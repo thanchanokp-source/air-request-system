@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id              String        @id @default(cuid())
+  name            String?
+  email           String        @unique
+  password        String
+  role            String        @default("MER_USER")
+  claimDepartment String?
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  airRequests     AirRequest[]
+  approvals       ApprovalLog[]
+}
+model MasterBrand {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  isActive Boolean @default(true)
+}
+model MasterBU {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  isActive Boolean @default(true)
+}
+model MasterDescription {
+  id            String  @id @default(cuid())
+  name          String  @unique
+  weightPerUnit Float   @default(0)
+  isActive      Boolean @default(true)
+}
+model MasterGMTType {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  isActive Boolean @default(true)
+}
+model MasterPort {
+  id        String   @id @default(cuid())
+  country   String
+  port      String   @unique
+  ratePerKg Float    @default(0)
+  isActive  Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
+model AirRequest {
+  id               String           @id @default(cuid())
+  documentNo       String           @unique
+  brandName        String
+  buName           String
+  status           String           @default("DRAFT")
+  claimDepartment  String?
+  rejectionReason  String?
+  createdById      String
+  createdBy        User             @relation(fields: [createdById], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  items            AirRequestItem[]
+  approvalLogs     ApprovalLog[]
+  invoiceNo        String?
+  actualAirFreight Float?
+  bookingDate      DateTime?
+  airline          String?
+}
+model AirRequestItem {
+  id                   String     @id @default(cuid())
+  requestId            String
+  request              AirRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  style                String
+  so                   String
+  customerPO           String?
+  description          String?
+  gmtType              String?
+  originalShipmentDate DateTime?
+  planShipmentDate     DateTime?
+  qtyOriginalShipment  Int
+  qtyRequestAir        Int
+  itemStatus           String    @default("PENDING")
+  itemComment          String?
+  reasonDelay          String
+  factory              String
+  country              String
+  port                 String
+  grossWeight          Float?
+  airFreight           Float?
+  marketRatePerKg      Float?
+  actualAirFreight     Float?
+  claimDepartment      String?
+  invoiceNo            String?
+  bookingDate          DateTime?
+}
+model ApprovalLog {
+  id         String     @id @default(cuid())
+  requestId  String
+  request    AirRequest @relation(fields: [requestId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  action     String
+  fromStatus String
+  toStatus   String
+  comment    String?
+  createdAt  DateTime   @default(now())
+}

@@ -1,0 +1,16 @@
+const { PrismaClient } = require('./node_modules/@prisma/client')
+const p = new PrismaClient()
+async function main() {
+  console.log('Deleting approval logs...')
+  const a = await p.approvalLog.deleteMany()
+  console.log('Deleted logs:', a.count)
+  console.log('Deleting items...')
+  const b = await p.airRequestItem.deleteMany()
+  console.log('Deleted items:', b.count)
+  console.log('Deleting requests...')
+  const c = await p.airRequest.deleteMany()
+  console.log('Deleted requests:', c.count)
+  console.log('done')
+  await p.$disconnect()
+}
+main().catch(e => { console.error('ERROR:', e.message); process.exit(1) })
