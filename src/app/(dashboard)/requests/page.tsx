@@ -9,6 +9,7 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING_VP_MER: "Pending VP MER", PENDING_SCM: "Pending SCM",
   PENDING_VP_SCM: "Pending VP SCM", PENDING_PRESIDENT: "Pending President",
   PENDING_LOGISTICS: "Pending Logistics", PENDING_CLAIM: "Pending Claim",
+  PENDING_VP_CLAIM: "Pending VP Claim",
   PENDING_VP_NYK: "Pending VP NYK", COMPLETED: "Completed", REJECTED: "Rejected"
 }
 
@@ -113,6 +114,7 @@ export default function RequestsPage() {
     { key: "PENDING_PRESIDENT", label: "PRESIDENT" },
     { key: "PENDING_LOGISTICS", label: "LOGISTICS" },
     { key: "PENDING_CLAIM", label: "CLAIM" },
+    { key: "PENDING_VP_CLAIM", label: "VP CLAIM" },
   ]
 
   const claimRows = allRows.filter(r => r.request.status === "PENDING_CLAIM")
@@ -161,7 +163,7 @@ export default function RequestsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-6 gap-2">
+      <div className="grid grid-cols-7 gap-2">
         {POSITIONS.map(({ key, label }) => {
           const count = allRows.filter(r => {
             if (r.itemStatus === "REJECTED") return false
@@ -176,6 +178,7 @@ export default function RequestsPage() {
             if (s === "PENDING_VP_SCM") return r.itemStatus === "PENDING" ? key === "PENDING_VP_SCM" : key === "PENDING_PRESIDENT"
             if (s === "PENDING_PRESIDENT") return r.itemStatus === "PENDING" ? key === "PENDING_PRESIDENT" : key === "PENDING_LOGISTICS"
             if (s === "PENDING_LOGISTICS") return r.itemStatus === "PENDING" ? key === "PENDING_LOGISTICS" : key === "PENDING_CLAIM"
+            if (s === "PENDING_VP_CLAIM") return key === "PENDING_VP_CLAIM"
             return s === key
           }).length
           const isClaim = key === "PENDING_CLAIM"

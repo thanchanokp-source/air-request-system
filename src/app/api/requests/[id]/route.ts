@@ -12,7 +12,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     include: {
       createdBy: { select: { name: true, email: true } },
       items: true,
-      approvalLogs: { include: { user: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } }
+      approvalLogs: { include: { user: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
+      attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } }
     }
   })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })

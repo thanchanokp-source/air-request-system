@@ -3,7 +3,10 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
-const ROLES = ["ADMIN","MER_USER","VP_MER","SCM_USER","VP_SCM","PRESIDENT","LOGISTICS","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION","VP_NYK"]
+const ROLES = ["ADMIN","MER_USER","VP_MER","SCM_USER","VP_SCM","PRESIDENT","LOGISTICS",
+  "DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION",
+  "VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION",
+  "CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"]
 const empty = { name: "", email: "", password: "", role: "MER_USER", isActive: true }
 
 export default function UsersPage() {

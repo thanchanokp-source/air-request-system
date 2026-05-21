@@ -1,7 +1,7 @@
 "use client"
 import React, { useState } from "react"
 
-export function PdfDownloadButton({ req, item, compact = false }: { req: any; item: any; compact?: boolean }) {
+export function PdfDownloadButton({ req, item, compact = false }: { req: any; item?: any; compact?: boolean }) {
   const [loading, setLoading] = useState(false)
 
   if (req.status !== "COMPLETED") return null

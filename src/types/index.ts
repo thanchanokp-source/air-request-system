@@ -6,6 +6,7 @@ export const STATUS_LABELS: Record<string, string> = {
   PENDING_PRESIDENT: "Pending President",
   PENDING_LOGISTICS: "Pending Logistics",
   PENDING_CLAIM: "Pending Claim",
+  PENDING_VP_CLAIM: "Pending VP Claim",
   PENDING_VP_NYK: "Pending VP NYK",
   COMPLETED: "Completed",
   REJECTED: "Rejected"
@@ -19,6 +20,7 @@ export const STATUS_COLORS: Record<string, string> = {
   PENDING_PRESIDENT: "bg-purple-100 text-purple-700",
   PENDING_LOGISTICS: "bg-blue-100 text-blue-700",
   PENDING_CLAIM: "bg-indigo-100 text-indigo-700",
+  PENDING_VP_CLAIM: "bg-violet-100 text-violet-700",
   COMPLETED: "bg-green-100 text-green-700",
   REJECTED: "bg-red-100 text-red-700"
 }
@@ -29,11 +31,14 @@ export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> =
   PENDING_VP_SCM: { approve: "PENDING_PRESIDENT", reject: "REJECTED" },
   PENDING_PRESIDENT: { approve: "PENDING_LOGISTICS", reject: "REJECTED" },
   PENDING_LOGISTICS: { approve: "PENDING_CLAIM" },
-  PENDING_CLAIM: { approve: "COMPLETED", reject: "REJECTED" },
+  PENDING_CLAIM: { approve: "PENDING_VP_CLAIM", reject: "REJECTED" },
+  PENDING_VP_CLAIM: { approve: "COMPLETED", reject: "REJECTED" },
   PENDING_VP_NYK: { approve: "COMPLETED", reject: "REJECTED" },
 }
 
 export const STYLE_APPROVER_STATUSES = ["PENDING_VP_MER", "PENDING_VP_SCM", "PENDING_PRESIDENT"]
+
+export const CLAIM_VP_ROLES = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
 
 export const ROLE_ACTIONS: Record<string, string[]> = {
   VP_MER: ["PENDING_VP_MER"],
@@ -41,9 +46,19 @@ export const ROLE_ACTIONS: Record<string, string[]> = {
   VP_SCM: ["PENDING_VP_SCM"],
   PRESIDENT: ["PENDING_PRESIDENT"],
   LOGISTICS: ["PENDING_LOGISTICS"],
+  // Legacy CLAIM_* roles
   CLAIM_COMMERCIAL: ["PENDING_CLAIM"],
   CLAIM_PROCUREMENT: ["PENDING_CLAIM"],
   CLAIM_NYK: ["PENDING_CLAIM"],
   CLAIM_PRODUCTION: ["PENDING_CLAIM"],
-  VP_NYK: ["PENDING_VP_NYK"]
+  // New DVM roles
+  DVM_COMMERCIAL: ["PENDING_CLAIM"],
+  DVM_PROCUREMENT: ["PENDING_CLAIM"],
+  DVM_NYK: ["PENDING_CLAIM"],
+  DVM_PRODUCTION: ["PENDING_CLAIM"],
+  // VP Claim roles
+  VP_COMMERCIAL: ["PENDING_VP_CLAIM"],
+  VP_PROCUREMENT: ["PENDING_VP_CLAIM"],
+  VP_PRODUCTION: ["PENDING_VP_CLAIM"],
+  VP_NYK: ["PENDING_VP_CLAIM", "PENDING_VP_NYK"],
 }

@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { NEXT_STATUS, STYLE_APPROVER_STATUSES } from "@/types"
+import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
+
+const getClaimDept = (role: string) => {
+  if (role.startsWith("DVM_")) return role.replace("DVM_", "")
+  if (role.startsWith("CLAIM_")) return role.replace("CLAIM_", "")
+  if (CLAIM_VP_ROLES.includes(role)) return role.replace("VP_", "")
+  return null
+}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -272,7 +279,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
 
   // Back to SCM for a specific SO only
-  if (request.status === "PENDING_CLAIM" && action === "back_to_scm_so") {
+  if ((request.status === "PENDING_CLAIM" || request.status === "PENDING_VP_CLAIM") && action === "back_to_scm_so") {
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const item = request.items.find((i: any) => i.id === itemId)
     await prisma.airRequestItem.update({
@@ -282,7 +289,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.approvalLog.create({
       data: {
         requestId: id, userId, action: "BACK_TO_SCM",
-        fromStatus: "PENDING_CLAIM", toStatus: "PENDING_SCM",
+        fromStatus: request.status, toStatus: "PENDING_SCM",
         comment: `SO: ${item?.so} — ${comment || "Back to SCM"}`
       }
     })
@@ -290,10 +297,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
-  // Per-SO claim approval
-  if (request.status === "PENDING_CLAIM" && (action === "approve_so" || action === "reject_so")) {
+  // DVM: forward selected SOs to VP (batch forward at PENDING_CLAIM)
+  if (request.status === "PENDING_CLAIM" && action === "forward_dvm_sos") {
+    const { itemIds } = body
+    if (!itemIds?.length) return NextResponse.json({ error: "itemIds required" }, { status: 400 })
+    await prisma.airRequestItem.updateMany({
+      where: { id: { in: itemIds }, requestId: id },
+      data: { itemStatus: "PASSED" }
+    })
+    await prisma.approvalLog.create({
+      data: {
+        requestId: id, userId, action: "APPROVE",
+        fromStatus: "PENDING_CLAIM", toStatus: "PENDING_CLAIM",
+        comment: comment || `Forwarded ${itemIds.length} SO(s) to VP`
+      }
+    })
+    const stillPending = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
+    if (stillPending === 0) {
+      // All DVMs done — reset PASSED → PENDING for VP review, advance to PENDING_VP_CLAIM
+      await prisma.airRequestItem.updateMany({
+        where: { requestId: id, itemStatus: "PASSED" },
+        data: { itemStatus: "PENDING" }
+      })
+      await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_VP_CLAIM" } })
+      await prisma.approvalLog.create({
+        data: {
+          requestId: id, userId, action: "APPROVE",
+          fromStatus: "PENDING_CLAIM", toStatus: "PENDING_VP_CLAIM",
+          comment: "All DVMs forwarded — advanced to VP Claim"
+        }
+      })
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // Per-SO claim approval — works at both PENDING_CLAIM and PENDING_VP_CLAIM
+  if ((request.status === "PENDING_CLAIM" || request.status === "PENDING_VP_CLAIM") && (action === "approve_so" || action === "reject_so")) {
     const userRole = (session.user as any).role as string
-    const userClaimDept = userRole.startsWith("CLAIM_") ? userRole.replace("CLAIM_", "") : null
+    const userClaimDept = getClaimDept(userRole)
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const newItemStatus = action === "approve_so" ? "PASSED" : "REJECTED"
     const updated = await prisma.airRequestItem.update({
@@ -308,26 +349,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         comment: `SO: ${updated.so}${comment ? ` - ${comment}` : ""}`
       }
     })
-    const deptPending = await prisma.airRequestItem.count({
-      where: { requestId: id, claimDepartment: userClaimDept || "", itemStatus: "PENDING" }
-    })
-    if (deptPending === 0) {
+    if (request.status === "PENDING_VP_CLAIM") {
       const allPending = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
       if (allPending === 0) {
-        const nykCount = await prisma.airRequestItem.count({
-          where: { requestId: id, claimDepartment: "NYK", itemStatus: { not: "REJECTED" } }
-        })
-        const nextStatus = nykCount > 0 ? "PENDING_VP_NYK" : "COMPLETED"
-        await prisma.airRequest.update({ where: { id }, data: { status: nextStatus } })
+        await prisma.airRequest.update({ where: { id }, data: { status: "COMPLETED" } })
+      }
+    } else {
+      // PENDING_CLAIM — backward compat: mark PASSED only, no auto-advance (use forward_dvm_sos instead)
+      const deptPending = await prisma.airRequestItem.count({
+        where: { requestId: id, claimDepartment: userClaimDept || "", itemStatus: "PENDING" }
+      })
+      if (deptPending === 0) {
+        const allPending = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
+        if (allPending === 0) {
+          await prisma.airRequestItem.updateMany({
+            where: { requestId: id, itemStatus: "PASSED" },
+            data: { itemStatus: "PENDING" }
+          })
+          await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_VP_CLAIM" } })
+        }
       }
     }
     return NextResponse.json(await getUpdated())
   }
 
-  // For PENDING_CLAIM: track per-dept approval, advance only when ALL depts done
+  // For PENDING_CLAIM: legacy batch approve — advances to PENDING_VP_CLAIM instead of COMPLETED
   if (request.status === "PENDING_CLAIM" && action === "approve") {
     const userRole = (session.user as any).role as string
-    const userClaimDept = userRole.startsWith("CLAIM_") ? userRole.replace("CLAIM_", "") : null
+    const userClaimDept = getClaimDept(userRole)
     if (userClaimDept) {
       await prisma.airRequestItem.updateMany({
         where: { requestId: id, claimDepartment: userClaimDept, itemStatus: "PENDING" },
@@ -340,10 +389,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (stillPending > 0) {
       upd.status = request.status
     } else {
-      const nykCount = await prisma.airRequestItem.count({
-        where: { requestId: id, claimDepartment: "NYK", itemStatus: { not: "REJECTED" } }
+      await prisma.airRequestItem.updateMany({
+        where: { requestId: id, itemStatus: "PASSED" },
+        data: { itemStatus: "PENDING" }
       })
-      upd.status = nykCount > 0 ? "PENDING_VP_NYK" : "COMPLETED"
+      upd.status = "PENDING_VP_CLAIM"
     }
   }
 

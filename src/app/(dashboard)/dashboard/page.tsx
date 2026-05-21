@@ -84,7 +84,7 @@ function EstActualBar({ data, title, onBarClick, drillLabel, onBack }: {
               <Legend verticalAlign="top" iconSize={10} wrapperStyle={{ fontSize: 10, paddingBottom: 12 }} />
               <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-35} textAnchor="end" interval={0} />
               <YAxis tick={{ fontSize: 9 }} tickFormatter={fmtK} />
-              <Tooltip formatter={(v: any, n: string | undefined) => [Number(v).toLocaleString(), n ?? ""]} />
+              <Tooltip formatter={(v: any, n: any) => [Number(v).toLocaleString(), n ?? ""]} />
               <Bar dataKey="est" name="Est. (THB)" fill={EST_COLOR} radius={[3,3,0,0]}
                 cursor={onBarClick ? "pointer" : undefined}
                 onClick={(d: any) => onBarClick?.(d.name)} />
@@ -313,7 +313,7 @@ export default function DashboardPage() {
                 <Legend verticalAlign="top" iconSize={10} wrapperStyle={{ fontSize: 10, paddingBottom: 12 }} />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 9 }} tickFormatter={fmtK} />
-                <Tooltip formatter={(v: any, n: string | undefined) => [Number(v).toLocaleString(), n ?? ""]} />
+                <Tooltip formatter={(v: any, n: any) => [Number(v).toLocaleString(), n ?? ""]} />
                 <Bar dataKey="est" name="Est. (THB)" fill={EST_COLOR} radius={[3,3,0,0]} />
                 <Bar dataKey="actual" name="Actual (THB)" fill={ACTUAL_COLOR} radius={[3,3,0,0]} />
               </BarChart>
@@ -347,7 +347,7 @@ export default function DashboardPage() {
                 <Legend verticalAlign="top" iconSize={10} wrapperStyle={{ fontSize: 10, paddingBottom: 16 }} />
                 <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={fmtK} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={200} />
-                <Tooltip formatter={(v: any, n: string | undefined) => [Number(v).toLocaleString(), n ?? ""]} />
+                <Tooltip formatter={(v: any, n: any) => [Number(v).toLocaleString(), n ?? ""]} />
                 <Bar dataKey="est" name="Est. (THB)" fill={REASON_COLOR} radius={[0,3,3,0]}>
                   <LabelList dataKey="count" position="right" style={{ fontSize: 9, fill: "#6b7280" }} formatter={(v: any) => `${v} SO`} />
                 </Bar>

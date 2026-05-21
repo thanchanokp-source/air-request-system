@@ -17,6 +17,7 @@ model User {
   updatedAt       DateTime      @updatedAt
   airRequests     AirRequest[]
   approvals       ApprovalLog[]
+  attachments     RequestAttachment[]
 }
 model MasterBrand {
   id       String  @id @default(cuid())
@@ -61,6 +62,7 @@ model AirRequest {
   updatedAt        DateTime         @updatedAt
   items            AirRequestItem[]
   approvalLogs     ApprovalLog[]
+  attachments      RequestAttachment[]
   invoiceNo        String?
   actualAirFreight Float?
   bookingDate      DateTime?
@@ -104,4 +106,19 @@ model ApprovalLog {
   toStatus   String
   comment    String?
   createdAt  DateTime   @default(now())
+}
+
+model RequestAttachment {
+  id           String     @id @default(cuid())
+  requestId    String
+  request      AirRequest @relation(fields: [requestId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  itemId       String?
+  uploadedById String
+  uploadedBy   User       @relation(fields: [uploadedById], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  fileName     String
+  filePath     String
+  fileSize     Int
+  mimeType     String
+  claimDept    String?
+  createdAt    DateTime   @default(now())
 }

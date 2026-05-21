@@ -40,6 +40,8 @@ export default function RequestDetailPage() {
   const [backToScmComment, setBackToScmComment] = useState("")
   const [backToScmStyleOpen, setBackToScmStyleOpen] = useState<string | null>(null)
   const [backToScmStyleComment, setBackToScmStyleComment] = useState("")
+  const [uploadingItem, setUploadingItem] = useState<string | null>(null)
+  const [dvmSelected, setDvmSelected] = useState<Set<string>>(new Set())
 
    useEffect(() => {
     fetch(`/api/requests/${id}`)
@@ -80,9 +82,14 @@ export default function RequestDetailPage() {
   const role = (session?.user as any)?.role || ""
   const canAct = req && ROLE_ACTIONS[role]?.includes(req.status)
   const isStyleApprover = req && STYLE_APPROVER_STATUSES.includes(req.status)
-  const isClaimApprover = req && req.status === "PENDING_CLAIM" && role.startsWith("CLAIM_")
-  const claimDeptRole = role.startsWith("CLAIM_") ? role.replace("CLAIM_", "") : ""
-  const myClaimItems = req?.items?.filter((i: any) => i.claimDepartment === claimDeptRole) || []
+  const CLAIM_VP_ROLES_LOCAL = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
+  const isDvmClaim = canAct && (req?.status === "PENDING_CLAIM") && (role.startsWith("DVM_") || role.startsWith("CLAIM_"))
+  const isVpClaim = canAct && (req?.status === "PENDING_VP_CLAIM") && CLAIM_VP_ROLES_LOCAL.includes(role)
+  const isClaimApprover = isDvmClaim || isVpClaim
+  const claimDept = role.startsWith("DVM_") ? role.replace("DVM_", "") : role.startsWith("CLAIM_") ? role.replace("CLAIM_", "") : CLAIM_VP_ROLES_LOCAL.includes(role) ? role.replace("VP_", "") : ""
+  // keep claimDeptRole as alias for backward-compat references inside JSX
+  const claimDeptRole = claimDept
+  const myClaimItems = req?.items?.filter((i: any) => i.claimDepartment === claimDept) || []
   const isVpScmAtScm = role === "VP_SCM" && req?.status === "PENDING_SCM"
   const canReject = canAct && !isStyleApprover && !isClaimApprover && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS"
 
@@ -136,6 +143,20 @@ export default function RequestDetailPage() {
     })
     if (res.ok) setReq(await res.json())
     setSubmitting(null); setBackToScmStyleOpen(null); setBackToScmStyleComment("")
+  }
+
+  const attachFileFn = async (file: File, itemId?: string) => {
+    setUploadingItem(itemId || "_req")
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      if (itemId) { form.append("itemId", itemId); form.append("claimDept", claimDeptRole) }
+      const res = await fetch(`/api/requests/${id}/attachments`, { method: "POST", body: form })
+      if (res.ok) {
+        const att = await res.json()
+        setReq((prev: any) => ({ ...prev, attachments: [...(prev.attachments || []), att] }))
+      } else { alert("Upload failed") }
+    } finally { setUploadingItem(null) }
   }
 
   const act = async (action: string) => {
@@ -428,26 +449,184 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* CLAIM per-SO approval */}
-      {isClaimApprover && canAct && (
+      {/* DVM CLAIM per-SO approval with checkbox forwarding */}
+      {isDvmClaim && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800">SO APPROVAL — {claimDeptRole} ({myClaimItems.length})</h2>
+            <h2 className="font-semibold text-gray-800">SO APPROVAL — DVM {claimDept} ({myClaimItems.length})</h2>
+            <div className="flex gap-4 text-xs font-medium">
+              <span className="text-yellow-600">{myClaimItems.filter((i:any) => i.itemStatus === "PENDING").length} pending</span>
+              <span className="text-green-600">{myClaimItems.filter((i:any) => i.itemStatus === "PASSED").length} forwarded</span>
+              <span className="text-red-600">{myClaimItems.filter((i:any) => i.itemStatus === "REJECTED").length} rejected</span>
+            </div>
+          </div>
+
+          {/* Select all / deselect all */}
+          {myClaimItems.some((i: any) => i.itemStatus === "PENDING") && (
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => {
+                const pendingIds = myClaimItems.filter((i: any) => i.itemStatus === "PENDING").map((i: any) => i.id)
+                setDvmSelected(prev => prev.size === pendingIds.length ? new Set() : new Set(pendingIds))
+              }} className="text-xs text-blue-600 hover:underline">
+                {dvmSelected.size === myClaimItems.filter((i: any) => i.itemStatus === "PENDING").length ? "Deselect All" : "Select All Pending"}
+              </button>
+            </div>
+          )}
+
+          {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").map((item: any) => {
+            const isRej = rejectingSo === item.id
+            const isSub = submitting === item.id
+            const itemAttachments = (req.attachments || []).filter((a: any) => a.itemId === item.id)
+            const isUploading = uploadingItem === item.id
+            const isPending = item.itemStatus === "PENDING"
+            const isPassed = item.itemStatus === "PASSED"
+            const isChecked = dvmSelected.has(item.id)
+            return (
+              <div key={item.id} className={`rounded-xl border overflow-hidden ${isPassed ? "border-green-200" : "border-gray-200"}`}>
+                <div className={`flex items-center gap-3 px-4 py-3 ${isPassed ? "bg-green-50" : "bg-white"}`}>
+                  {/* Checkbox — only for PENDING items */}
+                  {isPending ? (
+                    <input type="checkbox" checked={isChecked}
+                      onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                      className="w-4 h-4 rounded border-gray-300 shrink-0" />
+                  ) : (
+                    <span className="w-4 shrink-0" />
+                  )}
+                  <span className="font-semibold text-gray-800 w-28">{item.so}</span>
+                  <span className="text-xs text-gray-500 flex-1">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
+                  {isPassed && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Forwarded to VP</span>}
+                  {/* Attach file button */}
+                  <label className={`cursor-pointer text-xs px-2 py-1 rounded border ${isUploading ? "opacity-50 pointer-events-none" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                    {isUploading ? "Uploading..." : "📎 Attach"}
+                    <input type="file" className="hidden" disabled={isUploading}
+                      onChange={e => { if (e.target.files?.[0]) attachFileFn(e.target.files[0], item.id); e.target.value = "" }} />
+                  </label>
+                  {isPending && !isPassed && (
+                    <div className="flex gap-2">
+                      <button onClick={() => { setBackToScmSo(backToScmSo === item.id ? null : item.id); setBackToScmSoComment(""); setRejectingSo(null) }} disabled={isSub}
+                        className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
+                        Back to SCM
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {/* Attachments list */}
+                {itemAttachments.length > 0 && (
+                  <div className="px-4 py-2 bg-blue-50 border-t border-blue-100 flex flex-wrap gap-2">
+                    {itemAttachments.map((att: any) => (
+                      <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1.5 text-xs bg-white border border-blue-200 text-blue-700 px-2.5 py-1 rounded-full hover:bg-blue-100 font-medium">
+                        📎 {att.fileName}
+                        <span className="text-gray-400 font-normal">· {att.uploadedBy?.name} ({att.claimDept || att.uploadedBy?.role})</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {backToScmSo === item.id && (
+                  <div className="px-4 py-3 bg-orange-50 border-t border-orange-100 space-y-2">
+                    <label className="text-xs font-medium text-orange-700">Back to SCM — ระบุเหตุผล *</label>
+                    <textarea value={backToScmSoComment} onChange={e => setBackToScmSoComment(e.target.value)} rows={2}
+                      placeholder="Enter reason..." className="w-full border border-orange-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                    <div className="flex gap-2">
+                      <button disabled={isSub || !backToScmSoComment.trim()}
+                        onClick={async () => {
+                          setSubmitting(item.id)
+                          const res = await fetch(`/api/requests/${id}/approve`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "back_to_scm_so", itemId: item.id, comment: backToScmSoComment })
+                          })
+                          if (res.ok) { setReq(await res.json()) } else { const err = await res.json(); alert(err.error || "Error") }
+                          setSubmitting(null); setBackToScmSo(null); setBackToScmSoComment("")
+                        }}
+                        className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-40">
+                        {isSub ? "..." : "Confirm Back to SCM"}
+                      </button>
+                      <button onClick={() => { setBackToScmSo(null); setBackToScmSoComment("") }}
+                        className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Forward selected SOs to VP */}
+          {dvmSelected.size > 0 && (
+            <div className="border border-violet-300 rounded-lg p-3 bg-violet-50 flex items-center gap-3">
+              <span className="text-xs font-semibold text-violet-700">{dvmSelected.size} SO(s) selected</span>
+              <button
+                disabled={submitting === "_dvm"}
+                onClick={async () => {
+                  setSubmitting("_dvm")
+                  const res = await fetch(`/api/requests/${id}/approve`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "forward_dvm_sos", itemIds: [...dvmSelected], comment: "" })
+                  })
+                  if (res.ok) {
+                    const updated = await res.json()
+                    if (updated.status !== "PENDING_CLAIM") {
+                      window.location.href = "/approvals"
+                    } else {
+                      setReq(updated)
+                      setDvmSelected(new Set())
+                    }
+                  } else { const err = await res.json(); alert(err.error || "Error") }
+                  setSubmitting(null)
+                }}
+                className="px-4 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 disabled:opacity-50">
+                {submitting === "_dvm" ? "..." : `Forward ${dvmSelected.size} SO(s) to VP`}
+              </button>
+              <button type="button" onClick={() => setDvmSelected(new Set())}
+                className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VP CLAIM per-SO approval */}
+      {isVpClaim && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-gray-800">SO APPROVAL — VP {claimDept} ({myClaimItems.length})</h2>
             <div className="flex gap-4 text-xs font-medium">
               <span className="text-yellow-600">{myClaimItems.filter((i:any) => i.itemStatus === "PENDING").length} pending</span>
               <span className="text-green-600">{myClaimItems.filter((i:any) => i.itemStatus === "PASSED").length} approved</span>
               <span className="text-red-600">{myClaimItems.filter((i:any) => i.itemStatus === "REJECTED").length} rejected</span>
             </div>
           </div>
+
+          {/* Show all attachments for the request so VP can review documents */}
+          {(req.attachments || []).length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <p className="text-xs font-semibold text-blue-700 mb-2">ATTACHMENTS (SCM / MER / DVM)</p>
+              <div className="flex flex-wrap gap-2">
+                {(req.attachments || []).map((att: any) => (
+                  <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
+                    className="flex items-center gap-1.5 text-xs bg-white border border-blue-200 text-blue-700 px-2.5 py-1 rounded-full hover:bg-blue-100 font-medium">
+                    📎 {att.fileName}
+                    <span className="text-gray-400 font-normal">· {att.uploadedBy?.name} ({att.claimDept || att.uploadedBy?.role})</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
           {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").map((item: any) => {
             const isRej = rejectingSo === item.id
             const isSub = submitting === item.id
+            const itemAttachments = (req.attachments || []).filter((a: any) => a.itemId === item.id)
+            const isUploading = uploadingItem === item.id
             return (
               <div key={item.id} className={`rounded-xl border overflow-hidden ${item.itemStatus === "PASSED" ? "border-green-200" : "border-gray-200"}`}>
                 <div className={`flex items-center gap-3 px-4 py-3 ${item.itemStatus === "PASSED" ? "bg-green-50" : "bg-white"}`}>
                   <span className="font-semibold text-gray-800 w-28">{item.so}</span>
                   <span className="text-xs text-gray-500 flex-1">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
                   {item.itemStatus === "PASSED" && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Approved</span>}
+                  <label className={`cursor-pointer text-xs px-2 py-1 rounded border ${isUploading ? "opacity-50 pointer-events-none" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                    {isUploading ? "Uploading..." : "📎 Attach"}
+                    <input type="file" className="hidden" disabled={isUploading}
+                      onChange={e => { if (e.target.files?.[0]) attachFileFn(e.target.files[0], item.id); e.target.value = "" }} />
+                  </label>
                   {item.itemStatus === "PENDING" && (
                     <div className="flex gap-2">
                       <button onClick={() => approveSo(item.id)} disabled={isSub}
@@ -465,6 +644,17 @@ export default function RequestDetailPage() {
                     </div>
                   )}
                 </div>
+                {itemAttachments.length > 0 && (
+                  <div className="px-4 py-2 bg-blue-50 border-t border-blue-100 flex flex-wrap gap-2">
+                    {itemAttachments.map((att: any) => (
+                      <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1.5 text-xs bg-white border border-blue-200 text-blue-700 px-2.5 py-1 rounded-full hover:bg-blue-100 font-medium">
+                        📎 {att.fileName}
+                        <span className="text-gray-400 font-normal">· {att.uploadedBy?.name} ({att.claimDept || att.uploadedBy?.role})</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
                 {isRej && (
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
                     <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
@@ -507,7 +697,6 @@ export default function RequestDetailPage() {
               </div>
             )
           })}
-
         </div>
       )}
 
@@ -765,8 +954,8 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* Logistics edit section — visible to LOGISTICS even after doc moves to PENDING_CLAIM */}
-      {role === "LOGISTICS" && (req.status === "PENDING_CLAIM" || req.status === "PENDING_VP_NYK") && (
+      {/* Logistics edit section — visible to LOGISTICS even after doc moves to PENDING_CLAIM / VP_CLAIM */}
+      {role === "LOGISTICS" && (req.status === "PENDING_CLAIM" || req.status === "PENDING_VP_CLAIM" || req.status === "PENDING_VP_NYK") && (
         <div className="bg-white rounded-xl border p-5 space-y-3">
           <h2 className="font-semibold text-gray-800 border-b pb-2">LOGISTICS DATA <span className="text-xs font-normal text-gray-400 ml-1">(แก้ไขเพิ่มเติมได้)</span></h2>
           <div className="border border-gray-200 rounded-lg overflow-x-auto">
@@ -889,6 +1078,51 @@ export default function RequestDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Attachments */}
+      {(() => {
+        const allAttachments: any[] = req.attachments || []
+        const canAttach = role === "MER_USER" || role === "SCM_USER"
+        const isUploadingReq = uploadingItem === "_req"
+        return (
+          <div className="bg-white rounded-xl border">
+            <div className="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-800">ATTACHMENTS {allAttachments.length > 0 && <span className="text-xs font-normal text-gray-400 ml-1">({allAttachments.length})</span>}</h2>
+              {canAttach && (
+                <label className={`cursor-pointer text-xs px-3 py-1.5 rounded-lg border font-medium ${isUploadingReq ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "border-blue-300 text-blue-600 hover:bg-blue-50"}`}>
+                  {isUploadingReq ? "Uploading..." : "📎 Attach File"}
+                  <input type="file" className="hidden" disabled={isUploadingReq}
+                    onChange={e => { if (e.target.files?.[0]) attachFileFn(e.target.files[0]); e.target.value = "" }} />
+                </label>
+              )}
+            </div>
+            {allAttachments.length === 0
+              ? <p className="text-center py-5 text-xs text-gray-300">No attachments</p>
+              : <div className="divide-y divide-gray-50">
+                  {allAttachments.map((att: any) => (
+                    <div key={att.id} className="px-5 py-2.5 flex items-center justify-between hover:bg-gray-50">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-lg shrink-0">📎</span>
+                        <div className="min-w-0">
+                          <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
+                            className="text-sm font-medium text-blue-700 hover:underline truncate block">
+                            {att.fileName}
+                          </a>
+                          <p className="text-xs text-gray-400">
+                            {att.uploadedBy?.name}
+                            {att.claimDept && <span className="ml-1">({att.claimDept})</span>}
+                            {att.itemId && <span className="ml-1 text-gray-300">· SO attached</span>}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-xs text-gray-400 shrink-0 ml-4">{fmtDT(att.createdAt)}</span>
+                    </div>
+                  ))}
+                </div>
+            }
+          </div>
+        )
+      })()}
 
       {/* Approval History */}
       {(() => {
