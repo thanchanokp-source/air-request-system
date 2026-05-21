@@ -102,6 +102,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { itemStatus: "PENDING" }
         })
         await prisma.airRequest.update({ where: { id }, data: { status: statusMap.approve } })
+        notifyStatusChange(id, statusMap.approve).catch(() => {})
       }
     }
 
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: "PENDING_SCM", toStatus: nextStatus, comment }
     })
+    if (nextStatus !== "PENDING_SCM") notifyStatusChange(id, nextStatus).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -194,6 +196,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       } else {
         await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_PASSED" }, data: { itemStatus: "PENDING" } })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_PRESIDENT" } })
+        notifyStatusChange(id, "PENDING_PRESIDENT").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
@@ -232,6 +235,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: "PENDING_LOGISTICS", toStatus: nextStatus, comment }
     })
+    if (nextStatus !== "PENDING_LOGISTICS") notifyStatusChange(id, nextStatus).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -328,6 +332,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           comment: "All DVMs forwarded — advanced to VP Claim"
         }
       })
+      notifyStatusChange(id, "PENDING_VP_CLAIM").catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -354,6 +359,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const allPending = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
       if (allPending === 0) {
         await prisma.airRequest.update({ where: { id }, data: { status: "COMPLETED" } })
+        notifyStatusChange(id, "COMPLETED").catch(() => {})
       }
     } else {
       // PENDING_CLAIM — backward compat: mark PASSED only, no auto-advance (use forward_dvm_sos instead)
@@ -403,6 +409,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   await prisma.approvalLog.create({
     data: { requestId: id, userId, action: action.toUpperCase(), fromStatus: request.status, toStatus: upd.status, comment }
   })
+
+  if (upd.status && upd.status !== request.status) {
+    notifyStatusChange(id, upd.status).catch(() => {})
+  }
 
   return NextResponse.json(await getUpdated())
 }
