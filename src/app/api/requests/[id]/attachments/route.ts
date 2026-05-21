@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { writeFile, mkdir } from "fs/promises"
-import { join } from "path"
-import { existsSync } from "fs"
-
-const UPLOAD_DIR = join(process.cwd(), "uploads")
+import { supabase, BUCKET } from "@/lib/supabase-storage"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -34,12 +30,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!file) return NextResponse.json({ error: "No file" }, { status: 400 })
 
   const ext = file.name.split(".").pop() || "bin"
-  const safeName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-  const dir = join(UPLOAD_DIR, id)
-  if (!existsSync(dir)) await mkdir(dir, { recursive: true })
-
+  const storagePath = `${id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
   const buffer = Buffer.from(await file.arrayBuffer())
-  await writeFile(join(dir, safeName), buffer)
+
+  const { error } = await supabase.storage.from(BUCKET).upload(storagePath, buffer, {
+    contentType: file.type || "application/octet-stream",
+    upsert: false,
+  })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   const attachment = await prisma.requestAttachment.create({
     data: {
@@ -47,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       itemId: itemId || null,
       uploadedById: userId,
       fileName: file.name,
-      filePath: join(id, safeName),
+      filePath: storagePath,
       fileSize: buffer.length,
       mimeType: file.type || "application/octet-stream",
       claimDept: claimDept || null,
