@@ -2,6 +2,7 @@
 import { signIn } from "next-auth/react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -31,6 +32,9 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-900 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-md px-12 py-16">
         <div className="mb-8 text-center">
+          <div className="flex justify-center mb-4">
+            <Image src="/LOGO.png" alt="Nan Yang Textile" width={80} height={80} />
+          </div>
           <h1 className="text-2xl font-bold text-gray-900">Air Request System</h1>
           <p className="text-gray-500 text-sm mt-1">Nan Yang Textile</p>
         </div>
