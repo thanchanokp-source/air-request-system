@@ -1,22 +1,13 @@
-import nodemailer from "nodemailer"
+import { Resend } from "resend"
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.office365.com",
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  tls: { ciphers: "SSLv3" },
-})
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function sendMail(to: string | string[], subject: string, html: string) {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return
-  const recipients = Array.isArray(to) ? to.join(",") : to
-  if (!recipients) return
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+  if (!process.env.RESEND_API_KEY) return
+  const recipients = Array.isArray(to) ? to : [to]
+  if (!recipients.length) return
+  await resend.emails.send({
+    from: process.env.SMTP_FROM || "Air Request System <onboarding@resend.dev>",
     to: recipients,
     subject,
     html,
