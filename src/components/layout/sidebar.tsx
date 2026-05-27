@@ -11,27 +11,37 @@ const nav = [
   { href: "/master/description", label: "MASTER DESCRIPTION", adminOnly: true }
 ]
 
-export default function Sidebar({ role }: { role: string }) {
+export default function Sidebar({ role, onClose }: { role: string; onClose?: () => void }) {
   const path = usePathname()
   const isAdmin = role === "ADMIN"
   const visible = nav.filter(item => !item.adminOnly || isAdmin)
   return (
-    <div className="w-60 bg-blue-900 text-white flex flex-col shrink-0">
-      <div className="p-5 border-b border-blue-800">
-        <p className="font-bold text-lg">Air Request</p>
-        <p className="text-blue-300 text-xs">Nan Yang Textile</p>
+    <div className="w-60 h-full text-white flex flex-col shrink-0" style={{background:"#6b1a1a"}}>
+      <div className="p-5 border-b flex items-center justify-between" style={{borderColor:"#8b2a2a"}}>
+        <div>
+          <p className="font-bold text-lg">Air Request</p>
+          <p className="text-xs" style={{color:"#e8b0b0"}}>Nan Yang Textile</p>
+        </div>
+        {onClose && (
+          <button onClick={onClose} className="lg:hidden p-1 rounded hover:bg-white/10" style={{color:"#e8b0b0"}}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        )}
       </div>
       <nav className="flex-1 p-3 space-y-1">
         {visible.map(item => (
-          <Link key={item.href} href={item.href}
+          <Link key={item.href} href={item.href} onClick={onClose}
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-              path.startsWith(item.href) ? "bg-blue-700 text-white" : "text-blue-200 hover:bg-blue-800"
-            }`}>
+              path.startsWith(item.href) ? "text-white" : "hover:text-white"
+            }`}
+            style={path.startsWith(item.href) ? {background:"#8b2a2a"} : {color:"#e8b0b0"}}>
             {item.label}
           </Link>
         ))}
       </nav>
-      <div className="p-3 border-t border-blue-800 text-xs text-blue-400">{role}</div>
+      <div className="p-3 text-xs border-t" style={{borderColor:"#8b2a2a",color:"#e8b0b0"}}>{role}</div>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { useParams, useRouter } from "next/navigation"
 import { StatusBadge } from "@/components/ui/status-badge"
@@ -40,8 +40,28 @@ export default function RequestDetailPage() {
   const [backToScmComment, setBackToScmComment] = useState("")
   const [backToScmStyleOpen, setBackToScmStyleOpen] = useState<string | null>(null)
   const [backToScmStyleComment, setBackToScmStyleComment] = useState("")
+  const [scmStyleFilter, setScmStyleFilter] = useState("")
   const [uploadingItem, setUploadingItem] = useState<string | null>(null)
   const [dvmSelected, setDvmSelected] = useState<Set<string>>(new Set())
+  const [vpSelected, setVpSelected] = useState<Set<string>>(new Set())
+  const [logEditMode, setLogEditMode] = useState<Set<string>>(new Set())
+  const [claimApproversList, setClaimApproversList] = useState<any[]>([])
+  const claimAutoSaveReady = useRef(false)
+
+  // Auto-save SCM claim dept + comments to DB (debounced 1.5s)
+  useEffect(() => {
+    if (!claimAutoSaveReady.current || !id) return
+    const deptEntries = Object.entries(soClaimDepts).filter(([, v]) => v)
+    if (deptEntries.length === 0) return
+    const timer = setTimeout(async () => {
+      const dataToSave = Object.fromEntries(deptEntries)
+      await fetch(`/api/requests/${id}/approve`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save_claim_progress", soClaimData: dataToSave, soClaimComments })
+      })
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [soClaimDepts, soClaimComments])
 
    useEffect(() => {
     fetch(`/api/requests/${id}`)
@@ -49,20 +69,28 @@ export default function RequestDetailPage() {
       .then(d => {
         setReq(d)
         setLoading(false)
-        if (d.status === "PENDING_SCM" && d.items) {
+        if (d.items) {
           const depts: Record<string, string> = {}
           const comments: Record<string, string> = {}
           d.items.forEach((item: any) => {
             if (item.claimDepartment) depts[item.id] = item.claimDepartment
-            if (item.itemComment) comments[item.id] = item.itemComment
+            const msg = item.reasonDelay || item.itemComment
+            if (msg) comments[item.id] = msg
           })
-          if (Object.keys(depts).length > 0) setSoClaimDepts(depts)
-          if (Object.keys(comments).length > 0) setSoClaimComments(comments)
+          claimAutoSaveReady.current = false
+          setSoClaimDepts(depts)
+          setSoClaimComments(comments)
+          setTimeout(() => { claimAutoSaveReady.current = true }, 200)
         }
-        if (d.status === "PENDING_LOGISTICS" && d.items) {
+        // Pre-fill logistics data for PRES_PASSED items (and legacy PENDING at PENDING_LOGISTICS)
+        const logItems = (d.items || []).filter((i: any) =>
+          i.itemStatus === "PRES_PASSED" || i.itemStatus === "LOG_PASSED" ||
+          (d.status === "PENDING_LOGISTICS" && i.itemStatus === "PENDING")
+        )
+        if (logItems.length > 0) {
           const logistics: Record<string, { invoiceNo: string; bookingDate: string }> = {}
           const actuals: Record<string, string> = {}
-          d.items.filter((i: any) => i.itemStatus === "PENDING").forEach((item: any) => {
+          logItems.forEach((item: any) => {
             if (item.invoiceNo || item.bookingDate) {
               logistics[item.id] = {
                 invoiceNo: item.invoiceNo || "",
@@ -78,20 +106,43 @@ export default function RequestDetailPage() {
       .catch(() => setLoading(false))
   }, [id])
 
-
   const role = (session?.user as any)?.role || ""
+  const myPriority: number | null = (session?.user as any)?.priority ?? null
+  const myUserId: string = (session?.user as any)?.id || ""
+
+  useEffect(() => {
+    if (!role) return
+    const isDvm = role.startsWith("DVM_") || role.startsWith("CLAIM_")
+    const isVp = ["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION"].includes(role)
+    if (isDvm || isVp) {
+      const dept = isDvm ? role.replace("DVM_","").replace("CLAIM_","") : role.replace("VP_","")
+      const groupRole = isDvm ? `DVM_${dept}` : `VP_${dept}`
+      fetch(`/api/users/by-role?role=${groupRole}`).then(r => r.json()).then(setClaimApproversList)
+    }
+  }, [role])
   const canAct = req && ROLE_ACTIONS[role]?.includes(req.status)
   const isStyleApprover = req && STYLE_APPROVER_STATUSES.includes(req.status)
   const CLAIM_VP_ROLES_LOCAL = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
-  const isDvmClaim = canAct && (req?.status === "PENDING_CLAIM") && (role.startsWith("DVM_") || role.startsWith("CLAIM_"))
-  const isVpClaim = canAct && (req?.status === "PENDING_VP_CLAIM") && CLAIM_VP_ROLES_LOCAL.includes(role)
-  const isClaimApprover = isDvmClaim || isVpClaim
   const claimDept = role.startsWith("DVM_") ? role.replace("DVM_", "") : role.startsWith("CLAIM_") ? role.replace("CLAIM_", "") : CLAIM_VP_ROLES_LOCAL.includes(role) ? role.replace("VP_", "") : ""
-  // keep claimDeptRole as alias for backward-compat references inside JSX
   const claimDeptRole = claimDept
-  const myClaimItems = req?.items?.filter((i: any) => i.claimDepartment === claimDept) || []
+  const isDvmClaim = (role.startsWith("DVM_") || role.startsWith("CLAIM_")) && (req?.items || []).some((i: any) => (i.itemStatus === "LOG_PASSED" || i.itemStatus === "CLAIM_PASSED") && i.claimDepartment === claimDept)
+  const isVpClaim = CLAIM_VP_ROLES_LOCAL.includes(role) && (req?.items || []).some((i: any) => (i.itemStatus === "CLAIM_PASSED" || i.itemStatus === "COMPLETED") && i.claimDepartment === claimDept)
+  const isClaimApprover = isDvmClaim || isVpClaim
+  const myClaimItems = req?.items?.filter((i: any) => {
+    if (!claimDept || i.claimDepartment !== claimDept) return false
+    if (isDvmClaim) return i.itemStatus === "LOG_PASSED" || i.itemStatus === "CLAIM_PASSED" || i.itemStatus === "REJECTED"
+    if (isVpClaim) return i.itemStatus === "CLAIM_PASSED" || i.itemStatus === "COMPLETED" || i.itemStatus === "REJECTED"
+    return false
+  }) || []
   const isVpScmAtScm = role === "VP_SCM" && req?.status === "PENDING_SCM"
-  const canReject = canAct && !isStyleApprover && !isClaimApprover && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS"
+  const isScmAtVpMer = role === "SCM_USER" && req?.status === "PENDING_VP_MER"
+  const vpPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "VP_PASSED")
+  const presPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "PRES_PASSED")
+  const logPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "LOG_PASSED")
+  const claimPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "CLAIM_PASSED")
+  const isPresidentRole = role === "PRESIDENT" && vpPassedItems.length > 0
+  const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0
+  const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS"
 
   const styleGroups = useMemo(() => {
     if (!req?.items) return []
@@ -102,13 +153,21 @@ export default function RequestDetailPage() {
     }
     return Object.entries(groups).map(([style, items]) => {
       const nonRej = items.filter((i: any) => i.itemStatus !== "REJECTED")
+      const STATUS_ORDER = ["PENDING", "VP_MER_PASSED", "PASSED", "VP_PASSED", "PRES_PASSED", "LOG_PASSED", "CLAIM_PASSED", "COMPLETED"]
       const status = nonRej.length === 0 ? "REJECTED"
+        : nonRej.every((i: any) => i.itemStatus === "COMPLETED") ? "COMPLETED"
+        : nonRej.every((i: any) => i.itemStatus === "CLAIM_PASSED") ? "CLAIM_PASSED"
+        : nonRej.every((i: any) => i.itemStatus === "LOG_PASSED") ? "LOG_PASSED"
+        : nonRej.every((i: any) => i.itemStatus === "PRES_PASSED") ? "PRES_PASSED"
         : nonRej.every((i: any) => i.itemStatus === "VP_PASSED") ? "VP_PASSED"
+        : nonRej.every((i: any) => i.itemStatus === "VP_MER_PASSED") ? "VP_MER_PASSED"
         : nonRej.every((i: any) => i.itemStatus === "PASSED") ? "PASSED"
-        : "PENDING"
-      return { style, items, status }
+        : STATUS_ORDER[Math.min(...nonRej.map((i: any) => STATUS_ORDER.indexOf(i.itemStatus)).filter(x => x >= 0))] || "PENDING"
+      const totalGross = nonRej.reduce((s: number, i: any) => s + (Number(i.grossWeight) || 0), 0)
+      const totalEst = nonRej.reduce((s: number, i: any) => s + (Number(i.airFreight) || 0), 0)
+      const totalActual = nonRej.reduce((s: number, i: any) => s + (Number(i.actualAirFreight) || 0), 0)
+      return { style, items, status, totalGross, totalEst, totalActual }
     })
-
   }, [req])
 
   const toggleExpand = (style: string) => {
@@ -227,15 +286,47 @@ export default function RequestDetailPage() {
   const activeItems = req.items?.filter((i: any) => i.itemStatus !== "REJECTED") || []
   const pendingScmItems = req?.status === "PENDING_SCM" ? activeItems.filter((i: any) => i.itemStatus === "PENDING") : activeItems
   const forwardedScmItems = req?.status === "PENDING_SCM" ? activeItems.filter((i: any) => i.itemStatus === "PASSED") : []
-  const pendingLogItems = req?.status === "PENDING_LOGISTICS" ? activeItems.filter((i: any) => i.itemStatus === "PENDING") : activeItems
-  const forwardedLogItems = req?.status === "PENDING_LOGISTICS" ? activeItems.filter((i: any) => i.itemStatus === "PASSED") : []
+  const readyScmStyles = [...new Set(pendingScmItems.filter((i: any) => soClaimDepts[i.id]).map((i: any) => i.style as string))]
+    .filter(style => pendingScmItems.filter((i: any) => i.style === style).every((i: any) => soClaimDepts[i.id]))
+  const readyScmItemIds = pendingScmItems.filter((i: any) => readyScmStyles.includes(i.style)).map((i: any) => i.id as string)
+  const vpMerPassedItems = req?.status === "PENDING_VP_MER" ? activeItems.filter((i: any) => i.itemStatus === "VP_MER_PASSED") : []
+  const scmPassedAtVpMer = req?.status === "PENDING_VP_MER" ? activeItems.filter((i: any) => i.itemStatus === "PASSED") : []
+  // Logistics items: PRES_PASSED (ready for logistics) and LOG_PASSED (already processed)
+  const pendingLogItems = presPassedItems
+  const forwardedLogItems = logPassedItems
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
+      {submitting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[260px]">
+            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className="text-center">
+              <p className="font-semibold text-gray-800 text-sm">Approving...</p>
+              <p className="text-xs text-gray-400 mt-1">Please do not close this page.</p>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700">← Back</button>
         <h1 className="text-xl font-bold text-gray-900">{req.documentNo}</h1>
-        <StatusBadge status={req.status} />
+        {(() => {
+          const merAtts = (req.attachments || []).filter((a: any) => ["MER_USER","VP_MER"].includes(a.uploadedBy?.role) && !a.itemId)
+          if (merAtts.length > 0) {
+            return merAtts.map((att: any) => (
+              <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
+                className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full hover:bg-orange-100 whitespace-nowrap font-medium">
+                📎 {att.fileName}
+              </a>
+            ))
+          }
+          return (
+            <span className="flex items-center gap-1 text-xs bg-gray-100 border border-gray-200 text-gray-400 px-2 py-0.5 rounded-full cursor-not-allowed select-none">
+              📎 MER file
+            </span>
+          )
+        })()}
         {role === "MER_USER" && req.status === "PENDING_VP_MER" && (
           <button onClick={async () => {
             if (!confirm("Delete this request?")) return
@@ -255,7 +346,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* Style Accordion */}
-      {canAct && isStyleApprover && (
+      {canAct && isStyleApprover && !isScmAtVpMer && !isPresidentRole && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">STYLES ({styleGroups.length})</h2>
@@ -272,11 +363,22 @@ export default function RequestDetailPage() {
             const isSub = submitting === g.style
             return (
               <div key={g.style} className={`rounded-xl border overflow-hidden ${g.status === "PASSED" ? "border-green-200" : g.status === "REJECTED" ? "border-red-200" : isBackScm ? "border-orange-200" : "border-gray-200"}`}>
-                <div className={`flex items-center gap-3 px-4 py-3 ${g.status === "PASSED" ? "bg-green-50" : g.status === "REJECTED" ? "bg-red-50" : "bg-white"}`}>
+                <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${g.status === "PASSED" ? "bg-green-50" : g.status === "REJECTED" ? "bg-red-50" : "bg-white"}`}>
                   <button onClick={() => toggleExpand(g.style)} className="text-gray-400 hover:text-gray-700 w-5 text-center">{isExp ? "▼" : "▶"}</button>
-                  <span className="font-semibold text-gray-800 flex-1">{g.style}</span>
-                  <span className="text-xs text-gray-400">{g.items.length} SO(s)</span>
-                  {g.status === "PASSED" && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Approved</span>}
+                  <div className="flex-1 flex items-center gap-3 min-w-0">
+                    <span className="font-semibold text-gray-800 shrink-0">{g.style}</span>
+                    <div className="hidden sm:flex items-center gap-3 text-xs">
+                      <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
+                      <span className="text-gray-300">|</span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} THB</span></span>
+                      {(g as any).totalActual > 0 && <>
+                        <span className="text-gray-300">|</span>
+                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} THB</span></span>
+                      </>}
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400 shrink-0">{g.items.length} SO(s)</span>
+                  {(g.status === "PASSED" || g.status === "VP_MER_PASSED") && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Approved — Forwarded to SCM</span>}
                   {g.status === "REJECTED" && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Rejected</span>}
                   {g.status === "PENDING" && (
                     <div className="flex gap-2">
@@ -382,15 +484,26 @@ export default function RequestDetailPage() {
             const isBackScm = backToScmStyleOpen === g.style
             const isSub = submitting === g.style
             const isReady = g.status === "PASSED"
-            const isApproved = g.status === "VP_PASSED"
+            const isApproved = ["VP_PASSED","PRES_PASSED","LOG_PASSED","CLAIM_PASSED","COMPLETED"].includes(g.status)
             const isWaiting = g.status === "PENDING"
             return (
               <div key={g.style} className={`rounded-xl border overflow-hidden ${isApproved ? "border-green-200" : isRej || g.status === "REJECTED" ? "border-red-200" : isBackScm ? "border-orange-200" : isWaiting ? "border-gray-200 opacity-60" : "border-blue-200"}`}>
-                <div className={`flex items-center gap-3 px-4 py-3 ${isApproved ? "bg-green-50" : g.status === "REJECTED" ? "bg-red-50" : isBackScm ? "bg-orange-50" : isWaiting ? "bg-gray-50" : "bg-blue-50"}`}>
+                <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${isApproved ? "bg-green-50" : g.status === "REJECTED" ? "bg-red-50" : isBackScm ? "bg-orange-50" : isWaiting ? "bg-gray-50" : "bg-blue-50"}`}>
                   <button onClick={() => toggleExpand(g.style)} className="text-gray-400 hover:text-gray-700 w-5 text-center">{isExp ? "▼" : "▶"}</button>
-                  <span className="font-semibold text-gray-800 flex-1">{g.style}</span>
-                  <span className="text-xs text-gray-400">{g.items.length} SO(s)</span>
-                  {isWaiting && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Waiting for SCM</span>}
+                  <div className="flex-1 flex items-center gap-3 min-w-0">
+                    <span className="font-semibold text-gray-800 shrink-0">{g.style}</span>
+                    <div className="hidden sm:flex items-center gap-3 text-xs">
+                      <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
+                      <span className="text-gray-300">|</span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} THB</span></span>
+                      {(g as any).totalActual > 0 && <>
+                        <span className="text-gray-300">|</span>
+                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} THB</span></span>
+                      </>}
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400 shrink-0">{g.items.length} SO(s)</span>
+                  {isWaiting && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">⏳ Waiting for SCM</span>}
                   {isApproved && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Approved</span>}
                   {g.status === "REJECTED" && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Rejected</span>}
                   {isReady && !isRej && !isBackScm && (
@@ -449,64 +562,518 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* DVM CLAIM per-SO approval with checkbox forwarding */}
+      {/* President: approve/reject VP_PASSED styles (per-style forwarding) */}
+      {isPresidentRole && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-gray-800">STYLE APPROVAL — PRESIDENT</h2>
+            <div className="flex gap-4 text-xs font-medium">
+              <span className="text-gray-400">{styleGroups.filter(g => g.status === "PENDING" || g.status === "PASSED").length} earlier stage</span>
+              <span className="text-blue-600">{styleGroups.filter(g => g.status === "VP_PASSED").length} ready to approve</span>
+              <span className="text-green-600">{styleGroups.filter(g => g.status === "PRES_PASSED").length} approved</span>
+              <span className="text-red-600">{styleGroups.filter(g => g.status === "REJECTED").length} rejected</span>
+            </div>
+          </div>
+          {styleGroups.map(g => {
+            const isExp = expanded.has(g.style)
+            const isRej = rejectingStyle === g.style
+            const isBackScm = backToScmStyleOpen === g.style
+            const isSub = submitting === g.style
+            const isReady = g.status === "VP_PASSED"
+            const isApproved = ["PRES_PASSED","LOG_PASSED","CLAIM_PASSED","COMPLETED"].includes(g.status)
+            const isWaiting = g.status === "PENDING" || g.status === "PASSED"
+            return (
+              <div key={g.style} className={`rounded-xl border overflow-hidden ${isApproved ? "border-green-200" : g.status === "REJECTED" ? "border-red-200" : isBackScm ? "border-orange-200" : isWaiting ? "border-gray-200 opacity-60" : "border-purple-200"}`}>
+                <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${isApproved ? "bg-green-50" : g.status === "REJECTED" ? "bg-red-50" : isBackScm ? "bg-orange-50" : isWaiting ? "bg-gray-50" : "bg-purple-50"}`}>
+                  <button onClick={() => toggleExpand(g.style)} className="text-gray-400 hover:text-gray-700 w-5 text-center">{isExp ? "▼" : "▶"}</button>
+                  <div className="flex-1 flex items-center gap-3 min-w-0">
+                    <span className="font-semibold text-gray-800 shrink-0">{g.style}</span>
+                    <div className="hidden sm:flex items-center gap-3 text-xs">
+                      <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
+                      <span className="text-gray-300">|</span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} THB</span></span>
+                      {(g as any).totalActual > 0 && <>
+                        <span className="text-gray-300">|</span>
+                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} THB</span></span>
+                      </>}
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400 shrink-0">{g.items.length} SO(s)</span>
+                  {isWaiting && (
+                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                      {g.status === "PENDING" ? "⏳ Waiting for SCM" : "⏳ Waiting for VP SCM"}
+                    </span>
+                  )}
+                  {isApproved && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Approved — Sent to Logistics</span>}
+                  {g.status === "REJECTED" && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Rejected</span>}
+                  {isReady && !isRej && !isBackScm && (
+                    <div className="flex gap-2">
+                      <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">{isSub ? "..." : "Approve"}</button>
+                      <button onClick={() => { setRejectingStyle(g.style); setRejectComment(""); setBackToScmStyleOpen(null) }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>
+                      <button onClick={() => { setBackToScmStyleOpen(g.style); setBackToScmStyleComment(""); setRejectingStyle(null) }} disabled={isSub} className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to SCM</button>
+                    </div>
+                  )}
+                </div>
+                {isRej && isReady && (
+                  <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
+                    <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
+                    <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                    <div className="flex gap-2">
+                      <button onClick={() => rejectStyle(g.style)} disabled={isSub || !rejectComment.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">{isSub ? "..." : "Confirm Reject"}</button>
+                      <button onClick={() => { setRejectingStyle(null); setRejectComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {isBackScm && isReady && (
+                  <div className="px-4 py-3 bg-orange-50 border-t border-orange-100 space-y-2">
+                    <label className="text-xs font-medium text-orange-700">Back to SCM — ระบุเหตุผล *</label>
+                    <textarea value={backToScmStyleComment} onChange={e => setBackToScmStyleComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                    <div className="flex gap-2">
+                      <button onClick={() => backToScmStyleFn(g.style)} disabled={isSub || !backToScmStyleComment.trim()} className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{isSub ? "..." : "Confirm Back to SCM"}</button>
+                      <button onClick={() => { setBackToScmStyleOpen(null); setBackToScmStyleComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {isExp && (
+                  <div className="border-t border-gray-100 overflow-x-auto">
+                    <table className="text-xs w-full">
+                      <thead className="bg-gray-50"><tr>
+                        {["SO","CLAIM DEPT","DELAY REASON","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
+                          <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                      </tr></thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {g.items.map((item: any) => (
+                          <tr key={item.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-medium">{item.so}</td>
+                            <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
+                            <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
+                            <td className="px-3 py-2">{item.qtyRequestAir}</td>
+                            <td className="px-3 py-2">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "-"}</td>
+                            <td className="px-3 py-2">{item.airFreight != null ? Number(item.airFreight).toLocaleString() : "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* SCM processes VP_MER_PASSED items at PENDING_VP_MER */}
+      {isScmAtVpMer && (
+        <div className="bg-white rounded-xl border p-5 space-y-4">
+          <h2 className="font-semibold text-gray-800 border-b pb-2">
+            CLAIM DEPT — VP MER APPROVED
+            <span className="text-xs font-normal text-gray-400 ml-2">
+              {vpMerPassedItems.filter((i: any) => soClaimDepts[i.id]).length}/{vpMerPassedItems.length} assigned
+              {scmPassedAtVpMer.length > 0 && <span className="text-green-600 ml-2">· {scmPassedAtVpMer.length} forwarded to VP SCM</span>}
+            </span>
+          </h2>
+
+          {vpMerPassedItems.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">ยังไม่มี style ที่ VP MER approve มาหา SCM</p>
+          ) : (
+            <>
+              {(() => {
+                const readyVpMerStyles = [...new Set(vpMerPassedItems.filter((i: any) => soClaimDepts[i.id]).map((i: any) => i.style as string))]
+                  .filter(style => vpMerPassedItems.filter((i: any) => i.style === style).every((i: any) => soClaimDepts[i.id]))
+                const readyVpMerItemIds = vpMerPassedItems.filter((i: any) => readyVpMerStyles.includes(i.style)).map((i: any) => i.id as string)
+                return (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">เลือก SO ที่ต้องการ assign Claim Dept แล้วกด Forward</span>
+                    <div className="flex items-center gap-3">
+                      {readyVpMerStyles.length > 0 && (
+                        <button type="button" disabled={submitting === "_fwd_vpm"}
+                          onClick={async () => {
+                            setSubmitting("_fwd_vpm")
+                            const depts: Record<string, string> = {}
+                            const comments: Record<string, string> = {}
+                            readyVpMerItemIds.forEach((iid: string) => {
+                              depts[iid] = soClaimDepts[iid]
+                              if (soClaimComments[iid]) comments[iid] = soClaimComments[iid]
+                            })
+                            const res = await fetch(`/api/requests/${id}/approve`, {
+                              method: "POST", headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "approve", soClaimData: depts, soClaimComments: comments, comment: "" })
+                            })
+                            if (res.ok) {
+                              const updated = await res.json()
+                              if (updated.status !== "PENDING_VP_MER") { window.location.href = "/approvals" } else { setReq(updated) }
+                            }
+                            setSubmitting(null)
+                          }}
+                          className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50">
+                          {submitting === "_fwd_vpm" ? "..." : `Forward ${readyVpMerStyles.length} ready style(s) →`}
+                        </button>
+                      )}
+                      <button type="button" onClick={() => setSoClaimSelected(
+                        soClaimSelected.size === vpMerPassedItems.length ? new Set() : new Set(vpMerPassedItems.map((i: any) => i.id))
+                      )} className="text-xs text-blue-600 hover:underline">
+                        {soClaimSelected.size === vpMerPassedItems.length ? "Deselect All" : "Select All"}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
+              <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-3 py-2 w-8"></th>
+                      {["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","SCM DELAY REASON"].map(h =>
+                        <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {vpMerPassedItems.map((item: any) => {
+                      const assigned = soClaimDepts[item.id]
+                      const selected = soClaimSelected.has(item.id)
+                      return (
+                        <tr key={item.id} className={`cursor-pointer ${selected ? "bg-blue-50" : assigned ? "bg-green-50" : "bg-red-50 hover:bg-red-100"}`}
+                          onClick={() => setSoClaimSelected(prev => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })}>
+                          <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                            <input type="checkbox" checked={selected}
+                              onChange={e => setSoClaimSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                              className="w-4 h-4 rounded border-gray-300" />
+                          </td>
+                          <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{item.description}</td>
+                          <td className="px-3 py-2">{item.gmtType}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                          <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
+                          <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                          <td className="px-3 py-2 text-blue-700 font-medium">{fmtNum(item.grossWeight, 2)}</td>
+                          <td className="px-3 py-2 text-blue-700 font-medium">{fmtNum(item.airFreight)}</td>
+                          <td className="px-3 py-2">{item.factory}</td>
+                          <td className="px-3 py-2">{item.country}</td>
+                          <td className="px-3 py-2">{item.port}</td>
+                          <td className="px-3 py-2">
+                            {assigned
+                              ? <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{assigned}</span>
+                              : <span className="text-red-400 text-xs italic">-- Not assigned --</span>}
+                          </td>
+                          <td className="px-3 py-2 min-w-[200px]" onClick={e => e.stopPropagation()}>
+                            {item.reasonDelay && (
+                              <div className="mb-1 text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded">MER: {item.reasonDelay}</div>
+                            )}
+                            <input type="text" placeholder="SCM delay reason..."
+                              value={soClaimComments[item.id] || ""}
+                              onChange={e => setSoClaimComments(p => ({ ...p, [item.id]: e.target.value }))}
+                              className="border border-gray-300 rounded px-2 py-1 text-xs w-full focus:ring-1 focus:ring-blue-400" />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {soClaimSelected.size > 0 && (
+                <div className="border border-blue-300 rounded-lg p-3 bg-blue-50 space-y-2">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-xs font-semibold text-blue-700">{soClaimSelected.size} SO selected</span>
+                    <select value={batchClaimDept} onChange={e => setBatchClaimDept(e.target.value)}
+                      className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400">
+                      <option value="">-- Select Claim Dept --</option>
+                      {CLAIM_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <input type="text" placeholder="Comment / Delay reason..."
+                      value={batchComment} onChange={e => setBatchComment(e.target.value)}
+                      className="flex-1 min-w-[220px] border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400" />
+                    <button type="button" disabled={!batchClaimDept || submitting === "_"}
+                      onClick={async () => {
+                        const newDepts: Record<string, string> = {}
+                        const newComments: Record<string, string> = {}
+                        soClaimSelected.forEach(itemId => {
+                          newDepts[itemId] = batchClaimDept
+                          if (batchComment) newComments[itemId] = batchComment
+                        })
+                        setSoClaimDepts(prev => ({ ...prev, ...newDepts }))
+                        setSoClaimComments(prev => ({ ...prev, ...newComments }))
+                        setSoClaimSelected(new Set())
+                        setBatchClaimDept("")
+                        setBatchComment("")
+                        setSubmitting("_")
+                        const res = await fetch(`/api/requests/${id}/approve`, {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "approve", soClaimData: newDepts, soClaimComments: newComments, comment: "" })
+                        })
+                        if (res.ok) {
+                          const updated = await res.json()
+                          if (updated.status !== "PENDING_VP_MER") {
+                            window.location.href = "/approvals"
+                          } else {
+                            setReq(updated)
+                          }
+                        } else {
+                          const err = await res.json(); alert(err.error || "Error")
+                        }
+                        setSubmitting(null)
+                      }}
+                      className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">
+                      {submitting === "_" ? "..." : `Assign & Forward ${soClaimSelected.size} SO(s) to VP SCM`}
+                    </button>
+                    <button type="button" onClick={() => { setSoClaimSelected(new Set()); setBatchClaimDept(""); setBatchComment("") }}
+                      className="text-sm text-gray-500 hover:text-gray-700 px-2">Cancel</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Logistics: process PRES_PASSED items (per-style forwarding) */}
+      {isLogisticsRole && (
+        <div className="bg-white rounded-xl border p-5 space-y-3">
+          <h2 className="font-semibold text-gray-800 border-b pb-2">
+            INVOICE / BOOKING DATE — LOGISTICS
+            <span className="text-xs font-normal text-gray-400 ml-2">
+              {pendingLogItems.filter((i: any) => itemLogistics[i.id]?.invoiceNo).length}/{pendingLogItems.length} ready
+              {forwardedLogItems.length > 0 && <span className="text-green-600 ml-2">· {forwardedLogItems.length} forwarded to Claim</span>}
+            </span>
+          </h2>
+          <div className="border border-gray-200 rounded-lg overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-3 py-2 w-8"></th>
+                  {["SO","STYLE","GMT","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE",""].map(h =>
+                    <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pendingLogItems.map((item: any) => {
+                  const inv = itemLogistics[item.id]
+                  const sel = logSelected.has(item.id)
+                  const editing = logEditMode.has(item.id)
+                  return (
+                    <tr key={item.id} className={`cursor-pointer ${sel ? "bg-blue-50" : inv?.invoiceNo ? "bg-green-50" : "hover:bg-gray-50"}`}
+                      onClick={() => setLogSelected(prev => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })}>
+                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                        <input type="checkbox" checked={sel}
+                          onChange={e => setLogSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                          className="w-4 h-4 rounded border-gray-300" />
+                      </td>
+                      <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
+                      <td className="px-3 py-2">{item.gmtType}</td>
+                      <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                      <td className="px-3 py-2 text-gray-400">{fmtNum(item.airFreight)}</td>
+                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                        <input type="number" value={itemActuals[item.id] || ""}
+                          onChange={e => setItemActuals(p => ({...p,[item.id]:e.target.value}))}
+                          placeholder="0" className="w-24 border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-400" />
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        {editing
+                          ? <input type="text" autoFocus value={inv?.invoiceNo || ""}
+                              onChange={e => setItemLogistics(p => ({ ...p, [item.id]: { ...p[item.id], invoiceNo: e.target.value } }))}
+                              className="w-28 border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-400" />
+                          : inv?.invoiceNo
+                            ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{inv.invoiceNo}</span>
+                            : <span className="text-gray-300 text-xs italic">--</span>}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        {editing
+                          ? <input type="date" value={inv?.bookingDate || ""}
+                              onChange={e => setItemLogistics(p => ({ ...p, [item.id]: { ...p[item.id], bookingDate: e.target.value } }))}
+                              className="border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-400" />
+                          : inv?.bookingDate
+                            ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{inv.bookingDate}</span>
+                            : <span className="text-gray-300 text-xs italic">--</span>}
+                      </td>
+                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setLogEditMode(prev => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })}
+                          className={`p-1 rounded hover:bg-gray-200 transition-colors ${editing ? "text-blue-600" : "text-gray-400"}`}
+                          title={editing ? "Done" : "Edit"}>
+                          {editing ? "✓" : "✏️"}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          {logSelected.size > 0 && (
+            <div className="border border-blue-300 rounded-lg p-3 bg-blue-50 space-y-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-xs font-semibold text-blue-700">{logSelected.size} SO selected</span>
+                <input type="text" placeholder="Invoice No..."
+                  value={batchInvoice} onChange={e => setBatchInvoice(e.target.value)}
+                  className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400 w-44" />
+                <input type="date" value={batchBookingDate} onChange={e => setBatchBookingDate(e.target.value)}
+                  className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400" />
+                <button type="button" disabled={!batchInvoice}
+                  onClick={() => {
+                    setItemLogistics(prev => {
+                      const updated = { ...prev }
+                      logSelected.forEach(itemId => { updated[itemId] = { invoiceNo: batchInvoice, bookingDate: batchBookingDate } })
+                      return updated
+                    })
+                    setLogSelected(new Set()); setBatchInvoice(""); setBatchBookingDate("")
+                  }}
+                  className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">
+                  Assign to {logSelected.size} SO(s)
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              disabled={
+                submitting === "_" ||
+                !pendingLogItems.some((i: any) => itemLogistics[i.id]?.invoiceNo && itemLogistics[i.id]?.bookingDate && parseFloat(itemActuals[i.id] || "0") > 0) ||
+                pendingLogItems.some((i: any) => itemLogistics[i.id]?.invoiceNo && !(parseFloat(itemActuals[i.id] || "0") > 0))
+              }
+              onClick={async () => {
+                setSubmitting("_")
+                const res = await fetch(`/api/requests/${id}/approve`, {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "approve", itemActuals, itemLogistics })
+                })
+                if (res.ok) {
+                  const updated = await res.json()
+                  setReq(updated)
+                  if (!updated.items?.some((i: any) => i.itemStatus === "PRES_PASSED")) {
+                    window.location.href = "/approvals"
+                  }
+                } else { const err = await res.json(); alert(err.error || "Error") }
+                setSubmitting(null)
+              }}
+              className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+              {submitting === "_" ? "..." : "Confirm & Forward to Claim"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* DVM CLAIM per-SO approval — priority-based sequential */}
       {isDvmClaim && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">SO APPROVAL — DVM {claimDept} ({myClaimItems.length})</h2>
-            <div className="flex gap-4 text-xs font-medium">
-              <span className="text-yellow-600">{myClaimItems.filter((i:any) => i.itemStatus === "PENDING").length} pending</span>
-              <span className="text-green-600">{myClaimItems.filter((i:any) => i.itemStatus === "PASSED").length} forwarded</span>
+            <div className="flex items-center gap-4 text-xs font-medium">
+              <span className="text-yellow-600">{myClaimItems.filter((i:any) => i.itemStatus === "LOG_PASSED").length} pending</span>
+              <span className="text-green-600">{myClaimItems.filter((i:any) => i.itemStatus === "CLAIM_PASSED").length} forwarded to VP</span>
               <span className="text-red-600">{myClaimItems.filter((i:any) => i.itemStatus === "REJECTED").length} rejected</span>
+              {(() => {
+                const myTurnItems = myClaimItems.filter((i: any) => {
+                  if (i.itemStatus !== "LOG_PASSED") return false
+                  const appr: any[] = i.claimApprovals || []
+                  if (appr.some((a: any) => a.userId === myUserId)) return false
+                  const lower = myPriority !== null ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority) : []
+                  return lower.every((u: any) => appr.some((a: any) => a.userId === u.id))
+                })
+                if (myTurnItems.length === 0) return null
+                const allSel = myTurnItems.every((i: any) => dvmSelected.has(i.id))
+                return (
+                  <button onClick={() => setDvmSelected(allSel ? new Set() : new Set(myTurnItems.map((i: any) => i.id)))}
+                    className="text-blue-600 hover:underline">
+                    {allSel ? "Deselect All" : `Select All (${myTurnItems.length})`}
+                  </button>
+                )
+              })()}
             </div>
           </div>
 
-          {/* Select all / deselect all */}
-          {myClaimItems.some((i: any) => i.itemStatus === "PENDING") && (
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => {
-                const pendingIds = myClaimItems.filter((i: any) => i.itemStatus === "PENDING").map((i: any) => i.id)
-                setDvmSelected(prev => prev.size === pendingIds.length ? new Set() : new Set(pendingIds))
-              }} className="text-xs text-blue-600 hover:underline">
-                {dvmSelected.size === myClaimItems.filter((i: any) => i.itemStatus === "PENDING").length ? "Deselect All" : "Select All Pending"}
-              </button>
+          {/* Priority order reference */}
+          {claimApproversList.length > 1 && (
+            <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+              <span className="font-medium text-gray-600">Approval order:</span>
+              {claimApproversList.map((u: any, idx: number) => (
+                <span key={u.id} className="flex items-center gap-1">
+                  {idx > 0 && <span className="text-gray-300">→</span>}
+                  <span className={`px-2 py-0.5 rounded-full font-medium ${u.id === myUserId ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
+                    {u.priority != null ? `${u.priority}. ` : ""}{u.name || u.email}
+                  </span>
+                </span>
+              ))}
             </div>
           )}
 
           {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").map((item: any) => {
-            const isRej = rejectingSo === item.id
             const isSub = submitting === item.id
             const itemAttachments = (req.attachments || []).filter((a: any) => a.itemId === item.id)
             const isUploading = uploadingItem === item.id
-            const isPending = item.itemStatus === "PENDING"
-            const isPassed = item.itemStatus === "PASSED"
-            const isChecked = dvmSelected.has(item.id)
+            const isPending = item.itemStatus === "LOG_PASSED"
+            const isPassed = item.itemStatus === "CLAIM_PASSED"
+            // Who has approved this item so far
+            const itemApprovals: any[] = item.claimApprovals || []
+            const iHaveApproved = itemApprovals.some((a: any) => a.userId === myUserId)
+            // Can I approve? All lower-priority approvers must have approved first
+            const lowerApprovers = myPriority !== null
+              ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority)
+              : []
+            const lowerApproved = lowerApprovers.every((u: any) => itemApprovals.some((a: any) => a.userId === u.id))
+            const canApproveNow = isPending && !iHaveApproved && lowerApproved
+            // Next approver info
+            const nextApprover = claimApproversList.find((u: any) =>
+              !itemApprovals.some((a: any) => a.userId === u.id)
+            )
+            const isMyTurn = canApproveNow
+            const isP1 = myPriority === 1 || (myPriority === null && claimApproversList.length === 1)
+            const isExp = expanded.has(item.id)
             return (
-              <div key={item.id} className={`rounded-xl border overflow-hidden ${isPassed ? "border-green-200" : "border-gray-200"}`}>
-                <div className={`flex items-center gap-3 px-4 py-3 ${isPassed ? "bg-green-50" : "bg-white"}`}>
-                  {/* Checkbox — only for PENDING items */}
-                  {isPending ? (
-                    <input type="checkbox" checked={isChecked}
+              <div key={item.id} className={`rounded-xl border overflow-hidden ${isPassed ? "border-green-200" : iHaveApproved ? "border-blue-200" : "border-gray-200"}`}>
+                <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${isPassed ? "bg-green-50" : iHaveApproved ? "bg-blue-50" : "bg-white"}`}>
+                  {isMyTurn && (
+                    <input type="checkbox" checked={dvmSelected.has(item.id)}
                       onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
-                      className="w-4 h-4 rounded border-gray-300 shrink-0" />
-                  ) : (
-                    <span className="w-4 shrink-0" />
+                      className="w-4 h-4 rounded border-gray-300 shrink-0 cursor-pointer" />
                   )}
-                  <span className="font-semibold text-gray-800 w-28">{item.so}</span>
-                  <span className="text-xs text-gray-500 flex-1">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
-                  {isPassed && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Forwarded to VP</span>}
-                  {/* Attach file button */}
-                  <label className={`cursor-pointer text-xs px-2 py-1 rounded border ${isUploading ? "opacity-50 pointer-events-none" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
-                    {isUploading ? "Uploading..." : "📎 Attach"}
-                    <input type="file" className="hidden" disabled={isUploading}
-                      onChange={e => { if (e.target.files?.[0]) attachFileFn(e.target.files[0], item.id); e.target.value = "" }} />
-                  </label>
-                  {isPending && !isPassed && (
+                  <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
+                  <span className="font-semibold text-gray-800 w-28 shrink-0">{item.so}</span>
+                  <span className="text-xs text-gray-500 flex-1 min-w-0 truncate">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
+
+
+                  {isPassed && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">All approved → VP</span>}
+                  {isPending && !iHaveApproved && !canApproveNow && nextApprover && (
+                    <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      Waiting: {nextApprover.name || nextApprover.email}
+                    </span>
+                  )}
+                  {iHaveApproved && !isPassed && (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">You approved ✓</span>
+                  )}
+
+                  {/* Attach — priority 1 only */}
+                  {isP1 && isPending && (
+                    <label className={`cursor-pointer text-xs px-2 py-1 rounded border ${isUploading ? "opacity-50 pointer-events-none" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                      {isUploading ? "Uploading..." : "📎 Attach"}
+                      <input type="file" className="hidden" disabled={isUploading}
+                        onChange={e => { if (e.target.files?.[0]) attachFileFn(e.target.files[0], item.id); e.target.value = "" }} />
+                    </label>
+                  )}
+
+                  {/* Approve button — only if it's my turn */}
+                  {isMyTurn && (
                     <div className="flex gap-2">
-                      <button onClick={() => { setBackToScmSo(backToScmSo === item.id ? null : item.id); setBackToScmSoComment(""); setRejectingSo(null) }} disabled={isSub}
-                        className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
-                        Back to SCM
+                      <button onClick={async () => {
+                          setSubmitting(item.id)
+                          const res = await fetch(`/api/requests/${id}/approve`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "approve_so", itemId: item.id })
+                          })
+                          if (res.ok) {
+                            setReq(await res.json())
+                            setDvmSelected(prev => { const n = new Set(prev); n.delete(item.id); return n })
+                          } else { const err = await res.json(); alert(err.error || "Error") }
+                          setSubmitting(null)
+                        }} disabled={isSub}
+                        className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                        {isSub ? "..." : "Approve"}
                       </button>
+                      <button onClick={() => { setRejectingSo(item.id); setRejectSoComment(""); setBackToScmSo(null) }} disabled={isSub}
+                        className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>
+                      <button onClick={() => { setBackToScmSo(backToScmSo === item.id ? null : item.id); setBackToScmSoComment(""); setRejectingSo(null) }} disabled={isSub}
+                        className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to SCM</button>
                     </div>
                   )}
                 </div>
@@ -517,14 +1084,37 @@ export default function RequestDetailPage() {
                       <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
                         className="flex items-center gap-1.5 text-xs bg-white border border-blue-200 text-blue-700 px-2.5 py-1 rounded-full hover:bg-blue-100 font-medium">
                         📎 {att.fileName}
-                        <span className="text-gray-400 font-normal">· {att.uploadedBy?.name} ({att.claimDept || att.uploadedBy?.role})</span>
+                        <span className="text-gray-400 font-normal">· {att.uploadedBy?.name}</span>
                       </a>
                     ))}
                   </div>
                 )}
+                {rejectingSo === item.id && (
+                  <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
+                    <label className="text-xs font-medium text-red-700">Reject reason *</label>
+                    <textarea value={rejectSoComment} onChange={e => setRejectSoComment(e.target.value)} rows={2}
+                      placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                    <div className="flex gap-2">
+                      <button disabled={isSub || !rejectSoComment.trim()}
+                        onClick={async () => {
+                          setSubmitting(item.id)
+                          const res = await fetch(`/api/requests/${id}/approve`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "reject_so", itemId: item.id, comment: rejectSoComment })
+                          })
+                          if (res.ok) { setReq(await res.json()) } else { const err = await res.json(); alert(err.error || "Error") }
+                          setSubmitting(null); setRejectingSo(null); setRejectSoComment("")
+                        }}
+                        className="px-4 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-40">
+                        {isSub ? "..." : "Confirm Reject"}
+                      </button>
+                      <button onClick={() => setRejectingSo(null)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                    </div>
+                  </div>
+                )}
                 {backToScmSo === item.id && (
                   <div className="px-4 py-3 bg-orange-50 border-t border-orange-100 space-y-2">
-                    <label className="text-xs font-medium text-orange-700">Back to SCM — ระบุเหตุผล *</label>
+                    <label className="text-xs font-medium text-orange-700">Back to SCM reason *</label>
                     <textarea value={backToScmSoComment} onChange={e => setBackToScmSoComment(e.target.value)} rows={2}
                       placeholder="Enter reason..." className="w-full border border-orange-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                     <div className="flex gap-2">
@@ -546,38 +1136,72 @@ export default function RequestDetailPage() {
                     </div>
                   </div>
                 )}
+                {isExp && (
+                  <div className="border-t border-gray-100 overflow-x-auto">
+                    <table className="text-xs w-full">
+                      <thead className="bg-gray-50">
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","CLAIM DEPT","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                          <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium">{item.so}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
+                          <td className="px-3 py-2">{item.customerPO}</td>
+                          <td className="px-3 py-2">{item.description}</td>
+                          <td className="px-3 py-2">{item.gmtType}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                          <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
+                          <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                          <td className="px-3 py-2">{fmtNum(item.grossWeight, 2)}</td>
+                          <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
+                          <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
+                          <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
+                          <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
+                          <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
+                          <td className="px-3 py-2">{item.factory}</td>
+                          <td className="px-3 py-2">{item.country}</td>
+                          <td className="px-3 py-2">{item.port}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )
           })}
 
-          {/* Forward selected SOs to VP */}
+          {/* Batch approve panel */}
           {dvmSelected.size > 0 && (
-            <div className="border border-violet-300 rounded-lg p-3 bg-violet-50 flex items-center gap-3">
-              <span className="text-xs font-semibold text-violet-700">{dvmSelected.size} SO(s) selected</span>
+            <div className="sticky bottom-4 bg-white border border-blue-300 rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 flex-wrap z-10">
+              <span className="text-sm font-semibold text-blue-700">{dvmSelected.size} SO selected</span>
               <button
-                disabled={submitting === "_dvm"}
+                disabled={submitting !== null}
                 onClick={async () => {
-                  setSubmitting("_dvm")
-                  const res = await fetch(`/api/requests/${id}/approve`, {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: "forward_dvm_sos", itemIds: [...dvmSelected], comment: "" })
-                  })
-                  if (res.ok) {
-                    const updated = await res.json()
-                    if (updated.status !== "PENDING_CLAIM") {
-                      window.location.href = "/approvals"
-                    } else {
-                      setReq(updated)
-                      setDvmSelected(new Set())
-                    }
-                  } else { const err = await res.json(); alert(err.error || "Error") }
+                  const ids = [...dvmSelected]
+                  let updated: any = req
+                  for (const itemId of ids) {
+                    setSubmitting(itemId)
+                    const res = await fetch(`/api/requests/${id}/approve`, {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "approve_so", itemId })
+                    })
+                    if (res.ok) updated = await res.json()
+                  }
+                  setReq(updated)
+                  setDvmSelected(new Set())
                   setSubmitting(null)
                 }}
-                className="px-4 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700 disabled:opacity-50">
-                {submitting === "_dvm" ? "..." : `Forward ${dvmSelected.size} SO(s) to VP`}
+                className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                {submitting !== null ? "Approving..." : `Approve ${dvmSelected.size} SO(s)`}
               </button>
-              <button type="button" onClick={() => setDvmSelected(new Set())}
-                className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+              <button onClick={() => setDvmSelected(new Set())}
+                className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">
+                Cancel
+              </button>
             </div>
           )}
         </div>
@@ -588,74 +1212,155 @@ export default function RequestDetailPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">SO APPROVAL — VP {claimDept} ({myClaimItems.length})</h2>
-            <div className="flex gap-4 text-xs font-medium">
-              <span className="text-yellow-600">{myClaimItems.filter((i:any) => i.itemStatus === "PENDING").length} pending</span>
-              <span className="text-green-600">{myClaimItems.filter((i:any) => i.itemStatus === "PASSED").length} approved</span>
+            <div className="flex items-center gap-4 text-xs font-medium">
+              <span className="text-yellow-600">{myClaimItems.filter((i:any) => i.itemStatus === "CLAIM_PASSED").length} pending</span>
+              <span className="text-green-600">{myClaimItems.filter((i:any) => i.itemStatus === "COMPLETED").length} approved</span>
               <span className="text-red-600">{myClaimItems.filter((i:any) => i.itemStatus === "REJECTED").length} rejected</span>
+              {(() => {
+                const myTurnItems = myClaimItems.filter((i: any) => {
+                  if (i.itemStatus !== "CLAIM_PASSED") return false
+                  const appr: any[] = (i.claimApprovals || []).filter((a: any) => claimApproversList.some((u: any) => u.id === a.userId))
+                  if (appr.some((a: any) => a.userId === myUserId)) return false
+                  const lower = myPriority !== null ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority) : []
+                  return lower.every((u: any) => appr.some((a: any) => a.userId === u.id))
+                })
+                if (myTurnItems.length === 0) return null
+                const allSel = myTurnItems.every((i: any) => vpSelected.has(i.id))
+                return (
+                  <button onClick={() => setVpSelected(allSel ? new Set() : new Set(myTurnItems.map((i: any) => i.id)))}
+                    className="text-blue-600 hover:underline">
+                    {allSel ? "Deselect All" : `Select All (${myTurnItems.length})`}
+                  </button>
+                )
+              })()}
             </div>
           </div>
 
-          {/* Show all attachments for the request so VP can review documents */}
-          {(req.attachments || []).length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-              <p className="text-xs font-semibold text-blue-700 mb-2">ATTACHMENTS (SCM / MER / DVM)</p>
-              <div className="flex flex-wrap gap-2">
-                {(req.attachments || []).map((att: any) => (
+          {/* SCM attachments (doc-level) */}
+          {(() => {
+            const scmAtts = (req.attachments || []).filter((a: any) => a.uploadedBy?.role === "SCM_USER" && !a.itemId)
+            if (scmAtts.length === 0) return null
+            return (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-gray-500">SCM:</span>
+                {scmAtts.map((att: any) => (
                   <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 text-xs bg-white border border-blue-200 text-blue-700 px-2.5 py-1 rounded-full hover:bg-blue-100 font-medium">
+                    className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full hover:bg-blue-100 font-medium whitespace-nowrap">
                     📎 {att.fileName}
-                    <span className="text-gray-400 font-normal">· {att.uploadedBy?.name} ({att.claimDept || att.uploadedBy?.role})</span>
                   </a>
                 ))}
               </div>
+            )
+          })()}
+
+          {/* Priority order reference */}
+          {claimApproversList.length > 1 && (
+            <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+              <span className="font-medium text-gray-600">Approval order:</span>
+              {claimApproversList.map((u: any, idx: number) => (
+                <span key={u.id} className="flex items-center gap-1">
+                  {idx > 0 && <span className="text-gray-300">→</span>}
+                  <span className={`px-2 py-0.5 rounded-full font-medium ${u.id === myUserId ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
+                    {u.priority != null ? `${u.priority}. ` : ""}{u.name || u.email}
+                  </span>
+                </span>
+              ))}
             </div>
           )}
 
           {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").map((item: any) => {
-            const isRej = rejectingSo === item.id
             const isSub = submitting === item.id
             const itemAttachments = (req.attachments || []).filter((a: any) => a.itemId === item.id)
             const isUploading = uploadingItem === item.id
+            const isPending = item.itemStatus === "CLAIM_PASSED"
+            const isPassed = item.itemStatus === "COMPLETED"
+            // Filter approvals to only VP-tier approvers in this group
+            const itemApprovals: any[] = (item.claimApprovals || []).filter((a: any) =>
+              claimApproversList.some((u: any) => u.id === a.userId)
+            )
+            const iHaveApproved = itemApprovals.some((a: any) => a.userId === myUserId)
+            const lowerApprovers = myPriority !== null
+              ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority)
+              : []
+            const lowerApproved = lowerApprovers.every((u: any) => itemApprovals.some((a: any) => a.userId === u.id))
+            const canApproveNow = isPending && !iHaveApproved && lowerApproved
+            const nextApprover = claimApproversList.find((u: any) =>
+              !itemApprovals.some((a: any) => a.userId === u.id)
+            )
+            const isMyTurn = canApproveNow
+            const isP1 = myPriority === 1 || (myPriority === null && claimApproversList.length === 1)
+            const isExp = expanded.has(item.id)
             return (
-              <div key={item.id} className={`rounded-xl border overflow-hidden ${item.itemStatus === "PASSED" ? "border-green-200" : "border-gray-200"}`}>
-                <div className={`flex items-center gap-3 px-4 py-3 ${item.itemStatus === "PASSED" ? "bg-green-50" : "bg-white"}`}>
-                  <span className="font-semibold text-gray-800 w-28">{item.so}</span>
-                  <span className="text-xs text-gray-500 flex-1">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
-                  {item.itemStatus === "PASSED" && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Approved</span>}
-                  <label className={`cursor-pointer text-xs px-2 py-1 rounded border ${isUploading ? "opacity-50 pointer-events-none" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
-                    {isUploading ? "Uploading..." : "📎 Attach"}
-                    <input type="file" className="hidden" disabled={isUploading}
-                      onChange={e => { if (e.target.files?.[0]) attachFileFn(e.target.files[0], item.id); e.target.value = "" }} />
-                  </label>
-                  {item.itemStatus === "PENDING" && (
+              <div key={item.id} className={`rounded-xl border overflow-hidden ${isPassed ? "border-green-200" : iHaveApproved ? "border-blue-200" : "border-gray-200"}`}>
+                <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${isPassed ? "bg-green-50" : iHaveApproved ? "bg-blue-50" : "bg-white"}`}>
+                  {isMyTurn && (
+                    <input type="checkbox" checked={vpSelected.has(item.id)}
+                      onChange={e => setVpSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                      className="w-4 h-4 rounded border-gray-300 shrink-0 cursor-pointer" />
+                  )}
+                  <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
+                  <span className="font-semibold text-gray-800 w-28 shrink-0">{item.so}</span>
+                  <span className="text-xs text-gray-500 flex-1 min-w-0 truncate">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
+
+                  {isPassed && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">Completed</span>}
+                  {isPending && !iHaveApproved && !canApproveNow && nextApprover && (
+                    <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full whitespace-nowrap">
+                      Waiting: {nextApprover.name || nextApprover.email}
+                    </span>
+                  )}
+                  {iHaveApproved && !isPassed && (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">You approved ✓</span>
+                  )}
+
+                  {/* PDF download when completed */}
+                  {isPassed && <PdfDownloadButton req={req} item={item} compact alwaysShow />}
+
+                  {/* Attach — priority 1 only */}
+                  {isP1 && isPending && (
+                    <label className={`cursor-pointer text-xs px-2 py-1 rounded border ${isUploading ? "opacity-50 pointer-events-none" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                      {isUploading ? "Uploading..." : "📎 Attach"}
+                      <input type="file" className="hidden" disabled={isUploading}
+                        onChange={e => { if (e.target.files?.[0]) attachFileFn(e.target.files[0], item.id); e.target.value = "" }} />
+                    </label>
+                  )}
+
+                  {/* Approve/Reject/Back to SCM — only when it's my turn */}
+                  {isMyTurn && (
                     <div className="flex gap-2">
-                      <button onClick={() => approveSo(item.id)} disabled={isSub}
+                      <button onClick={async () => {
+                          setSubmitting(item.id)
+                          const res = await fetch(`/api/requests/${id}/approve`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "approve_so", itemId: item.id })
+                          })
+                          if (res.ok) {
+                            setReq(await res.json())
+                            setVpSelected(prev => { const n = new Set(prev); n.delete(item.id); return n })
+                          } else { const err = await res.json(); alert(err.error || "Error") }
+                          setSubmitting(null)
+                        }} disabled={isSub}
                         className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
-                        {isSub && !isRej ? "..." : "Approve"}
+                        {isSub ? "..." : "Approve"}
                       </button>
-                      <button onClick={() => { setRejectingSo(isRej ? null : item.id); setRejectSoComment("") }} disabled={isSub}
-                        className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">
-                        Reject
-                      </button>
+                      <button onClick={() => { setRejectingSo(rejectingSo === item.id ? null : item.id); setRejectSoComment(""); setBackToScmSo(null) }} disabled={isSub}
+                        className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>
                       <button onClick={() => { setBackToScmSo(backToScmSo === item.id ? null : item.id); setBackToScmSoComment(""); setRejectingSo(null) }} disabled={isSub}
-                        className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
-                        Back to SCM
-                      </button>
+                        className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to SCM</button>
                     </div>
                   )}
                 </div>
                 {itemAttachments.length > 0 && (
-                  <div className="px-4 py-2 bg-blue-50 border-t border-blue-100 flex flex-wrap gap-2">
+                  <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex flex-wrap gap-2">
                     {itemAttachments.map((att: any) => (
                       <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-1.5 text-xs bg-white border border-blue-200 text-blue-700 px-2.5 py-1 rounded-full hover:bg-blue-100 font-medium">
+                        className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 text-gray-700 px-2.5 py-1 rounded-full hover:bg-gray-100 font-medium">
                         📎 {att.fileName}
-                        <span className="text-gray-400 font-normal">· {att.uploadedBy?.name} ({att.claimDept || att.uploadedBy?.role})</span>
+                        <span className="text-gray-400 font-normal">· {att.uploadedBy?.name}</span>
                       </a>
                     ))}
                   </div>
                 )}
-                {isRej && (
+                {rejectingSo === item.id && (
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
                     <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
                     <textarea value={rejectSoComment} onChange={e => setRejectSoComment(e.target.value)} rows={2}
@@ -694,14 +1399,79 @@ export default function RequestDetailPage() {
                     </div>
                   </div>
                 )}
+                {isExp && (
+                  <div className="border-t border-gray-100 overflow-x-auto">
+                    <table className="text-xs w-full">
+                      <thead className="bg-gray-50">
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","CLAIM DEPT","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                          <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium">{item.so}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
+                          <td className="px-3 py-2">{item.customerPO}</td>
+                          <td className="px-3 py-2">{item.description}</td>
+                          <td className="px-3 py-2">{item.gmtType}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                          <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
+                          <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                          <td className="px-3 py-2">{fmtNum(item.grossWeight, 2)}</td>
+                          <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
+                          <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
+                          <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
+                          <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
+                          <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
+                          <td className="px-3 py-2">{item.factory}</td>
+                          <td className="px-3 py-2">{item.country}</td>
+                          <td className="px-3 py-2">{item.port}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )
           })}
+
+          {/* VP batch approve panel */}
+          {vpSelected.size > 0 && (
+            <div className="sticky bottom-4 bg-white border border-blue-300 rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 flex-wrap z-10">
+              <span className="text-sm font-semibold text-blue-700">{vpSelected.size} SO selected</span>
+              <button
+                disabled={submitting !== null}
+                onClick={async () => {
+                  const ids = [...vpSelected]
+                  let updated: any = req
+                  for (const itemId of ids) {
+                    setSubmitting(itemId)
+                    const res = await fetch(`/api/requests/${id}/approve`, {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "approve_so", itemId })
+                    })
+                    if (res.ok) updated = await res.json()
+                  }
+                  setReq(updated)
+                  setVpSelected(new Set())
+                  setSubmitting(null)
+                }}
+                className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                {submitting !== null ? "Approving..." : `Approve ${vpSelected.size} SO(s)`}
+              </button>
+              <button onClick={() => setVpSelected(new Set())}
+                className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Actions */}
-      {canAct && !isStyleApprover && !isClaimApprover && (
+      {canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && role !== "PRESIDENT" && role !== "LOGISTICS" && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && (
         <div className="bg-white rounded-xl border p-5 space-y-4">
           <h2 className="font-semibold text-gray-800 border-b pb-2">ACTIONS</h2>
 
@@ -716,24 +1486,73 @@ export default function RequestDetailPage() {
                     {forwardedScmItems.length > 0 && <span className="text-green-600 ml-2">· {forwardedScmItems.length} forwarded to VP SCM</span>}
                   </span>
                 </label>
-                <button type="button" onClick={() => setSoClaimSelected(
-                  soClaimSelected.size === pendingScmItems.length ? new Set() : new Set(pendingScmItems.map((i: any) => i.id))
-                )} className="text-xs text-blue-600 hover:underline">
-                  {soClaimSelected.size === pendingScmItems.length ? "Deselect All" : "Select All"}
-                </button>
+                <div className="flex items-center gap-3">
+                  {readyScmStyles.length > 0 && (
+                    <button type="button" disabled={submitting === "_fwd"}
+                      onClick={async () => {
+                        setSubmitting("_fwd")
+                        const depts: Record<string, string> = {}
+                        const comments: Record<string, string> = {}
+                        readyScmItemIds.forEach((iid: string) => {
+                          depts[iid] = soClaimDepts[iid]
+                          if (soClaimComments[iid]) comments[iid] = soClaimComments[iid]
+                        })
+                        const res = await fetch(`/api/requests/${id}/approve`, {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "approve", soClaimData: depts, soClaimComments: comments, comment: "" })
+                        })
+                        if (res.ok) {
+                          const updated = await res.json()
+                          if (updated.status !== "PENDING_SCM") { window.location.href = "/approvals" } else { setReq(updated) }
+                        }
+                        setSubmitting(null)
+                      }}
+                      className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50">
+                      {submitting === "_fwd" ? "..." : `Forward ${readyScmStyles.length} ready style(s) →`}
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setSoClaimSelected(
+                    soClaimSelected.size === pendingScmItems.length ? new Set() : new Set(pendingScmItems.map((i: any) => i.id))
+                  )} className="text-xs text-blue-600 hover:underline">
+                    {soClaimSelected.size === pendingScmItems.length ? "Deselect All" : "Select All"}
+                  </button>
+                </div>
               </div>
 
-              <div className="border border-gray-200 rounded-lg overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="px-3 py-2 w-8"></th>
-                      {["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","SCM DELAY REASON"].map(h =>
-                        <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {pendingScmItems.map((item: any) => {
+              {(() => {
+                const scmStyles: string[] = ([...new Set<string>(pendingScmItems.map((i: any) => i.style as string))]).sort()
+                const displayedScmItems = scmStyleFilter ? pendingScmItems.filter((i: any) => i.style === scmStyleFilter) : pendingScmItems
+                return <>
+                  {scmStyles.length > 1 && (
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className="text-xs text-gray-500 font-medium">Filter style:</span>
+                      <button onClick={() => setScmStyleFilter("")}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${!scmStyleFilter ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"}`}>
+                        All ({pendingScmItems.length})
+                      </button>
+                      {scmStyles.map(s => {
+                        const cnt = pendingScmItems.filter((i: any) => i.style === s).length
+                        const assigned = pendingScmItems.filter((i: any) => i.style === s && soClaimDepts[i.id]).length
+                        return (
+                          <button key={s} onClick={() => setScmStyleFilter(scmStyleFilter === s ? "" : s)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${scmStyleFilter === s ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"}`}>
+                            {s} ({assigned}/{cnt})
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                  <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-3 py-2 w-8"></th>
+                          {["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","SCM DELAY REASON"].map(h =>
+                            <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                    {displayedScmItems.map((item: any) => {
                       const assigned = soClaimDepts[item.id]
                       const selected = soClaimSelected.has(item.id)
                       return (
@@ -779,6 +1598,8 @@ export default function RequestDetailPage() {
                   </tbody>
                 </table>
               </div>
+              </>
+              })()}
 
               {/* Batch assign panel */}
               {soClaimSelected.size > 0 && (
@@ -1064,9 +1885,21 @@ export default function RequestDetailPage() {
                       </td>
                     ))}
                     <td className="px-2 py-1.5">
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${item.itemStatus === "PASSED" ? "bg-green-100 text-green-700" : item.itemStatus === "REJECTED" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"}`}>
-                        {item.itemStatus === "PASSED" ? "Approved" : item.itemStatus === "REJECTED" ? "Rejected" : "Pending"}
-                      </span>
+                      {(() => {
+                        const SD: Record<string, [string, string]> = {
+                          PENDING: ["VP MER", "bg-yellow-100 text-yellow-700"],
+                          VP_MER_PASSED: ["SCM", "bg-blue-100 text-blue-700"],
+                          PASSED: ["VP SCM", "bg-indigo-100 text-indigo-700"],
+                          VP_PASSED: ["President", "bg-purple-100 text-purple-700"],
+                          PRES_PASSED: ["Logistics", "bg-cyan-100 text-cyan-700"],
+                          LOG_PASSED: ["Claim", "bg-teal-100 text-teal-700"],
+                          CLAIM_PASSED: ["VP Claim", "bg-violet-100 text-violet-700"],
+                          COMPLETED: ["Done", "bg-green-100 text-green-700"],
+                          REJECTED: ["Rejected", "bg-red-100 text-red-700"],
+                        }
+                        const [label, cls] = SD[item.itemStatus] || ["Pending", "bg-yellow-100 text-yellow-700"]
+                        return <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${cls}`}>{label}</span>
+                      })()}
                     </td>
                     <td className="px-2 py-1.5">
                       <PdfDownloadButton req={req} item={item} compact />

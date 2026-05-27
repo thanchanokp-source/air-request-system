@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { StatusBadge } from "@/components/ui/status-badge"
 import Link from "next/link"
-import { ROLE_ACTIONS } from "@/types"
+import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -27,13 +27,54 @@ export default function ApprovalsPage() {
     fetch("/api/requests?mine=true").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
   }, [])
 
-  const myStatuses = ROLE_ACTIONS[role] || []
-  const myRequests = requests.filter(r => myStatuses.includes(r.status))
+  // Derive claim dept from role
+  const claimDept = role.startsWith("DVM_") ? role.replace("DVM_", "")
+    : role.startsWith("CLAIM_") ? role.replace("CLAIM_", "")
+    : CLAIM_VP_ROLES.includes(role) ? role.replace("VP_", "")
+    : ""
+
+  // Filter documents by item-status (per-style forwarding — each role acts on specific itemStatus)
+  const myRequests = requests.filter(r => {
+    const items = r.items || []
+    if (role === "VP_MER") return r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "PENDING")
+    if (role === "SCM_USER") {
+      return (r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||
+             (r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PENDING"))
+    }
+    if (role === "VP_SCM") return r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PASSED")
+    if (role === "PRESIDENT") return items.some((i: any) => i.itemStatus === "VP_PASSED")
+    if (role === "LOGISTICS") return items.some((i: any) => i.itemStatus === "PRES_PASSED")
+    if (role.startsWith("DVM_") || role.startsWith("CLAIM_")) {
+      return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
+    }
+    if (CLAIM_VP_ROLES.includes(role)) {
+      return items.some((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
+    }
+    return false
+  })
+
+  // Show only items relevant to this role
+  const getRelevantItems = (r: any) => {
+    const items = r.items || []
+    if (role === "VP_MER") return items.filter((i: any) => i.itemStatus === "PENDING")
+    if (role === "SCM_USER") {
+      if (r.status === "PENDING_VP_MER") return items.filter((i: any) => i.itemStatus === "VP_MER_PASSED")
+      return items.filter((i: any) => i.itemStatus === "PENDING")
+    }
+    if (role === "VP_SCM") return items.filter((i: any) => i.itemStatus === "PASSED")
+    if (role === "PRESIDENT") return items.filter((i: any) => i.itemStatus === "VP_PASSED")
+    if (role === "LOGISTICS") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
+    if (role.startsWith("DVM_") || role.startsWith("CLAIM_")) {
+      return items.filter((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
+    }
+    if (CLAIM_VP_ROLES.includes(role)) {
+      return items.filter((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
+    }
+    return items.filter((i: any) => i.itemStatus !== "REJECTED")
+  }
 
   const allRows = myRequests.flatMap(r =>
-    (r.items || [])
-      .filter((i: any) => i.itemStatus !== "REJECTED")
-      .map((item: any) => ({ ...item, request: r }))
+    getRelevantItems(r).map((item: any) => ({ ...item, request: r }))
   )
 
   const brands = [...new Set(allRows.map(r => r.request.brandName).filter(Boolean))].sort()
@@ -69,7 +110,7 @@ export default function ApprovalsPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <p className="text-xs font-semibold text-gray-500 mb-3">FILTERS</p>
-        <div className="grid grid-cols-8 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF} />
@@ -91,13 +132,13 @@ export default function ApprovalsPage() {
           const reqItems = filtered.filter(f => f.request.id === req.id)
           return (
             <div key={req.id} className="bg-white rounded-xl border overflow-hidden">
-              <div className="px-5 py-3 bg-gray-50 border-b flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm">{req.documentNo}</Link>
-                  <span className="text-xs text-gray-500">{req.brandName} · {req.buName}</span>
+              <div className="px-4 py-3 bg-gray-50 border-b flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                  <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm shrink-0">{req.documentNo}</Link>
+                  <span className="text-xs text-gray-500 truncate">{req.brandName} · {req.buName}</span>
                   <StatusBadge status={req.status} />
                 </div>
-                <Link href={`/requests/${req.id}`} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">
+                <Link href={`/requests/${req.id}`} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium shrink-0 ml-auto">
                   Open →
                 </Link>
               </div>

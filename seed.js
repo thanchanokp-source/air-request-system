@@ -14,7 +14,7 @@ async function main() {
     { email: 'claim@nanyang.com', name: 'Claim', role: 'CLAIM', password: h }
   ]
   for (const u of users) {
-    await prisma.user.upsert({ where: { email: u.email }, update: {}, create: u })
+    await prisma.user.upsert({ where: { email: u.email }, update: { password: h }, create: u })
   }
   console.log('Users seeded OK')
 }

@@ -14,11 +14,13 @@ model User {
   role            String        @default("MER_USER")
   claimDepartment String?
   isActive        Boolean       @default(true)
+  priority        Int?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   airRequests     AirRequest[]
   approvals       ApprovalLog[]
   attachments     RequestAttachment[]
+  claimApprovals  ClaimApproval[]
 }
 model MasterBrand {
   id       String  @id @default(cuid())
@@ -69,6 +71,18 @@ model AirRequest {
   bookingDate      DateTime?
   airline          String?
 }
+model ClaimApproval {
+  id        String         @id @default(cuid())
+  itemId    String
+  item      AirRequestItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+  role      String
+  createdAt DateTime       @default(now())
+
+  @@unique([itemId, userId])
+}
+
 model AirRequestItem {
   id                   String     @id @default(cuid())
   requestId            String
@@ -95,6 +109,7 @@ model AirRequestItem {
   claimDepartment      String?
   invoiceNo            String?
   bookingDate          DateTime?
+  claimApprovals       ClaimApproval[]
 }
 model ApprovalLog {
   id         String     @id @default(cuid())

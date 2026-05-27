@@ -4,6 +4,7 @@ import { sendMail } from "./email"
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
 const STATUS_SUBJECT: Record<string, string> = {
+  PENDING_VP_MER:    "มีเอกสาร Air Request ใหม่ รอ Approve — VP MER",
   PENDING_SCM:       "มีเอกสารรอ Assign Claim — SCM User",
   PENDING_VP_SCM:    "มีเอกสารรอ Approve — VP SCM",
   PENDING_PRESIDENT: "มีเอกสารรอ Approve — President",
@@ -17,6 +18,7 @@ const STATUS_SUBJECT: Record<string, string> = {
 
 // Roles that receive notification per status
 const STATUS_ROLES: Record<string, string[]> = {
+  PENDING_VP_MER:    ["VP_MER"],
   PENDING_SCM:       ["SCM_USER"],
   PENDING_VP_SCM:    ["VP_SCM"],
   PENDING_PRESIDENT: ["PRESIDENT"],
@@ -34,7 +36,7 @@ const deptFromRole = (r: string) =>
 
 function buildHtml(req: any, newStatus: string, link: string) {
   const statusLabel: Record<string,string> = {
-    PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
+    PENDING_VP_MER:"Pending VP MER", PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
     PENDING_PRESIDENT:"Pending President", PENDING_LOGISTICS:"Pending Logistics",
     PENDING_CLAIM:"Pending Claim (DVM)", PENDING_VP_CLAIM:"Pending VP Claim",
     PENDING_VP_NYK:"Pending VP NYK", COMPLETED:"Completed", REJECTED:"Rejected",

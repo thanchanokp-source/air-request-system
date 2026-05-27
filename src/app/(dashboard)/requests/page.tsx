@@ -16,19 +16,45 @@ const STATUS_LABELS: Record<string, string> = {
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
 
-const SoBadge = ({ s }: { s: string }) => {
-  const cls = s === "PASSED" ? "bg-green-100 text-green-700" : s === "REJECTED" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
-  const lbl = s === "PASSED" ? "Approved" : s === "REJECTED" ? "Rejected" : "Pending"
+const SoBadge = ({ s, docStatus }: { s: string; docStatus: string }) => {
+  const completed = s === "COMPLETED" || (docStatus === "COMPLETED" && s !== "REJECTED")
+  const rejected = s === "REJECTED" || docStatus === "REJECTED"
+  const cls = completed ? "bg-green-100 text-green-700" : rejected ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
+  const lbl = completed ? "Completed" : rejected ? "Rejected" : "Pending"
   return <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${cls}`}>{lbl}</span>
 }
 
-const ReqBadge = ({ s }: { s: string }) => {
-  const cls = s.startsWith("PENDING") ? "bg-yellow-100 text-yellow-700"
-    : s === "COMPLETED" ? "bg-green-100 text-green-700"
-    : s === "REJECTED" ? "bg-red-100 text-red-700"
-    : "bg-gray-100 text-gray-600"
-  return <span className={`px-1.5 py-0.5 rounded text-xs font-semibold uppercase whitespace-nowrap ${cls}`}>{STATUS_LABELS[s] || s}</span>
+const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
+  if (itemStatus === "REJECTED") return "Rejected"
+  if (itemStatus === "COMPLETED") return "Completed"
+  if (itemStatus === "PENDING") return docStatus === "PENDING_SCM" ? "SCM" : "VP MER"
+  if (itemStatus === "VP_MER_PASSED") return "SCM"
+  if (itemStatus === "PASSED") return "VP SCM"
+  if (itemStatus === "VP_PASSED") return "President"
+  if (itemStatus === "PRES_PASSED") return "Logistics"
+  if (itemStatus === "LOG_PASSED") return "Claim"
+  if (itemStatus === "CLAIM_PASSED") return "VP Claim"
+  return "-"
 }
+
+const STEP_COLORS: Record<string, string> = {
+  "VP MER": "bg-yellow-100 text-yellow-700",
+  "SCM": "bg-orange-100 text-orange-700",
+  "VP SCM": "bg-amber-100 text-amber-700",
+  "President": "bg-purple-100 text-purple-700",
+  "Logistics": "bg-blue-100 text-blue-700",
+  "Claim": "bg-indigo-100 text-indigo-700",
+  "VP Claim": "bg-violet-100 text-violet-700",
+  "Completed": "bg-green-100 text-green-700",
+  "Rejected": "bg-red-100 text-red-700",
+}
+
+const CurrentStepBadge = ({ docStatus, itemStatus }: { docStatus: string; itemStatus: string }) => {
+  const step = getSoCurrentStep(docStatus, itemStatus)
+  const cls = STEP_COLORS[step] || "bg-gray-100 text-gray-500"
+  return <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${cls}`}>{step}</span>
+}
+
 
 export default function RequestsPage() {
   const { data: session } = useSession()
@@ -102,8 +128,13 @@ export default function RequestsPage() {
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
     ["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["PORT",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],["REASON","min-w-[130px]"],
-    ["SO STATUS","min-w-[90px]"],["",""]
+    ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"],
+    ["SCM FILE","min-w-[100px]"],["APPROVAL FILE","min-w-[110px]"],["BOOKING FILE","min-w-[110px]"],
+    ["",""]
   ] as [string,string][]
+
+  const getFileLinks = (atts: any[], itemId: string, roles: string[]) =>
+    (atts || []).filter(a => a.itemId === itemId && roles.includes(a.uploadedBy?.role))
 
   const [claimExpanded, setClaimExpanded] = useState(false)
 
@@ -117,16 +148,16 @@ export default function RequestsPage() {
     { key: "PENDING_VP_CLAIM", label: "VP CLAIM" },
   ]
 
-  const claimRows = allRows.filter(r => r.request.status === "PENDING_CLAIM")
+  const claimRows = allRows.filter(r => r.itemStatus === "LOG_PASSED")
   const claimByDept: Record<string, number> = {}
   for (const r of claimRows) {
     const dept = r.claimDepartment || "Unassigned"
     claimByDept[dept] = (claimByDept[dept] || 0) + 1
   }
 
-  const totalPending = allRows.filter(r => r.itemStatus === "PENDING").length
+  const totalCompleted = allRows.filter(r => r.itemStatus === "COMPLETED").length
   const totalRejected = allRows.filter(r => r.itemStatus === "REJECTED").length
-  const totalCompleted = allRows.filter(r => r.request.status === "COMPLETED").length
+  const totalPending = allRows.filter(r => r.itemStatus !== "COMPLETED" && r.itemStatus !== "REJECTED").length
 
   return (
     <div className="space-y-4">
@@ -139,54 +170,50 @@ export default function RequestsPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="border rounded-xl p-4 bg-green-50 border-green-200 flex items-center gap-4">
-          <div className="text-3xl font-bold text-green-600">{totalCompleted}</div>
-          <div>
-            <div className="text-sm font-semibold text-green-700">COMPLETED</div>
-            <div className="text-xs text-green-500">SO(s)</div>
-          </div>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="border rounded-xl p-3 sm:p-4 bg-green-50 border-green-200 flex items-center gap-2 sm:gap-4">
+          <div className="text-2xl sm:text-3xl font-bold text-green-600">{totalCompleted}</div>
+          <div><div className="text-xs sm:text-sm font-semibold text-green-700">COMPLETED</div><div className="text-xs text-green-500">SO(s)</div></div>
         </div>
-        <div className="border rounded-xl p-4 bg-yellow-50 border-yellow-200 flex items-center gap-4">
-          <div className="text-3xl font-bold text-yellow-600">{totalPending}</div>
-          <div>
-            <div className="text-sm font-semibold text-yellow-700">PENDING</div>
-            <div className="text-xs text-yellow-500">SO(s)</div>
-          </div>
+        <div className="border rounded-xl p-3 sm:p-4 bg-yellow-50 border-yellow-200 flex items-center gap-2 sm:gap-4">
+          <div className="text-2xl sm:text-3xl font-bold text-yellow-600">{totalPending}</div>
+          <div><div className="text-xs sm:text-sm font-semibold text-yellow-700">PENDING</div><div className="text-xs text-yellow-500">SO(s)</div></div>
         </div>
-        <div className="border rounded-xl p-4 bg-red-50 border-red-200 flex items-center gap-4">
-          <div className="text-3xl font-bold text-red-600">{totalRejected}</div>
-          <div>
-            <div className="text-sm font-semibold text-red-700">REJECTED</div>
-            <div className="text-xs text-red-500">SO(s)</div>
-          </div>
+        <div className="border rounded-xl p-3 sm:p-4 bg-red-50 border-red-200 flex items-center gap-2 sm:gap-4">
+          <div className="text-2xl sm:text-3xl font-bold text-red-600">{totalRejected}</div>
+          <div><div className="text-xs sm:text-sm font-semibold text-red-700">REJECTED</div><div className="text-xs text-red-500">SO(s)</div></div>
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-2">
+      <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-blue-500 uppercase tracking-wider">Pending by Stage</span>
+        <div className="flex-1 border-t border-blue-100"></div>
+      </div>
+      <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
         {POSITIONS.map(({ key, label }) => {
+          const ITEM_TO_STEP: Record<string, string> = {
+            PENDING: "PENDING_VP_MER",
+            VP_MER_PASSED: "PENDING_SCM",
+            PASSED: "PENDING_VP_SCM",
+            VP_PASSED: "PENDING_PRESIDENT",
+            PRES_PASSED: "PENDING_LOGISTICS",
+            LOG_PASSED: "PENDING_CLAIM",
+            CLAIM_PASSED: "PENDING_VP_CLAIM",
+          }
           const count = allRows.filter(r => {
-            if (r.itemStatus === "REJECTED") return false
-            const s = r.request.status
-            if (s === "PENDING_VP_MER") return r.itemStatus === "PENDING" ? key === "PENDING_VP_MER" : key === "PENDING_SCM"
-            if (s === "PENDING_SCM") {
-              if (r.itemStatus === "PENDING") return key === "PENDING_SCM"
-              if (r.itemStatus === "PASSED") return key === "PENDING_VP_SCM"
-              if (r.itemStatus === "VP_PASSED") return key === "PENDING_PRESIDENT"
-              return false
-            }
-            if (s === "PENDING_VP_SCM") return r.itemStatus === "PENDING" ? key === "PENDING_VP_SCM" : key === "PENDING_PRESIDENT"
-            if (s === "PENDING_PRESIDENT") return r.itemStatus === "PENDING" ? key === "PENDING_PRESIDENT" : key === "PENDING_LOGISTICS"
-            if (s === "PENDING_LOGISTICS") return r.itemStatus === "PENDING" ? key === "PENDING_LOGISTICS" : key === "PENDING_CLAIM"
-            if (s === "PENDING_VP_CLAIM") return key === "PENDING_VP_CLAIM"
-            return s === key
+            if (r.itemStatus === "REJECTED" || r.itemStatus === "COMPLETED") return false
+            const step = r.itemStatus === "PENDING"
+              ? (r.request.status === "PENDING_SCM" ? "PENDING_SCM" : "PENDING_VP_MER")
+              : ITEM_TO_STEP[r.itemStatus]
+            return step === key
           }).length
           const isClaim = key === "PENDING_CLAIM"
           return (
-            <div key={key} className={`border rounded-xl p-3 border-blue-200 bg-blue-50 ${isClaim ? "cursor-pointer" : ""}`}
+            <div key={key} className={`border rounded-xl p-2 sm:p-3 border-blue-200 bg-blue-50 ${isClaim ? "cursor-pointer" : ""}`}
               onClick={() => isClaim && setClaimExpanded(p => !p)}>
-              <div className="text-2xl font-bold text-blue-600">{count}</div>
-              <div className="text-xs font-semibold mt-0.5 flex items-center gap-1 text-blue-700">
+              <div className="text-xl sm:text-2xl font-bold text-blue-600">{count}</div>
+              <div className="text-[10px] sm:text-xs font-semibold mt-0.5 flex items-center gap-1 text-blue-700">
                 {label} {isClaim && <span className="text-xs">{claimExpanded ? "▲" : "▼"}</span>}
               </div>
               {isClaim && claimExpanded && count > 0 && (
@@ -203,10 +230,11 @@ export default function RequestsPage() {
           )
         })}
       </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <p className="text-xs font-semibold text-gray-500 mb-3">FILTERS</p>
-        <div className="grid grid-cols-9 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
             <option value="">All Status</option>
@@ -230,32 +258,29 @@ export default function RequestsPage() {
         )}
         {!loading && docGroups.map(dg => {
           const isDocExp = expanded.has(dg.request.id)
-          const docPend = dg.styles.flatMap(s => s.rows).filter((r: any) => r.itemStatus === "PENDING").length
-          const docPass = dg.styles.flatMap(s => s.rows).filter((r: any) => r.itemStatus === "PASSED").length
-          const docRej = dg.styles.flatMap(s => s.rows).filter((r: any) => r.itemStatus === "REJECTED").length
           return (
             <div key={dg.request.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {/* Document header */}
-              <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 select-none bg-gray-50 border-b border-gray-100" onClick={() => toggleDoc(dg.request.id)}>
-                <span className="text-gray-400 text-xs w-4">{isDocExp ? "▼" : "▶"}</span>
+              <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 cursor-pointer hover:bg-gray-50 select-none bg-gray-50 border-b border-gray-100 min-w-0" onClick={() => toggleDoc(dg.request.id)}>
+                <span className="text-gray-400 text-xs w-4 shrink-0">{isDocExp ? "▼" : "▶"}</span>
                 <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
-                  className="font-bold text-blue-700 hover:underline text-sm">{dg.request.documentNo}</Link>
+                  className="font-bold text-blue-700 hover:underline text-sm shrink-0">{dg.request.documentNo}</Link>
                 {role === "MER_USER" && dg.request.status === "PENDING_VP_MER" && (
                   <button onClick={e => { e.stopPropagation(); deleteRequest(dg.request.id) }}
-                    className="text-red-400 hover:text-red-600 text-xs" title="Delete">✕</button>
+                    className="text-red-400 hover:text-red-600 text-xs shrink-0" title="Delete">✕</button>
                 )}
-                <span className="text-xs text-gray-500">{dg.request.brandName} · {dg.request.buName}</span>
-                <ReqBadge s={dg.request.status} />
+                <span className="text-xs text-gray-500 truncate">{dg.request.brandName} · {dg.request.buName}</span>
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
-                  <span className="text-xs text-red-500">by {dg.request.approvalLogs[0].user?.name}</span>
+                  <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
                 )}
-                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-auto">{dg.styles.length} style(s) · {dg.total} SO(s)</span>
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-auto shrink-0">{dg.styles.length} style(s) · {dg.total} SO(s)</span>
+                {(dg.request.attachments || []).filter((a: any) => ["MER_USER","VP_MER"].includes(a.uploadedBy?.role)).map((att: any) => (
+                  <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                    className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full hover:bg-orange-100 whitespace-nowrap font-medium shrink-0">
+                    📎 {att.fileName}
+                  </a>
+                ))}
                 <PdfDownloadButton req={dg.request} compact />
-                <div className="flex gap-1.5">
-                  {docPend > 0 && <span className="text-xs font-semibold uppercase bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full">{docPend} pending</span>}
-                  {docPass > 0 && <span className="text-xs font-semibold uppercase bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">{docPass} approved</span>}
-                  {docRej > 0 && <span className="text-xs font-semibold uppercase bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{docRej} rejected</span>}
-                </div>
               </div>
 
               {/* Style groups */}
@@ -264,25 +289,12 @@ export default function RequestsPage() {
                   {dg.styles.map(sg => {
                     const styleKey = `${dg.request.id}||${sg.style}`
                     const isStyleExp = expandedStyles.has(styleKey)
-                    const sPend = sg.rows.filter((r: any) => r.itemStatus === "PENDING").length
-                    const sPass = sg.rows.filter((r: any) => r.itemStatus === "PASSED").length
-                    const sRej = sg.rows.filter((r: any) => r.itemStatus === "REJECTED").length
-                    const rejectLog = sRej > 0
-                      ? (dg.request.approvalLogs?.find((l: any) => l.comment?.includes(`Style: ${sg.style}`))
-                        ?? (sRej === sg.rows.length ? dg.request.approvalLogs?.[0] : null))
-                      : null
                     return (
                       <div key={styleKey}>
                         <div className="flex items-center gap-3 px-6 py-2.5 cursor-pointer hover:bg-blue-50/30 select-none" onClick={() => toggleStyle(styleKey)}>
                           <span className="text-gray-300 text-xs w-4">{isStyleExp ? "▼" : "▶"}</span>
                           <span className="font-semibold text-gray-700 text-sm">{sg.style}</span>
                           <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{sg.rows.length} SO(s)</span>
-                          <div className="flex gap-1.5 items-center">
-                            {sPend > 0 && <span className="text-xs font-semibold uppercase bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full">{sPend} pending</span>}
-                            {sPass > 0 && <span className="text-xs font-semibold uppercase bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">{sPass} approved</span>}
-                            {sRej > 0 && <span className="text-xs font-semibold uppercase bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{sRej} rejected</span>}
-                            {rejectLog && <span className="text-xs text-red-400">by {rejectLog.user?.name}</span>}
-                          </div>
                         </div>
                         {isStyleExp && (
                           <div className="overflow-x-auto border-t border-gray-50">
@@ -311,7 +323,11 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2">{row.claimDepartment || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.invoiceNo || "-"}</td>
                                     <td className="px-3 py-2 max-w-[150px] truncate" title={row.reasonDelay}>{row.reasonDelay || "-"}</td>
-                                    <td className="px-3 py-2"><SoBadge s={row.itemStatus} /></td>
+                                    <td className="px-3 py-2"><SoBadge s={row.itemStatus} docStatus={row.request.status} /></td>
+                                    <td className="px-3 py-2"><CurrentStepBadge docStatus={row.request.status} itemStatus={row.itemStatus} /></td>
+                                    <td className="px-3 py-2">{(() => { const f = getFileLinks(dg.request.attachments, row.id, ["SCM_USER","VP_SCM"]); return f.length ? f.map((a: any) => <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap">📎 {a.fileName}</a>) : <span className="text-gray-300">—</span> })()}</td>
+                                    <td className="px-3 py-2">{(() => { const f = getFileLinks(dg.request.attachments, row.id, ["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"]); return f.length ? f.map((a: any) => <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-600 hover:underline whitespace-nowrap">📎 {a.fileName}</a>) : <span className="text-gray-300">—</span> })()}</td>
+                                    <td className="px-3 py-2">{(() => { const f = getFileLinks(dg.request.attachments, row.id, ["LOGISTICS"]); return f.length ? f.map((a: any) => <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-green-600 hover:underline whitespace-nowrap">📎 {a.fileName}</a>) : <span className="text-gray-300">—</span> })()}</td>
                                     <td className="px-3 py-2"><PdfDownloadButton req={dg.request} item={row} compact /></td>
                                   </tr>
                                 ))}

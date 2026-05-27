@@ -8,15 +8,6 @@ const fmtDate = (v: any) => {
 }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
 
-const STATUS_TO_POS: Record<string, string> = {
-  PENDING_VP_MER: "VP MER",
-  PENDING_VP_SCM: "VP SCM",
-  PENDING_PRESIDENT: "PRESIDENT",
-  PENDING_LOGISTICS: "LOGISTICS",
-  PENDING_CLAIM: "CLAIM",
-  PENDING_VP_NYK: "VP NYK",
-}
-
 const s = StyleSheet.create({
   page: { fontFamily: "Helvetica", fontSize: 8.5, paddingHorizontal: 40, paddingVertical: 32, color: "#222" },
   title: { fontSize: 15, fontFamily: "Helvetica-Bold", color: "#1E40AF", textAlign: "center", letterSpacing: 0.5, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: "#1E40AF" },
@@ -25,21 +16,41 @@ const s = StyleSheet.create({
   infoValue: { flex: 1, fontSize: 8.5 },
   sectionBar: { backgroundColor: "#DBEAFE", paddingHorizontal: 8, paddingVertical: 4, marginTop: 10, marginBottom: 1, flexDirection: "row", borderLeftWidth: 3, borderLeftColor: "#1D4ED8" },
   sectionTitle: { fontFamily: "Helvetica-Bold", color: "#1D4ED8", fontSize: 9 },
-  approvalHeaderRow: { flexDirection: "row", backgroundColor: "#DBEAFE", paddingHorizontal: 8, paddingVertical: 4, marginTop: 2 },
+  approvalHeaderRow: { flexDirection: "row", backgroundColor: "#F3F4F6", paddingHorizontal: 8, paddingVertical: 4, marginTop: 2 },
   approvalRow: { flexDirection: "row", paddingHorizontal: 8, paddingVertical: 3.5, borderBottomWidth: 0.5, borderBottomColor: "#E5E7EB" },
   approvalPos: { width: 130, fontFamily: "Helvetica-Bold", fontSize: 8, color: "#444" },
-  approvalVal: { flex: 1, fontSize: 8.5 },
+  approvalName: { width: 120, fontSize: 8.5 },
+  approvalDate: { flex: 1, fontSize: 8, color: "#666" },
 })
 
 function ItemPage({ req, item }: { req: any; item: any }) {
+  // Build approval chain from approvalLogs for style-level approvals
   const approveLogs = (req.approvalLogs || []).filter((l: any) => l.action === "APPROVE")
-  const posMap: Record<string, { name: string; date: string }> = {}
-  for (const log of approveLogs) {
-    const pos = STATUS_TO_POS[log.fromStatus]
-    if (pos && !posMap[pos]) posMap[pos] = { name: log.user?.name || "-", date: fmtDate(log.createdAt) }
+  const styleLogsByPos: Record<string, { name: string; date: string }> = {}
+  const styleLevelPositions = ["VP MER", "SCM", "VP SCM", "PRESIDENT", "LOGISTICS"]
+  const statusToPos: Record<string, string> = {
+    PENDING_VP_MER: "VP MER",
+    PENDING_SCM: "SCM",
+    PENDING_VP_SCM: "VP SCM",
+    PENDING_PRESIDENT: "PRESIDENT",
+    PENDING_LOGISTICS: "LOGISTICS",
   }
-  const posOrder = ["VP MER", "VP SCM", "PRESIDENT", "LOGISTICS", "CLAIM", "VP NYK"]
-  const shownPos = posOrder.filter(p => posMap[p])
+  for (const log of approveLogs) {
+    const pos = statusToPos[log.fromStatus]
+    if (pos && !styleLogsByPos[pos]) {
+      styleLogsByPos[pos] = { name: log.user?.name || "-", date: fmtDate(log.createdAt) }
+    }
+  }
+
+  // DVM approvals for this item (from claimApprovals, role starts with DVM_)
+  const dvmApprovals = (item.claimApprovals || [])
+    .filter((a: any) => a.role?.startsWith("DVM_") || a.role?.startsWith("CLAIM_"))
+    .sort((a: any, b: any) => (a.user?.priority ?? 99) - (b.user?.priority ?? 99))
+
+  // VP approvals for this item (from claimApprovals, role starts with VP_)
+  const vpApprovals = (item.claimApprovals || [])
+    .filter((a: any) => a.role?.startsWith("VP_") && a.role !== "VP_SCM")
+    .sort((a: any, b: any) => (a.user?.priority ?? 99) - (b.user?.priority ?? 99))
 
   return (
     <Page size="A4" style={s.page}>
@@ -48,8 +59,8 @@ function ItemPage({ req, item }: { req: any; item: any }) {
       {/* Header info */}
       {[
         ["REQUEST DATE", fmtDate(req.createdAt)],
-        ["REQUEST NAME", req.createdBy?.name || "-"],
-        ["TRACKING ID / NO DOC", req.documentNo],
+        ["REQUEST BY", req.createdBy?.name || "-"],
+        ["DOCUMENT NO", req.documentNo],
       ].map(([label, value]) => (
         <View key={label} style={s.infoRow}>
           <Text style={s.infoLabel}>{label}</Text>
@@ -67,6 +78,8 @@ function ItemPage({ req, item }: { req: any; item: any }) {
         ["STYLE", item.style || "-"],
         ["GMT TYPE", item.gmtType || "-"],
         ["DESCRIPTION", item.description || "-"],
+        ["FACTORY", item.factory || "-"],
+        ["COUNTRY / PORT", `${item.country || "-"} / ${item.port || "-"}`],
       ].map(([label, value]) => (
         <View key={label} style={s.infoRow}>
           <Text style={s.infoLabel}>{label}</Text>
@@ -77,13 +90,25 @@ function ItemPage({ req, item }: { req: any; item: any }) {
       {/* Shipment & Quantity */}
       <View style={s.sectionBar}><Text style={s.sectionTitle}>SHIPMENT & QUANTITY</Text></View>
       {[
-        ["ORIGINAL DATE", fmtDate(item.originalShipmentDate)],
-        ["QTY ORIGINAL", String(item.qtyOriginalShipment ?? "-")],
+        ["ORIGINAL SHIP DATE", fmtDate(item.originalShipmentDate)],
         ["PLAN SHIP DATE", fmtDate(item.planShipmentDate)],
-        ["QTY REQ", String(item.qtyRequestAir ?? "-")],
-        ["COUNTRY / PORT", `${item.country || "-"} / ${item.port || "-"}`],
+        ["QTY ORIGINAL", String(item.qtyOriginalShipment ?? "-")],
+        ["QTY REQUEST AIR", String(item.qtyRequestAir ?? "-")],
         ["GROSS WEIGHT", item.grossWeight != null ? `${fmtNum(item.grossWeight, 2)} kg` : "-"],
-        ["AIR FREIGHT", item.airFreight != null ? `${fmtNum(item.airFreight)} Baht` : "-"],
+        ["EST. AIR FREIGHT", item.airFreight != null ? `${fmtNum(item.airFreight)} THB` : "-"],
+      ].map(([label, value]) => (
+        <View key={label} style={s.infoRow}>
+          <Text style={s.infoLabel}>{label}</Text>
+          <Text style={s.infoValue}>{value}</Text>
+        </View>
+      ))}
+
+      {/* Logistics */}
+      <View style={s.sectionBar}><Text style={s.sectionTitle}>LOGISTICS</Text></View>
+      {[
+        ["INVOICE NO", item.invoiceNo || "-"],
+        ["BOOKING DATE", fmtDate(item.bookingDate)],
+        ["ACTUAL AIR FREIGHT", item.actualAirFreight != null ? `${fmtNum(item.actualAirFreight)} THB` : "-"],
       ].map(([label, value]) => (
         <View key={label} style={s.infoRow}>
           <Text style={s.infoLabel}>{label}</Text>
@@ -94,8 +119,8 @@ function ItemPage({ req, item }: { req: any; item: any }) {
       {/* Reason & Claim */}
       <View style={s.sectionBar}><Text style={s.sectionTitle}>REASON & CLAIM</Text></View>
       {[
-        ["CLAIM TO", item.claimDepartment || "-"],
-        ["REASON DELAY BY SCM", item.reasonDelay || "-"],
+        ["CLAIM DEPARTMENT", item.claimDepartment || "-"],
+        ["REASON DELAY", item.reasonDelay || "-"],
       ].map(([label, value]) => (
         <View key={label} style={s.infoRow}>
           <Text style={s.infoLabel}>{label}</Text>
@@ -103,21 +128,37 @@ function ItemPage({ req, item }: { req: any; item: any }) {
         </View>
       ))}
 
-      {/* Approval Status */}
-      <View style={s.sectionBar}><Text style={s.sectionTitle}>APPROVAL STATUS</Text></View>
+      {/* Approval Chain */}
+      <View style={s.sectionBar}><Text style={s.sectionTitle}>APPROVAL CHAIN</Text></View>
       <View style={s.approvalHeaderRow}>
-        <Text style={[s.approvalPos, { color: "#1D4ED8", fontSize: 8 }]}>POSITION</Text>
-        <Text style={[s.approvalVal, { fontFamily: "Helvetica-Bold", color: "#1D4ED8", fontSize: 8 }]}>APPROVER / APPROVE DATE</Text>
+        <Text style={[s.approvalPos, { color: "#1D4ED8", fontSize: 8, fontFamily: "Helvetica-Bold" }]}>POSITION</Text>
+        <Text style={[s.approvalName, { color: "#1D4ED8", fontSize: 8, fontFamily: "Helvetica-Bold" }]}>APPROVER</Text>
+        <Text style={[s.approvalDate, { color: "#1D4ED8", fontSize: 8, fontFamily: "Helvetica-Bold" }]}>DATE</Text>
       </View>
-      {shownPos.length === 0
-        ? <View style={s.approvalRow}><Text style={[s.approvalVal, { color: "#999" }]}>No approvals yet</Text></View>
-        : shownPos.map(pos => (
-            <View key={pos} style={s.approvalRow}>
-              <Text style={s.approvalPos}>{pos}</Text>
-              <Text style={s.approvalVal}>{posMap[pos].name} / {posMap[pos].date}</Text>
-            </View>
-          ))
-      }
+      {styleLevelPositions.filter(p => styleLogsByPos[p]).map(pos => (
+        <View key={pos} style={s.approvalRow}>
+          <Text style={s.approvalPos}>{pos}</Text>
+          <Text style={s.approvalName}>{styleLogsByPos[pos].name}</Text>
+          <Text style={s.approvalDate}>{styleLogsByPos[pos].date}</Text>
+        </View>
+      ))}
+      {dvmApprovals.map((a: any, i: number) => (
+        <View key={`dvm-${i}`} style={s.approvalRow}>
+          <Text style={s.approvalPos}>DVM {item.claimDepartment} {a.user?.priority != null ? `(P${a.user.priority})` : ""}</Text>
+          <Text style={s.approvalName}>{a.user?.name || "-"}</Text>
+          <Text style={s.approvalDate}>{fmtDate(a.createdAt)}</Text>
+        </View>
+      ))}
+      {vpApprovals.map((a: any, i: number) => (
+        <View key={`vp-${i}`} style={s.approvalRow}>
+          <Text style={s.approvalPos}>VP {item.claimDepartment} {a.user?.priority != null ? `(P${a.user.priority})` : ""}</Text>
+          <Text style={s.approvalName}>{a.user?.name || "-"}</Text>
+          <Text style={s.approvalDate}>{fmtDate(a.createdAt)}</Text>
+        </View>
+      ))}
+      {styleLevelPositions.every(p => !styleLogsByPos[p]) && dvmApprovals.length === 0 && vpApprovals.length === 0 && (
+        <View style={s.approvalRow}><Text style={[s.approvalPos, { color: "#999" }]}>No approvals recorded</Text></View>
+      )}
     </Page>
   )
 }

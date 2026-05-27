@@ -7,7 +7,8 @@ const ROLES = ["ADMIN","MER_USER","VP_MER","SCM_USER","VP_SCM","PRESIDENT","LOGI
   "DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION",
   "VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION",
   "CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"]
-const empty = { name: "", email: "", password: "", role: "MER_USER", isActive: true }
+const CLAIM_ROLES = ["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION","VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"]
+const empty = { name: "", email: "", password: "", role: "MER_USER", isActive: true, priority: "" }
 
 export default function UsersPage() {
   const { data: session } = useSession()
@@ -25,28 +26,39 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [activeOnly, setActiveOnly] = useState(false)
+  const [roleFilter, setRoleFilter] = useState("")
+  const [deptFilter, setDeptFilter] = useState("")
   const [peopleQ, setPeopleQ] = useState("")
   const [peopleResults, setPeopleResults] = useState<any[]>([])
   const [peopleLoading, setPeopleLoading] = useState(false)
   const [peopleError, setPeopleError] = useState("")
 
-  const load = () => fetch("/api/users").then(r => r.json()).then(d => { setUsers(d); setLoading(false) })
+  const load = () => fetch("/api/users").then(r => r.json()).then(d => { setUsers(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
   useEffect(() => { load() }, [])
 
   const openEdit = (u: any) => {
     setEditId(u.id)
-    setForm({ name: u.name || "", email: u.email, password: "", role: u.role, isActive: u.isActive })
+    setForm({ name: u.name || "", email: u.email, password: "", role: u.role, isActive: u.isActive, priority: u.priority != null ? String(u.priority) : "" })
     setError("")
   }
   const reset = () => { setEditId(null); setForm(empty); setError("") }
 
   const save = async () => {
     setSaving(true); setError("")
-    const url = editId ? `/api/users/${editId}` : "/api/users"
-    const method = editId ? "PATCH" : "POST"
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
-    if (res.ok) { await load(); reset() } else { const e = await res.json(); setError(e.error || "Error") }
-    setSaving(false)
+    try {
+      const url = editId ? `/api/users/${editId}` : "/api/users"
+      const method = editId ? "PATCH" : "POST"
+      const payload = { ...form, priority: form.priority !== "" ? parseInt(form.priority) : null }
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      if (res.ok) { await load(); reset() } else {
+        const text = await res.text()
+        try { const e = JSON.parse(text); setError(e.error || "Error") } catch { setError(text || "Save failed") }
+      }
+    } catch (e: any) {
+      setError(e.message || "Network error")
+    } finally {
+      setSaving(false)
+    }
   }
 
   const del = async (id: string, name: string) => {
@@ -166,6 +178,13 @@ export default function UsersPage() {
               {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
+          {CLAIM_ROLES.includes(form.role) && (
+            <div>
+              <label className="text-xs text-gray-500 font-medium">APPROVAL PRIORITY <span className="font-normal text-gray-400">(1 = first, leave blank = any order)</span></label>
+              <input type="number" min="1" value={form.priority} onChange={e => setForm(p => ({...p, priority: e.target.value}))}
+                className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="e.g. 1, 2, 3..." />
+            </div>
+          )}
           {editId && (
             <div className="flex items-end pb-1">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -188,9 +207,41 @@ export default function UsersPage() {
 
       {/* Table */}
       <div className="bg-white rounded-xl border overflow-hidden">
-        <div className="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">USERS ({users.length})</h2>
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600">
+        <div className="px-5 py-3 border-b bg-gray-50 flex items-center gap-3 flex-wrap">
+          <h2 className="font-semibold text-gray-800 mr-2">USERS ({users.filter(u =>
+            (!activeOnly || u.isActive) &&
+            (!roleFilter || u.role === roleFilter) &&
+            (!deptFilter || u.role.endsWith(`_${deptFilter}`))
+          ).length})</h2>
+          <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setDeptFilter("") }}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-400">
+            <option value="">All Roles</option>
+            {["ADMIN","MER_USER","VP_MER","SCM_USER","VP_SCM","PRESIDENT","LOGISTICS"].map(r =>
+              <option key={r} value={r}>{r}</option>)}
+            <optgroup label="── DVM">
+              {["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION"].map(r =>
+                <option key={r} value={r}>{r}</option>)}
+            </optgroup>
+            <optgroup label="── VP Claim">
+              {["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION"].map(r =>
+                <option key={r} value={r}>{r}</option>)}
+            </optgroup>
+            <optgroup label="── Claim (Legacy)">
+              {["CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"].map(r =>
+                <option key={r} value={r}>{r}</option>)}
+            </optgroup>
+          </select>
+          <select value={deptFilter} onChange={e => { setDeptFilter(e.target.value); setRoleFilter("") }}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-400">
+            <option value="">All Departments</option>
+            {["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"].map(d =>
+              <option key={d} value={d}>{d}</option>)}
+          </select>
+          {(roleFilter || deptFilter) && (
+            <button onClick={() => { setRoleFilter(""); setDeptFilter("") }}
+              className="text-xs text-gray-400 hover:text-gray-600">✕ Clear</button>
+          )}
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 ml-auto">
             <input type="checkbox" checked={activeOnly} onChange={e => setActiveOnly(e.target.checked)} className="w-4 h-4 rounded" />
             Active only
           </label>
@@ -198,17 +249,26 @@ export default function UsersPage() {
         {loading ? <div className="py-10 text-center text-gray-400">Loading...</div> : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
-              <tr>{["NAME","EMAIL","ROLE","STATUS",""].map(h =>
+              <tr>{["NAME","EMAIL","ROLE","PRIORITY","STATUS",""].map(h =>
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y">
-              {users.filter(u => !activeOnly || u.isActive).map(u => (
+              {users.filter(u =>
+                (!activeOnly || u.isActive) &&
+                (!roleFilter || u.role === roleFilter) &&
+                (!deptFilter || u.role.endsWith(`_${deptFilter}`))
+              ).map(u => (
                 <tr key={u.id} className={`hover:bg-gray-50 ${!u.isActive ? "opacity-40" : ""}`}>
                   <td className="px-4 py-3 font-medium">{u.name || "-"}</td>
                   <td className="px-4 py-3 text-gray-600">{u.email}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase ${roleColor[u.role] || "bg-gray-100 text-gray-600"}`}>{u.role}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {CLAIM_ROLES.includes(u.role) && u.priority != null
+                      ? <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">{u.priority}</span>
+                      : <span className="text-gray-300 text-xs">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     <button onClick={() => toggleActive(u)}

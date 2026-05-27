@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
+import { notifyStatusChange } from "@/lib/notify"
 
 const parseDate = (val: any): Date | null => {
   if (!val) return null
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
     include: {
       createdBy: { select: { name: true } },
       items: true,
+      attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
       approvalLogs: {
         where: { action: "REJECT" },
         orderBy: { createdAt: "desc" },
@@ -107,6 +109,7 @@ export async function POST(req: NextRequest) {
       }
     })
 
+    notifyStatusChange(request.id, "PENDING_VP_MER").catch(() => {})
     return NextResponse.json({ id: request.id })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
