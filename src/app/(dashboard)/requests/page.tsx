@@ -130,7 +130,7 @@ export default function RequestsPage() {
     ["FACTORY",""],["COUNTRY",""],["PORT",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],["REASON","min-w-[130px]"],
     ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"],
     ["SCM FILE","min-w-[100px]"],["APPROVAL FILE","min-w-[110px]"],["BOOKING FILE","min-w-[110px]"],
-    ["",""]
+    ["LOGISTICS FILE","min-w-[110px]"]
   ] as [string,string][]
 
   const getFileLinks = (atts: any[], itemId: string, roles: string[]) =>
@@ -327,8 +327,8 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2"><CurrentStepBadge docStatus={row.request.status} itemStatus={row.itemStatus} /></td>
                                     <td className="px-3 py-2">{(() => { const f = getFileLinks(dg.request.attachments, row.id, ["SCM_USER","VP_SCM"]); return f.length ? f.map((a: any) => <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap">📎 {a.fileName}</a>) : <span className="text-gray-300">—</span> })()}</td>
                                     <td className="px-3 py-2">{(() => { const f = getFileLinks(dg.request.attachments, row.id, ["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"]); return f.length ? f.map((a: any) => <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-600 hover:underline whitespace-nowrap">📎 {a.fileName}</a>) : <span className="text-gray-300">—</span> })()}</td>
-                                    <td className="px-3 py-2">{(() => { const f = getFileLinks(dg.request.attachments, row.id, ["LOGISTICS"]); return f.length ? f.map((a: any) => <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-green-600 hover:underline whitespace-nowrap">📎 {a.fileName}</a>) : <span className="text-gray-300">—</span> })()}</td>
                                     <td className="px-3 py-2"><PdfDownloadButton req={dg.request} item={row} compact /></td>
+                                    <td className="px-3 py-2">{(() => { const f = getFileLinks(dg.request.attachments, row.id, ["LOGISTICS"]); return f.length ? f.map((a: any) => <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-green-600 hover:underline whitespace-nowrap">📎 {a.fileName}</a>) : <span className="text-gray-300">—</span> })()}</td>
                                   </tr>
                                 ))}
                               </tbody>
