@@ -31,6 +31,7 @@ export default function RequestDetailPage() {
   const [batchComment, setBatchComment] = useState("")
   const [soClaimComments, setSoClaimComments] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [selectedStyles, setSelectedStyles] = useState<Set<string>>(new Set())
   const [rejectingStyle, setRejectingStyle] = useState<string | null>(null)
   const [rejectComment, setRejectComment] = useState("")
   const [rejectingSo, setRejectingSo] = useState<string | null>(null)
@@ -182,6 +183,20 @@ export default function RequestDetailPage() {
     })
     if (res.ok) setReq(await res.json())
     setSubmitting(null)
+  }
+
+  const approveSelectedStyles = async () => {
+    const toApprove = styleGroups.filter(g => g.status === "PENDING" && selectedStyles.has(g.style)).map(g => g.style)
+    for (const style of toApprove) {
+      setSubmitting(style)
+      const res = await fetch(`/api/requests/${id}/approve`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve_style", style, comment: "" })
+      })
+      if (res.ok) setReq(await res.json())
+    }
+    setSubmitting(null)
+    setSelectedStyles(new Set())
   }
 
   const rejectStyle = async (style: string) => {
@@ -348,12 +363,33 @@ export default function RequestDetailPage() {
       {/* Style Accordion */}
       {canAct && isStyleApprover && !isScmAtVpMer && !isPresidentRole && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="font-semibold text-gray-800">STYLES ({styleGroups.length})</h2>
-            <div className="flex gap-4 text-xs font-medium">
-              <span className="text-yellow-600">{styleGroups.filter(g => g.status === "PENDING").length} pending</span>
-              <span className="text-green-600">{styleGroups.filter(g => g.status === "PASSED").length} approved</span>
-              <span className="text-red-600">{styleGroups.filter(g => g.status === "REJECTED").length} rejected</span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex gap-4 text-xs font-medium">
+                <span className="text-yellow-600">{styleGroups.filter(g => g.status === "PENDING").length} pending</span>
+                <span className="text-green-600">{styleGroups.filter(g => g.status === "PASSED").length} approved</span>
+                <span className="text-red-600">{styleGroups.filter(g => g.status === "REJECTED").length} rejected</span>
+              </div>
+              {styleGroups.some(g => g.status === "PENDING") && (
+                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                  <input type="checkbox"
+                    checked={styleGroups.filter(g => g.status === "PENDING").every(g => selectedStyles.has(g.style))}
+                    onChange={e => {
+                      const pending = styleGroups.filter(g => g.status === "PENDING").map(g => g.style)
+                      setSelectedStyles(e.target.checked ? new Set(pending) : new Set())
+                    }}
+                    className="w-4 h-4"
+                  />
+                  Select All
+                </label>
+              )}
+              {selectedStyles.size > 0 && (
+                <button onClick={approveSelectedStyles} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                  {submitting ? "..." : `Approve Selected (${selectedStyles.size})`}
+                </button>
+              )}
             </div>
           </div>
           {styleGroups.map(g => {
@@ -364,6 +400,12 @@ export default function RequestDetailPage() {
             return (
               <div key={g.style} className={`rounded-xl border overflow-hidden ${g.status === "PASSED" ? "border-green-200" : g.status === "REJECTED" ? "border-red-200" : isBackScm ? "border-orange-200" : "border-gray-200"}`}>
                 <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${g.status === "PASSED" ? "bg-green-50" : g.status === "REJECTED" ? "bg-red-50" : "bg-white"}`}>
+                  {g.status === "PENDING" && (
+                    <input type="checkbox" className="w-4 h-4 shrink-0"
+                      checked={selectedStyles.has(g.style)}
+                      onChange={e => setSelectedStyles(prev => { const s = new Set(prev); e.target.checked ? s.add(g.style) : s.delete(g.style); return s })}
+                    />
+                  )}
                   <button onClick={() => toggleExpand(g.style)} className="text-gray-400 hover:text-gray-700 w-5 text-center">{isExp ? "▼" : "▶"}</button>
                   <div className="flex-1 flex items-center gap-3 min-w-0">
                     <span className="font-semibold text-gray-800 shrink-0">{g.style}</span>
