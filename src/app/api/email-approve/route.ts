@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { notifyStatusChange } from "@/lib/notify"
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token")
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
         }
       }
     })
+    notifyStatusChange(request.id, "PENDING_SCM").catch(() => {})
     return NextResponse.redirect(`${APP_URL}/requests/${request.id}?msg=approved`)
   }
 
@@ -54,6 +56,7 @@ export async function GET(req: NextRequest) {
         }
       }
     })
+    notifyStatusChange(request.id, "REJECTED").catch(() => {})
     return NextResponse.redirect(`${APP_URL}/requests/${request.id}?msg=rejected`)
   }
 
