@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const userRole = (session.user as any).role
   const { id } = await params
   const body = await req.json()
-    const { action, comment, style, itemId, claimDepartment, logisticsData, itemActuals, soClaimData, soClaimComments, itemLogistics } = body
+    const { action, comment, style, itemId, claimDepartment, logisticsData, itemActuals, soClaimData, soClaimComments, soDvmData, itemLogistics } = body
 
   const request = await prisma.airRequest.findUnique({ where: { id }, include: { items: true } })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -273,6 +273,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: {
           claimDepartment: String(dept),
           itemStatus: "PASSED",
+          assignedDvm: soDvmData?.[itemId] ? String(soDvmData[itemId]) : undefined,
           itemComment: soClaimComments?.[itemId] ? String(soClaimComments[itemId]) : undefined,
           reasonDelay: soClaimComments?.[itemId] ? String(soClaimComments[itemId]) : undefined
         }

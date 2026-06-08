@@ -246,7 +246,7 @@ export default function RequestsPage() {
           <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF} />
           <MultiSelect label="All Port" options={ports} value={portF} onChange={setPortF} />
           <MultiSelect label="All Country" options={countries} value={countryF} onChange={setCountryF} />
-          <MultiSelect label="Claim Dept" options={["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"]} value={claimF} onChange={setClaimF} />
+          <MultiSelect label="Claim Dept" options={["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]} value={claimF} onChange={setClaimF} />
           <MultiSelect label="Invoice No..." options={invoices} value={invoiceF} onChange={setInvoiceF} />
         </div>
       </div>

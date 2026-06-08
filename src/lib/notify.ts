@@ -34,7 +34,7 @@ const deptFromRole = (r: string) =>
   r.startsWith("CLAIM_") ? r.replace("CLAIM_","") :
   ["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION"].includes(r) ? r.replace("VP_","") : null
 
-function buildHtml(req: any, newStatus: string, link: string) {
+function buildHtml(req: any, newStatus: string, link: string, approveUrl?: string, rejectUrl?: string) {
   const statusLabel: Record<string,string> = {
     PENDING_VP_MER:"Pending VP MER", PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
     PENDING_PRESIDENT:"Pending President", PENDING_LOGISTICS:"Pending Logistics",
@@ -44,34 +44,93 @@ function buildHtml(req: any, newStatus: string, link: string) {
   const totalSo = req.items?.length || 0
   const depts = [...new Set((req.items||[]).map((i:any) => i.claimDepartment).filter(Boolean))]
 
+  const styles = [...new Set((req.items||[]).map((i:any) => i.style).filter(Boolean))].join(", ")
+
+  const buttons = approveUrl ? `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px">
+      <tr>
+        <td align="center">
+          <table cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding-right:12px">
+                <a href="${rejectUrl}" style="display:inline-block;background:#ef4444;color:#ffffff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1.5px;font-family:Arial,sans-serif">REJECT</a>
+              </td>
+              <td>
+                <a href="${approveUrl}" style="display:inline-block;background:#22c55e;color:#ffffff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1.5px;font-family:Arial,sans-serif">APPROVE</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td align="center" style="padding-top:16px">
+          <a href="${link}" style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">เปิดใน Air Request System →</a>
+        </td>
+      </tr>
+    </table>
+  ` : `
+    <div style="text-align:center;margin-top:24px">
+      <a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">เปิดเอกสาร →</a>
+    </div>
+  `
+
   return `
 <!DOCTYPE html>
 <html>
-<body style="font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:20px">
-  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb">
-    <div style="background:#1e3a8a;padding:20px 24px">
-      <p style="color:#93c5fd;font-size:12px;margin:0 0 4px">AIR REQUEST SYSTEM</p>
-      <h1 style="color:#fff;font-size:18px;margin:0">${STATUS_SUBJECT[newStatus] || "Document Update"}</h1>
-    </div>
-    <div style="padding:24px">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
-        <tr><td style="color:#6b7280;padding:6px 0;width:140px">Document No.</td>
-            <td style="font-weight:700;color:#1e3a8a">${req.documentNo}</td></tr>
-        <tr><td style="color:#6b7280;padding:6px 0">Brand / BU</td>
-            <td>${req.brandName || "-"} / ${req.buName || "-"}</td></tr>
-        <tr><td style="color:#6b7280;padding:6px 0">Status</td>
-            <td><span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:600">${statusLabel[newStatus] || newStatus}</span></td></tr>
-        <tr><td style="color:#6b7280;padding:6px 0">Total SO</td>
-            <td>${totalSo} SO(s)${depts.length ? ` · ${depts.join(", ")}` : ""}</td></tr>
-      </table>
-      <a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">
-        เปิดเอกสาร →
-      </a>
-    </div>
-    <div style="padding:12px 24px;background:#f9fafb;border-top:1px solid #f3f4f6">
-      <p style="color:#9ca3af;font-size:11px;margin:0">Nan Yang Textile · Air Request System</p>
-    </div>
-  </div>
+<body style="margin:0;padding:0;background-color:#f1f5f9">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:40px 0">
+    <tr>
+      <td align="center">
+        <table width="400" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+          <!-- Header -->
+          <tr>
+            <td style="background:#1e3a8a;padding:20px;text-align:center">
+              <p style="margin:0;color:#93c5fd;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif;text-transform:uppercase">Nan Yang Textile</p>
+              <h1 style="margin:6px 0 0;color:#ffffff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 36px">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
+                    <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">DOC NO</span><br>
+                    <span style="color:#1e3a8a;font-size:15px;font-weight:700;font-family:Arial,sans-serif">${req.documentNo}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
+                    <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">BRAND</span><br>
+                    <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${req.brandName || "-"}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
+                    <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">STATUS</span><br>
+                    <span style="color:#1d4ed8;font-size:14px;font-weight:600;font-family:Arial,sans-serif">${statusLabel[newStatus] || newStatus}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0">
+                    <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">STYLE</span><br>
+                    <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${styles || `${totalSo} SO(s)`}</span>
+                  </td>
+                </tr>
+              </table>
+              ${buttons}
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+              <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`
 }
@@ -83,9 +142,35 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 
     const req = await prisma.airRequest.findUnique({
       where: { id: requestId },
-      include: { items: { select: { claimDepartment: true } } }
+      include: { items: { select: { claimDepartment: true, assignedDvm: true } } }
     })
     if (!req) return
+
+    // For PENDING_VP_MER — send only to assigned VP MER with approve/reject buttons
+    if (newStatus === "PENDING_VP_MER") {
+      const assignedEmail = (req as any).assignedVpMer
+      const token = (req as any).vpMerToken
+      if (!assignedEmail) return
+      const link = `${APP_URL}/requests/${requestId}`
+      const approveUrl = token ? `${APP_URL}/api/email-approve?token=${token}&action=approve` : undefined
+      const rejectUrl = token ? `${APP_URL}/api/email-approve?token=${token}&action=reject` : undefined
+      const html = buildHtml(req, newStatus, link, approveUrl, rejectUrl)
+      const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
+      await sendMail([assignedEmail], `[Air Request] ${subject} — ${req.documentNo}`, html)
+      return
+    }
+
+    // For PENDING_CLAIM — send only to assignedDvm per item (if set)
+    if (newStatus === "PENDING_CLAIM") {
+      const assignedEmails = [...new Set(req.items.map((i:any) => i.assignedDvm).filter(Boolean))]
+      if (assignedEmails.length > 0) {
+        const link = `${APP_URL}/requests/${requestId}`
+        const html = buildHtml(req, newStatus, link)
+        const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
+        await sendMail(assignedEmails, `[Air Request] ${subject} — ${req.documentNo}`, html)
+        return
+      }
+    }
 
     // For claim statuses, filter by depts that actually have items
     const activeDepts = new Set(req.items.map((i:any) => i.claimDepartment).filter(Boolean))
@@ -99,7 +184,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     const recipients = users
       .filter(u => {
         const dept = deptFromRole(u.role)
-        if (!dept) return true // non-dept roles get all notifications
+        if (!dept) return true
         if (newStatus === "PENDING_CLAIM" || newStatus === "PENDING_VP_CLAIM") {
           return activeDepts.has(dept)
         }

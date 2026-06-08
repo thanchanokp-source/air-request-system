@@ -12,6 +12,7 @@ const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US"
 export default function ApprovalsPage() {
   const { data: session } = useSession()
   const role = (session?.user as any)?.role || ""
+  const userEmail = session?.user?.email || ""
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [brandF, setBrandF] = useState<string[]>([])
@@ -36,7 +37,7 @@ export default function ApprovalsPage() {
   // Filter documents by item-status (per-style forwarding — each role acts on specific itemStatus)
   const myRequests = requests.filter(r => {
     const items = r.items || []
-    if (role === "VP_MER") return r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "PENDING")
+    if (role === "VP_MER") return r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)
     if (role === "SCM_USER") {
       return (r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||
              (r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PENDING"))
@@ -117,7 +118,7 @@ export default function ApprovalsPage() {
           <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF} />
           <MultiSelect label="All Port" options={ports} value={portF} onChange={setPortF} />
           <MultiSelect label="All Country" options={countries} value={countryF} onChange={setCountryF} />
-          <MultiSelect label="Claim Dept" options={["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"]} value={claimF} onChange={setClaimF} />
+          <MultiSelect label="Claim Dept" options={["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]} value={claimF} onChange={setClaimF} />
           <MultiSelect label="Invoice No..." options={invoices} value={invoiceF} onChange={setInvoiceF} />
         </div>
       </div>

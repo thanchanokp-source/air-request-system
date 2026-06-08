@@ -4,10 +4,10 @@ import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
 const ROLES = ["ADMIN","MER_USER","VP_MER","SCM_USER","VP_SCM","PRESIDENT","LOGISTICS",
-  "DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION",
-  "VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION",
-  "CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"]
-const CLAIM_ROLES = ["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION","VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"]
+  "DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_NYG","DVM_PRODUCTION",
+  "VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_NYG","VP_PRODUCTION",
+  "CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_NYG","CLAIM_PRODUCTION"]
+const CLAIM_ROLES = ["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_NYG","DVM_PRODUCTION","VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_NYG","VP_PRODUCTION","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_NYG","CLAIM_PRODUCTION"]
 const empty = { name: "", email: "", password: "", role: "MER_USER", isActive: true, priority: "" }
 
 export default function UsersPage() {
@@ -219,23 +219,23 @@ export default function UsersPage() {
             {["ADMIN","MER_USER","VP_MER","SCM_USER","VP_SCM","PRESIDENT","LOGISTICS"].map(r =>
               <option key={r} value={r}>{r}</option>)}
             <optgroup label="── DVM">
-              {["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION"].map(r =>
+              {["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_NYG","DVM_PRODUCTION"].map(r =>
                 <option key={r} value={r}>{r}</option>)}
             </optgroup>
             <optgroup label="── VP Claim">
-              {["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION"].map(r =>
+              {["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_NYG","VP_PRODUCTION"].map(r =>
                 <option key={r} value={r}>{r}</option>)}
             </optgroup>
             <optgroup label="── Claim (Legacy)">
-              {["CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"].map(r =>
+              {["CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_NYG","CLAIM_PRODUCTION"].map(r =>
                 <option key={r} value={r}>{r}</option>)}
             </optgroup>
           </select>
           <select value={deptFilter} onChange={e => { setDeptFilter(e.target.value); setRoleFilter("") }}
             className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-400">
             <option value="">All Departments</option>
-            {["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"].map(d =>
-              <option key={d} value={d}>{d}</option>)}
+            {[{v:"COMMERCIAL",l:"COMMERCIAL"},{v:"PROCUREMENT",l:"PROCUREMENT"},{v:"NYK",l:"SCM NYK"},{v:"NYG",l:"SCM NYG"},{v:"PRODUCTION",l:"PRODUCTION"}].map(d =>
+              <option key={d.v} value={d.v}>{d.l}</option>)}
           </select>
           {(roleFilter || deptFilter) && (
             <button onClick={() => { setRoleFilter(""); setDeptFilter("") }}

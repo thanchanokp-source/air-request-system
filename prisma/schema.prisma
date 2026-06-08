@@ -70,6 +70,8 @@ model AirRequest {
   actualAirFreight Float?
   bookingDate      DateTime?
   airline          String?
+  assignedVpMer    String?
+  vpMerToken       String?
 }
 model ClaimApproval {
   id        String         @id @default(cuid())
@@ -107,6 +109,7 @@ model AirRequestItem {
   marketRatePerKg      Float?
   actualAirFreight     Float?
   claimDepartment      String?
+  assignedDvm          String?
   invoiceNo            String?
   bookingDate          DateTime?
   claimApprovals       ClaimApproval[]

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange } from "@/lib/notify"
+import crypto from "crypto"
 
 const parseDate = (val: any): Date | null => {
   if (!val) return null
@@ -49,9 +50,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { items } = body
+    const { items, assignedVpMer } = body
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "No items" }, { status: 400 })
+    }
+    if (!assignedVpMer) {
+      return NextResponse.json({ error: "กรุณาเลือก VP MER" }, { status: 400 })
     }
 
     const descNames = [...new Set(items.map((i: any) => String(i["DESCRIPTION"] || "")).filter(Boolean))] as string[]
@@ -78,6 +82,8 @@ export async function POST(req: NextRequest) {
         buName: String(first["BU"] || ""),
         status: "PENDING_VP_MER",
         createdById: userId,
+        assignedVpMer,
+        vpMerToken: crypto.randomUUID(),
         items: {
           create: items.map((item: any) => {
             const desc = String(item["DESCRIPTION"] || "")

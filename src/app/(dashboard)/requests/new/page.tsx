@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
 export default function NewRequestPage() {
@@ -8,6 +8,15 @@ export default function NewRequestPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
+
+  const [vpMerList, setVpMerList] = useState<any[]>([])
+  const [vpMerSelected, setVpMerSelected] = useState<{ name: string; email: string } | null>(null)
+
+  useEffect(() => {
+    fetch("/api/users/by-role?role=VP_MER")
+      .then(r => r.json())
+      .then(d => setVpMerList(Array.isArray(d) ? d : []))
+  }, [])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -23,12 +32,13 @@ export default function NewRequestPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file || preview.length === 0) return
+    if (!vpMerSelected) { setError("กรุณาเลือก VP MER ก่อน Submit"); return }
     setLoading(true)
     setError("")
     const res = await fetch("/api/requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: preview })
+      body: JSON.stringify({ items: preview, assignedVpMer: vpMerSelected.email })
     })
     const data = await res.json()
     setLoading(false)
@@ -43,6 +53,28 @@ export default function NewRequestPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">New Air Request</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
+
+        {/* Select VP MER */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+          <h2 className="font-semibold text-gray-800">เลือก VP MER <span className="text-red-500">*</span></h2>
+          <select
+            value={vpMerSelected?.email || ""}
+            onChange={e => {
+              const u = vpMerList.find(x => x.email === e.target.value)
+              setVpMerSelected(u ? { name: u.name, email: u.email } : null)
+            }}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400">
+            <option value="">-- เลือก VP MER --</option>
+            {vpMerList.map(u => (
+              <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
+            ))}
+          </select>
+          {vpMerSelected && (
+            <p className="text-xs text-green-600">เลือก: {vpMerSelected.name} · {vpMerSelected.email}</p>
+          )}
+        </div>
+
+        {/* Upload Excel */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="font-semibold text-gray-800 mb-4">Upload Excel File</h2>
           <input
@@ -86,7 +118,7 @@ export default function NewRequestPage() {
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={loading || preview.length === 0}
+            disabled={loading || preview.length === 0 || !vpMerSelected}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {loading ? "Submitting..." : "Submit Request"}
           </button>

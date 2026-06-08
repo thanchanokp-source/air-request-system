@@ -29,7 +29,7 @@ const STATUS_LABELS: Record<string,string> = {
   PENDING_PRESIDENT:"President", PENDING_LOGISTICS:"Logistics",
   PENDING_CLAIM:"Claim", PENDING_VP_CLAIM:"VP Claim", COMPLETED:"Completed", REJECTED:"Rejected"
 }
-const CLAIM_DEPTS = ["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"]
+const CLAIM_DEPTS = ["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]
 const MONTH_OPTS = [
   {value:"01",label:"Jan"},{value:"02",label:"Feb"},{value:"03",label:"Mar"},{value:"04",label:"Apr"},
   {value:"05",label:"May"},{value:"06",label:"Jun"},{value:"07",label:"Jul"},{value:"08",label:"Aug"},

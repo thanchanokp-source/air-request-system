@@ -10,7 +10,8 @@ const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isN
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
 
-const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
+const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "NYG", "PRODUCTION"]
+const CLAIM_DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
 
 export default function RequestDetailPage() {
   const { id } = useParams()
@@ -26,10 +27,14 @@ export default function RequestDetailPage() {
   const [batchInvoice, setBatchInvoice] = useState("")
   const [batchBookingDate, setBatchBookingDate] = useState("")
   const [soClaimDepts, setSoClaimDepts] = useState<Record<string, string>>({})
+  const [soDvmAssigned, setSoDvmAssigned] = useState<Record<string, string>>({})
+  const [dvmUsers, setDvmUsers] = useState<Record<string, any[]>>({})
   const [soClaimSelected, setSoClaimSelected] = useState<Set<string>>(new Set())
   const [batchClaimDept, setBatchClaimDept] = useState("")
+  const [batchDvm, setBatchDvm] = useState("")
   const [batchComment, setBatchComment] = useState("")
   const [soClaimComments, setSoClaimComments] = useState<Record<string, string>>({})
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selectedStyles, setSelectedStyles] = useState<Set<string>>(new Set())
   const [rejectingStyle, setRejectingStyle] = useState<string | null>(null)
@@ -64,6 +69,17 @@ export default function RequestDetailPage() {
     return () => clearTimeout(timer)
   }, [soClaimDepts, soClaimComments])
 
+  useEffect(() => {
+    const CLAIM_DEPTS_LIST = ["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]
+    Promise.all(CLAIM_DEPTS_LIST.map(dept =>
+      fetch(`/api/users/by-role?role=DVM_${dept}`).then(r => r.json()).then(d => ({ dept, users: Array.isArray(d) ? d : [] }))
+    )).then(results => {
+      const map: Record<string, any[]> = {}
+      results.forEach(({ dept, users }) => { map[dept] = users })
+      setDvmUsers(map)
+    })
+  }, [])
+
    useEffect(() => {
     fetch(`/api/requests/${id}`)
       .then(r => r.json())
@@ -72,12 +88,15 @@ export default function RequestDetailPage() {
         setLoading(false)
         if (d.items) {
           const depts: Record<string, string> = {}
+          const dvms: Record<string, string> = {}
           const comments: Record<string, string> = {}
           d.items.forEach((item: any) => {
             if (item.claimDepartment) depts[item.id] = item.claimDepartment
+            if (item.assignedDvm) dvms[item.id] = item.assignedDvm
             const msg = item.reasonDelay || item.itemComment
             if (msg) comments[item.id] = msg
           })
+          setSoDvmAssigned(dvms)
           claimAutoSaveReady.current = false
           setSoClaimDepts(depts)
           setSoClaimComments(comments)
@@ -580,13 +599,15 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50"><tr>
-                        {["SO","CLAIM DEPT","DELAY REASON","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
+                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY REASON","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-gray-50">
                         {g.items.map((item: any) => (
                           <tr key={item.id} className="hover:bg-gray-50">
                             <td className="px-3 py-2 font-medium">{item.so}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                             <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
                             <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
@@ -680,13 +701,15 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50"><tr>
-                        {["SO","CLAIM DEPT","DELAY REASON","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
+                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY REASON","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-gray-50">
                         {g.items.map((item: any) => (
                           <tr key={item.id} className="hover:bg-gray-50">
                             <td className="px-3 py-2 font-medium">{item.so}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                             <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
                             <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
@@ -822,7 +845,7 @@ export default function RequestDetailPage() {
                     <select value={batchClaimDept} onChange={e => setBatchClaimDept(e.target.value)}
                       className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400">
                       <option value="">-- Select Claim Dept --</option>
-                      {CLAIM_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      {CLAIM_DEPTS.map(d => <option key={d} value={d}>{CLAIM_DEPT_LABEL[d] || d}</option>)}
                     </select>
                     <input type="text" placeholder="Comment / Delay reason..."
                       value={batchComment} onChange={e => setBatchComment(e.target.value)}
@@ -1535,13 +1558,15 @@ export default function RequestDetailPage() {
                         setSubmitting("_fwd")
                         const depts: Record<string, string> = {}
                         const comments: Record<string, string> = {}
+                        const dvms: Record<string, string> = {}
                         readyScmItemIds.forEach((iid: string) => {
                           depts[iid] = soClaimDepts[iid]
                           if (soClaimComments[iid]) comments[iid] = soClaimComments[iid]
+                          if (soDvmAssigned[iid]) dvms[iid] = soDvmAssigned[iid]
                         })
                         const res = await fetch(`/api/requests/${id}/approve`, {
                           method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ action: "approve", soClaimData: depts, soClaimComments: comments, comment: "" })
+                          body: JSON.stringify({ action: "approve", soClaimData: depts, soClaimComments: comments, soDvmData: dvms, comment: "" })
                         })
                         if (res.ok) {
                           const updated = await res.json()
@@ -1589,7 +1614,7 @@ export default function RequestDetailPage() {
                       <thead className="bg-gray-50 border-b">
                         <tr>
                           <th className="px-3 py-2 w-8"></th>
-                          {["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","SCM DELAY REASON"].map(h =>
+                          {["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","DVM","SCM DELAY REASON"].map(h =>
                             <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -1623,6 +1648,18 @@ export default function RequestDetailPage() {
                               ? <span className="inline-block bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{assigned}</span>
                               : <span className="text-red-400 text-xs italic">-- Not assigned --</span>}
                           </td>
+                          <td className="px-3 py-2 min-w-[160px]" onClick={e => e.stopPropagation()}>
+                            {assigned && (dvmUsers[assigned] || []).length > 0 ? (
+                              <select value={soDvmAssigned[item.id] || ""}
+                                onChange={e => setSoDvmAssigned(p => ({ ...p, [item.id]: e.target.value }))}
+                                className="border border-gray-300 rounded px-2 py-1 text-xs w-full focus:ring-1 focus:ring-blue-400">
+                                <option value="">-- Select DVM --</option>
+                                {(dvmUsers[assigned] || []).map((u: any) => (
+                                  <option key={u.id} value={u.email}>{u.name}</option>
+                                ))}
+                              </select>
+                            ) : <span className="text-gray-300 text-xs">—</span>}
+                          </td>
                           <td className="px-3 py-2 min-w-[200px]" onClick={e => e.stopPropagation()}>
                             {item.reasonDelay && (
                               <div className="mb-1 text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded">
@@ -1648,11 +1685,20 @@ export default function RequestDetailPage() {
                 <div className="border border-blue-300 rounded-lg p-3 bg-blue-50 space-y-2">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-xs font-semibold text-blue-700">{soClaimSelected.size} SO selected</span>
-                    <select value={batchClaimDept} onChange={e => setBatchClaimDept(e.target.value)}
+                    <select value={batchClaimDept} onChange={e => { setBatchClaimDept(e.target.value); setBatchDvm("") }}
                       className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400">
                       <option value="">-- Select Claim Dept --</option>
-                      {CLAIM_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+                      {CLAIM_DEPTS.map(d => <option key={d} value={d}>{CLAIM_DEPT_LABEL[d] || d}</option>)}
                     </select>
+                    {batchClaimDept && (dvmUsers[batchClaimDept] || []).length > 0 && (
+                      <select value={batchDvm} onChange={e => setBatchDvm(e.target.value)}
+                        className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400">
+                        <option value="">-- Select DVM --</option>
+                        {(dvmUsers[batchClaimDept] || []).map((u: any) => (
+                          <option key={u.id} value={u.email}>{u.name}</option>
+                        ))}
+                      </select>
+                    )}
                     <input type="text" placeholder="Comment / Delay reason..."
                       value={batchComment} onChange={e => setBatchComment(e.target.value)}
                       className="flex-1 min-w-[220px] border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400" />
