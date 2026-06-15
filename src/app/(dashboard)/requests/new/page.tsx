@@ -1,8 +1,19 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
+
+const CLAIM_DEPT_GW = [
+  { value: "SUPPLIER_IN", label: "Supplier ใน" },
+  { value: "SUPPLIER_OUT", label: "Supplier นอก" },
+  { value: "NYK", label: "NYK" },
+]
 
 export default function NewRequestPage() {
+  const { data: session } = useSession()
+  const userBu = (session?.user as any)?.bu || "NYG"
+  const isGW = userBu === "GW"
+
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -11,12 +22,14 @@ export default function NewRequestPage() {
 
   const [vpMerList, setVpMerList] = useState<any[]>([])
   const [vpMerSelected, setVpMerSelected] = useState<{ name: string; email: string } | null>(null)
+  const [claimDept, setClaimDept] = useState("")
 
   useEffect(() => {
-    fetch("/api/users/by-role?role=VP_MER")
+    const role = isGW ? "VP_MER_GW" : "VP_MER"
+    fetch(`/api/users/by-role?role=${role}`)
       .then(r => r.json())
       .then(d => setVpMerList(Array.isArray(d) ? d : []))
-  }, [])
+  }, [isGW])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -32,13 +45,19 @@ export default function NewRequestPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file || preview.length === 0) return
-    if (!vpMerSelected) { setError("กรุณาเลือก VP MER ก่อน Submit"); return }
+    if (!vpMerSelected) { setError(`กรุณาเลือก ${isGW ? "VP MER GW" : "VP MER"} ก่อน Submit`); return }
+    if (isGW && !claimDept) { setError("กรุณาเลือก Claim Department ก่อน Submit"); return }
     setLoading(true)
     setError("")
     const res = await fetch("/api/requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: preview, assignedVpMer: vpMerSelected.email })
+      body: JSON.stringify({
+        items: preview,
+        assignedVpMer: vpMerSelected.email,
+        bu: userBu,
+        ...(isGW && { claimDepartment: claimDept })
+      })
     })
     const data = await res.json()
     setLoading(false)
@@ -51,12 +70,20 @@ export default function NewRequestPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">New Air Request</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold text-gray-900">New Air Request</h1>
+        <span className={`px-2 py-0.5 rounded text-xs font-bold ${isGW ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+          {userBu}
+        </span>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
 
         {/* Select VP MER */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-          <h2 className="font-semibold text-gray-800">เลือก VP MER <span className="text-red-500">*</span></h2>
+          <h2 className="font-semibold text-gray-800">
+            เลือก {isGW ? "VP MER GW" : "VP MER"} <span className="text-red-500">*</span>
+          </h2>
           <select
             value={vpMerSelected?.email || ""}
             onChange={e => {
@@ -64,7 +91,7 @@ export default function NewRequestPage() {
               setVpMerSelected(u ? { name: u.name, email: u.email } : null)
             }}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400">
-            <option value="">-- เลือก VP MER --</option>
+            <option value="">-- เลือก {isGW ? "VP MER GW" : "VP MER"} --</option>
             {vpMerList.map(u => (
               <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
             ))}
@@ -73,6 +100,22 @@ export default function NewRequestPage() {
             <p className="text-xs text-green-600">เลือก: {vpMerSelected.name} · {vpMerSelected.email}</p>
           )}
         </div>
+
+        {/* Claim Dept — GW only */}
+        {isGW && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+            <h2 className="font-semibold text-gray-800">เลือก Claim Department <span className="text-red-500">*</span></h2>
+            <select
+              value={claimDept}
+              onChange={e => setClaimDept(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400">
+              <option value="">-- เลือก Claim Dept --</option>
+              {CLAIM_DEPT_GW.map(d => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Upload Excel */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -118,7 +161,7 @@ export default function NewRequestPage() {
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={loading || preview.length === 0 || !vpMerSelected}
+            disabled={loading || preview.length === 0 || !vpMerSelected || (isGW && !claimDept)}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {loading ? "Submitting..." : "Submit Request"}
           </button>

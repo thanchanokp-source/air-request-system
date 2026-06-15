@@ -1,48 +1,56 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+
 model User {
-  id              String        @id @default(cuid())
+  id              String              @id @default(cuid())
   name            String?
-  email           String        @unique
+  email           String              @unique
   password        String
-  role            String        @default("MER_USER")
+  role            String              @default("MER_USER")
   claimDepartment String?
-  isActive        Boolean       @default(true)
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
   priority        Int?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  bu              String              @default("NYG")
   airRequests     AirRequest[]
   approvals       ApprovalLog[]
-  attachments     RequestAttachment[]
   claimApprovals  ClaimApproval[]
+  attachments     RequestAttachment[]
 }
+
 model MasterBrand {
   id       String  @id @default(cuid())
   name     String  @unique
   isActive Boolean @default(true)
 }
+
 model MasterBU {
   id       String  @id @default(cuid())
   name     String  @unique
   isActive Boolean @default(true)
 }
+
 model MasterDescription {
   id            String  @id @default(cuid())
   name          String  @unique
   weightPerUnit Float   @default(0)
   isActive      Boolean @default(true)
 }
+
 model MasterGMTType {
   id       String  @id @default(cuid())
   name     String  @unique
   isActive Boolean @default(true)
 }
+
 model MasterPort {
   id        String   @id @default(cuid())
   country   String
@@ -51,44 +59,46 @@ model MasterPort {
   isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
 }
+
 model AirRequest {
-  id               String           @id @default(cuid())
-  documentNo       String           @unique
+  id               String              @id @default(cuid())
+  documentNo       String              @unique
   brandName        String
   buName           String
-  status           String           @default("DRAFT")
+  status           String              @default("DRAFT")
   claimDepartment  String?
   rejectionReason  String?
   createdById      String
-  createdBy        User             @relation(fields: [createdById], references: [id])
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  items            AirRequestItem[]
-  approvalLogs     ApprovalLog[]
-  attachments      RequestAttachment[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
   invoiceNo        String?
   actualAirFreight Float?
   bookingDate      DateTime?
   airline          String?
   assignedVpMer    String?
   vpMerToken       String?
+  bu               String              @default("NYG")
+  createdBy        User                @relation(fields: [createdById], references: [id])
+  items            AirRequestItem[]
+  approvalLogs     ApprovalLog[]
+  attachments      RequestAttachment[]
 }
+
 model ClaimApproval {
   id        String         @id @default(cuid())
   itemId    String
-  item      AirRequestItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   userId    String
-  user      User           @relation(fields: [userId], references: [id])
   role      String
   createdAt DateTime       @default(now())
+  item      AirRequestItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id])
 
   @@unique([itemId, userId])
 }
 
 model AirRequestItem {
-  id                   String     @id @default(cuid())
+  id                   String          @id @default(cuid())
   requestId            String
-  request              AirRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   style                String
   so                   String
   customerPO           String?
@@ -98,7 +108,7 @@ model AirRequestItem {
   planShipmentDate     DateTime?
   qtyOriginalShipment  Int
   qtyRequestAir        Int
-  itemStatus           String    @default("PENDING")
+  itemStatus           String          @default("PENDING")
   itemComment          String?
   reasonDelay          String
   factory              String
@@ -109,35 +119,37 @@ model AirRequestItem {
   marketRatePerKg      Float?
   actualAirFreight     Float?
   claimDepartment      String?
-  assignedDvm          String?
   invoiceNo            String?
   bookingDate          DateTime?
+  assignedDvm          String?
+  request              AirRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
   claimApprovals       ClaimApproval[]
 }
+
 model ApprovalLog {
   id         String     @id @default(cuid())
   requestId  String
-  request    AirRequest @relation(fields: [requestId], references: [id], onUpdate: NoAction, onDelete: NoAction)
   userId     String
-  user       User       @relation(fields: [userId], references: [id], onUpdate: NoAction, onDelete: NoAction)
   action     String
   fromStatus String
   toStatus   String
   comment    String?
   createdAt  DateTime   @default(now())
+  request    AirRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user       User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model RequestAttachment {
   id           String     @id @default(cuid())
   requestId    String
-  request      AirRequest @relation(fields: [requestId], references: [id], onUpdate: NoAction, onDelete: NoAction)
   itemId       String?
   uploadedById String
-  uploadedBy   User       @relation(fields: [uploadedById], references: [id], onUpdate: NoAction, onDelete: NoAction)
   fileName     String
   filePath     String
   fileSize     Int
   mimeType     String
   claimDept    String?
   createdAt    DateTime   @default(now())
+  request      AirRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  uploadedBy   User       @relation(fields: [uploadedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }

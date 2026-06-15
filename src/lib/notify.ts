@@ -4,28 +4,37 @@ import { sendMail } from "./email"
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
 const STATUS_SUBJECT: Record<string, string> = {
-  PENDING_VP_MER:    "มีเอกสาร Air Request ใหม่ รอ Approve — VP MER",
-  PENDING_SCM:       "มีเอกสารรอ Assign Claim — SCM User",
-  PENDING_VP_SCM:    "มีเอกสารรอ Approve — VP SCM",
-  PENDING_PRESIDENT: "มีเอกสารรอ Approve — President",
-  PENDING_LOGISTICS: "มีเอกสารรอใส่ข้อมูล — Logistics",
-  PENDING_CLAIM:     "มีเอกสารรอ Approve — DVM Claim",
-  PENDING_VP_CLAIM:  "มีเอกสารรอ Approve — VP Claim",
-  PENDING_VP_NYK:    "มีเอกสารรอ Approve — VP NYK",
-  COMPLETED:         "เอกสารได้รับการ Approve ครบแล้ว",
-  REJECTED:          "เอกสารถูก Reject",
+  PENDING_VP_MER:      "มีเอกสาร Air Request ใหม่ รอ Approve — VP MER",
+  PENDING_SCM:         "มีเอกสารรอ Assign Claim — SCM User",
+  PENDING_VP_SCM:      "มีเอกสารรอ Approve — VP SCM",
+  PENDING_PRESIDENT:   "มีเอกสารรอ Approve — President",
+  PENDING_LOGISTICS:   "มีเอกสารรอใส่ข้อมูล — Logistics",
+  PENDING_CLAIM:       "มีเอกสารรอ Approve — DVM Claim",
+  PENDING_VP_CLAIM:    "มีเอกสารรอ Approve — VP Claim",
+  PENDING_VP_NYK:      "มีเอกสารรอ Approve — VP NYK",
+  // GW
+  PENDING_VP_MER_GW:   "มีเอกสาร Air Request ใหม่ (GW) รอ Approve — VP MER",
+  PENDING_PRESIDENT_GW:"มีเอกสารรอ Approve — President (GW)",
+  PENDING_LOGISTICS_GW:"มีเอกสารรอใส่ข้อมูล — Logistics (GW)",
+  PENDING_CLAIM_GW:    "มีเอกสารรอ Approve — Claim (GW)",
+  COMPLETED:           "เอกสารได้รับการ Approve ครบแล้ว",
+  REJECTED:            "เอกสารถูก Reject",
 }
 
 // Roles that receive notification per status
 const STATUS_ROLES: Record<string, string[]> = {
-  PENDING_VP_MER:    ["VP_MER"],
-  PENDING_SCM:       ["SCM_USER"],
-  PENDING_VP_SCM:    ["VP_SCM"],
-  PENDING_PRESIDENT: ["PRESIDENT"],
-  PENDING_LOGISTICS: ["LOGISTICS"],
-  PENDING_CLAIM:     ["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"],
-  PENDING_VP_CLAIM:  ["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION"],
-  PENDING_VP_NYK:    ["VP_NYK"],
+  PENDING_VP_MER:       ["VP_MER"],
+  PENDING_SCM:          ["SCM_USER"],
+  PENDING_VP_SCM:       ["VP_SCM"],
+  PENDING_PRESIDENT:    ["PRESIDENT"],
+  PENDING_LOGISTICS:    ["LOGISTICS"],
+  PENDING_CLAIM:        ["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"],
+  PENDING_VP_CLAIM:     ["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION"],
+  PENDING_VP_NYK:       ["VP_NYK"],
+  // GW — handled separately in notifyStatusChange
+  PENDING_PRESIDENT_GW: ["PRESIDENT_GW"],
+  PENDING_LOGISTICS_GW: ["LOGISTICS_GW"],
+  PENDING_CLAIM_GW:     ["CLAIM_GW"],
 }
 
 // Extract claim dept from role string
@@ -42,8 +51,6 @@ function buildHtml(req: any, newStatus: string, link: string, approveUrl?: strin
     PENDING_VP_NYK:"Pending VP NYK", COMPLETED:"Completed", REJECTED:"Rejected",
   }
   const totalSo = req.items?.length || 0
-  const depts = [...new Set((req.items||[]).map((i:any) => i.claimDepartment).filter(Boolean))]
-
   const styles = [...new Set((req.items||[]).map((i:any) => i.style).filter(Boolean))].join(", ")
 
   const buttons = approveUrl ? `
@@ -157,6 +164,36 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const html = buildHtml(req, newStatus, link, approveUrl, rejectUrl)
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
       await sendMail([assignedEmail], `[Air Request] ${subject} — ${req.documentNo}`, html)
+      return
+    }
+
+    // For PENDING_VP_MER_GW — send to assigned VP MER GW with approve/reject buttons
+    if (newStatus === "PENDING_VP_MER_GW") {
+      const assignedEmail = (req as any).assignedVpMer
+      const token = (req as any).vpMerToken
+      if (!assignedEmail) return
+      const link = `${APP_URL}/requests/${requestId}`
+      const approveUrl = token ? `${APP_URL}/api/email-approve?token=${token}&action=approve` : undefined
+      const rejectUrl = token ? `${APP_URL}/api/email-approve?token=${token}&action=reject` : undefined
+      const html = buildHtml(req, newStatus, link, approveUrl, rejectUrl)
+      const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
+      await sendMail([assignedEmail], `[Air Request] ${subject} — ${req.documentNo}`, html)
+      return
+    }
+
+    // For PENDING_CLAIM_GW — send to CLAIM_GW users matching claim dept
+    if (newStatus === "PENDING_CLAIM_GW") {
+      const claimDept = (req as any).claimDepartment
+      const users = await (prisma.user as any).findMany({
+        where: { role: "CLAIM_GW", isActive: true, ...(claimDept ? { claimDepartment: claimDept } : {}) },
+        select: { email: true }
+      })
+      const recipients = users.map((u: any) => u.email).filter(Boolean)
+      if (!recipients.length) return
+      const link = `${APP_URL}/requests/${requestId}`
+      const html = buildHtml(req, newStatus, link)
+      const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
+      await sendMail(recipients, `[Air Request] ${subject} — ${req.documentNo}`, html)
       return
     }
 

@@ -9,7 +9,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const users = await (prisma.user as any).findMany({
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, email: true, role: true, claimDepartment: true, isActive: true, priority: true, createdAt: true }
+    select: { id: true, name: true, email: true, role: true, bu: true, claimDepartment: true, isActive: true, priority: true, createdAt: true }
   })
   return NextResponse.json(users)
 }
@@ -17,12 +17,12 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const { name, email, password, role, claimDepartment, priority } = await req.json()
+  const { name, email, password, role, bu, claimDepartment, priority } = await req.json()
   if (!email || !password || !role) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   const hashed = await bcrypt.hash(password, 10)
   try {
     const user = await prisma.user.create({
-      data: { name, email, password: hashed, role, claimDepartment: role === "CLAIM" ? claimDepartment : null, priority: priority ?? null }
+      data: { name, email, password: hashed, role, bu: bu || "NYG", claimDepartment: role === "CLAIM" ? claimDepartment : null, priority: priority ?? null }
     })
     return NextResponse.json({ id: user.id })
   } catch (e: any) {

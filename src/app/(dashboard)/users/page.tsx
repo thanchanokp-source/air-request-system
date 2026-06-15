@@ -3,12 +3,16 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 
-const ROLES = ["ADMIN","MER_USER","VP_MER","SCM_USER","VP_SCM","PRESIDENT","LOGISTICS",
+const ROLES_NYG = ["ADMIN","MER_USER","VP_MER","SCM_USER","VP_SCM","PRESIDENT","LOGISTICS",
   "DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_NYG","DVM_PRODUCTION",
   "VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_NYG","VP_PRODUCTION",
   "CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_NYG","CLAIM_PRODUCTION"]
+const ROLES_GW = ["MER_USER","VP_MER_GW","PRESIDENT_GW","LOGISTICS_GW","CLAIM_GW"]
+const ROLES_ALL = ["ADMIN","ACCOUNTING"]
 const CLAIM_ROLES = ["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_NYG","DVM_PRODUCTION","VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_NYG","VP_PRODUCTION","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_NYG","CLAIM_PRODUCTION"]
-const empty = { name: "", email: "", password: "", role: "MER_USER", isActive: true, priority: "" }
+const CLAIM_GW_DEPTS = ["SUPPLIER_IN","SUPPLIER_OUT","NYK"]
+const BU_OPTIONS = ["NYG", "GW", "ALL"]
+const empty = { name: "", email: "", password: "", role: "MER_USER", bu: "NYG", isActive: true, priority: "" }
 
 export default function UsersPage() {
   const { data: session } = useSession()
@@ -38,7 +42,7 @@ export default function UsersPage() {
 
   const openEdit = (u: any) => {
     setEditId(u.id)
-    setForm({ name: u.name || "", email: u.email, password: "", role: u.role, isActive: u.isActive, priority: u.priority != null ? String(u.priority) : "" })
+    setForm({ name: u.name || "", email: u.email, password: "", role: u.role, bu: u.bu || "NYG", isActive: u.isActive, priority: u.priority != null ? String(u.priority) : "" })
     setError("")
   }
   const reset = () => { setEditId(null); setForm(empty); setError("") }
@@ -175,9 +179,34 @@ export default function UsersPage() {
             <label className="text-xs text-gray-500 font-medium">ROLE *</label>
             <select value={form.role} onChange={e => setForm(p => ({...p, role: e.target.value}))}
               className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-              {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              <optgroup label="── NYG">
+                {ROLES_NYG.map(r => <option key={r} value={r}>{r}</option>)}
+              </optgroup>
+              <optgroup label="── GW">
+                {ROLES_GW.map(r => <option key={r} value={r}>{r}</option>)}
+              </optgroup>
+              <optgroup label="── All BU">
+                {ROLES_ALL.map(r => <option key={r} value={r}>{r}</option>)}
+              </optgroup>
             </select>
           </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">BU *</label>
+            <select value={form.bu} onChange={e => setForm(p => ({...p, bu: e.target.value}))}
+              className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              {BU_OPTIONS.map(b => <option key={b} value={b}>{b === "ALL" ? "ALL (Admin/Accounting)" : b}</option>)}
+            </select>
+          </div>
+          {form.role === "CLAIM_GW" && (
+            <div>
+              <label className="text-xs text-gray-500 font-medium">CLAIM DEPT (GW) *</label>
+              <select value={(form as any).claimDepartment || ""} onChange={e => setForm(p => ({...p, claimDepartment: e.target.value}))}
+                className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">-- เลือก --</option>
+                {CLAIM_GW_DEPTS.map(d => <option key={d} value={d}>{d === "SUPPLIER_IN" ? "Supplier ใน" : d === "SUPPLIER_OUT" ? "Supplier นอก" : "NYK"}</option>)}
+              </select>
+            </div>
+          )}
           {CLAIM_ROLES.includes(form.role) && (
             <div>
               <label className="text-xs text-gray-500 font-medium">APPROVAL PRIORITY <span className="font-normal text-gray-400">(1 = first, leave blank = any order)</span></label>
@@ -249,7 +278,7 @@ export default function UsersPage() {
         {loading ? <div className="py-10 text-center text-gray-400">Loading...</div> : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
-              <tr>{["NAME","EMAIL","ROLE","PRIORITY","STATUS",""].map(h =>
+              <tr>{["NAME","EMAIL","ROLE","BU","PRIORITY","STATUS",""].map(h =>
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>)}
               </tr>
             </thead>
@@ -264,6 +293,13 @@ export default function UsersPage() {
                   <td className="px-4 py-3 text-gray-600">{u.email}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase ${roleColor[u.role] || "bg-gray-100 text-gray-600"}`}>{u.role}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                      u.bu === "GW" ? "bg-emerald-100 text-emerald-700" :
+                      u.bu === "ALL" ? "bg-purple-100 text-purple-700" :
+                      "bg-blue-100 text-blue-700"
+                    }`}>{u.bu || "NYG"}</span>
                   </td>
                   <td className="px-4 py-3">
                     {CLAIM_ROLES.includes(u.role) && u.priority != null

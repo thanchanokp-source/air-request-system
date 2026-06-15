@@ -44,3 +44,6 @@ next-env.d.ts
 
 # file attachments (local storage)
 /uploads
+
+.vercel
+.env*

@@ -50,13 +50,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { items, assignedVpMer } = body
+    const { items, assignedVpMer, bu, claimDepartment } = body
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "No items" }, { status: 400 })
     }
     if (!assignedVpMer) {
       return NextResponse.json({ error: "กรุณาเลือก VP MER" }, { status: 400 })
     }
+    const isGW = bu === "GW"
 
     const descNames = [...new Set(items.map((i: any) => String(i["DESCRIPTION"] || "")).filter(Boolean))] as string[]
     const portNames = [...new Set(items.map((i: any) => String(i["Port"] || "")).filter(Boolean))] as string[]
@@ -80,7 +81,9 @@ export async function POST(req: NextRequest) {
         documentNo: docNo,
         brandName: String(first["Brand name"] || first["BRAND"] || ""),
         buName: String(first["BU"] || ""),
-        status: "PENDING_VP_MER",
+        bu: isGW ? "GW" : "NYG",
+        status: isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER",
+        claimDepartment: isGW ? (claimDepartment || null) : null,
         createdById: userId,
         assignedVpMer,
         vpMerToken: crypto.randomUUID(),
@@ -115,7 +118,7 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    notifyStatusChange(request.id, "PENDING_VP_MER").catch(() => {})
+    notifyStatusChange(request.id, isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER").catch(() => {})
     return NextResponse.json({ id: request.id })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
