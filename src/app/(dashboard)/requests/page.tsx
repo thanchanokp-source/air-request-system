@@ -10,7 +10,10 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING_VP_SCM: "Pending VP SCM", PENDING_PRESIDENT: "Pending President",
   PENDING_LOGISTICS: "Pending Logistics", PENDING_CLAIM: "Pending Claim",
   PENDING_VP_CLAIM: "Pending VP Claim",
-  PENDING_VP_NYK: "Pending VP NYK", COMPLETED: "Completed", REJECTED: "Rejected"
+  PENDING_VP_NYK: "Pending VP NYK",
+  PENDING_VP_MER_GW: "Pending VP MER (GW)", PENDING_PRESIDENT_GW: "Pending President (GW)",
+  PENDING_LOGISTICS_GW: "Pending Logistics (GW)", PENDING_CLAIM_GW: "Pending Claim (GW)",
+  COMPLETED: "Completed", REJECTED: "Rejected"
 }
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -27,7 +30,11 @@ const SoBadge = ({ s, docStatus }: { s: string; docStatus: string }) => {
 const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
   if (itemStatus === "REJECTED") return "Rejected"
   if (itemStatus === "COMPLETED") return "Completed"
-  if (itemStatus === "PENDING") return docStatus === "PENDING_SCM" ? "SCM" : "VP MER"
+  if (itemStatus === "PENDING") {
+    if (docStatus === "PENDING_SCM") return "SCM"
+    if (docStatus === "PENDING_PRESIDENT_GW") return "President"
+    return "VP MER"
+  }
   if (itemStatus === "VP_MER_PASSED") return "SCM"
   if (itemStatus === "PASSED") return "VP SCM"
   if (itemStatus === "VP_PASSED") return "President"
@@ -142,7 +149,12 @@ export default function RequestsPage() {
 
   const [claimExpanded, setClaimExpanded] = useState(false)
 
-  const POSITIONS = [
+  const POSITIONS = activeBu === "GW" ? [
+    { key: "PENDING_VP_MER_GW", label: "VP MER" },
+    { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
+    { key: "PENDING_LOGISTICS_GW", label: "LOGISTICS" },
+    { key: "PENDING_CLAIM_GW", label: "CLAIM" },
+  ] : [
     { key: "PENDING_VP_MER", label: "VP MER" },
     { key: "PENDING_SCM", label: "SCM" },
     { key: "PENDING_VP_SCM", label: "VP SCM" },
@@ -183,7 +195,7 @@ export default function RequestsPage() {
             </span>
           )}
         </div>
-        {role === "MER_USER" && (
+        {(role === "MER_USER" || role === "MER_GW") && (
           <Link href="/requests/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
             + New Request
           </Link>
@@ -212,8 +224,10 @@ export default function RequestsPage() {
       </div>
       <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
         {POSITIONS.map(({ key, label }) => {
-          const ITEM_TO_STEP: Record<string, string> = {
-            PENDING: "PENDING_VP_MER",
+          const ITEM_TO_STEP: Record<string, string> = activeBu === "GW" ? {
+            PRES_PASSED: "PENDING_LOGISTICS_GW",
+            LOG_PASSED: "PENDING_CLAIM_GW",
+          } : {
             VP_MER_PASSED: "PENDING_SCM",
             PASSED: "PENDING_VP_SCM",
             VP_PASSED: "PENDING_PRESIDENT",
@@ -223,12 +237,17 @@ export default function RequestsPage() {
           }
           const count = allRows.filter(r => {
             if (r.itemStatus === "REJECTED" || r.itemStatus === "COMPLETED") return false
-            const step = r.itemStatus === "PENDING"
-              ? (r.request.status === "PENDING_SCM" ? "PENDING_SCM" : "PENDING_VP_MER")
-              : ITEM_TO_STEP[r.itemStatus]
+            let step: string | undefined
+            if (r.itemStatus === "PENDING") {
+              step = activeBu === "GW"
+                ? (r.request.status === "PENDING_PRESIDENT_GW" ? "PENDING_PRESIDENT_GW" : "PENDING_VP_MER_GW")
+                : (r.request.status === "PENDING_SCM" ? "PENDING_SCM" : "PENDING_VP_MER")
+            } else {
+              step = ITEM_TO_STEP[r.itemStatus]
+            }
             return step === key
           }).length
-          const isClaim = key === "PENDING_CLAIM"
+          const isClaim = key === "PENDING_CLAIM" || key === "PENDING_CLAIM_GW"
           return (
             <div key={key} className={`border rounded-xl p-2 sm:p-3 border-blue-200 bg-blue-50 ${isClaim ? "cursor-pointer" : ""}`}
               onClick={() => isClaim && setClaimExpanded(p => !p)}>
