@@ -20,25 +20,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${APP_URL}/login?error=expired`)
   }
 
-  if (request.status !== "PENDING_VP_MER") {
+  const isGW = request.bu === "GW"
+  const expectedStatus = isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER"
+
+  if (request.status !== expectedStatus) {
     return NextResponse.redirect(`${APP_URL}/requests/${request.id}?msg=already_processed`)
   }
 
   if (action === "approve") {
-    await prisma.airRequest.update({
-      where: { id: request.id },
-      data: {
-        status: "PENDING_SCM",
-        vpMerToken: null,
-        items: {
-          updateMany: {
-            where: { itemStatus: "PENDING" },
-            data: { itemStatus: "VP_MER_PASSED" }
+    if (isGW) {
+      await prisma.airRequest.update({
+        where: { id: request.id },
+        data: { status: "PENDING_PRESIDENT_GW", vpMerToken: null }
+      })
+      notifyStatusChange(request.id, "PENDING_PRESIDENT_GW").catch(() => {})
+    } else {
+      await prisma.airRequest.update({
+        where: { id: request.id },
+        data: {
+          status: "PENDING_SCM",
+          vpMerToken: null,
+          items: {
+            updateMany: {
+              where: { itemStatus: "PENDING" },
+              data: { itemStatus: "VP_MER_PASSED" }
+            }
           }
         }
-      }
-    })
-    notifyStatusChange(request.id, "PENDING_SCM").catch(() => {})
+      })
+      notifyStatusChange(request.id, "PENDING_SCM").catch(() => {})
+    }
     return NextResponse.redirect(`${APP_URL}/requests/${request.id}?msg=approved`)
   }
 

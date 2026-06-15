@@ -129,6 +129,8 @@ export default function RequestDetailPage() {
   const role = (session?.user as any)?.role || ""
   const myPriority: number | null = (session?.user as any)?.priority ?? null
   const myUserId: string = (session?.user as any)?.id || ""
+  const isGWRole = ["VP_MER_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW"].includes(role)
+  const isGWRequest = req?.bu === "GW"
 
   useEffect(() => {
     if (!role) return
@@ -140,7 +142,7 @@ export default function RequestDetailPage() {
       fetch(`/api/users/by-role?role=${groupRole}`).then(r => r.json()).then(setClaimApproversList)
     }
   }, [role])
-  const canAct = req && ROLE_ACTIONS[role]?.includes(req.status)
+  const canAct = req && ROLE_ACTIONS[role]?.includes(req.status) && (!isGWRole || isGWRequest)
   const isStyleApprover = req && STYLE_APPROVER_STATUSES.includes(req.status)
   const CLAIM_VP_ROLES_LOCAL = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
   const claimDept = role.startsWith("DVM_") ? role.replace("DVM_", "") : role.startsWith("CLAIM_") ? role.replace("CLAIM_", "") : CLAIM_VP_ROLES_LOCAL.includes(role) ? role.replace("VP_", "") : ""
@@ -162,7 +164,7 @@ export default function RequestDetailPage() {
   const claimPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "CLAIM_PASSED")
   const isPresidentRole = role === "PRESIDENT" && vpPassedItems.length > 0
   const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0
-  const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS"
+  const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
 
   const styleGroups = useMemo(() => {
     if (!req?.items) return []
@@ -361,7 +363,7 @@ export default function RequestDetailPage() {
             </span>
           )
         })()}
-        {role === "MER_USER" && req.status === "PENDING_VP_MER" && (
+        {((role === "MER_USER" && req.status === "PENDING_VP_MER") || (role === "MER_GW" && req.status === "PENDING_VP_MER_GW")) && (
           <button onClick={async () => {
             if (!confirm("Delete this request?")) return
             const res = await fetch(`/api/requests/${id}`, { method: "DELETE" })
@@ -1538,7 +1540,17 @@ export default function RequestDetailPage() {
       {/* Actions */}
       {canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && role !== "PRESIDENT" && role !== "LOGISTICS" && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && (
         <div className="bg-white rounded-xl border p-5 space-y-4">
-          <h2 className="font-semibold text-gray-800 border-b pb-2">ACTIONS</h2>
+          <div className="flex items-center gap-2 border-b pb-2">
+            <h2 className="font-semibold text-gray-800">ACTIONS</h2>
+            {isGWRequest && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW</span>}
+          </div>
+
+          {/* GW — claim dept info for CLAIM_GW */}
+          {isGWRequest && req.claimDepartment && role === "CLAIM_GW" && (
+            <div className="text-sm text-gray-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              Claim Department: <span className="font-semibold text-emerald-700">{req.claimDepartment === "SUPPLIER_IN" ? "Supplier ใน" : req.claimDepartment === "SUPPLIER_OUT" ? "Supplier นอก" : req.claimDepartment}</span>
+            </div>
+          )}
 
           {/* SCM */}
           {req.status === "PENDING_SCM" && (

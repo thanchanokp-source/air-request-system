@@ -428,6 +428,7 @@ function SectionRow({ label }: { label:string }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const [activeBu, setActiveBu] = useState<string>("ALL")
   const [requests, setRequests]   = useState<any[]>([])
   const [loading,  setLoading]    = useState(true)
   const [yearFilter,  setYearFilter]  = useState("")
@@ -445,7 +446,8 @@ export default function DashboardPage() {
     fetch("/api/requests").then(r=>r.json()).then(d=>{ setRequests(d); setLoading(false) })
   }, [])
 
-  const allSOs = useMemo(()=>requests.flatMap(r=>(r.items||[]).map((item:any)=>({...item,request:r}))), [requests])
+  const buRequests = useMemo(()=>requests.filter(r=> activeBu==="ALL" ? true : activeBu==="GW" ? r.bu==="GW" : (r.bu==="NYG"||!r.bu)), [requests, activeBu])
+  const allSOs = useMemo(()=>buRequests.flatMap(r=>(r.items||[]).map((item:any)=>({...item,request:r}))), [buRequests])
 
   const filtered = useMemo(()=>allSOs.filter(row=>{
     const r = row.request
@@ -617,7 +619,23 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold text-gray-900">DASHBOARD</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold text-gray-900">DASHBOARD</h1>
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+          {[{v:"ALL",label:"All BU"},{v:"NYG",label:"NYG"},{v:"GW",label:"GW"}].map(({v,label}) => (
+            <button key={v} onClick={() => setActiveBu(v)}
+              className={`px-4 py-1.5 transition-colors ${
+                activeBu === v
+                  ? v === "GW" ? "bg-emerald-600 text-white"
+                  : v === "NYG" ? "bg-blue-600 text-white"
+                  : "bg-gray-700 text-white"
+                  : "bg-white text-gray-500 hover:bg-gray-50"
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* ── KPI ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3">

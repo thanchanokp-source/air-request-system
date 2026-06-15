@@ -59,6 +59,8 @@ const CurrentStepBadge = ({ docStatus, itemStatus }: { docStatus: string; itemSt
 export default function RequestsPage() {
   const { data: session } = useSession()
   const role = (session?.user as any)?.role || ""
+  const userBu = (session?.user as any)?.bu || "NYG"
+  const [activeBu, setActiveBu] = useState<string>(userBu === "ALL" ? "NYG" : userBu)
   const [requests, setRequests] = useState<any[]>([])
   const [statusFilter, setStatusFilter] = useState("")
   const [brandF, setBrandF] = useState<string[]>([])
@@ -77,7 +79,9 @@ export default function RequestsPage() {
     fetch("/api/requests").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
   }, [])
 
-  const allRows = requests.flatMap(r =>
+  const buRequests = requests.filter(r => activeBu === "GW" ? r.bu === "GW" : (r.bu === "NYG" || !r.bu))
+
+  const allRows = buRequests.flatMap(r =>
     (r.items || []).map((item: any) => ({ ...item, request: r }))
   )
 
@@ -102,7 +106,7 @@ export default function RequestsPage() {
       (!invoiceF.length || invoiceF.includes(row.invoiceNo))
   })
 
-  const docGroups = requests.map(req => {
+  const docGroups = buRequests.map(req => {
     const reqRows = filtered.filter(row => row.request.id === req.id)
     if (!reqRows.length) return null
     const styleMap: Record<string, any[]> = {}
@@ -162,7 +166,23 @@ export default function RequestsPage() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">AIR REQUESTS</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-900">AIR REQUESTS</h1>
+          {userBu === "ALL" ? (
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+              {["NYG","GW"].map(bu => (
+                <button key={bu} onClick={() => setActiveBu(bu)}
+                  className={`px-4 py-1.5 transition-colors ${activeBu === bu ? (bu === "GW" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white") : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                  {bu}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className={`px-2 py-0.5 rounded text-xs font-bold ${activeBu === "GW" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+              {activeBu}
+            </span>
+          )}
+        </div>
         {role === "MER_USER" && (
           <Link href="/requests/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
             + New Request
