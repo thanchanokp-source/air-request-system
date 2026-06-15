@@ -164,7 +164,12 @@ export default function RequestDetailPage() {
   const claimPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "CLAIM_PASSED")
   const isPresidentRole = role === "PRESIDENT" && vpPassedItems.length > 0
   const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0
-  const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
+  const isVpMerGW = role === "VP_MER_GW" && req?.status === "PENDING_VP_MER_GW" && isGWRequest
+  const isPresidentGW = role === "PRESIDENT_GW" && req?.status === "PENDING_PRESIDENT_GW" && isGWRequest
+  const isLogisticsGW = role === "LOGISTICS_GW" && presPassedItems.length > 0 && isGWRequest
+  const isClaimGW = role === "CLAIM_GW" && req?.status === "PENDING_CLAIM_GW" && isGWRequest
+  const isGWApprover = isVpMerGW || isPresidentGW || isLogisticsGW || isClaimGW
+  const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
 
   const styleGroups = useMemo(() => {
     if (!req?.items) return []
@@ -729,6 +734,119 @@ export default function RequestDetailPage() {
         </div>
       )}
 
+      {/* GW Style Approval — VP_MER_GW (PENDING → VP_MER_PASSED) and PRESIDENT_GW (PENDING → PRES_PASSED) */}
+      {(isVpMerGW || isPresidentGW) && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-gray-800">STYLES ({styleGroups.length})</h2>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW · {isVpMerGW ? "VP MER" : "President"}</span>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex gap-4 text-xs font-medium">
+                <span className="text-yellow-600">{styleGroups.filter(g => g.status === "PENDING").length} pending</span>
+                <span className="text-green-600">{styleGroups.filter(g => ["VP_MER_PASSED","PRES_PASSED"].includes(g.status)).length} approved</span>
+                <span className="text-red-600">{styleGroups.filter(g => g.status === "REJECTED").length} rejected</span>
+              </div>
+              {styleGroups.some(g => g.status === "PENDING") && (
+                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                  <input type="checkbox"
+                    checked={styleGroups.filter(g => g.status === "PENDING").every(g => selectedStyles.has(g.style))}
+                    onChange={e => {
+                      const pending = styleGroups.filter(g => g.status === "PENDING").map(g => g.style)
+                      setSelectedStyles(e.target.checked ? new Set(pending) : new Set())
+                    }}
+                    className="w-4 h-4" />
+                  Select All
+                </label>
+              )}
+              {selectedStyles.size > 0 && (
+                <button onClick={approveSelectedStyles} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                  {submitting ? "..." : `Approve Selected (${selectedStyles.size})`}
+                </button>
+              )}
+            </div>
+          </div>
+          {styleGroups.map(g => {
+            const isExp = expanded.has(g.style)
+            const isRej = rejectingStyle === g.style
+            const isSub = submitting === g.style
+            const isApproved = ["VP_MER_PASSED","PRES_PASSED"].includes(g.status)
+            return (
+              <div key={g.style} className={`rounded-xl border overflow-hidden ${isApproved ? "border-green-200" : g.status === "REJECTED" ? "border-red-200" : "border-gray-200"}`}>
+                <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${isApproved ? "bg-green-50" : g.status === "REJECTED" ? "bg-red-50" : "bg-white"}`}>
+                  {g.status === "PENDING" && (
+                    <input type="checkbox" className="w-4 h-4 shrink-0"
+                      checked={selectedStyles.has(g.style)}
+                      onChange={e => setSelectedStyles(prev => { const s = new Set(prev); e.target.checked ? s.add(g.style) : s.delete(g.style); return s })} />
+                  )}
+                  <button onClick={() => toggleExpand(g.style)} className="text-gray-400 hover:text-gray-700 w-5 text-center">{isExp ? "▼" : "▶"}</button>
+                  <div className="flex-1 flex items-center gap-3 min-w-0">
+                    <span className="font-semibold text-gray-800 shrink-0">{g.style}</span>
+                    <div className="hidden sm:flex items-center gap-3 text-xs">
+                      <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
+                      <span className="text-gray-300">|</span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} THB</span></span>
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400 shrink-0">{g.items.length} SO(s)</span>
+                  {isApproved && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Approved</span>}
+                  {g.status === "REJECTED" && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Rejected</span>}
+                  {g.status === "PENDING" && !isRej && (
+                    <div className="flex gap-2">
+                      <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">{isSub ? "..." : "Approve"}</button>
+                      <button onClick={() => { setRejectingStyle(isRej ? null : g.style); setRejectComment("") }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>
+                    </div>
+                  )}
+                </div>
+                {isRej && (
+                  <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
+                    <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
+                    <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                    <div className="flex gap-2">
+                      <button onClick={() => rejectStyle(g.style)} disabled={isSub || !rejectComment.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">{isSub ? "..." : "Confirm Reject"}</button>
+                      <button onClick={() => { setRejectingStyle(null); setRejectComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {isExp && (
+                  <div className="border-t border-gray-100 overflow-x-auto">
+                    <table className="text-xs w-full">
+                      <thead className="bg-gray-50">
+                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                          <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {g.items.map((item: any) => (
+                          <tr key={item.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-medium">{item.so}</td>
+                            <td className="px-3 py-2">{item.customerPO}</td>
+                            <td className="px-3 py-2">{item.description}</td>
+                            <td className="px-3 py-2">{item.gmtType}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                            <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
+                            <td className="px-3 py-2">{item.qtyRequestAir}</td>
+                            <td className="px-3 py-2">{fmtNum(item.grossWeight, 2)}</td>
+                            <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
+                            <td className="px-3 py-2">{item.reasonDelay}</td>
+                            <td className="px-3 py-2">{item.factory}</td>
+                            <td className="px-3 py-2">{item.country}</td>
+                            <td className="px-3 py-2">{item.port}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* SCM processes VP_MER_PASSED items at PENDING_VP_MER */}
       {isScmAtVpMer && (
         <div className="bg-white rounded-xl border p-5 space-y-4">
@@ -896,10 +1014,10 @@ export default function RequestDetailPage() {
       )}
 
       {/* Logistics: process PRES_PASSED items (per-style forwarding) */}
-      {isLogisticsRole && (
+      {(isLogisticsRole || isLogisticsGW) && (
         <div className="bg-white rounded-xl border p-5 space-y-3">
           <h2 className="font-semibold text-gray-800 border-b pb-2">
-            INVOICE / BOOKING DATE — LOGISTICS
+            INVOICE / BOOKING DATE — LOGISTICS{isLogisticsGW ? <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium align-middle">GW</span> : ""}
             <span className="text-xs font-normal text-gray-400 ml-2">
               {pendingLogItems.filter((i: any) => itemLogistics[i.id]?.invoiceNo).length}/{pendingLogItems.length} ready
               {forwardedLogItems.length > 0 && <span className="text-green-600 ml-2">· {forwardedLogItems.length} forwarded to Claim</span>}
@@ -1537,8 +1655,121 @@ export default function RequestDetailPage() {
         </div>
       )}
 
+      {/* GW CLAIM: per-SO approve/reject at PENDING_CLAIM_GW */}
+      {isClaimGW && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-gray-800">SO APPROVAL — CLAIM GW</h2>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW</span>
+            </div>
+            <div className="flex gap-4 text-xs font-medium">
+              <span className="text-yellow-600">{(req.items||[]).filter((i:any) => i.itemStatus === "LOG_PASSED").length} pending</span>
+              <span className="text-green-600">{(req.items||[]).filter((i:any) => i.itemStatus === "COMPLETED").length} approved</span>
+              <span className="text-red-600">{(req.items||[]).filter((i:any) => i.itemStatus === "REJECTED").length} rejected</span>
+            </div>
+          </div>
+          {req.claimDepartment && (
+            <div className="text-sm text-gray-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+              Claim Department: <span className="font-semibold text-emerald-700">{req.claimDepartment === "SUPPLIER_IN" ? "Supplier ใน" : req.claimDepartment === "SUPPLIER_OUT" ? "Supplier นอก" : req.claimDepartment}</span>
+            </div>
+          )}
+          {(req.items||[]).filter((i:any) => ["LOG_PASSED","COMPLETED","REJECTED"].includes(i.itemStatus)).map((item: any) => {
+            const isSub = submitting === item.id
+            const isRejRow = rejectingSo === item.id
+            const isPending = item.itemStatus === "LOG_PASSED"
+            const isPassed = item.itemStatus === "COMPLETED"
+            const isExp = expanded.has(item.id)
+            return (
+              <div key={item.id} className={`rounded-xl border overflow-hidden ${isPassed ? "border-green-200" : item.itemStatus === "REJECTED" ? "border-red-200" : "border-gray-200"}`}>
+                <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${isPassed ? "bg-green-50" : item.itemStatus === "REJECTED" ? "bg-red-50" : "bg-white"}`}>
+                  <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
+                  <span className="font-semibold text-gray-800 w-28 shrink-0">{item.so}</span>
+                  <span className="text-xs text-gray-500 flex-1 min-w-0 truncate">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
+                  {isPassed && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">Completed</span>}
+                  {item.itemStatus === "REJECTED" && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">Rejected</span>}
+                  {isPassed && <PdfDownloadButton req={req} item={item} compact alwaysShow />}
+                  {isPending && !isRejRow && (
+                    <div className="flex gap-2">
+                      <button onClick={async () => {
+                          setSubmitting(item.id)
+                          const res = await fetch(`/api/requests/${id}/approve`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "approve_so", itemId: item.id })
+                          })
+                          if (res.ok) setReq(await res.json())
+                          setSubmitting(null)
+                        }} disabled={isSub}
+                        className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                        {isSub ? "..." : "Approve"}
+                      </button>
+                      <button onClick={() => { setRejectingSo(item.id); setRejectSoComment("") }} disabled={isSub}
+                        className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>
+                    </div>
+                  )}
+                </div>
+                {isRejRow && (
+                  <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
+                    <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
+                    <textarea value={rejectSoComment} onChange={e => setRejectSoComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                    <div className="flex gap-2">
+                      <button onClick={async () => {
+                          setSubmitting(item.id)
+                          const res = await fetch(`/api/requests/${id}/approve`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "reject_so", itemId: item.id, comment: rejectSoComment })
+                          })
+                          if (res.ok) setReq(await res.json())
+                          setSubmitting(null); setRejectingSo(null); setRejectSoComment("")
+                        }} disabled={isSub || !rejectSoComment.trim()}
+                        className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
+                        {isSub ? "..." : "Confirm Reject"}
+                      </button>
+                      <button onClick={() => { setRejectingSo(null); setRejectSoComment("") }}
+                        className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {isExp && (
+                  <div className="border-t border-gray-100 overflow-x-auto">
+                    <table className="text-xs w-full">
+                      <thead className="bg-gray-50">
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","FACTORY","COUNTRY","PORT"].map(h =>
+                          <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium">{item.so}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
+                          <td className="px-3 py-2">{item.customerPO}</td>
+                          <td className="px-3 py-2">{item.description}</td>
+                          <td className="px-3 py-2">{item.gmtType}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                          <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
+                          <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                          <td className="px-3 py-2">{fmtNum(item.grossWeight, 2)}</td>
+                          <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
+                          <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
+                          <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
+                          <td className="px-3 py-2">{item.factory}</td>
+                          <td className="px-3 py-2">{item.country}</td>
+                          <td className="px-3 py-2">{item.port}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* Actions */}
-      {canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && role !== "PRESIDENT" && role !== "LOGISTICS" && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && (
+      {canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && role !== "PRESIDENT" && role !== "LOGISTICS" && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && (
         <div className="bg-white rounded-xl border p-5 space-y-4">
           <div className="flex items-center gap-2 border-b pb-2">
             <h2 className="font-semibold text-gray-800">ACTIONS</h2>
