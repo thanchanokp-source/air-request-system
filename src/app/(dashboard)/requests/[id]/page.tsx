@@ -52,6 +52,7 @@ export default function RequestDetailPage() {
   const [vpSelected, setVpSelected] = useState<Set<string>>(new Set())
   const [logEditMode, setLogEditMode] = useState<Set<string>>(new Set())
   const [claimApproversList, setClaimApproversList] = useState<any[]>([])
+  const [recalculating, setRecalculating] = useState(false)
   const claimAutoSaveReady = useRef(false)
 
   // Auto-save SCM claim dept + comments to DB (debounced 1.5s)
@@ -368,12 +369,29 @@ export default function RequestDetailPage() {
             </span>
           )
         })()}
+        {role === "ADMIN" && (
+          <button onClick={async () => {
+            setRecalculating(true)
+            const res = await fetch(`/api/requests/${id}/recalculate`, { method: "POST" })
+            const data = await res.json()
+            setRecalculating(false)
+            if (res.ok) {
+              const r = await fetch(`/api/requests/${id}`).then(r => r.json())
+              setReq(r)
+              alert(`Recalculated ${data.updated} item(s)`)
+            } else {
+              alert("Recalculate failed")
+            }
+          }} disabled={recalculating} className="ml-auto text-xs text-blue-600 border border-blue-300 px-3 py-1 rounded-lg hover:bg-blue-50 disabled:opacity-50">
+            {recalculating ? "Calculating..." : "⟳ Recalculate"}
+          </button>
+        )}
         {((role === "MER_USER" && req.status === "PENDING_VP_MER") || (role === "MER_GW" && req.status === "PENDING_VP_MER_GW")) && (
           <button onClick={async () => {
             if (!confirm("Delete this request?")) return
             const res = await fetch(`/api/requests/${id}`, { method: "DELETE" })
             if (res.ok) router.push("/requests")
-          }} className="ml-auto text-sm text-red-500 border border-red-300 px-3 py-1 rounded-lg hover:text-red-700">
+          }} className="text-sm text-red-500 border border-red-300 px-3 py-1 rounded-lg hover:text-red-700">
             Delete
           </button>
         )}
