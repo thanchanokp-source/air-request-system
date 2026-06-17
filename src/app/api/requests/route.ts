@@ -59,16 +59,9 @@ export async function POST(req: NextRequest) {
     }
     const isGW = bu === "GW"
 
-    const descNames = [...new Set(items.map((i: any) => String(i["DESCRIPTION"] || "")).filter(Boolean))] as string[]
     const portNames = [...new Set(items.map((i: any) => String(i["Port"] || "")).filter(Boolean))] as string[]
 
-    const [descList, portList] = await Promise.all([
-      prisma.masterDescription.findMany({ where: { name: { in: descNames } } }),
-      prisma.masterPort.findMany({ where: { port: { in: portNames } } })
-    ])
-
-    const descWeights: Record<string, number> = {}
-    for (const d of descList) descWeights[d.name] = d.weightPerUnit
+    const portList = await prisma.masterPort.findMany({ where: { port: { in: portNames } } })
 
     const portRates: Record<string, number> = {}
     for (const p of portList) portRates[p.port] = p.ratePerKg
@@ -89,17 +82,15 @@ export async function POST(req: NextRequest) {
         vpMerToken: crypto.randomUUID(),
         items: {
           create: items.map((item: any) => {
-            const desc = String(item["DESCRIPTION"] || "")
             const port = String(item["Port"] || "")
             const qty = Number(item["QTY Request ship Air (pcs)"] || 0)
-            const weight = descWeights[desc] || 0
             const rate = portRates[port] || 0
-            const gw = qty * weight
+            const gw = parseFloat(String(item["WEIGHT(KG)"] || "0")) || 0
             return {
               style: String(item["STYLE"] || ""),
               so: String(item["SO"] || ""),
               customerPO: String(item["CUSTOMER PO"] || ""),
-              description: desc,
+              description: String(item["DESCRIPTION"] || ""),
               gmtType: String(item["GMT_TYPE"] || ""),
               originalShipmentDate: parseDate(item["Original Shipment Date"]),
               planShipmentDate: parseDate(item["Plan Shipment Date"]),

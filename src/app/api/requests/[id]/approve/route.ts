@@ -412,6 +412,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // GW LOGISTICS: enter invoice/booking/actual per SO at PENDING_LOGISTICS_GW
   if (action === "approve" && userRole === "LOGISTICS_GW") {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (itemActuals && typeof itemActuals === "object") {
       for (const [iid, val] of Object.entries(itemActuals)) {
         const num = parseFloat(String(val))
@@ -450,6 +451,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    if (itemData.requestId !== id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     const newItemStatus = action === "approve_so" ? "COMPLETED" : "REJECTED"
     await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
     await prisma.approvalLog.create({
