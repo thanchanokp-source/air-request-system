@@ -110,7 +110,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (pendingCount === 0) {
       const vpMerPassedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "VP_MER_PASSED" } })
       if (vpMerPassedCount === 0) {
-        await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED" } })
+        await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED", rejectionReason: comment || "Rejected by VP MER GW" } })
       } else {
         await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PENDING" } })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_PRESIDENT_GW" } })
