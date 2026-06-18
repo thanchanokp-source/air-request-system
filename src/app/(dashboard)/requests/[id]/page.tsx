@@ -1157,21 +1157,9 @@ export default function RequestDetailPage() {
             </div>
           )}
           <div className="space-y-2">
-            {isLogisticsGW && (
-              <div>
-                <label className="text-xs text-gray-500 font-medium">CLAIM DEPT *</label>
-                <select value={gwClaimDept} onChange={e => setGwClaimDept(e.target.value)}
-                  className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-emerald-400">
-                  <option value="">-- เลือก Claim Dept --</option>
-                  <option value="SUPPLIER_IN">Supplier ใน</option>
-                  <option value="SUPPLIER_OUT">Supplier นอก</option>
-                  <option value="NYK">NYK</option>
-                </select>
-              </div>
-            )}
             <button
               disabled={
-                submitting === "_" || (isLogisticsGW && !gwClaimDept) ||
+                submitting === "_" ||
                 !pendingLogItems.some((i: any) => itemLogistics[i.id]?.invoiceNo && itemLogistics[i.id]?.bookingDate && parseFloat(itemActuals[i.id] || "0") > 0) ||
                 pendingLogItems.some((i: any) => itemLogistics[i.id]?.invoiceNo && !(parseFloat(itemActuals[i.id] || "0") > 0))
               }
@@ -1179,7 +1167,7 @@ export default function RequestDetailPage() {
                 setSubmitting("_")
                 const res = await fetch(`/api/requests/${id}/approve`, {
                   method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "approve", itemActuals, itemLogistics, gwClaimDept })
+                  body: JSON.stringify({ action: "approve", itemActuals, itemLogistics })
                 })
                 if (res.ok) {
                   const updated = await res.json()

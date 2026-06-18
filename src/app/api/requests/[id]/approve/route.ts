@@ -442,11 +442,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const remainingPres = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
     const remainingPending = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
     const nextStatus = (remainingPres === 0 && remainingPending === 0) ? "PENDING_CLAIM_GW" : request.status
-    const reqUpdate: any = { status: nextStatus }
-    if (gwClaimDept) reqUpdate.claimDepartment = gwClaimDept
-    if (nextStatus !== request.status || gwClaimDept) {
-      await prisma.airRequest.update({ where: { id }, data: reqUpdate })
-      if (nextStatus !== request.status) notifyStatusChange(id, nextStatus).catch(() => {})
+    if (nextStatus !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: nextStatus } })
+      notifyStatusChange(id, nextStatus).catch(() => {})
     }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: nextStatus, comment }
