@@ -3,6 +3,14 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 
+const REQUIRED_COLUMNS = [
+  "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
+  "Original Shipment Date", "Plan Shipment Date",
+  "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
+  "Reason delay", "Factory", "Country", "Port", "WEIGHT(KG)",
+  "Brand name", "BU",
+]
+
 const CLAIM_DEPT_GW = [
   { value: "SUPPLIER_IN", label: "Supplier ใน" },
   { value: "SUPPLIER_OUT", label: "Supplier นอก" },
@@ -35,11 +43,23 @@ export default function NewRequestPage() {
     const f = e.target.files?.[0]
     if (!f) return
     setFile(f)
+    setError("")
+    setPreview([])
     const form = new FormData()
     form.append("file", f)
     const res = await fetch("/api/upload", { method: "POST", body: form })
     const data = await res.json()
-    if (data.rows) setPreview(data.rows)
+    if (!data.rows || data.rows.length === 0) {
+      setError("ไม่พบข้อมูลในไฟล์ กรุณาตรวจสอบและอัพโหลดใหม่")
+      return
+    }
+    const cols = Object.keys(data.rows[0])
+    const missing = REQUIRED_COLUMNS.filter(c => !cols.includes(c))
+    if (missing.length > 0) {
+      setError(`Template ไม่ตรง — คอลัมน์ที่หายไป: ${missing.join(", ")}`)
+      return
+    }
+    setPreview(data.rows)
   }
 
   async function handleSubmit(e: React.FormEvent) {

@@ -31,9 +31,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const userId = (session.user as any).id
   const userRole = (session.user as any).role
+  const userClaimDept = (session.user as any).claimDepartment || null
   const { id } = await params
   const body = await req.json()
-    const { action, comment, style, itemId, claimDepartment, logisticsData, itemActuals, soClaimData, soClaimComments, soDvmData, itemLogistics } = body
+    const { action, comment, style, itemId, itemIds, claimDepartment, gwClaimDept, logisticsData, itemActuals, soClaimData, soClaimComments, soDvmData, itemLogistics } = body
 
   const request = await prisma.airRequest.findUnique({ where: { id }, include: { items: true } })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -186,7 +187,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // SCM forwards VP_MER_PASSED items at PENDING_VP_MER (same style-complete rule as PENDING_SCM)
-  if (request.status === "PENDING_VP_MER" && action === "approve") {
+  if (request.status === "PENDING_VP_MER" && action === "approve" && userRole !== "LOGISTICS") {
     const toForward = Object.entries(soClaimData || {}).filter(([, dept]) => dept)
     if (toForward.length === 0) return NextResponse.json({ error: "กรุณาระบุ Claim Dept อย่างน้อย 1 SO ก่อน Forward" }, { status: 400 })
 
@@ -293,7 +294,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!toStatus) return NextResponse.json({ error: "Invalid action" }, { status: 400 })
 
   // Partial SCM forwarding: forward only assigned items, advance when all done
-  if (request.status === "PENDING_SCM" && action === "approve") {
+  if (request.status === "PENDING_SCM" && action === "approve" && userRole !== "LOGISTICS") {
     const toForward = Object.entries(soClaimData || {}).filter(([, dept]) => dept)
     if (toForward.length === 0) return NextResponse.json({ error: "กรุณาระบุ Claim Dept อย่างน้อย 1 SO ก่อน Forward" }, { status: 400 })
 
@@ -413,6 +414,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW LOGISTICS: enter invoice/booking/actual per SO at PENDING_LOGISTICS_GW
   if (action === "approve" && userRole === "LOGISTICS_GW") {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (request.status !== "PENDING_LOGISTICS_GW" && request.status !== "PENDING_PRESIDENT_GW") {
+      return NextResponse.json({ error: "Request is not at Logistics stage" }, { status: 400 })
+    }
     if (itemActuals && typeof itemActuals === "object") {
       for (const [iid, val] of Object.entries(itemActuals)) {
         const num = parseFloat(String(val))
@@ -434,11 +438,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const item of readyItems) {
       await prisma.airRequestItem.update({ where: { id: item.id }, data: { itemStatus: "LOG_PASSED" } })
     }
+    // Move to PENDING_CLAIM_GW only when no PRES_PASSED and no PENDING (awaiting president) remain
     const remainingPres = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
-    const nextStatus = remainingPres === 0 ? "PENDING_CLAIM_GW" : request.status
-    if (nextStatus !== request.status) {
-      await prisma.airRequest.update({ where: { id }, data: { status: nextStatus } })
-      notifyStatusChange(id, nextStatus).catch(() => {})
+    const remainingPending = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
+    const nextStatus = (remainingPres === 0 && remainingPending === 0) ? "PENDING_CLAIM_GW" : request.status
+    const reqUpdate: any = { status: nextStatus }
+    if (gwClaimDept) reqUpdate.claimDepartment = gwClaimDept
+    if (nextStatus !== request.status || gwClaimDept) {
+      await prisma.airRequest.update({ where: { id }, data: reqUpdate })
+      if (nextStatus !== request.status) notifyStatusChange(id, nextStatus).catch(() => {})
     }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: nextStatus, comment }
@@ -446,8 +454,43 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
-  // GW CLAIM: per-SO approve/reject at PENDING_CLAIM_GW
+  // GW CLAIM: batch approve multiple SOs at once
+  if (action === "batch_approve_so" && userRole === "CLAIM_GW") {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (request.status !== "PENDING_CLAIM_GW" && request.status !== "PENDING_LOGISTICS_GW") {
+      return NextResponse.json({ error: "Request is not at Claim stage" }, { status: 400 })
+    }
+    if (userClaimDept && (request as any).claimDepartment !== userClaimDept) {
+      return NextResponse.json({ error: "Forbidden - Wrong claim department" }, { status: 403 })
+    }
+    if (!Array.isArray(itemIds) || itemIds.length === 0) return NextResponse.json({ error: "itemIds required" }, { status: 400 })
+    for (const iid of itemIds) {
+      const itemData = await prisma.airRequestItem.findUnique({ where: { id: iid } })
+      if (!itemData || itemData.requestId !== id || itemData.itemStatus !== "LOG_PASSED") continue
+      await prisma.airRequestItem.update({ where: { id: iid }, data: { itemStatus: "COMPLETED" } })
+    }
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Batch approve ${itemIds.length} SO(s)` }
+    })
+    const remaining = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: { notIn: ["COMPLETED", "REJECTED"] } } })
+    if (remaining === 0) {
+      const completedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "COMPLETED" } })
+      const finalStatus = completedCount > 0 ? "COMPLETED" : "REJECTED"
+      await prisma.airRequest.update({ where: { id }, data: { status: finalStatus } })
+      notifyStatusChange(id, finalStatus).catch(() => {})
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // GW CLAIM: per-SO approve/reject at PENDING_CLAIM_GW or PENDING_LOGISTICS_GW (partial forwarding)
   if ((action === "approve_so" || action === "reject_so") && userRole === "CLAIM_GW") {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (request.status !== "PENDING_CLAIM_GW" && request.status !== "PENDING_LOGISTICS_GW") {
+      return NextResponse.json({ error: "Request is not at Claim stage" }, { status: 400 })
+    }
+    if (userClaimDept && (request as any).claimDepartment !== userClaimDept) {
+      return NextResponse.json({ error: "Forbidden - Wrong claim department" }, { status: 403 })
+    }
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData) return NextResponse.json({ error: "Item not found" }, { status: 404 })
@@ -457,12 +500,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: action === "approve_so" ? "APPROVE" : "REJECT", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so}${comment ? ` - ${comment}` : ""}` }
     })
+    // Advance to COMPLETED only when no items remain (handles partial forwarding from PENDING_LOGISTICS_GW)
     const remaining = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: { notIn: ["COMPLETED", "REJECTED"] } } })
     if (remaining === 0) {
       const completedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "COMPLETED" } })
       const finalStatus = completedCount > 0 ? "COMPLETED" : "REJECTED"
       await prisma.airRequest.update({ where: { id }, data: { status: finalStatus } })
-      if (finalStatus !== request.status) notifyStatusChange(id, finalStatus).catch(() => {})
+      notifyStatusChange(id, finalStatus).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }

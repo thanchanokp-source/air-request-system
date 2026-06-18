@@ -14,36 +14,25 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
   const items = request.items as any[]
-  const descNames = [...new Set(items.map(i => String(i.description || "")).filter(Boolean))]
   const portNames = [...new Set(items.map(i => String(i.port || "")).filter(Boolean))]
 
-  const [descList, portList] = await Promise.all([
-    prisma.masterDescription.findMany({ where: { name: { in: descNames } } }),
-    prisma.masterPort.findMany({ where: { port: { in: portNames } } })
-  ])
-
-  const descWeights: Record<string, number> = {}
-  for (const d of descList) descWeights[d.name] = d.weightPerUnit
-
+  const portList = await prisma.masterPort.findMany({ where: { port: { in: portNames } } })
   const portRates: Record<string, number> = {}
   for (const p of portList) portRates[p.port] = p.ratePerKg
 
   let updated = 0
   for (const item of items) {
-    const weight = descWeights[item.description] || 0
     const rate = portRates[item.port] || 0
-    const gw = (item.qtyRequestAir || 0) * weight
-    const af = gw * rate
-    await prisma.airItem.update({
+    const gw = item.grossWeight || 0
+    await prisma.airRequestItem.update({
       where: { id: item.id },
       data: {
-        grossWeight: gw,
-        airFreight: af,
+        airFreight: gw * rate,
         marketRatePerKg: rate > 0 ? rate : undefined
       }
     })
     updated++
   }
 
-  return NextResponse.json({ ok: true, updated, descWeights, portRates })
+  return NextResponse.json({ ok: true, updated, portRates })
 }

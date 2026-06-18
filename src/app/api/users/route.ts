@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   const hashed = await bcrypt.hash(password, 10)
   try {
     const user = await prisma.user.create({
-      data: { name, email, password: hashed, role, bu: bu || "NYG", claimDepartment: role === "CLAIM" ? claimDepartment : null, priority: priority ?? null }
+      data: { name, email, password: hashed, role, bu: bu || "NYG", claimDepartment: role === "CLAIM_GW" ? (claimDepartment || null) : null, priority: priority ?? null }
     })
     return NextResponse.json({ id: user.id })
   } catch (e: any) {

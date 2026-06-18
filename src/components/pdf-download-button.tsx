@@ -4,7 +4,8 @@ import React, { useState } from "react"
 export function PdfDownloadButton({ req, item, compact = false, alwaysShow = false }: { req: any; item?: any; compact?: boolean; alwaysShow?: boolean }) {
   const [loading, setLoading] = useState(false)
 
-  if (!alwaysShow && req.status !== "COMPLETED") return null
+  const isLogisticsStage = ["PENDING_LOGISTICS", "PENDING_LOGISTICS_GW"].includes(req.status)
+  if (!alwaysShow && req.status !== "COMPLETED" && !isLogisticsStage) return null
 
   const handleDownload = async () => {
     setLoading(true)

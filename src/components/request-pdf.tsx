@@ -27,16 +27,25 @@ function ItemPage({ req, item }: { req: any; item: any }) {
   // Build approval chain from approvalLogs for style-level approvals
   const approveLogs = (req.approvalLogs || []).filter((l: any) => l.action === "APPROVE")
   const styleLogsByPos: Record<string, { name: string; date: string }> = {}
-  const styleLevelPositions = ["VP MER", "SCM", "VP SCM", "PRESIDENT", "LOGISTICS"]
-  const statusToPos: Record<string, string> = {
-    PENDING_VP_MER: "VP MER",
-    PENDING_SCM: "SCM",
-    PENDING_VP_SCM: "VP SCM",
-    PENDING_PRESIDENT: "PRESIDENT",
-    PENDING_LOGISTICS: "LOGISTICS",
-  }
+  const isGW = req.bu === "GW"
+  const styleLevelPositions = isGW
+    ? ["VP MER GW", "PRESIDENT GW", "LOGISTICS GW"]
+    : ["VP MER", "SCM", "VP SCM", "PRESIDENT", "LOGISTICS"]
+  const roleToPos: Record<string, string> = isGW
+    ? {
+        VP_MER_GW: "VP MER GW",
+        PRESIDENT_GW: "PRESIDENT GW",
+        LOGISTICS_GW: "LOGISTICS GW",
+      }
+    : {
+        VP_MER: "VP MER",
+        SCM_USER: "SCM",
+        VP_SCM: "VP SCM",
+        PRESIDENT: "PRESIDENT",
+        LOGISTICS: "LOGISTICS",
+      }
   for (const log of approveLogs) {
-    const pos = statusToPos[log.fromStatus]
+    const pos = roleToPos[log.user?.role]
     if (pos && !styleLogsByPos[pos]) {
       styleLogsByPos[pos] = { name: log.user?.name || "-", date: fmtDate(log.createdAt) }
     }
@@ -119,7 +128,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
       {/* Reason & Claim */}
       <View style={s.sectionBar}><Text style={s.sectionTitle}>REASON & CLAIM</Text></View>
       {[
-        ["CLAIM DEPARTMENT", item.claimDepartment || "-"],
+        ["CLAIM DEPARTMENT", (isGW ? req.claimDepartment : item.claimDepartment) || "-"],
         ["REASON DELAY", item.reasonDelay || "-"],
       ].map(([label, value]) => (
         <View key={label} style={s.infoRow}>

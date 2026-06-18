@@ -7,14 +7,17 @@ const nav = [
   { href: "/requests", label: "AIR REQUESTS" },
   { href: "/approvals", label: "APPROVALS" },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
-  { href: "/master/port", label: "MASTER PORT", adminOnly: true },
+  { href: "/master/port", label: "MASTER PORT", roles: ["ADMIN", "LOGISTICS"] },
   { href: "/master/description", label: "MASTER DESCRIPTION", adminOnly: true }
 ]
 
 export default function Sidebar({ role, onClose }: { role: string; onClose?: () => void }) {
   const path = usePathname()
   const isAdmin = role === "ADMIN"
-  const visible = nav.filter(item => !item.adminOnly || isAdmin)
+  const visible = nav.filter(item => {
+    if (item.roles) return item.roles.includes(role)
+    return !item.adminOnly || isAdmin
+  })
   return (
     <div className="w-60 h-full text-white flex flex-col shrink-0" style={{background:"#6b1a1a"}}>
       <div className="p-5 border-b flex items-center justify-between" style={{borderColor:"#8b2a2a"}}>

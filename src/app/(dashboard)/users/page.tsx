@@ -278,7 +278,7 @@ export default function UsersPage() {
         {loading ? <div className="py-10 text-center text-gray-400">Loading...</div> : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
-              <tr>{["NAME","EMAIL","ROLE","BU","PRIORITY","STATUS",""].map(h =>
+              <tr>{["NAME","EMAIL","ROLE","BU","CLAIM DEPT","PRIORITY","STATUS",""].map(h =>
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>)}
               </tr>
             </thead>
@@ -300,6 +300,18 @@ export default function UsersPage() {
                       u.bu === "ALL" ? "bg-purple-100 text-purple-700" :
                       "bg-blue-100 text-blue-700"
                     }`}>{u.bu || "NYG"}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const dept = u.claimDepartment ||
+                        (u.role.startsWith("DVM_") ? u.role.replace("DVM_","") :
+                         u.role.startsWith("CLAIM_") && !u.role.endsWith("_GW") ? u.role.replace("CLAIM_","") :
+                         u.role.startsWith("VP_") && !["VP_MER","VP_SCM","VP_MER_GW"].includes(u.role) ? u.role.replace("VP_","") : null)
+                      if (!dept) return <span className="text-gray-300 text-xs">—</span>
+                      const label = dept === "SUPPLIER_IN" ? "Supplier ใน" : dept === "SUPPLIER_OUT" ? "Supplier นอก" : dept
+                      const isGW = !!u.claimDepartment
+                      return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${isGW ? "bg-emerald-100 text-emerald-700" : "bg-indigo-100 text-indigo-700"}`}>{label}</span>
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     {CLAIM_ROLES.includes(u.role) && u.priority != null

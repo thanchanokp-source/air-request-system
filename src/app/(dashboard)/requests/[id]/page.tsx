@@ -51,6 +51,8 @@ export default function RequestDetailPage() {
   const [dvmSelected, setDvmSelected] = useState<Set<string>>(new Set())
   const [vpSelected, setVpSelected] = useState<Set<string>>(new Set())
   const [logEditMode, setLogEditMode] = useState<Set<string>>(new Set())
+  const [gwClaimDept, setGwClaimDept] = useState("")
+  const [claimGwSelected, setClaimGwSelected] = useState<Set<string>>(new Set())
   const [claimApproversList, setClaimApproversList] = useState<any[]>([])
   const [recalculating, setRecalculating] = useState(false)
   const claimAutoSaveReady = useRef(false)
@@ -87,6 +89,7 @@ export default function RequestDetailPage() {
       .then(d => {
         setReq(d)
         setLoading(false)
+        if (d.claimDepartment) setGwClaimDept(d.claimDepartment)
         if (d.items) {
           const depts: Record<string, string> = {}
           const dvms: Record<string, string> = {}
@@ -164,11 +167,12 @@ export default function RequestDetailPage() {
   const logPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "LOG_PASSED")
   const claimPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "CLAIM_PASSED")
   const isPresidentRole = role === "PRESIDENT" && vpPassedItems.length > 0
-  const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0
+  const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0 && !isGWRequest
   const isVpMerGW = role === "VP_MER_GW" && req?.status === "PENDING_VP_MER_GW" && isGWRequest
   const isPresidentGW = role === "PRESIDENT_GW" && req?.status === "PENDING_PRESIDENT_GW" && isGWRequest
-  const isLogisticsGW = role === "LOGISTICS_GW" && presPassedItems.length > 0 && isGWRequest
-  const isClaimGW = role === "CLAIM_GW" && req?.status === "PENDING_CLAIM_GW" && isGWRequest
+  const isLogisticsGW = role === "LOGISTICS_GW" && (req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && presPassedItems.length > 0 && isGWRequest
+  const userClaimDept = (session?.user as any)?.claimDepartment || null
+  const isClaimGW = role === "CLAIM_GW" && (req?.status === "PENDING_CLAIM_GW" || req?.status === "PENDING_LOGISTICS_GW") && logPassedItems.length > 0 && isGWRequest && (!userClaimDept || req?.claimDepartment === userClaimDept)
   const isGWApprover = isVpMerGW || isPresidentGW || isLogisticsGW || isClaimGW
   const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
 
@@ -213,7 +217,7 @@ export default function RequestDetailPage() {
   }
 
   const approveSelectedStyles = async () => {
-    const toApprove = styleGroups.filter(g => g.status === "PENDING" && selectedStyles.has(g.style)).map(g => g.style)
+    const toApprove = styleGroups.filter(g => (g.status === "PENDING" || g.status === "PASSED") && selectedStyles.has(g.style)).map(g => g.style)
     for (const style of toApprove) {
       setSubmitting(style)
       const res = await fetch(`/api/requests/${id}/approve`, {
@@ -321,6 +325,8 @@ export default function RequestDetailPage() {
     else { const err = await res.json(); alert(err.error || "Error") }
     setSubmitting(null)
   }
+
+
 
   if (loading) return <div className="text-center py-20 text-gray-400">Loading...</div>
   if (!req) return <div className="text-center py-20 text-gray-400">Not found</div>
@@ -517,7 +523,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -527,8 +533,7 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 font-medium">{item.so}</td>
                             <td className="px-3 py-2">{item.customerPO}</td>
                             <td className="px-3 py-2">{item.description}</td>
-                            <td className="px-3 py-2">{item.gmtType}</td>
-                            <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                                                        <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                             <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
@@ -555,13 +560,33 @@ export default function RequestDetailPage() {
       {/* VP SCM approve styles at PENDING_SCM (styles fully forwarded by SCM) */}
       {isVpScmAtScm && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="font-semibold text-gray-800">STYLE APPROVAL — VP SCM</h2>
-            <div className="flex gap-4 text-xs font-medium">
-              <span className="text-gray-400">{styleGroups.filter(g => g.status === "PENDING").length} waiting for SCM</span>
-              <span className="text-blue-600">{styleGroups.filter(g => g.status === "PASSED").length} ready to approve</span>
-              <span className="text-green-600">{styleGroups.filter(g => g.status === "VP_PASSED").length} approved</span>
-              <span className="text-red-600">{styleGroups.filter(g => g.status === "REJECTED").length} rejected</span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex gap-4 text-xs font-medium">
+                <span className="text-gray-400">{styleGroups.filter(g => g.status === "PENDING").length} waiting for SCM</span>
+                <span className="text-blue-600">{styleGroups.filter(g => g.status === "PASSED").length} ready to approve</span>
+                <span className="text-green-600">{styleGroups.filter(g => g.status === "VP_PASSED").length} approved</span>
+                <span className="text-red-600">{styleGroups.filter(g => g.status === "REJECTED").length} rejected</span>
+              </div>
+              {styleGroups.some(g => g.status === "PASSED") && (
+                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                  <input type="checkbox"
+                    checked={styleGroups.filter(g => g.status === "PASSED").every(g => selectedStyles.has(g.style))}
+                    onChange={e => {
+                      const ready = styleGroups.filter(g => g.status === "PASSED").map(g => g.style)
+                      setSelectedStyles(e.target.checked ? new Set(ready) : new Set())
+                    }}
+                    className="w-4 h-4" />
+                  Select All
+                </label>
+              )}
+              {selectedStyles.size > 0 && (
+                <button onClick={approveSelectedStyles} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                  {submitting ? "..." : `Approve Selected (${selectedStyles.size})`}
+                </button>
+              )}
             </div>
           </div>
           {styleGroups.map(g => {
@@ -575,6 +600,11 @@ export default function RequestDetailPage() {
             return (
               <div key={g.style} className={`rounded-xl border overflow-hidden ${isApproved ? "border-green-200" : isRej || g.status === "REJECTED" ? "border-red-200" : isBackScm ? "border-orange-200" : isWaiting ? "border-gray-200 opacity-60" : "border-blue-200"}`}>
                 <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${isApproved ? "bg-green-50" : g.status === "REJECTED" ? "bg-red-50" : isBackScm ? "bg-orange-50" : isWaiting ? "bg-gray-50" : "bg-blue-50"}`}>
+                  {isReady && (
+                    <input type="checkbox" className="w-4 h-4 shrink-0"
+                      checked={selectedStyles.has(g.style)}
+                      onChange={e => setSelectedStyles(prev => { const n = new Set(prev); e.target.checked ? n.add(g.style) : n.delete(g.style); return n })} />
+                  )}
                   <button onClick={() => toggleExpand(g.style)} className="text-gray-400 hover:text-gray-700 w-5 text-center">{isExp ? "▼" : "▶"}</button>
                   <div className="flex-1 flex items-center gap-3 min-w-0">
                     <span className="font-semibold text-gray-800 shrink-0">{g.style}</span>
@@ -832,7 +862,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","CLAIM DEPT","REASON","FACTORY","COUNTRY","PORT"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -842,13 +872,13 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 font-medium">{item.so}</td>
                             <td className="px-3 py-2">{item.customerPO}</td>
                             <td className="px-3 py-2">{item.description}</td>
-                            <td className="px-3 py-2">{item.gmtType}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                             <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{fmtNum(item.grossWeight, 2)}</td>
                             <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
+                            <td className="px-3 py-2">{req.claimDepartment ?? "-"}</td>
                             <td className="px-3 py-2">{item.reasonDelay}</td>
                             <td className="px-3 py-2">{item.factory}</td>
                             <td className="px-3 py-2">{item.country}</td>
@@ -926,7 +956,7 @@ export default function RequestDetailPage() {
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="px-3 py-2 w-8"></th>
-                      {["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","SCM DELAY REASON"].map(h =>
+                      {["SO","STYLE","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","SCM DELAY REASON"].map(h =>
                         <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
@@ -945,8 +975,7 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{item.description}</td>
-                          <td className="px-3 py-2">{item.gmtType}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                           <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
                           <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
@@ -1046,7 +1075,7 @@ export default function RequestDetailPage() {
               <thead className="bg-gray-50 border-b">
                 <tr>
                   <th className="px-3 py-2 w-8"></th>
-                  {["SO","STYLE","GMT","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE",""].map(h =>
+                  {["SO","STYLE","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE",""].map(h =>
                     <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                 </tr>
               </thead>
@@ -1065,8 +1094,7 @@ export default function RequestDetailPage() {
                       </td>
                       <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
-                      <td className="px-3 py-2">{item.gmtType}</td>
-                      <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                                            <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
                       <td className="px-3 py-2 text-gray-400">{fmtNum(item.airFreight)}</td>
                       <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                         <input type="number" value={itemActuals[item.id] || ""}
@@ -1128,10 +1156,22 @@ export default function RequestDetailPage() {
               </div>
             </div>
           )}
-          <div className="flex gap-2">
+          <div className="space-y-2">
+            {isLogisticsGW && (
+              <div>
+                <label className="text-xs text-gray-500 font-medium">CLAIM DEPT *</label>
+                <select value={gwClaimDept} onChange={e => setGwClaimDept(e.target.value)}
+                  className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-emerald-400">
+                  <option value="">-- เลือก Claim Dept --</option>
+                  <option value="SUPPLIER_IN">Supplier ใน</option>
+                  <option value="SUPPLIER_OUT">Supplier นอก</option>
+                  <option value="NYK">NYK</option>
+                </select>
+              </div>
+            )}
             <button
               disabled={
-                submitting === "_" ||
+                submitting === "_" || (isLogisticsGW && !gwClaimDept) ||
                 !pendingLogItems.some((i: any) => itemLogistics[i.id]?.invoiceNo && itemLogistics[i.id]?.bookingDate && parseFloat(itemActuals[i.id] || "0") > 0) ||
                 pendingLogItems.some((i: any) => itemLogistics[i.id]?.invoiceNo && !(parseFloat(itemActuals[i.id] || "0") > 0))
               }
@@ -1139,7 +1179,7 @@ export default function RequestDetailPage() {
                 setSubmitting("_")
                 const res = await fetch(`/api/requests/${id}/approve`, {
                   method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "approve", itemActuals, itemLogistics })
+                  body: JSON.stringify({ action: "approve", itemActuals, itemLogistics, gwClaimDept })
                 })
                 if (res.ok) {
                   const updated = await res.json()
@@ -1150,7 +1190,7 @@ export default function RequestDetailPage() {
                 } else { const err = await res.json(); alert(err.error || "Error") }
                 setSubmitting(null)
               }}
-              className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+              className="w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
               {submitting === "_" ? "..." : "Confirm & Forward to Claim"}
             </button>
           </div>
@@ -1343,7 +1383,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","CLAIM DEPT","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","CLAIM DEPT","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -1353,8 +1393,7 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
                           <td className="px-3 py-2">{item.customerPO}</td>
                           <td className="px-3 py-2">{item.description}</td>
-                          <td className="px-3 py-2">{item.gmtType}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                           <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
                           <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
@@ -1606,7 +1645,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","CLAIM DEPT","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","CLAIM DEPT","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -1616,8 +1655,7 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
                           <td className="px-3 py-2">{item.customerPO}</td>
                           <td className="px-3 py-2">{item.description}</td>
-                          <td className="px-3 py-2">{item.gmtType}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                           <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
                           <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
@@ -1681,26 +1719,67 @@ export default function RequestDetailPage() {
               <h2 className="font-semibold text-gray-800">SO APPROVAL — CLAIM GW</h2>
               <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW</span>
             </div>
-            <div className="flex gap-4 text-xs font-medium">
+            <div className="flex items-center gap-4 text-xs font-medium">
               <span className="text-yellow-600">{(req.items||[]).filter((i:any) => i.itemStatus === "LOG_PASSED").length} pending</span>
               <span className="text-green-600">{(req.items||[]).filter((i:any) => i.itemStatus === "COMPLETED").length} approved</span>
               <span className="text-red-600">{(req.items||[]).filter((i:any) => i.itemStatus === "REJECTED").length} rejected</span>
+              {(() => {
+                const pendingItems = (req.items||[]).filter((i:any) => i.itemStatus === "LOG_PASSED")
+                const allSelected = pendingItems.length > 0 && pendingItems.every((i:any) => claimGwSelected.has(i.id))
+                return pendingItems.length > 0 && (
+                  <label className="flex items-center gap-1.5 cursor-pointer text-gray-600 font-normal ml-2">
+                    <input type="checkbox" checked={allSelected}
+                      onChange={e => setClaimGwSelected(e.target.checked ? new Set(pendingItems.map((i:any) => i.id)) : new Set())}
+                      className="w-4 h-4 rounded border-gray-300" />
+                    เลือกทั้งหมด
+                  </label>
+                )
+              })()}
             </div>
           </div>
+          {claimGwSelected.size > 0 && (
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5">
+              <span className="text-sm font-medium text-green-700">{claimGwSelected.size} SO selected</span>
+              <button
+                disabled={submitting === "_batch"}
+                onClick={async () => {
+                  setSubmitting("_batch")
+                  const ids = [...claimGwSelected]
+                  const res = await fetch(`/api/requests/${id}/approve`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "batch_approve_so", itemIds: ids })
+                  })
+                  if (res.ok) { setReq(await res.json()); setClaimGwSelected(new Set()) }
+                  else { const err = await res.json(); alert(err.error || "Error") }
+                  setSubmitting(null)
+                }}
+                className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                {submitting === "_batch" ? "..." : `Approve ${claimGwSelected.size} SO`}
+              </button>
+              <button onClick={() => setClaimGwSelected(new Set())}
+                className="text-sm text-gray-500 hover:text-gray-700">ยกเลิก</button>
+            </div>
+          )}
           {req.claimDepartment && (
             <div className="text-sm text-gray-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
               Claim Department: <span className="font-semibold text-emerald-700">{req.claimDepartment === "SUPPLIER_IN" ? "Supplier ใน" : req.claimDepartment === "SUPPLIER_OUT" ? "Supplier นอก" : req.claimDepartment}</span>
             </div>
           )}
           {(req.items||[]).filter((i:any) => ["LOG_PASSED","COMPLETED","REJECTED"].includes(i.itemStatus)).map((item: any) => {
-            const isSub = submitting === item.id
+            const isSub = submitting === item.id || submitting === "_batch"
             const isRejRow = rejectingSo === item.id
             const isPending = item.itemStatus === "LOG_PASSED"
             const isPassed = item.itemStatus === "COMPLETED"
             const isExp = expanded.has(item.id)
+            const isSel = claimGwSelected.has(item.id)
             return (
-              <div key={item.id} className={`rounded-xl border overflow-hidden ${isPassed ? "border-green-200" : item.itemStatus === "REJECTED" ? "border-red-200" : "border-gray-200"}`}>
-                <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${isPassed ? "bg-green-50" : item.itemStatus === "REJECTED" ? "bg-red-50" : "bg-white"}`}>
+              <div key={item.id} className={`rounded-xl border overflow-hidden ${isSel ? "border-green-400 ring-1 ring-green-300" : isPassed ? "border-green-200" : item.itemStatus === "REJECTED" ? "border-red-200" : "border-gray-200"}`}>
+                <div className={`flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 ${isSel ? "bg-green-50" : isPassed ? "bg-green-50" : item.itemStatus === "REJECTED" ? "bg-red-50" : "bg-white"}`}>
+                  {isPending && (
+                    <input type="checkbox" checked={isSel}
+                      onChange={e => setClaimGwSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                      className="w-4 h-4 rounded border-gray-300 shrink-0" />
+                  )}
                   <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
                   <span className="font-semibold text-gray-800 w-28 shrink-0">{item.so}</span>
                   <span className="text-xs text-gray-500 flex-1 min-w-0 truncate">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
@@ -1752,7 +1831,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","FACTORY","COUNTRY","PORT"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -1762,8 +1841,7 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
                           <td className="px-3 py-2">{item.customerPO}</td>
                           <td className="px-3 py-2">{item.description}</td>
-                          <td className="px-3 py-2">{item.gmtType}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                           <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
                           <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
@@ -1875,7 +1953,7 @@ export default function RequestDetailPage() {
                       <thead className="bg-gray-50 border-b">
                         <tr>
                           <th className="px-3 py-2 w-8"></th>
-                          {["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","DVM","SCM DELAY REASON"].map(h =>
+                          {["SO","STYLE","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","DVM","SCM DELAY REASON"].map(h =>
                             <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -1894,8 +1972,7 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{item.description}</td>
-                          <td className="px-3 py-2">{item.gmtType}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                                                    <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                           <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
                           <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
@@ -2025,7 +2102,7 @@ export default function RequestDetailPage() {
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="px-3 py-2 w-8"></th>
-                      {["SO","STYLE","GMT","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
+                      {["SO","STYLE","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
                         <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
@@ -2043,8 +2120,7 @@ export default function RequestDetailPage() {
                           </td>
                           <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
-                          <td className="px-3 py-2">{item.gmtType}</td>
-                          <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                                                    <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
                           <td className="px-3 py-2 text-gray-400">{fmtNum(item.airFreight)}</td>
                           <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                             <input type="number" value={itemActuals[item.id] || ""}
@@ -2133,7 +2209,7 @@ export default function RequestDetailPage() {
               <thead className="bg-gray-50 border-b">
                 <tr>
                   <th className="px-3 py-2 w-8"></th>
-                  {["SO","STYLE","GMT","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
+                  {["SO","STYLE","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
                     <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                 </tr>
               </thead>
@@ -2152,8 +2228,7 @@ export default function RequestDetailPage() {
                       </td>
                       <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
-                      <td className="px-3 py-2">{item.gmtType}</td>
-                      <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                                            <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
                       <td className="px-3 py-2 text-gray-400">{fmtNum(item.airFreight)}</td>
                       <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                         <input type="number" value={itemActuals[item.id] ?? (item.actualAirFreight ?? "")}
@@ -2218,25 +2293,29 @@ export default function RequestDetailPage() {
           <div className="overflow-x-auto">
             <table className="text-xs w-full">
               <thead className="bg-gray-50 border-b">
-                <tr>{([["STYLE","min-w-[110px]"],["SO","min-w-[90px]"],["CUSTOMER PO","min-w-[110px]"],["DESCRIPTION","min-w-[160px]"],["GMT","min-w-[60px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],["QTY ORIG","min-w-[75px]"],["QTY AIR","min-w-[70px]"],["GROSS WEIGHT (KG)","min-w-[110px]"],["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],["CLAIM DEPT","min-w-[110px]"],["REASON","min-w-[120px]"],["FACTORY","min-w-[70px]"],["COUNTRY","min-w-[110px]"],["PORT","min-w-[110px]"],["STATUS","min-w-[75px]"],["","min-w-[60px]"]] as [string,string][]).map(([h,w]) =>
+                <tr>{([["STYLE","min-w-[110px]"],["SO","min-w-[90px]"],["CUSTOMER PO","min-w-[110px]"],["DESCRIPTION","min-w-[160px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],["QTY ORIG","min-w-[75px]"],["QTY AIR","min-w-[70px]"],["GROSS WEIGHT (KG)","min-w-[110px]"],["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],["CLAIM DEPT","min-w-[110px]"],["REASON","min-w-[120px]"],["FACTORY","min-w-[70px]"],["COUNTRY","min-w-[110px]"],["PORT","min-w-[110px]"],["STATUS","min-w-[110px]"]] as [string,string][]).map(([h,w]) =>
                   <th key={h} className={`px-2 py-2 text-left text-gray-600 whitespace-nowrap ${w}`}>{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {req.items?.map((item: any) => (
                   <tr key={item.id} className={`hover:bg-gray-50 ${item.itemStatus === "REJECTED" ? "opacity-40" : ""}`}>
-                    {["style","so","customerPO","description","gmtType","originalShipmentDate","planShipmentDate","qtyOriginalShipment","qtyRequestAir","grossWeight","airFreight","actualAirFreight","claimDepartment","reasonDelay","factory","country","port"].map(f => (
+                    {["style","so","customerPO","description","originalShipmentDate","planShipmentDate","qtyOriginalShipment","qtyRequestAir","grossWeight","airFreight","actualAirFreight","claimDepartment","reasonDelay","factory","country","port"].map(f => (
                       <td key={f} className="px-2 py-1.5 whitespace-nowrap">
                         {f.includes("Date") ? fmtDate(item[f])
                           : f === "grossWeight" ? fmtNum(item[f], 2)
                           : f === "airFreight" || f === "actualAirFreight" ? fmtNum(item[f])
+                          : f === "claimDepartment" ? (isGWRequest ? (req.claimDepartment ?? "-") : (item[f] ?? "-"))
                           : item[f] ?? "-"}
                       </td>
                     ))}
                     <td className="px-2 py-1.5">
                       {(() => {
+                        const pendingLabel = isGWRequest
+                          ? (req.status === "PENDING_PRESIDENT_GW" ? "President GW" : "VP MER GW")
+                          : "VP MER"
                         const SD: Record<string, [string, string]> = {
-                          PENDING: ["VP MER", "bg-yellow-100 text-yellow-700"],
+                          PENDING: [pendingLabel, "bg-yellow-100 text-yellow-700"],
                           VP_MER_PASSED: ["SCM", "bg-blue-100 text-blue-700"],
                           PASSED: ["VP SCM", "bg-indigo-100 text-indigo-700"],
                           VP_PASSED: ["President", "bg-purple-100 text-purple-700"],
@@ -2247,11 +2326,8 @@ export default function RequestDetailPage() {
                           REJECTED: ["Rejected", "bg-red-100 text-red-700"],
                         }
                         const [label, cls] = SD[item.itemStatus] || ["Pending", "bg-yellow-100 text-yellow-700"]
-                        return <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${cls}`}>{label}</span>
+                        return <span className={`text-xs px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${cls}`}>{label}</span>
                       })()}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <PdfDownloadButton req={req} item={item} compact />
                     </td>
                   </tr>
                 ))}

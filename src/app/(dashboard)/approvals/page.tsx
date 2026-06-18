@@ -33,6 +33,7 @@ export default function ApprovalsPage() {
     : role.startsWith("CLAIM_") ? role.replace("CLAIM_", "")
     : CLAIM_VP_ROLES.includes(role) ? role.replace("VP_", "")
     : ""
+  const userClaimDept = (session?.user as any)?.claimDepartment || null
 
   // Filter documents by item-status (per-style forwarding — each role acts on specific itemStatus)
   const myRequests = requests.filter(r => {
@@ -44,8 +45,8 @@ export default function ApprovalsPage() {
     }
     if (role === "VP_SCM") return r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PASSED")
     if (role === "PRESIDENT") return items.some((i: any) => i.itemStatus === "VP_PASSED")
-    if (role === "LOGISTICS") return items.some((i: any) => i.itemStatus === "PRES_PASSED")
-    if (role.startsWith("DVM_") || role.startsWith("CLAIM_")) {
+    if (role === "LOGISTICS") return r.bu !== "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
+    if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }
     if (CLAIM_VP_ROLES.includes(role)) {
@@ -53,8 +54,8 @@ export default function ApprovalsPage() {
     }
     if (role === "VP_MER_GW") return r.status === "PENDING_VP_MER_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)
     if (role === "PRESIDENT_GW") return r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
-    if (role === "LOGISTICS_GW") return r.status === "PENDING_LOGISTICS_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
-    if (role === "CLAIM_GW") return r.status === "PENDING_CLAIM_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED")
+    if (role === "LOGISTICS_GW") return (r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
+    if (role === "CLAIM_GW") return (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED") && (!userClaimDept || r.claimDepartment === userClaimDept)
     return false
   })
 
