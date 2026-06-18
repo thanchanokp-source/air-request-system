@@ -41,7 +41,7 @@ export default function LoginPage() {
             <p className="text-gray-400 text-xs mt-1">Nan Yang Textile</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -53,6 +53,7 @@ export default function LoginPage() {
                 placeholder="Email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
+                autoComplete="off"
                 className="w-full bg-gray-100 rounded-xl pl-9 pr-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
                 required
               />
@@ -69,6 +70,7 @@ export default function LoginPage() {
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
+                autoComplete="new-password"
                 className="w-full bg-gray-100 rounded-xl pl-9 pr-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
                 required
               />
