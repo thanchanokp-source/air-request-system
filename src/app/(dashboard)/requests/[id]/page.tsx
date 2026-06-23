@@ -133,7 +133,7 @@ export default function RequestDetailPage() {
   const role = (session?.user as any)?.role || ""
   const myPriority: number | null = (session?.user as any)?.priority ?? null
   const myUserId: string = (session?.user as any)?.id || ""
-  const isGWRole = ["VP_MER_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_GW", "ACCOUNTING"].includes(role)
+  const isGWRole = ["VP_MER_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
   const isGWRequest = req?.bu === "GW"
 
   useEffect(() => {
@@ -173,9 +173,12 @@ export default function RequestDetailPage() {
   const isLogisticsGW = role === "LOGISTICS_GW" && (req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && presPassedItems.length > 0 && isGWRequest
   const userClaimDept = (session?.user as any)?.claimDepartment || null
   const isClaimGW = role === "CLAIM_GW" && (req?.status === "PENDING_CLAIM_GW" || req?.status === "PENDING_LOGISTICS_GW") && logPassedItems.length > 0 && isGWRequest && (!userClaimDept || req?.claimDepartment === userClaimDept)
-  const scmGwItems = (req?.items || []).filter((i: any) => i.itemStatus === "SCM_GW_PENDING")
+  const scmGwItems = (req?.items || []).filter((i: any) => i.itemStatus === "SCM_GW_PENDING" && (
+    role === "SCM_NYK" ? i.claimDepartment === "NYK" :
+    role === "SCM_NYG" ? i.claimDepartment === "NYG" : true
+  ))
   const accountingGwItems = (req?.items || []).filter((i: any) => i.itemStatus === "ACCOUNTING_PENDING")
-  const isScmGW = role === "SCM_GW" && req?.status === "PENDING_SCM_GW" && scmGwItems.length > 0 && isGWRequest
+  const isScmGW = (role === "SCM_NYK" || role === "SCM_NYG") && req?.status === "PENDING_SCM_GW" && scmGwItems.length > 0 && isGWRequest
   const isAccountingGW = role === "ACCOUNTING" && req?.status === "PENDING_ACCOUNTING" && accountingGwItems.length > 0 && isGWRequest
   const isGWApprover = isVpMerGW || isPresidentGW || isLogisticsGW || isClaimGW || isScmGW || isAccountingGW
   const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
@@ -1064,128 +1067,119 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* Logistics: process PRES_PASSED items (per-style forwarding) */}
+      {/* Logistics: Excel upload */}
       {(isLogisticsRole || isLogisticsGW) && (
-        <div className="bg-white rounded-xl border p-5 space-y-3">
-          <h2 className="font-semibold text-gray-800 border-b pb-2">
-            INVOICE / BOOKING DATE — LOGISTICS{isLogisticsGW ? <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium align-middle">GW</span> : ""}
-            <span className="text-xs font-normal text-gray-400 ml-2">
-              {pendingLogItems.filter((i: any) => itemLogistics[i.id]?.invoiceNo).length}/{pendingLogItems.length} ready
-              {forwardedLogItems.length > 0 && <span className="text-green-600 ml-2">· {forwardedLogItems.length} forwarded to Claim</span>}
-            </span>
-          </h2>
-          <div className="border border-gray-200 rounded-lg overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-3 py-2 w-8"></th>
-                  {["SO","STYLE","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE",""].map(h =>
-                    <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {pendingLogItems.map((item: any) => {
-                  const inv = itemLogistics[item.id]
-                  const sel = logSelected.has(item.id)
-                  const editing = logEditMode.has(item.id)
-                  return (
-                    <tr key={item.id} className={`cursor-pointer ${sel ? "bg-blue-50" : inv?.invoiceNo ? "bg-green-50" : "hover:bg-gray-50"}`}
-                      onClick={() => setLogSelected(prev => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })}>
-                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={sel}
-                          onChange={e => setLogSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
-                          className="w-4 h-4 rounded border-gray-300" />
-                      </td>
-                      <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
-                                            <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
-                      <td className="px-3 py-2 text-gray-400">{fmtNum(item.airFreight)}</td>
-                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                        <input type="number" value={itemActuals[item.id] || ""}
-                          onChange={e => setItemActuals(p => ({...p,[item.id]:e.target.value}))}
-                          placeholder="0" className="w-24 border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-400" />
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        {editing
-                          ? <input type="text" autoFocus value={inv?.invoiceNo || ""}
-                              onChange={e => setItemLogistics(p => ({ ...p, [item.id]: { ...p[item.id], invoiceNo: e.target.value } }))}
-                              className="w-28 border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-400" />
-                          : inv?.invoiceNo
-                            ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{inv.invoiceNo}</span>
-                            : <span className="text-gray-300 text-xs italic">--</span>}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                        {editing
-                          ? <input type="date" value={inv?.bookingDate || ""}
-                              onChange={e => setItemLogistics(p => ({ ...p, [item.id]: { ...p[item.id], bookingDate: e.target.value } }))}
-                              className="border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-400" />
-                          : inv?.bookingDate
-                            ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{inv.bookingDate}</span>
-                            : <span className="text-gray-300 text-xs italic">--</span>}
-                      </td>
-                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setLogEditMode(prev => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })}
-                          className={`p-1 rounded hover:bg-gray-200 transition-colors ${editing ? "text-blue-600" : "text-gray-400"}`}
-                          title={editing ? "Done" : "Edit"}>
-                          {editing ? "✓" : "✏️"}
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+        <div className="bg-white rounded-xl border p-5 space-y-4">
+          <div className="flex items-center justify-between border-b pb-2 flex-wrap gap-2">
+            <h2 className="font-semibold text-gray-800">
+              LOGISTICS UPLOAD
+              {isLogisticsGW && <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium align-middle">GW</span>}
+            </h2>
+            <a href={isLogisticsGW ? "/air-request-template-gw.xlsx" : "/air-request-template.xlsx"} download
+              className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
+              ⬇ Download Template {isLogisticsGW ? "(GW)" : "(NYG)"}
+            </a>
           </div>
-          {logSelected.size > 0 && (
-            <div className="border border-blue-300 rounded-lg p-3 bg-blue-50 space-y-2">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs font-semibold text-blue-700">{logSelected.size} SO selected</span>
-                <input type="text" placeholder="Invoice No..."
-                  value={batchInvoice} onChange={e => setBatchInvoice(e.target.value)}
-                  className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400 w-44" />
-                <input type="date" value={batchBookingDate} onChange={e => setBatchBookingDate(e.target.value)}
-                  className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400" />
-                <button type="button" disabled={!batchInvoice}
-                  onClick={() => {
-                    setItemLogistics(prev => {
-                      const updated = { ...prev }
-                      logSelected.forEach(itemId => { updated[itemId] = { invoiceNo: batchInvoice, bookingDate: batchBookingDate } })
-                      return updated
-                    })
-                    setLogSelected(new Set()); setBatchInvoice(""); setBatchBookingDate("")
-                  }}
-                  className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">
-                  Assign to {logSelected.size} SO(s)
-                </button>
-              </div>
+
+          {/* Upload zone */}
+          <div className="border-2 border-dashed border-blue-200 rounded-xl p-5 bg-blue-50 text-center space-y-2">
+            <p className="text-sm text-blue-700 font-medium">อัปโหลดไฟล์ Excel ที่กรอก Invoice No / QTY Actual / Actual Air Freight / Booking Date แล้ว</p>
+            <input
+              type="file" accept=".xlsx,.xls"
+              disabled={submitting === "_log_upload"}
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                setSubmitting("_log_upload")
+                const form = new FormData()
+                form.append("file", f)
+                const res = await fetch(`/api/requests/${id}/logistics-upload`, { method: "POST", body: form })
+                const data = await res.json()
+                if (res.ok) {
+                  setReq(data.request)
+                  const msg = `อัปโหลดสำเร็จ: match ${data.matched} SO` + (data.unmatched?.length ? ` · ไม่พบ SO: ${data.unmatched.join(", ")}` : "")
+                  alert(msg)
+                } else {
+                  alert(data.error || "Upload failed")
+                }
+                setSubmitting(null)
+                e.target.value = ""
+              }}
+              className="block mx-auto text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 disabled:opacity-50"
+            />
+            {submitting === "_log_upload" && <p className="text-xs text-blue-500">กำลังประมวลผล...</p>}
+          </div>
+
+          {/* Preview table — shows DB state after upload */}
+          {pendingLogItems.length > 0 && (
+            <div className="border border-gray-200 rounded-lg overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 border-b">
+                  <tr>{["SO","STYLE","QTY AIR","QTY ACTUAL","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
+                    <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {pendingLogItems.map((item: any) => {
+                    const ready = item.invoiceNo && item.bookingDate && item.actualAirFreight != null
+                    return (
+                      <tr key={item.id} className={ready ? "bg-green-50" : "hover:bg-gray-50"}>
+                        <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
+                        <td className="px-3 py-2">{item.style}</td>
+                        <td className="px-3 py-2">{item.qtyRequestAir}</td>
+                        <td className="px-3 py-2">{item.qtyActualShip ?? <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2 text-gray-400">{fmtNum(item.airFreight)}</td>
+                        <td className="px-3 py-2 font-semibold text-green-700">{item.actualAirFreight != null ? fmtNum(item.actualAirFreight) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2">{item.invoiceNo ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{item.invoiceNo}</span> : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{item.bookingDate ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{fmtDate(item.bookingDate)}</span> : <span className="text-gray-300">—</span>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
-          <div className="space-y-2">
-            <button
-              disabled={
-                submitting === "_" ||
-                !pendingLogItems.some((i: any) => itemLogistics[i.id]?.invoiceNo && itemLogistics[i.id]?.bookingDate && parseFloat(itemActuals[i.id] || "0") > 0) ||
-                pendingLogItems.some((i: any) => itemLogistics[i.id]?.invoiceNo && !(parseFloat(itemActuals[i.id] || "0") > 0))
+
+          {/* Confirm button — reads ready items from DB state */}
+          {(() => {
+            const readyItems = pendingLogItems.filter((i: any) => i.invoiceNo && i.bookingDate && i.actualAirFreight != null)
+            const canConfirm = readyItems.length > 0
+            // Build itemActuals + itemLogistics from DB state for the approve call
+            const dbActuals: Record<string, string> = {}
+            const dbLogistics: Record<string, { invoiceNo: string; bookingDate: string }> = {}
+            for (const item of readyItems) {
+              dbActuals[item.id] = String(item.actualAirFreight)
+              dbLogistics[item.id] = {
+                invoiceNo: item.invoiceNo,
+                bookingDate: item.bookingDate ? new Date(item.bookingDate).toISOString().split("T")[0] : ""
               }
-              onClick={async () => {
-                setSubmitting("_")
-                const res = await fetch(`/api/requests/${id}/approve`, {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "approve", itemActuals, itemLogistics })
-                })
-                if (res.ok) {
-                  const updated = await res.json()
-                  setReq(updated)
-                  if (!updated.items?.some((i: any) => i.itemStatus === "PRES_PASSED")) {
-                    window.location.href = "/approvals"
-                  }
-                } else { const err = await res.json(); alert(err.error || "Error") }
-                setSubmitting(null)
-              }}
-              className="w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
-              {submitting === "_" ? "..." : "Confirm & Forward to Claim"}
-            </button>
-          </div>
+            }
+            return (
+              <div className="space-y-1">
+                <p className="text-xs text-gray-400">{readyItems.length}/{pendingLogItems.length} SO พร้อม forward</p>
+                <button
+                  disabled={submitting === "_" || !canConfirm}
+                  onClick={async () => {
+                    setSubmitting("_")
+                    const res = await fetch(`/api/requests/${id}/approve`, {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "approve", itemActuals: dbActuals, itemLogistics: dbLogistics })
+                    })
+                    if (res.ok) {
+                      const updated = await res.json()
+                      setReq(updated)
+                      if (!updated.items?.some((i: any) => i.itemStatus === "PRES_PASSED")) {
+                        window.location.href = "/approvals"
+                      }
+                    } else { const err = await res.json(); alert(err.error || "Error") }
+                    setSubmitting(null)
+                  }}
+                  className="w-full bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                  {submitting === "_" ? "..." : `Confirm & Forward ${readyItems.length} SO to Claim`}
+                </button>
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -2260,104 +2254,60 @@ export default function RequestDetailPage() {
             </div>
           )}
 
-          {/* LOGISTICS */}
+          {/* LOGISTICS — file upload */}
           {req.status === "PENDING_LOGISTICS" && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold text-gray-700">
-                  INVOICE / BOOKING DATE BY SO
-                  <span className="text-xs font-normal text-gray-400 ml-2">
-                    {pendingLogItems.filter((i: any) => itemLogistics[i.id]?.invoiceNo).length}/{pendingLogItems.length} assigned
-                    {forwardedLogItems.length > 0 && <span className="text-green-600 ml-2">· {forwardedLogItems.length} forwarded to Claim</span>}
-                  </span>
-                </label>
-                <button type="button" onClick={() => setLogSelected(
-                  logSelected.size === pendingLogItems.length ? new Set() : new Set(pendingLogItems.map((i: any) => i.id))
-                )} className="text-xs text-blue-600 hover:underline">
-                  {logSelected.size === pendingLogItems.length ? "Deselect All" : "Select All"}
-                </button>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-sm font-semibold text-gray-700">LOGISTICS UPLOAD</label>
+                <a href="/air-request-template.xlsx" download className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">⬇ Download Template</a>
               </div>
-
-              <div className="border border-gray-200 rounded-lg overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="px-3 py-2 w-8"></th>
-                      {["SO","STYLE","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
+              <div className="border-2 border-dashed border-blue-200 rounded-xl p-4 bg-blue-50 text-center space-y-2">
+                <p className="text-xs text-blue-600">อัปโหลด Excel ที่กรอก Invoice No / QTY Actual / Actual Air Freight / Booking Date แล้ว</p>
+                <input type="file" accept=".xlsx,.xls" disabled={submitting === "_log_upload"}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0]; if (!f) return
+                    setSubmitting("_log_upload")
+                    const form = new FormData(); form.append("file", f)
+                    const res = await fetch(`/api/requests/${id}/logistics-upload`, { method: "POST", body: form })
+                    const data = await res.json()
+                    if (res.ok) { setReq(data.request); alert(`อัปโหลดสำเร็จ: match ${data.matched} SO` + (data.unmatched?.length ? ` · ไม่พบ SO: ${data.unmatched.join(", ")}` : "")) }
+                    else alert(data.error || "Upload failed")
+                    setSubmitting(null); e.target.value = ""
+                  }}
+                  className="block mx-auto text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 disabled:opacity-50" />
+              </div>
+              {pendingLogItems.length > 0 && (
+                <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>{["SO","STYLE","QTY AIR","QTY ACTUAL","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
                         <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {pendingLogItems.map((item: any) => {
-                      const inv = itemLogistics[item.id]
-                      const sel = logSelected.has(item.id)
-                      return (
-                        <tr key={item.id} className={`cursor-pointer ${sel ? "bg-blue-50" : inv?.invoiceNo ? "bg-green-50" : "hover:bg-gray-50"}`}
-                          onClick={() => setLogSelected(prev => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })}>
-                          <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                            <input type="checkbox" checked={sel}
-                              onChange={e => setLogSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
-                              className="w-4 h-4 rounded border-gray-300" />
-                          </td>
-                          <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
-                                                    <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
-                          <td className="px-3 py-2 text-gray-400">{fmtNum(item.airFreight)}</td>
-                          <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                            <input type="number" value={itemActuals[item.id] || ""}
-                              onChange={e => setItemActuals(p => ({...p,[item.id]:e.target.value}))}
-                              placeholder="0" className="w-24 border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-400" />
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {inv?.invoiceNo
-                              ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{inv.invoiceNo}</span>
-                              : <span className="text-gray-300 text-xs italic">--</span>}
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            {inv?.bookingDate
-                              ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{inv.bookingDate}</span>
-                              : <span className="text-gray-300 text-xs italic">--</span>}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {logSelected.size > 0 && (
-                <div className="border border-blue-300 rounded-lg p-3 bg-blue-50 space-y-2">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-xs font-semibold text-blue-700">{logSelected.size} SO selected</span>
-                    <input type="text" placeholder="Invoice No..."
-                      value={batchInvoice} onChange={e => setBatchInvoice(e.target.value)}
-                      className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400 w-44" />
-                    <input type="date" value={batchBookingDate} onChange={e => setBatchBookingDate(e.target.value)}
-                      className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400" />
-                    <button type="button" disabled={!batchInvoice}
-                      onClick={() => {
-                        setItemLogistics(prev => {
-                          const updated = { ...prev }
-                          logSelected.forEach(itemId => { updated[itemId] = { invoiceNo: batchInvoice, bookingDate: batchBookingDate } })
-                          return updated
-                        })
-                        setLogSelected(new Set()); setBatchInvoice(""); setBatchBookingDate("")
-                      }}
-                      className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">
-                      Assign to {logSelected.size} SO(s)
-                    </button>
-                    <button type="button" onClick={() => { setLogSelected(new Set()); setBatchInvoice(""); setBatchBookingDate("") }}
-                      className="text-sm text-gray-500 hover:text-gray-700 px-2">Cancel</button>
-                  </div>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {pendingLogItems.map((item: any) => {
+                        const ready = item.invoiceNo && item.bookingDate && item.actualAirFreight != null
+                        return (
+                          <tr key={item.id} className={ready ? "bg-green-50" : "hover:bg-gray-50"}>
+                            <td className="px-3 py-2 font-medium">{item.so}</td>
+                            <td className="px-3 py-2">{item.style}</td>
+                            <td className="px-3 py-2">{item.qtyRequestAir}</td>
+                            <td className="px-3 py-2">{item.qtyActualShip ?? <span className="text-gray-300">—</span>}</td>
+                            <td className="px-3 py-2 font-semibold text-green-700">{item.actualAirFreight != null ? fmtNum(item.actualAirFreight) : <span className="text-gray-300">—</span>}</td>
+                            <td className="px-3 py-2">{item.invoiceNo ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{item.invoiceNo}</span> : <span className="text-gray-300">—</span>}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{item.bookingDate ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{fmtDate(item.bookingDate)}</span> : <span className="text-gray-300">—</span>}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
           )}
 
-          {req.status === "PENDING_LOGISTICS" && !activeItems.some((i: any) =>
-            itemLogistics[i.id]?.invoiceNo && itemLogistics[i.id]?.bookingDate && itemActuals[i.id]
-          ) && (
-            <p className="text-xs text-red-500">กรุณาใส่ Invoice No / Booking Date / Actual THB อย่างน้อย 1 SO ก่อน Confirm</p>
+          {req.status === "PENDING_LOGISTICS" && !pendingLogItems.some((i: any) => i.invoiceNo && i.bookingDate && i.actualAirFreight != null) && (
+            <p className="text-xs text-red-500">กรุณาอัปโหลด Excel ที่มีข้อมูลครบก่อน Confirm</p>
           )}
 
           <div className="flex gap-2">
@@ -2365,7 +2315,7 @@ export default function RequestDetailPage() {
             <button onClick={() => act("approve")}
               disabled={submitting === "_" ||
                 (req.status === "PENDING_LOGISTICS" && !pendingLogItems.some((i: any) =>
-                  itemLogistics[i.id]?.invoiceNo && itemLogistics[i.id]?.bookingDate && itemActuals[i.id]
+                  i.invoiceNo && i.bookingDate && i.actualAirFreight != null
                 ))}
               className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
               {submitting === "_" ? "..." : "Confirm"}
@@ -2381,87 +2331,47 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* Logistics edit section — visible to LOGISTICS even after doc moves to PENDING_CLAIM / VP_CLAIM */}
+      {/* Logistics edit — upload Excel to update data after PENDING_LOGISTICS */}
       {role === "LOGISTICS" && (req.status === "PENDING_CLAIM" || req.status === "PENDING_VP_CLAIM" || req.status === "PENDING_VP_NYK") && (
         <div className="bg-white rounded-xl border p-5 space-y-3">
-          <h2 className="font-semibold text-gray-800 border-b pb-2">LOGISTICS DATA <span className="text-xs font-normal text-gray-400 ml-1">(แก้ไขเพิ่มเติมได้)</span></h2>
+          <h2 className="font-semibold text-gray-800 border-b pb-2">LOGISTICS DATA <span className="text-xs font-normal text-gray-400 ml-1">(แก้ไขได้โดย re-upload)</span></h2>
+          <div className="border-2 border-dashed border-blue-200 rounded-xl p-4 bg-blue-50 text-center space-y-2">
+            <p className="text-xs text-blue-600">อัปโหลด Excel ใหม่เพื่อแก้ไขข้อมูล Invoice No / Actual Air Freight / Booking Date</p>
+            <input type="file" accept=".xlsx,.xls" disabled={submitting === "_log_edit"}
+              onChange={async (e) => {
+                const f = e.target.files?.[0]; if (!f) return
+                setSubmitting("_log_edit")
+                const form = new FormData(); form.append("file", f)
+                const res = await fetch(`/api/requests/${id}/logistics-upload`, { method: "POST", body: form })
+                const data = await res.json()
+                if (res.ok) { setReq(data.request); alert(`อัปเดตสำเร็จ: ${data.matched} SO`) }
+                else alert(data.error || "Upload failed")
+                setSubmitting(null); e.target.value = ""
+              }}
+              className="block mx-auto text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 disabled:opacity-50" />
+          </div>
           <div className="border border-gray-200 rounded-lg overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-3 py-2 w-8"></th>
-                  {["SO","STYLE","QTY AIR","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
-                    <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                <tr>{["SO","STYLE","QTY AIR","QTY ACTUAL","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
+                  <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {activeItems.map((item: any) => {
-                  const inv = itemLogistics[item.id] ?? { invoiceNo: item.invoiceNo || "", bookingDate: item.bookingDate ? item.bookingDate.slice(0,10) : "" }
-                  const sel = logSelected.has(item.id)
-                  const complete = inv.invoiceNo && inv.bookingDate && itemActuals[item.id]
-                  return (
-                    <tr key={item.id} className={`cursor-pointer ${sel ? "bg-blue-50" : complete ? "bg-green-50" : "hover:bg-gray-50"}`}
-                      onClick={() => setLogSelected(prev => { const n = new Set(prev); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n })}>
-                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={sel}
-                          onChange={e => setLogSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
-                          className="w-4 h-4 rounded border-gray-300" />
-                      </td>
-                      <td className="px-3 py-2 font-medium whitespace-nowrap">{item.so}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
-                                            <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
-                      <td className="px-3 py-2 text-gray-400">{fmtNum(item.airFreight)}</td>
-                      <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-                        <input type="number" value={itemActuals[item.id] ?? (item.actualAirFreight ?? "")}
-                          onChange={e => setItemActuals(p => ({...p,[item.id]:e.target.value}))}
-                          placeholder="0" className="w-24 border border-blue-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-400" />
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {inv.invoiceNo
-                          ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{inv.invoiceNo}</span>
-                          : <span className="text-gray-300 text-xs italic">--</span>}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {inv.bookingDate
-                          ? <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{inv.bookingDate}</span>
-                          : <span className="text-gray-300 text-xs italic">--</span>}
-                      </td>
-                    </tr>
-                  )
-                })}
+                {activeItems.map((item: any) => (
+                  <tr key={item.id} className={item.invoiceNo ? "bg-green-50" : "hover:bg-gray-50"}>
+                    <td className="px-3 py-2 font-medium">{item.so}</td>
+                    <td className="px-3 py-2">{item.style}</td>
+                    <td className="px-3 py-2">{item.qtyRequestAir}</td>
+                    <td className="px-3 py-2">{item.qtyActualShip ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-3 py-2 font-semibold text-green-700">{item.actualAirFreight != null ? fmtNum(item.actualAirFreight) : <span className="text-gray-300">—</span>}</td>
+                    <td className="px-3 py-2">{item.invoiceNo ?? <span className="text-gray-300">—</span>}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{item.bookingDate ? fmtDate(item.bookingDate) : <span className="text-gray-300">—</span>}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-          {logSelected.size > 0 && (
-            <div className="border border-blue-300 rounded-lg p-3 bg-blue-50">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-xs font-semibold text-blue-700">{logSelected.size} SO selected</span>
-                <input type="text" placeholder="Invoice No..."
-                  value={batchInvoice} onChange={e => setBatchInvoice(e.target.value)}
-                  className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400 w-44" />
-                <input type="date" value={batchBookingDate} onChange={e => setBatchBookingDate(e.target.value)}
-                  className="border border-blue-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-blue-400" />
-                <button type="button" disabled={!batchInvoice}
-                  onClick={() => {
-                    setItemLogistics(prev => {
-                      const updated = { ...prev }
-                      logSelected.forEach(itemId => { updated[itemId] = { invoiceNo: batchInvoice, bookingDate: batchBookingDate } })
-                      return updated
-                    })
-                    setLogSelected(new Set()); setBatchInvoice(""); setBatchBookingDate("")
-                  }}
-                  className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">
-                  Assign to {logSelected.size} SO(s)
-                </button>
-                <button type="button" onClick={() => { setLogSelected(new Set()); setBatchInvoice(""); setBatchBookingDate("") }}
-                  className="text-sm text-gray-500 hover:text-gray-700 px-2">Cancel</button>
-              </div>
-            </div>
-          )}
-          <button onClick={saveLogistics} disabled={submitting === "log"}
-            className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-            {submitting === "log" ? "..." : "Save Logistics Data"}
-          </button>
         </div>
       )}
 

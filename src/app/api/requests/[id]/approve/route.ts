@@ -521,13 +521,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
-  // SCM_GW: approve/reject per-SO at PENDING_SCM_GW
-  if ((action === "approve_so" || action === "reject_so") && userRole === "SCM_GW") {
+  // SCM_NYK / SCM_NYG: approve/reject per-SO at PENDING_SCM_GW
+  if ((action === "approve_so" || action === "reject_so") && (userRole === "SCM_NYK" || userRole === "SCM_NYG")) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
     if (itemData.itemStatus !== "SCM_GW_PENDING") return NextResponse.json({ error: "Item not pending SCM_GW" }, { status: 400 })
+    const expectedDept = userRole === "SCM_NYK" ? "NYK" : "NYG"
+    if (itemData.claimDepartment !== expectedDept) return NextResponse.json({ error: "Forbidden: wrong dept" }, { status: 403 })
     const newItemStatus = action === "approve_so" ? "ACCOUNTING_PENDING" : "REJECTED"
     await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
     await prisma.approvalLog.create({
