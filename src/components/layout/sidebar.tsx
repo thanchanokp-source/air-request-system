@@ -6,6 +6,7 @@ const nav = [
   { href: "/dashboard", label: "DASHBOARD" },
   { href: "/requests", label: "AIR REQUESTS" },
   { href: "/approvals", label: "APPROVALS" },
+  { href: "/files", label: "ALL FILES" },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
   { href: "/master/port", label: "MASTER PORT", roles: ["ADMIN", "LOGISTICS"] },
   { href: "/master/description", label: "MASTER DESCRIPTION", adminOnly: true }

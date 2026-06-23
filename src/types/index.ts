@@ -99,6 +99,6 @@ export const ROLE_ACTIONS: Record<string, string[]> = {
   CLAIM_GW: ["PENDING_CLAIM_GW"],
   SCM_NYK: ["PENDING_SCM_GW"],
   SCM_NYG: ["PENDING_SCM_GW"],
-  ACCOUNTING: ["PENDING_ACCOUNTING"],
+  ACCOUNTING: [],
   MER_GW: [],
 }

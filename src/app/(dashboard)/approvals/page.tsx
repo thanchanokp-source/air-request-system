@@ -58,7 +58,6 @@ export default function ApprovalsPage() {
     if (role === "CLAIM_GW") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED")
     if (role === "SCM_NYK") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "SCM_GW_PENDING" && i.claimDepartment === "NYK")
     if (role === "SCM_NYG") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "SCM_GW_PENDING" && i.claimDepartment === "NYG")
-    if (role === "ACCOUNTING") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "ACCOUNTING_PENDING")
     return false
   })
 
@@ -85,7 +84,6 @@ export default function ApprovalsPage() {
     if (role === "CLAIM_GW") return items.filter((i: any) => i.itemStatus === "LOG_PASSED")
     if (role === "SCM_NYK") return items.filter((i: any) => i.itemStatus === "SCM_GW_PENDING" && i.claimDepartment === "NYK")
     if (role === "SCM_NYG") return items.filter((i: any) => i.itemStatus === "SCM_GW_PENDING" && i.claimDepartment === "NYG")
-    if (role === "ACCOUNTING") return items.filter((i: any) => i.itemStatus === "ACCOUNTING_PENDING")
     return items.filter((i: any) => i.itemStatus !== "REJECTED")
   }
 

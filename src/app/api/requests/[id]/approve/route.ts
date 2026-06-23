@@ -39,9 +39,7 @@ async function recalcDocStatusGW(id: string): Promise<string> {
   const s = new Set(nonRej.map(i => i.itemStatus))
   // Still in earlier stages
   if (s.has("PENDING") || s.has("VP_MER_PASSED") || s.has("PRES_PASSED") || s.has("LOG_PASSED")) return "PENDING_CLAIM_GW"
-  // SCM_GW stage takes priority over ACCOUNTING
   if (s.has("SCM_GW_PENDING")) return "PENDING_SCM_GW"
-  if (s.has("ACCOUNTING_PENDING")) return "PENDING_ACCOUNTING"
   return "COMPLETED"
 }
 
@@ -530,26 +528,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (itemData.itemStatus !== "SCM_GW_PENDING") return NextResponse.json({ error: "Item not pending SCM_GW" }, { status: 400 })
     const expectedDept = userRole === "SCM_NYK" ? "NYK" : "NYG"
     if (itemData.claimDepartment !== expectedDept) return NextResponse.json({ error: "Forbidden: wrong dept" }, { status: 403 })
-    const newItemStatus = action === "approve_so" ? "ACCOUNTING_PENDING" : "REJECTED"
-    await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
-    await prisma.approvalLog.create({
-      data: { requestId: id, userId, action: action === "approve_so" ? "APPROVE" : "REJECT", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so}${comment ? ` - ${comment}` : ""}` }
-    })
-    const nextDocStatus = await recalcDocStatusGW(id)
-    if (nextDocStatus !== request.status) {
-      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-      notifyStatusChange(id, nextDocStatus).catch(() => {})
-    }
-    return NextResponse.json(await getUpdated())
-  }
-
-  // ACCOUNTING: approve/reject per-SO at PENDING_ACCOUNTING
-  if ((action === "approve_so" || action === "reject_so") && userRole === "ACCOUNTING") {
-    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
-    const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
-    if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
-    if (itemData.itemStatus !== "ACCOUNTING_PENDING") return NextResponse.json({ error: "Item not pending Accounting" }, { status: 400 })
     const newItemStatus = action === "approve_so" ? "COMPLETED" : "REJECTED"
     await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
     await prisma.approvalLog.create({

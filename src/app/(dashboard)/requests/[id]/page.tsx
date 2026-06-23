@@ -177,10 +177,8 @@ export default function RequestDetailPage() {
     role === "SCM_NYK" ? i.claimDepartment === "NYK" :
     role === "SCM_NYG" ? i.claimDepartment === "NYG" : true
   ))
-  const accountingGwItems = (req?.items || []).filter((i: any) => i.itemStatus === "ACCOUNTING_PENDING")
   const isScmGW = (role === "SCM_NYK" || role === "SCM_NYG") && req?.status === "PENDING_SCM_GW" && scmGwItems.length > 0 && isGWRequest
-  const isAccountingGW = role === "ACCOUNTING" && req?.status === "PENDING_ACCOUNTING" && accountingGwItems.length > 0 && isGWRequest
-  const isGWApprover = isVpMerGW || isPresidentGW || isLogisticsGW || isClaimGW || isScmGW || isAccountingGW
+  const isGWApprover = isVpMerGW || isPresidentGW || isLogisticsGW || isClaimGW || isScmGW
   const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
 
   const styleGroups = useMemo(() => {
@@ -1944,100 +1942,6 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* ACCOUNTING: approve/reject ACCOUNTING_PENDING items */}
-      {isAccountingGW && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-gray-800">SO APPROVAL — ACCOUNTING</h2>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 font-medium">ACCOUNTING</span>
-            <span className="text-xs text-gray-500">{accountingGwItems.length} pending</span>
-          </div>
-          {accountingGwItems.map((item: any) => {
-            const isSub = submitting === item.id
-            const isRejRow = rejectingSo === item.id
-            const isExp = expanded.has(item.id)
-            return (
-              <div key={item.id} className="rounded-xl border border-teal-200 overflow-hidden">
-                <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 bg-teal-50">
-                  <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
-                  <span className="font-semibold text-gray-800 w-28 shrink-0">{item.so}</span>
-                  <span className="text-xs text-gray-500 flex-1 min-w-0 truncate">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
-                  <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-                    Dept: {item.factory || item.claimDepartment || "-"}
-                  </span>
-                  {!isRejRow && (
-                    <div className="flex gap-2">
-                      <button onClick={async () => {
-                          setSubmitting(item.id)
-                          const res = await fetch(`/api/requests/${id}/approve`, {
-                            method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "approve_so", itemId: item.id })
-                          })
-                          if (res.ok) setReq(await res.json())
-                          setSubmitting(null)
-                        }} disabled={isSub}
-                        className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
-                        {isSub ? "..." : "Approve → Complete"}
-                      </button>
-                      <button onClick={() => { setRejectingSo(item.id); setRejectSoComment("") }} disabled={isSub}
-                        className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>
-                    </div>
-                  )}
-                </div>
-                {isRejRow && (
-                  <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
-                    <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
-                    <textarea value={rejectSoComment} onChange={e => setRejectSoComment(e.target.value)} rows={2} className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
-                    <div className="flex gap-2">
-                      <button onClick={async () => {
-                          setSubmitting(item.id)
-                          const res = await fetch(`/api/requests/${id}/approve`, {
-                            method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "reject_so", itemId: item.id, comment: rejectSoComment })
-                          })
-                          if (res.ok) setReq(await res.json())
-                          setSubmitting(null); setRejectingSo(null); setRejectSoComment("")
-                        }} disabled={isSub || !rejectSoComment.trim()}
-                        className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
-                        {isSub ? "..." : "Confirm Reject"}
-                      </button>
-                      <button onClick={() => { setRejectingSo(null); setRejectSoComment("") }}
-                        className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
-                    </div>
-                  </div>
-                )}
-                {isExp && (
-                  <div className="border-t border-gray-100 overflow-x-auto">
-                    <table className="text-xs w-full">
-                      <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","INVOICE NO","BOOKING DATE","DEPT","% CLAIM","ACTUAL (THB)","COUNTRY","PORT"].map(h =>
-                          <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="hover:bg-gray-50">
-                          <td className="px-3 py-2 font-medium">{item.so}</td>
-                          <td className="px-3 py-2">{item.style}</td>
-                          <td className="px-3 py-2">{item.description}</td>
-                          <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
-                          <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
-                          <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
-                          <td className="px-3 py-2">{item.factory || item.claimDepartment || "-"}</td>
-                          <td className="px-3 py-2">{item.claimPercentage != null ? `${item.claimPercentage}%` : "-"}</td>
-                          <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
-                          <td className="px-3 py-2">{item.country}</td>
-                          <td className="px-3 py-2">{item.port}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
 
       {/* Actions */}
       {canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && role !== "PRESIDENT" && role !== "LOGISTICS" && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && (
