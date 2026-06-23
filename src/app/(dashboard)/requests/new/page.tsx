@@ -80,6 +80,11 @@ export default function NewRequestPage() {
       })
     })
     const data = await res.json()
+    if (data.id && file) {
+      const attachForm = new FormData()
+      attachForm.append("file", file)
+      await fetch(`/api/requests/${data.id}/attachments`, { method: "POST", body: attachForm })
+    }
     setLoading(false)
     if (data.id) {
       router.push(`/requests/${data.id}`)
