@@ -1073,7 +1073,7 @@ export default function RequestDetailPage() {
               LOGISTICS UPLOAD
               {isLogisticsGW && <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium align-middle">GW</span>}
             </h2>
-            <a href={isLogisticsGW ? "/air-request-template-gw.xlsx" : "/air-request-template.xlsx"} download
+            <a href={isLogisticsGW ? "/air-request-template_GW.xlsx" : "/air-request-template_NYG.xlsx"} download
               className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
               ⬇ Download Template {isLogisticsGW ? "(GW)" : "(NYG)"}
             </a>
@@ -2163,7 +2163,7 @@ export default function RequestDetailPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="text-sm font-semibold text-gray-700">LOGISTICS UPLOAD</label>
-                <a href="/air-request-template.xlsx" download className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">⬇ Download Template</a>
+                <a href={req?.bu === "GW" ? "/air-request-template_GW.xlsx" : "/air-request-template_NYG.xlsx"} download className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">⬇ Download Template</a>
               </div>
               <div className="border-2 border-dashed border-blue-200 rounded-xl p-4 bg-blue-50 text-center space-y-2">
                 <p className="text-xs text-blue-600">อัปโหลด Excel ที่กรอก Invoice No / QTY Actual / Actual Air Freight / Booking Date แล้ว</p>

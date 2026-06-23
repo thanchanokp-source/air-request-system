@@ -130,7 +130,7 @@ export default function NewRequestPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-800">Upload Excel File</h2>
-            <a href={isGW ? "/air-request-template-gw.xlsx" : "/air-request-template.xlsx"} download
+            <a href={isGW ? "/air-request-template_GW.xlsx" : "/air-request-template_NYG.xlsx"} download
               className="flex items-center gap-1.5 text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
               ⬇ Download Template {isGW ? "(GW)" : "(NYG)"}
             </a>
