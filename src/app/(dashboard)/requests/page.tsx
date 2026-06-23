@@ -95,31 +95,37 @@ export default function RequestsPage() {
     (r.items || []).map((item: any) => ({ ...item, request: r }))
   )
 
-  const brands = [...new Set(allRows.map(r => r.request.brandName).filter(Boolean))].sort()
-  const styles = [...new Set(allRows.map(r => r.style).filter(Boolean))].sort()
-  const sos = [...new Set(allRows.map(r => r.so).filter(Boolean))].sort()
-  const cps = [...new Set(allRows.map(r => r.customerPO).filter(Boolean))].sort()
-  const ports = [...new Set(allRows.map(r => r.port).filter(Boolean))].sort()
-  const countries = [...new Set(allRows.map(r => r.country).filter(Boolean))].sort()
-  const invoices = [...new Set(allRows.map(r => r.invoiceNo).filter(Boolean))].sort()
-
-  const filtered = allRows.filter(row => {
+  const applyFilters = (rows: any[], opts: {
+    brand?: string[], style?: string[], so?: string[], cp?: string[],
+    port?: string[], country?: string[], claim?: string[], invoice?: string[]
+  }) => rows.filter(row => {
     const r = row.request
-    // 3-state filter: Completed / Pending / Rejected (or all)
     const statusMatch = !statusFilter ||
       (statusFilter === "COMPLETED" && row.itemStatus === "COMPLETED") ||
       (statusFilter === "REJECTED" && row.itemStatus === "REJECTED") ||
       (statusFilter === "PENDING" && row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED")
     return statusMatch &&
-      (!brandF.length || brandF.includes(r.brandName)) &&
-      (!styleF.length || styleF.includes(row.style)) &&
-      (!soF.length || soF.includes(row.so)) &&
-      (!cpF.length || cpF.includes(row.customerPO)) &&
-      (!portF.length || portF.includes(row.port)) &&
-      (!countryF.length || countryF.includes(row.country)) &&
-      (!claimF.length || claimF.includes(row.claimDepartment)) &&
-      (!invoiceF.length || invoiceF.includes(row.invoiceNo))
+      (!opts.brand?.length || opts.brand.includes(r.brandName)) &&
+      (!opts.style?.length || opts.style.includes(row.style)) &&
+      (!opts.so?.length || opts.so.includes(row.so)) &&
+      (!opts.cp?.length || opts.cp.includes(row.customerPO)) &&
+      (!opts.port?.length || opts.port.includes(row.port)) &&
+      (!opts.country?.length || opts.country.includes(row.country)) &&
+      (!opts.claim?.length || opts.claim.includes(row.claimDepartment)) &&
+      (!opts.invoice?.length || opts.invoice.includes(row.invoiceNo))
   })
+  const uniq = (arr: (string | null | undefined)[]) => [...new Set(arr.filter(Boolean) as string[])].sort()
+
+  // Cascading options: each dropdown shows options available given all OTHER active filters
+  const brands   = uniq(allRows.map(r => r.request.brandName))
+  const styles   = uniq(applyFilters(allRows, { brand: brandF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.style))
+  const sos      = uniq(applyFilters(allRows, { brand: brandF, style: styleF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.so))
+  const cps      = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.customerPO))
+  const ports    = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.port))
+  const countries = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, claim: claimF, invoice: invoiceF }).map(r => r.country))
+  const invoices = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF }).map(r => r.invoiceNo))
+
+  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF })
 
   const docGroups = buRequests.map(req => {
     const reqRows = filtered.filter(row => row.request.id === req.id)
