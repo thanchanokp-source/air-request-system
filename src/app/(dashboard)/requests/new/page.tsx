@@ -3,7 +3,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 
-const REQUIRED_COLUMNS = [
+const NYG_REQUIRED = [
   "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
   "Original Shipment Date", "Plan Shipment Date",
   "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
@@ -11,10 +11,12 @@ const REQUIRED_COLUMNS = [
   "Brand name", "BU",
 ]
 
-const CLAIM_DEPT_GW = [
-  { value: "SUPPLIER_IN", label: "Supplier ใน" },
-  { value: "SUPPLIER_OUT", label: "Supplier นอก" },
-  { value: "NYK", label: "NYK" },
+const GW_REQUIRED = [
+  "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
+  "Original Shipment Date", "Plan Shipment Date",
+  "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
+  "Reason delay", "department ที่ต้องเคลม", "Country", "Port", "WEIGHT(KG)",
+  "Brand name", "BU",
 ]
 
 export default function NewRequestPage() {
@@ -30,7 +32,6 @@ export default function NewRequestPage() {
 
   const [vpMerList, setVpMerList] = useState<any[]>([])
   const [vpMerSelected, setVpMerSelected] = useState<{ name: string; email: string } | null>(null)
-  const [claimDept, setClaimDept] = useState("")
 
   useEffect(() => {
     const role = isGW ? "VP_MER_GW" : "VP_MER"
@@ -53,8 +54,9 @@ export default function NewRequestPage() {
       setError("ไม่พบข้อมูลในไฟล์ กรุณาตรวจสอบและอัพโหลดใหม่")
       return
     }
+    const required = isGW ? GW_REQUIRED : NYG_REQUIRED
     const cols = Object.keys(data.rows[0])
-    const missing = REQUIRED_COLUMNS.filter(c => !cols.includes(c))
+    const missing = required.filter(c => !cols.includes(c))
     if (missing.length > 0) {
       setError(`Template ไม่ตรง — คอลัมน์ที่หายไป: ${missing.join(", ")}`)
       return
@@ -66,7 +68,6 @@ export default function NewRequestPage() {
     e.preventDefault()
     if (!file || preview.length === 0) return
     if (!vpMerSelected) { setError(`กรุณาเลือก ${isGW ? "VP MER GW" : "VP MER"} ก่อน Submit`); return }
-    if (isGW && !claimDept) { setError("กรุณาเลือก Claim Department ก่อน Submit"); return }
     setLoading(true)
     setError("")
     const res = await fetch("/api/requests", {
@@ -76,7 +77,6 @@ export default function NewRequestPage() {
         items: preview,
         assignedVpMer: vpMerSelected.email,
         bu: userBu,
-        ...(isGW && { claimDepartment: claimDept })
       })
     })
     const data = await res.json()
@@ -121,29 +121,13 @@ export default function NewRequestPage() {
           )}
         </div>
 
-        {/* Claim Dept — GW only */}
-        {isGW && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-            <h2 className="font-semibold text-gray-800">เลือก Claim Department <span className="text-red-500">*</span></h2>
-            <select
-              value={claimDept}
-              onChange={e => setClaimDept(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400">
-              <option value="">-- เลือก Claim Dept --</option>
-              {CLAIM_DEPT_GW.map(d => (
-                <option key={d.value} value={d.value}>{d.label}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* Upload Excel */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-800">Upload Excel File</h2>
-            <a href="/air-request-template.xlsx" download
+            <a href={isGW ? "/air-request-template-gw.xlsx" : "/air-request-template.xlsx"} download
               className="flex items-center gap-1.5 text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
-              ⬇ Download Template
+              ⬇ Download Template {isGW ? "(GW)" : "(NYG)"}
             </a>
           </div>
           <input
@@ -187,7 +171,7 @@ export default function NewRequestPage() {
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={loading || preview.length === 0 || !vpMerSelected || (isGW && !claimDept)}
+            disabled={loading || preview.length === 0 || !vpMerSelected}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {loading ? "Submitting..." : "Submit Request"}
           </button>

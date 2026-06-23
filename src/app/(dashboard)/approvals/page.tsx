@@ -55,7 +55,9 @@ export default function ApprovalsPage() {
     if (role === "VP_MER_GW") return r.status === "PENDING_VP_MER_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)
     if (role === "PRESIDENT_GW") return r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
-    if (role === "CLAIM_GW") return (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED") && (!userClaimDept || r.claimDepartment === userClaimDept)
+    if (role === "CLAIM_GW") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED")
+    if (role === "SCM_GW") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "SCM_GW_PENDING")
+    if (role === "ACCOUNTING") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "ACCOUNTING_PENDING")
     return false
   })
 
@@ -80,6 +82,8 @@ export default function ApprovalsPage() {
     if (role === "PRESIDENT_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW") return items.filter((i: any) => i.itemStatus === "LOG_PASSED")
+    if (role === "SCM_GW") return items.filter((i: any) => i.itemStatus === "SCM_GW_PENDING")
+    if (role === "ACCOUNTING") return items.filter((i: any) => i.itemStatus === "ACCOUNTING_PENDING")
     return items.filter((i: any) => i.itemStatus !== "REJECTED")
   }
 

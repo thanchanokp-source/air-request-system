@@ -122,6 +122,8 @@ model AirRequestItem {
   invoiceNo            String?
   bookingDate          DateTime?
   assignedDvm          String?
+  claimPercentage      Float?
+  qtyActualShip        Int?
   request              AirRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
   claimApprovals       ClaimApproval[]
 }

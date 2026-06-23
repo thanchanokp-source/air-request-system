@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
+import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES, GW_SCM_DEPTS } from "@/types"
 import { notifyStatusChange } from "@/lib/notify"
 
 const getClaimDept = (role: string) => {
@@ -22,6 +22,26 @@ async function recalcDocStatus(id: string): Promise<string> {
   if (s.has("PRES_PASSED")) return "PENDING_LOGISTICS"
   if (s.has("LOG_PASSED")) return "PENDING_CLAIM"
   if (s.has("CLAIM_PASSED")) return "PENDING_VP_CLAIM"
+  return "COMPLETED"
+}
+
+// GW: after CLAIM_GW approves, route item based on claimDepartment
+// NYG/NYK → SCM_GW_PENDING; GW/Supplier → ACCOUNTING_PENDING
+function gwItemStatusAfterClaim(claimDept: string | null): string {
+  if (claimDept && GW_SCM_DEPTS.includes(claimDept)) return "SCM_GW_PENDING"
+  return "ACCOUNTING_PENDING"
+}
+
+async function recalcDocStatusGW(id: string): Promise<string> {
+  const items = await prisma.airRequestItem.findMany({ where: { requestId: id }, select: { itemStatus: true } })
+  const nonRej = items.filter(i => i.itemStatus !== "REJECTED")
+  if (nonRej.length === 0) return "REJECTED"
+  const s = new Set(nonRej.map(i => i.itemStatus))
+  // Still in earlier stages
+  if (s.has("PENDING") || s.has("VP_MER_PASSED") || s.has("PRES_PASSED") || s.has("LOG_PASSED")) return "PENDING_CLAIM_GW"
+  // SCM_GW stage takes priority over ACCOUNTING
+  if (s.has("SCM_GW_PENDING")) return "PENDING_SCM_GW"
+  if (s.has("ACCOUNTING_PENDING")) return "PENDING_ACCOUNTING"
   return "COMPLETED"
 }
 
@@ -458,53 +478,85 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (request.status !== "PENDING_CLAIM_GW" && request.status !== "PENDING_LOGISTICS_GW") {
       return NextResponse.json({ error: "Request is not at Claim stage" }, { status: 400 })
     }
-    if (userClaimDept && (request as any).claimDepartment !== userClaimDept) {
-      return NextResponse.json({ error: "Forbidden - Wrong claim department" }, { status: 403 })
-    }
     if (!Array.isArray(itemIds) || itemIds.length === 0) return NextResponse.json({ error: "itemIds required" }, { status: 400 })
     for (const iid of itemIds) {
       const itemData = await prisma.airRequestItem.findUnique({ where: { id: iid } })
       if (!itemData || itemData.requestId !== id || itemData.itemStatus !== "LOG_PASSED") continue
-      await prisma.airRequestItem.update({ where: { id: iid }, data: { itemStatus: "COMPLETED" } })
+      const nextItemStatus = gwItemStatusAfterClaim(itemData.claimDepartment)
+      await prisma.airRequestItem.update({ where: { id: iid }, data: { itemStatus: nextItemStatus } })
     }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Batch approve ${itemIds.length} SO(s)` }
     })
-    const remaining = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: { notIn: ["COMPLETED", "REJECTED"] } } })
-    if (remaining === 0) {
-      const completedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "COMPLETED" } })
-      const finalStatus = completedCount > 0 ? "COMPLETED" : "REJECTED"
-      await prisma.airRequest.update({ where: { id }, data: { status: finalStatus } })
-      notifyStatusChange(id, finalStatus).catch(() => {})
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      notifyStatusChange(id, nextDocStatus).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
 
-  // GW CLAIM: per-SO approve/reject at PENDING_CLAIM_GW or PENDING_LOGISTICS_GW (partial forwarding)
+  // GW CLAIM: per-SO approve/reject at PENDING_CLAIM_GW
   if ((action === "approve_so" || action === "reject_so") && userRole === "CLAIM_GW") {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (request.status !== "PENDING_CLAIM_GW" && request.status !== "PENDING_LOGISTICS_GW") {
       return NextResponse.json({ error: "Request is not at Claim stage" }, { status: 400 })
     }
-    if (userClaimDept && (request as any).claimDepartment !== userClaimDept) {
-      return NextResponse.json({ error: "Forbidden - Wrong claim department" }, { status: 403 })
-    }
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData) return NextResponse.json({ error: "Item not found" }, { status: 404 })
     if (itemData.requestId !== id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const newItemStatus = action === "approve_so"
+      ? gwItemStatusAfterClaim(itemData.claimDepartment)
+      : "REJECTED"
+    await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: action === "approve_so" ? "APPROVE" : "REJECT", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so}${comment ? ` - ${comment}` : ""}` }
+    })
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      notifyStatusChange(id, nextDocStatus).catch(() => {})
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // SCM_GW: approve/reject per-SO at PENDING_SCM_GW
+  if ((action === "approve_so" || action === "reject_so") && userRole === "SCM_GW") {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
+    if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    if (itemData.itemStatus !== "SCM_GW_PENDING") return NextResponse.json({ error: "Item not pending SCM_GW" }, { status: 400 })
+    const newItemStatus = action === "approve_so" ? "ACCOUNTING_PENDING" : "REJECTED"
+    await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: action === "approve_so" ? "APPROVE" : "REJECT", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so}${comment ? ` - ${comment}` : ""}` }
+    })
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      notifyStatusChange(id, nextDocStatus).catch(() => {})
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // ACCOUNTING: approve/reject per-SO at PENDING_ACCOUNTING
+  if ((action === "approve_so" || action === "reject_so") && userRole === "ACCOUNTING") {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
+    if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    if (itemData.itemStatus !== "ACCOUNTING_PENDING") return NextResponse.json({ error: "Item not pending Accounting" }, { status: 400 })
     const newItemStatus = action === "approve_so" ? "COMPLETED" : "REJECTED"
     await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: action === "approve_so" ? "APPROVE" : "REJECT", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so}${comment ? ` - ${comment}` : ""}` }
     })
-    // Advance to COMPLETED only when no items remain (handles partial forwarding from PENDING_LOGISTICS_GW)
-    const remaining = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: { notIn: ["COMPLETED", "REJECTED"] } } })
-    if (remaining === 0) {
-      const completedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "COMPLETED" } })
-      const finalStatus = completedCount > 0 ? "COMPLETED" : "REJECTED"
-      await prisma.airRequest.update({ where: { id }, data: { status: finalStatus } })
-      notifyStatusChange(id, finalStatus).catch(() => {})
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      notifyStatusChange(id, nextDocStatus).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }

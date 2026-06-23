@@ -41,6 +41,8 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
   if (itemStatus === "PRES_PASSED") return "Logistics"
   if (itemStatus === "LOG_PASSED") return "Claim"
   if (itemStatus === "CLAIM_PASSED") return "VP Claim"
+  if (itemStatus === "SCM_GW_PENDING") return "SCM (GW)"
+  if (itemStatus === "ACCOUNTING_PENDING") return "Accounting"
   return "-"
 }
 
@@ -52,6 +54,8 @@ const STEP_COLORS: Record<string, string> = {
   "Logistics": "bg-blue-100 text-blue-700",
   "Claim": "bg-indigo-100 text-indigo-700",
   "VP Claim": "bg-violet-100 text-violet-700",
+  "SCM (GW)": "bg-orange-100 text-orange-700",
+  "Accounting": "bg-teal-100 text-teal-700",
   "Completed": "bg-green-100 text-green-700",
   "Rejected": "bg-red-100 text-red-700",
 }
@@ -102,7 +106,12 @@ export default function RequestsPage() {
 
   const filtered = allRows.filter(row => {
     const r = row.request
-    return (!statusFilter || r.status === statusFilter) &&
+    // 3-state filter: Completed / Pending / Rejected (or all)
+    const statusMatch = !statusFilter ||
+      (statusFilter === "COMPLETED" && row.itemStatus === "COMPLETED") ||
+      (statusFilter === "REJECTED" && row.itemStatus === "REJECTED") ||
+      (statusFilter === "PENDING" && row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED")
+    return statusMatch &&
       (!brandF.length || brandF.includes(r.brandName)) &&
       (!styleF.length || styleF.includes(row.style)) &&
       (!soF.length || soF.includes(row.so)) &&
@@ -154,6 +163,8 @@ export default function RequestsPage() {
     { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
     { key: "PENDING_LOGISTICS_GW", label: "LOGISTICS" },
     { key: "PENDING_CLAIM_GW", label: "CLAIM" },
+    { key: "PENDING_SCM_GW", label: "SCM" },
+    { key: "PENDING_ACCOUNTING", label: "ACCOUNTING" },
   ] : [
     { key: "PENDING_VP_MER", label: "VP MER" },
     { key: "PENDING_SCM", label: "SCM" },
@@ -227,6 +238,8 @@ export default function RequestsPage() {
           const ITEM_TO_STEP: Record<string, string> = activeBu === "GW" ? {
             PRES_PASSED: "PENDING_LOGISTICS_GW",
             LOG_PASSED: "PENDING_CLAIM_GW",
+            SCM_GW_PENDING: "PENDING_SCM_GW",
+            ACCOUNTING_PENDING: "PENDING_ACCOUNTING",
           } : {
             VP_MER_PASSED: "PENDING_SCM",
             PASSED: "PENDING_VP_SCM",
@@ -277,7 +290,9 @@ export default function RequestsPage() {
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
             <option value="">All Status</option>
-            {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            <option value="COMPLETED">Completed</option>
+            <option value="PENDING">Pending</option>
+            <option value="REJECTED">Rejected</option>
           </select>
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />

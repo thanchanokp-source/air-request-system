@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { items, assignedVpMer, bu, claimDepartment } = body
+    const { items, assignedVpMer, bu } = body
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "No items" }, { status: 400 })
     }
@@ -76,7 +76,6 @@ export async function POST(req: NextRequest) {
         buName: String(first["BU"] || ""),
         bu: isGW ? "GW" : "NYG",
         status: isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER",
-        claimDepartment: isGW ? (claimDepartment || null) : null,
         createdById: userId,
         assignedVpMer,
         vpMerToken: crypto.randomUUID(),
@@ -86,6 +85,9 @@ export async function POST(req: NextRequest) {
             const qty = Number(item["QTY Request ship Air (pcs)"] || 0)
             const rate = portRates[port] || 0
             const gw = parseFloat(String(item["WEIGHT(KG)"] || "0")) || 0
+            // GW: per-item claim dept from "department ที่ต้องเคลม" column
+            const claimDept = isGW ? String(item["department ที่ต้องเคลม"] || "") : undefined
+            const claimPct = isGW ? (parseFloat(String(item["% Claim"] || "")) || null) : undefined
             return {
               style: String(item["STYLE"] || ""),
               so: String(item["SO"] || ""),
@@ -97,12 +99,14 @@ export async function POST(req: NextRequest) {
               qtyOriginalShipment: Number(item["QTY Original Shipment (pcs)"] || 0),
               qtyRequestAir: qty,
               reasonDelay: String(item["Reason delay"] || ""),
-              factory: String(item["Factory"] || ""),
+              // GW uses "department ที่ต้องเคลม", NYG uses "Factory"
+              factory: isGW ? String(item["department ที่ต้องเคลม"] || "") : String(item["Factory"] || ""),
               country: String(item["Country"] || ""),
               port,
               grossWeight: gw,
               airFreight: gw * rate,
               marketRatePerKg: rate > 0 ? rate : null,
+              ...(isGW && { claimDepartment: claimDept || null, claimPercentage: claimPct }),
             }
           })
         }

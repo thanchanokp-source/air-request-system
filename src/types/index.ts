@@ -13,6 +13,8 @@ export const STATUS_LABELS: Record<string, string> = {
   PENDING_PRESIDENT_GW: "Pending President (GW)",
   PENDING_LOGISTICS_GW: "Pending Logistics (GW)",
   PENDING_CLAIM_GW: "Pending Claim (GW)",
+  PENDING_SCM_GW: "Pending SCM (GW)",
+  PENDING_ACCOUNTING: "Pending Accounting",
   COMPLETED: "Completed",
   REJECTED: "Rejected"
 }
@@ -31,6 +33,8 @@ export const STATUS_COLORS: Record<string, string> = {
   PENDING_PRESIDENT_GW: "bg-purple-100 text-purple-700",
   PENDING_LOGISTICS_GW: "bg-blue-100 text-blue-700",
   PENDING_CLAIM_GW: "bg-indigo-100 text-indigo-700",
+  PENDING_SCM_GW: "bg-orange-100 text-orange-700",
+  PENDING_ACCOUNTING: "bg-teal-100 text-teal-700",
   COMPLETED: "bg-green-100 text-green-700",
   REJECTED: "bg-red-100 text-red-700"
 }
@@ -49,15 +53,23 @@ export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> =
   PENDING_VP_MER_GW: { approve: "PENDING_PRESIDENT_GW", reject: "REJECTED" },
   PENDING_PRESIDENT_GW: { approve: "PENDING_LOGISTICS_GW", reject: "REJECTED" },
   PENDING_LOGISTICS_GW: { approve: "PENDING_CLAIM_GW" },
-  PENDING_CLAIM_GW: { approve: "COMPLETED", reject: "REJECTED" },
+  PENDING_CLAIM_GW: { approve: "PENDING_ACCOUNTING", reject: "REJECTED" },
+  PENDING_SCM_GW: { approve: "PENDING_ACCOUNTING", reject: "REJECTED" },
+  PENDING_ACCOUNTING: { approve: "COMPLETED", reject: "REJECTED" },
 }
 
 export const STYLE_APPROVER_STATUSES = ["PENDING_VP_MER", "PENDING_VP_SCM", "PENDING_PRESIDENT"]
 
 export const CLAIM_VP_ROLES = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
 
-export const GW_ROLES = ["VP_MER_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW"]
-export const ALL_BU_ROLES = ["ADMIN", "ACCOUNTING"]
+export const GW_ROLES = ["VP_MER_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_GW", "ACCOUNTING"]
+export const ALL_BU_ROLES = ["ADMIN"]
+export const GW_CLAIM_DEPTS = ["NYK", "NYG", "GW", "SUPPLIER_IN", "SUPPLIER_OUT"] as const
+export const GW_CLAIM_DEPT_LABELS: Record<string, string> = {
+  NYK: "NYK", NYG: "NYG", GW: "GW",
+  SUPPLIER_IN: "Supplier ใน", SUPPLIER_OUT: "Supplier นอก"
+}
+export const GW_SCM_DEPTS = ["NYK", "NYG"]
 
 export const ROLE_ACTIONS: Record<string, string[]> = {
   VP_MER: ["PENDING_VP_MER"],
@@ -85,4 +97,7 @@ export const ROLE_ACTIONS: Record<string, string[]> = {
   PRESIDENT_GW: ["PENDING_PRESIDENT_GW"],
   LOGISTICS_GW: ["PENDING_LOGISTICS_GW"],
   CLAIM_GW: ["PENDING_CLAIM_GW"],
+  SCM_GW: ["PENDING_SCM_GW"],
+  ACCOUNTING: ["PENDING_ACCOUNTING"],
+  MER_GW: [],
 }
