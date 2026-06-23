@@ -3,7 +3,6 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { PdfDownloadButton } from "@/components/pdf-download-button"
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING_VP_MER: "Pending VP MER", PENDING_SCM: "Pending SCM",
@@ -148,13 +147,8 @@ export default function RequestsPage() {
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
     ["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["PORT",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],["REASON","min-w-[130px]"],
-    ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"],
-    ["SCM FILE","min-w-[100px]"],["BOOKING FILE","min-w-[110px]"],
-    ["LOGISTICS FILE","min-w-[110px]"],["FINAL FILE","min-w-[110px]"]
+    ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"]
   ] as [string,string][]
-
-  const getFileLinks = (atts: any[], itemId: string, roles: string[]) =>
-    (atts || []).filter(a => a.itemId === itemId && roles.includes(a.uploadedBy?.role))
 
   const [claimExpanded, setClaimExpanded] = useState(false)
 
@@ -377,29 +371,6 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2 max-w-[150px] truncate" title={row.reasonDelay}>{row.reasonDelay || "-"}</td>
                                     <td className="px-3 py-2"><SoBadge s={row.itemStatus} docStatus={row.request.status} /></td>
                                     <td className="px-3 py-2"><CurrentStepBadge docStatus={row.request.status} itemStatus={row.itemStatus} /></td>
-                                    {/* SCM FILE — hidden for GW */}
-                                    {dg.request.bu !== "GW" && <td className="px-3 py-2">{(() => { const f = getFileLinks(dg.request.attachments, row.id, ["SCM_USER","VP_SCM"]); return f.length ? f.map((a: any) => <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-600 hover:underline whitespace-nowrap">📎 {a.fileName}</a>) : <span className="text-gray-300">—</span> })()}</td>}
-                                    {/* BOOKING FILE: show after President approve for both GW and NYG */}
-                                    <td className="px-3 py-2">
-                                      {["PRES_PASSED","LOG_PASSED","CLAIM_PASSED","COMPLETED"].includes(row.itemStatus)
-                                        ? <PdfDownloadButton req={dg.request} item={row} compact alwaysShow />
-                                        : <span className="text-gray-300">—</span>
-                                      }
-                                    </td>
-                                    {/* LOGISTICS FILE: show after LG forwards (LOG_PASSED+) */}
-                                    <td className="px-3 py-2">
-                                      {["LOG_PASSED","CLAIM_PASSED","COMPLETED"].includes(row.itemStatus)
-                                        ? <PdfDownloadButton req={dg.request} item={row} compact alwaysShow />
-                                        : <span className="text-gray-300">—</span>
-                                      }
-                                    </td>
-                                    {/* FINAL FILE: show PDF when COMPLETED (both GW and NYG) */}
-                                    <td className="px-3 py-2">
-                                      {row.itemStatus === "COMPLETED"
-                                        ? <PdfDownloadButton req={dg.request} item={row} compact alwaysShow />
-                                        : <span className="text-gray-300">—</span>
-                                      }
-                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
