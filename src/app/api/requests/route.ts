@@ -85,9 +85,10 @@ export async function POST(req: NextRequest) {
             const qty = Number(item["QTY Request ship Air (pcs)"] || 0)
             const rate = portRates[port] || 0
             const gw = parseFloat(String(item["WEIGHT(KG)"] || "0")) || 0
-            // GW: per-item claim dept from "department ที่ต้องเคลม" column
-            const claimDept = isGW ? String(item["department ที่ต้องเคลม"] || "") : undefined
-            const claimPct = isGW ? (parseFloat(String(item["% Claim"] || "")) || null) : undefined
+            // GW: "Claim" column = dept to claim; NYG: "Factory" column
+            const claimDept = isGW ? String(item["Claim"] || "") : undefined
+            // TODO: auto-calculate claimPercentage based on formula (TBD)
+            const claimPct: number | null = isGW ? null : (undefined as any)
             return {
               style: String(item["STYLE"] || ""),
               so: String(item["SO"] || ""),
@@ -99,8 +100,8 @@ export async function POST(req: NextRequest) {
               qtyOriginalShipment: Number(item["QTY Original Shipment (pcs)"] || 0),
               qtyRequestAir: qty,
               reasonDelay: String(item["Reason delay"] || ""),
-              // GW uses "department ที่ต้องเคลม", NYG uses "Factory"
-              factory: isGW ? String(item["department ที่ต้องเคลม"] || "") : String(item["Factory"] || ""),
+              // NYG: "Factory" column; GW: "Claim" column (claim dept)
+              factory: isGW ? String(item["Claim"] || "") : String(item["Factory"] || ""),
               country: String(item["Country"] || ""),
               port,
               grossWeight: gw,
