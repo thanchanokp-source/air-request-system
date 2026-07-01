@@ -3959,9 +3959,9 @@ export default function RequestDetailPage() {
               <h2 className="font-semibold text-gray-800">ATTACHMENTS {allAttachments.length > 0 && <span className="text-xs font-normal text-gray-400 ml-1">({allAttachments.length})</span>}</h2>
               {canAttach && (
                 <label className={`cursor-pointer text-xs px-3 py-1.5 rounded-lg border font-medium ${isUploadingReq ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "border-blue-300 text-blue-600 hover:bg-blue-50"}`}>
-                  {isUploadingReq ? "Uploading..." : "📎 Attach File"}
-                  <input type="file" className="hidden" disabled={isUploadingReq}
-                    onChange={e => { if (e.target.files?.[0]) attachFileFn(e.target.files[0]); e.target.value = "" }} />
+                  {isUploadingReq ? "Uploading..." : "+ Attach File"}
+                  <input type="file" className="hidden" multiple disabled={isUploadingReq}
+                    onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
                 </label>
               )}
             </div>
@@ -4003,6 +4003,14 @@ export default function RequestDetailPage() {
                       </div>
                     </div>
                   ))}
+                  {canAttach && (
+                    <label className={`px-5 py-2.5 flex items-center gap-2 cursor-pointer text-xs font-medium ${isUploadingReq ? "text-gray-300 pointer-events-none" : "text-blue-600 hover:bg-blue-50"}`}>
+                      <span className="text-base leading-none">+</span>
+                      {isUploadingReq ? "Uploading..." : "เพิ่มไฟล์"}
+                      <input type="file" className="hidden" multiple disabled={isUploadingReq}
+                        onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
+                    </label>
+                  )}
                 </div>
             }
           </div>
