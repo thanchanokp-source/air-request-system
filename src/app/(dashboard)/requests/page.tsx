@@ -35,6 +35,7 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
     if (docStatus === "PENDING_VP_SCM") return "VP SCM"
     if (docStatus === "PENDING_CLAIM") return "Claim"
     if (docStatus === "PENDING_LOGISTICS") return "Logistics"
+    if (docStatus === "PENDING_VP_MER_GW") return "DPM GW"
     return "VP MER"
   }
   if (itemStatus === "VP_MER_PASSED") return "President"
@@ -49,6 +50,7 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
 }
 
 const STEP_COLORS: Record<string, string> = {
+  "DPM GW": "bg-yellow-100 text-yellow-700",
   "VP MER": "bg-yellow-100 text-yellow-700",
   "SCM": "bg-orange-100 text-orange-700",
   "VP SCM": "bg-amber-100 text-amber-700",
@@ -165,7 +167,7 @@ export default function RequestsPage() {
   const [claimExpanded, setClaimExpanded] = useState(false)
 
   const POSITIONS = activeBu === "GW" ? [
-    { key: "PENDING_VP_MER_GW", label: "VP MER" },
+    { key: "PENDING_VP_MER_GW", label: "DPM" },
     { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
     { key: "PENDING_LOGISTICS_GW", label: "LOGISTICS" },
     { key: "PENDING_CLAIM_GW", label: "CLAIM" },
