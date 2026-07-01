@@ -177,7 +177,24 @@ export async function sendVerificationEmail(email: string, token: string) {
   </td></tr>
 </table>
 </body></html>`
-  await sendMail(email, "[Air Request] ยืนยัน Email เพื่อเริ่มใช้งาน", html)
+
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error("RESEND_API_KEY not configured")
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: "Air Request System <onboarding@resend.dev>",
+      to: [email],
+      subject: "[Air Request] ยืนยัน Email เพื่อเริ่มใช้งาน",
+      html,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Resend failed: ${res.status} ${err}`)
+  }
 }
 
 export async function sendPasswordSetupEmail(email: string, name: string, token: string) {

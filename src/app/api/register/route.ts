@@ -41,23 +41,17 @@ export async function POST(req: NextRequest) {
 
   const normalEmail = email.toLowerCase()
 
-  // Check for existing account
   const existing = await (prisma.user as any).findUnique({ where: { email: normalEmail } })
   if (existing) {
     if (existing.isActive) {
       return NextResponse.json({ error: "Email นี้มีในระบบแล้ว" }, { status: 409 })
     }
-    // Unverified — token still valid → ask to check email
-    if (existing.resetTokenExpiry && new Date(existing.resetTokenExpiry) > new Date()) {
-      return NextResponse.json({ error: "มีการสมัครด้วย email นี้แล้ว กรุณาตรวจสอบ email เพื่อยืนยัน" }, { status: 409 })
-    }
-    // Token expired → delete stale account and allow re-registration
     await (prisma.user as any).delete({ where: { email: normalEmail } })
   }
 
   const hashed = await bcrypt.hash(password, 10)
   const token = crypto.randomUUID()
-  const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
+  const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
   await (prisma.user as any).create({
     data: {
@@ -70,8 +64,12 @@ export async function POST(req: NextRequest) {
       resetTokenExpiry: expiry,
     }
   })
-  sendVerificationEmail(normalEmail, token).catch((err) => {
-    console.error("[register] sendVerificationEmail failed:", err?.message || err)
-  })
+
+  try {
+    await sendVerificationEmail(normalEmail, token)
+  } catch (err: any) {
+    console.error("[register] email failed:", err?.message || err)
+  }
+
   return NextResponse.json({ ok: true })
 }
