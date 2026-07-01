@@ -54,6 +54,10 @@ function buildHtml(req: any, newStatus: string, link: string, approveUrl?: strin
     PENDING_PRESIDENT:"Pending President", PENDING_LOGISTICS:"Pending Logistics",
     PENDING_CLAIM:"Pending Claim (DVM)", PENDING_VP_CLAIM:"Pending VP Claim",
     PENDING_VP_NYK:"Pending VP NYK", COMPLETED:"Completed", REJECTED:"Rejected",
+    // GW
+    PENDING_VP_MER_GW:"Pending DPM (GW)", PENDING_PRESIDENT_GW:"Pending President (GW)",
+    PENDING_LOGISTICS_GW:"Pending Logistics (GW)", PENDING_CLAIM_GW:"Pending Claim (GW)",
+    PENDING_SCM_GW:"Pending SCM (GW)", PENDING_ACCOUNTING:"Pending Accounting",
   }
   const totalSo = req.items?.length || 0
   const styles = [...new Set((req.items||[]).map((i:any) => i.style).filter(Boolean))].join(", ")
