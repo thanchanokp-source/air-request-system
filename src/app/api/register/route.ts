@@ -70,6 +70,8 @@ export async function POST(req: NextRequest) {
       resetTokenExpiry: expiry,
     }
   })
-  sendVerificationEmail(normalEmail, token).catch(() => {})
+  sendVerificationEmail(normalEmail, token).catch((err) => {
+    console.error("[register] sendVerificationEmail failed:", err?.message || err)
+  })
   return NextResponse.json({ ok: true })
 }
