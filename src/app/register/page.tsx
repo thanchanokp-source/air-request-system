@@ -43,7 +43,8 @@ export default function RegisterPage() {
     const data = await res.json()
     setLoading(false)
     if (data.ok) {
-      setDone(true)
+      if (data.emailError) setError(`สมัครสำเร็จแต่ส่งอีเมลไม่ได้: ${data.emailError}`)
+      else setDone(true)
     } else {
       setError(data.error || "เกิดข้อผิดพลาด")
     }

@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   try {
     await sendVerificationEmail(normalEmail, token)
   } catch (err: any) {
-    console.error("[register] email failed:", err?.message || err)
+    return NextResponse.json({ ok: true, emailError: err?.message || String(err) })
   }
 
   return NextResponse.json({ ok: true })
