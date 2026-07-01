@@ -142,7 +142,7 @@ export default function NewRequestPage() {
           </h2>
 
           {vpMerUsers.length === 0 ? (
-            <p className="text-sm text-red-500">ไม่พบผู้อนุมัติใน Master — กรุณาเพิ่ม {isGW ? "VP_MER_GW" : "VP_MER"} ใน User Management</p>
+            <p className="text-sm text-red-500">ไม่พบผู้อนุมัติใน Master — กรุณาเพิ่ม {isGW ? "DPM_GW" : "VP_MER"} ใน User Management</p>
           ) : vpMerUsers.length === 1 ? (
             <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
               <div>
