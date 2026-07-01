@@ -62,7 +62,7 @@ export async function sendMail(to: string | string[], subject: string, html: str
             body: { contentType: "HTML", content: monitorHtml },
             toRecipients: [{ emailAddress: { address: override } }],
           },
-          saveToSentItems: false,
+          saveToSentItems: true,
         }),
       }
     )
@@ -89,7 +89,7 @@ export async function sendMail(to: string | string[], subject: string, html: str
           body: { contentType: "HTML", content: html },
           toRecipients: recipients,
         },
-        saveToSentItems: false,
+        saveToSentItems: true,
       }),
     }
   )
