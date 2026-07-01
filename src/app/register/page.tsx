@@ -6,8 +6,7 @@ import Image from "next/image"
 
 const POSITIONS = [
   { value: "MER", label: "MER" },
-  { value: "SCM", label: "SCM" },
-  { value: "LOGISTICS", label: "LOGISTICS" },
+  { value: "ACCOUNTING", label: "ACCOUNTING" },
 ]
 
 export default function RegisterPage() {
