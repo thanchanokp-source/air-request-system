@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange } from "@/lib/notify"
-import { getSplits, routeSplitsAfterClaimGw, approveScmSplit, completeAcctSplits, deriveGwItemStatus } from "@/lib/claim"
+import { getSplits, routeSplitsAfterClaimGw, approveScmSplit, completeAcctSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus } from "@/lib/claim"
 
 const getClaimDept = (role: string) => {
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
@@ -872,10 +872,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const everyoneApproved = allApprovers.every((u: any) => approvedIds.has(u.id))
 
     if (everyoneApproved) {
-      const newItemStatus = isVpClaimRole ? "COMPLETED" : "CLAIM_PASSED"
-      await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
+      // Per-split: mark only THIS department's split (DVM done → CLAIM_PASSED, VP done → COMPLETED).
+      // The item advances only when every split's department has cleared this level.
+      const splitStatus = isVpClaimRole ? "COMPLETED" : "CLAIM_PASSED"
+      const updatedSplits = setDeptSplitStatus(getSplits(itemData), dept, splitStatus)
+      const newItemStatus = deriveNygItemStatus(updatedSplits)
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updatedSplits as any, itemStatus: newItemStatus, itemComment: comment || null } })
       await prisma.approvalLog.create({
-        data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — All ${groupRole} approved${comment ? ` - ${comment}` : ""}` }
+        data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — All ${groupRole} approved (${dept})${comment ? ` - ${comment}` : ""}` }
       })
       const newStatus = await recalcDocStatus(id)
       if (newStatus !== request.status) {

@@ -101,3 +101,38 @@ export function completeAcctSplits(splits: ClaimSplit[]): ClaimSplit[] {
     s.status === SPLIT_STATUS.ACCT_PENDING ? { ...s, status: SPLIT_STATUS.COMPLETED } : s
   )
 }
+
+// ── NYG claim flow (per split: DVM → VP, per department) ───────────
+// Per-split status for NYG:
+//   null / CLAIM_PENDING → waiting DVM of that dept
+//   CLAIM_PASSED         → DVM done, waiting VP of that dept
+//   COMPLETED            → VP done
+export const NYG_SPLIT = {
+  CLAIM_PASSED: "CLAIM_PASSED",
+  COMPLETED: "COMPLETED",
+  REJECTED: "REJECTED",
+} as const
+
+// The NYG split status for one department (null = still waiting DVM).
+export function deptSplitStatus(item: any, dept: string): string | null {
+  const s = getSplits(item).find(x => x.dept === dept)
+  return s ? (s.status ?? null) : null
+}
+
+// Set one dept's split to a new status; other splits untouched.
+export function setDeptSplitStatus(splits: ClaimSplit[], dept: string, status: string): ClaimSplit[] {
+  return splits.map(s => (s.dept === dept ? { ...s, status } : s))
+}
+
+// Coarse NYG item.itemStatus derived from all splits (sequential: all DVM, then all VP).
+export function deriveNygItemStatus(splits: ClaimSplit[]): string {
+  if (splits.length === 0) return "LOG_PASSED"
+  const st = splits.map(s => s.status)
+  if (st.every(s => s === NYG_SPLIT.COMPLETED)) return "COMPLETED"
+  if (st.every(s => s === NYG_SPLIT.REJECTED)) return "REJECTED"
+  // Any split still waiting on its DVM → whole item stays at the DVM (claim) stage.
+  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING)) return "LOG_PASSED"
+  // All DVMs done, at least one VP outstanding → VP stage.
+  if (st.some(s => s === NYG_SPLIT.CLAIM_PASSED)) return "CLAIM_PASSED"
+  return "COMPLETED"
+}

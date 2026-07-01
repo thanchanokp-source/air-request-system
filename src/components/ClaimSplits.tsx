@@ -7,7 +7,8 @@ function fmt(n: number) {
 }
 
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
-  CLAIM_PENDING: { text: "รอ Claim", cls: "bg-gray-100 text-gray-600" },
+  CLAIM_PENDING: { text: "รอ DVM",   cls: "bg-gray-100 text-gray-600" },
+  CLAIM_PASSED:  { text: "รอ VP",    cls: "bg-violet-100 text-violet-700" },
   SCM_PENDING:   { text: "รอ SCM",   cls: "bg-orange-100 text-orange-700" },
   ACCT_PENDING:  { text: "รอ Acct",  cls: "bg-blue-100 text-blue-700" },
   COMPLETED:     { text: "เสร็จ",     cls: "bg-green-100 text-green-700" },

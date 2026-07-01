@@ -8,7 +8,7 @@ import { ROLE_ACTIONS, STATUS_LABELS, STYLE_APPROVER_STATUSES } from "@/types"
 import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
-import { getSplits } from "@/lib/claim"
+import { getSplits, deptSplitStatus } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -294,11 +294,24 @@ export default function RequestDetailPage() {
   const claimDeptRole = claimDept
   const isGwClaimP1Role = (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") && isGWRequest
   const gwClaimDepts = role === "CLAIM_GW" ? ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"] : role === "SCM_NYK" ? ["NYK"] : role === "SCM_NYG" ? ["NYG"] : []
+  // NYG per-split: my dept's split status (null = still waiting my DVM). undefined = my dept not on this SO.
+  const mySplitStatus = (i: any): string | null | undefined => {
+    const list: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
+      ? i.claimDepts.map((d: any) => d.dept)
+      : (i.claimDepartment ? [i.claimDepartment] : [])
+    if (!list.includes(claimDept)) return undefined
+    return deptSplitStatus(i, claimDept)
+  }
   const isDvmClaim = (role.startsWith("DVM_") || role.startsWith("CLAIM_") || role === "SCM_NYK" || role === "SCM_NYG") && (req?.items || []).some((i: any) => {
-    const matchDept = isGwClaimP1Role ? gwClaimDepts.includes(i.claimDepartment) : i.claimDepartment === claimDept
-    return (i.itemStatus === "LOG_PASSED" || i.itemStatus === "CLAIM_PASSED") && matchDept
+    if (isGwClaimP1Role) {
+      return (i.itemStatus === "LOG_PASSED" || i.itemStatus === "CLAIM_PASSED") && gwClaimDepts.includes(i.claimDepartment)
+    }
+    // NYG DVM: my dept is on the SO and its split still awaits DVM approval.
+    return i.itemStatus === "LOG_PASSED" && mySplitStatus(i) === null
   })
-  const isVpClaim = CLAIM_VP_ROLES_LOCAL.includes(role) && (req?.items || []).some((i: any) => (i.itemStatus === "CLAIM_PASSED" || i.itemStatus === "COMPLETED") && i.claimDepartment === claimDept)
+  const isVpClaim = CLAIM_VP_ROLES_LOCAL.includes(role) && (req?.items || []).some((i: any) =>
+    i.itemStatus === "CLAIM_PASSED" && mySplitStatus(i) === "CLAIM_PASSED"
+  )
   const isClaimApprover = isDvmClaim || isVpClaim
   const isClaimP1ForForward = ((role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_") || role === "SCM_NYK" || role === "SCM_NYG") && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
   const isClaimNextApprover = role === "CLAIM_NEXT_APPROVER" && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
@@ -310,8 +323,14 @@ export default function RequestDetailPage() {
       ? gwClaimDepts.some((gd: string) => itemDeptList.includes(gd))
       : (!claimDept || itemDeptList.includes(claimDept))
     if (!matchDept) return false
-    if (isDvmClaim) return i.itemStatus === "LOG_PASSED" || i.itemStatus === "CLAIM_PASSED" || i.itemStatus === "REJECTED"
-    if (isVpClaim) return i.itemStatus === "CLAIM_PASSED" || i.itemStatus === "COMPLETED" || i.itemStatus === "REJECTED"
+    if (isGwClaimP1Role) {
+      if (isDvmClaim) return i.itemStatus === "LOG_PASSED" || i.itemStatus === "CLAIM_PASSED" || i.itemStatus === "REJECTED"
+      return false
+    }
+    // NYG: my dept is on this SO (matchDept). Show claim-stage items + rejected history.
+    if (i.itemStatus === "REJECTED") return true
+    if (isDvmClaim) return ["LOG_PASSED", "CLAIM_PASSED", "COMPLETED"].includes(i.itemStatus)
+    if (isVpClaim) return ["CLAIM_PASSED", "COMPLETED"].includes(i.itemStatus)
     return false
   }) || []
   const isVpScmAtScm = role === "VP_SCM" && req?.status === "PENDING_SCM"
@@ -2134,10 +2153,11 @@ export default function RequestDetailPage() {
                   </div>
                 )}
                 {isExp && (
-                  <div className="border-t border-gray-100 overflow-x-auto">
+                  <div className="border-t border-gray-100 p-3 space-y-3">
+                    <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","CLAIM DEPT","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -2156,7 +2176,6 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
                           <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
-                          <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
                           <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                           <td className="px-3 py-2">{item.factory}</td>
                           <td className="px-3 py-2">{item.country}</td>
@@ -2164,6 +2183,11 @@ export default function RequestDetailPage() {
                         </tr>
                       </tbody>
                     </table>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">การแบ่ง Claim</p>
+                      <ClaimSplitTable item={item} highlightDept={claimDept || null} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -2379,10 +2403,11 @@ export default function RequestDetailPage() {
                   </div>
                 )}
                 {isExp && (
-                  <div className="border-t border-gray-100 overflow-x-auto">
+                  <div className="border-t border-gray-100 p-3 space-y-3">
+                    <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","CLAIM DEPT","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -2401,7 +2426,6 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
                           <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
-                          <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
                           <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                           <td className="px-3 py-2">{item.factory}</td>
                           <td className="px-3 py-2">{item.country}</td>
@@ -2409,6 +2433,11 @@ export default function RequestDetailPage() {
                         </tr>
                       </tbody>
                     </table>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">การแบ่ง Claim</p>
+                      <ClaimSplitTable item={item} highlightDept={claimDept || null} />
+                    </div>
                   </div>
                 )}
               </div>
