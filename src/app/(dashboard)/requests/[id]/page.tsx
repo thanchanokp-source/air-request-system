@@ -215,7 +215,7 @@ export default function RequestDetailPage() {
   const role = (session?.user as any)?.role || ""
   const myPriority: number | null = (session?.user as any)?.priority ?? null
   const myUserId: string = (session?.user as any)?.id || ""
-  const isGWRole = ["VP_MER_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
+  const isGWRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
   const isGWRequest = req?.bu === "GW"
   const isProcureDvm = (role === "DVM_PROCUREMENT" || role === "CLAIM_PROCUREMENT") && req?.status === "PENDING_CLAIM"
 
@@ -366,7 +366,7 @@ export default function RequestDetailPage() {
     setLgDraftSaving(false)
     router.push("/approvals")
   }
-  const isVpMerGW = role === "VP_MER_GW" && req?.status === "PENDING_VP_MER_GW" && isGWRequest
+  const isVpMerGW = role === "DPM_GW" && req?.status === "PENDING_VP_MER_GW" && isGWRequest
   const isPresidentGW = role === "PRESIDENT_GW" && req?.status === "PENDING_PRESIDENT_GW" && isGWRequest
   const isLogisticsGW = role === "LOGISTICS_GW" && (req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && presPassedItems.length > 0 && isGWRequest
   const userClaimDept = (session?.user as any)?.claimDepartment || null

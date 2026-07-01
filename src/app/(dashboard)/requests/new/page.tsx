@@ -34,7 +34,7 @@ export default function NewRequestPage() {
   const [vpMerUsers, setVpMerUsers] = useState<any[]>([])
 
   useEffect(() => {
-    const role = isGW ? "VP_MER_GW" : "VP_MER"
+    const role = isGW ? "DPM_GW" : "VP_MER"
     fetch(`/api/users/by-role?role=${role}`)
       .then(r => r.json())
       .then(users => {
