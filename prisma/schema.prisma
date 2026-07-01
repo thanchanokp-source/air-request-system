@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -9,17 +10,20 @@ datasource db {
 }
 
 model User {
-  id              String              @id @default(cuid())
-  name            String?
-  email           String              @unique
-  password        String
-  role            String              @default("MER_USER")
-  claimDepartment String?
-  isActive        Boolean             @default(true)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  priority        Int?
-  bu              String              @default("NYG")
+  id               String    @id @default(cuid())
+  name             String?
+  email            String    @unique
+  password         String?
+  role             String    @default("MER_USER")
+  claimDepartment  String?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  priority         Int?
+  bu               String    @default("NYG")
+  procurementType  String?
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
   airRequests     AirRequest[]
   approvals       ApprovalLog[]
   claimApprovals  ClaimApproval[]
@@ -77,11 +81,22 @@ model AirRequest {
   airline          String?
   assignedVpMer    String?
   vpMerToken       String?
+  presidentToken   String?
+  scmToken         String?
+  vpScmToken       String?
+  assignedVpScm    String?
+  logisticsToken   String?
+  accountingToken  String?
+  crNo             String?
+  claimNextEmail   String?
+  claimNextToken   String?
+  claimNextName    String?
   bu               String              @default("NYG")
   createdBy        User                @relation(fields: [createdById], references: [id])
   items            AirRequestItem[]
   approvalLogs     ApprovalLog[]
   attachments      RequestAttachment[]
+  hawbGroups       HawbGroup[]
 }
 
 model ClaimApproval {
@@ -96,11 +111,23 @@ model ClaimApproval {
   @@unique([itemId, userId])
 }
 
+model HawbGroup {
+  id          String           @id @default(cuid())
+  requestId   String
+  hawbNo      String
+  totalCharge Float
+  createdAt   DateTime         @default(now())
+  request     AirRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  items       AirRequestItem[]
+}
+
 model AirRequestItem {
   id                   String          @id @default(cuid())
   requestId            String
+  hawbGroupId          String?
   style                String
   so                   String
+  sub                  String?
   customerPO           String?
   description          String?
   gmtType              String?
@@ -119,12 +146,15 @@ model AirRequestItem {
   marketRatePerKg      Float?
   actualAirFreight     Float?
   claimDepartment      String?
+  claimDepts           Json?
   invoiceNo            String?
+  hawbNo               String?
   bookingDate          DateTime?
   assignedDvm          String?
   claimPercentage      Float?
   qtyActualShip        Int?
   request              AirRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  hawbGroup            HawbGroup?      @relation(fields: [hawbGroupId], references: [id], onDelete: SetNull)
   claimApprovals       ClaimApproval[]
 }
 

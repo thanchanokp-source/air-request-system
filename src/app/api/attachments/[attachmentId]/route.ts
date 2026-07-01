@@ -21,13 +21,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ att
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ attachmentId: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const userId = (session.user as any).id
+  const role = (session.user as any).role as string
   const { attachmentId } = await params
 
   const att = await prisma.requestAttachment.findUnique({ where: { id: attachmentId } })
-  if (att) {
-    await supabase.storage.from(BUCKET).remove([att.filePath])
-    await prisma.requestAttachment.delete({ where: { id: attachmentId } })
+  if (!att) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+  // Only the uploader can delete their own attachment
+  if (att.uploadedById !== userId) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
+
+  // MER files are locked after submission — VP MER must reject for a redo
+  if (role === "MER_USER" || role === "MER_GW") {
+    return NextResponse.json({ error: "ไม่สามารถลบไฟล์หลังจาก submit แล้ว กรุณาให้ VP MER Reject เพื่อสร้างใหม่" }, { status: 400 })
+  }
+
+  await supabase.storage.from(BUCKET).remove([att.filePath])
+  await prisma.requestAttachment.delete({ where: { id: attachmentId } })
 
   return NextResponse.json({ ok: true })
 }

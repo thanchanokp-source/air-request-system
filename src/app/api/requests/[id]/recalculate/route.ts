@@ -14,15 +14,14 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
   const items = request.items as any[]
-  const portNames = [...new Set(items.map(i => String(i.port || "")).filter(Boolean))]
-
-  const portList = await prisma.masterPort.findMany({ where: { port: { in: portNames } } })
+  // Case-insensitive: normalize both sides to uppercase
+  const portList = await prisma.masterPort.findMany({ where: { isActive: true } })
   const portRates: Record<string, number> = {}
-  for (const p of portList) portRates[p.port] = p.ratePerKg
+  for (const p of portList) portRates[p.port.trim().toUpperCase()] = p.ratePerKg
 
   let updated = 0
   for (const item of items) {
-    const rate = portRates[item.port] || 0
+    const rate = portRates[String(item.port || "").trim().toUpperCase()] || 0
     const gw = item.grossWeight || 0
     await prisma.airRequestItem.update({
       where: { id: item.id },

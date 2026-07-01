@@ -10,8 +10,15 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
             const wb = XLSX.read(buffer, { type: "buffer", cellDates: true })
     const ws = wb.Sheets[wb.SheetNames[0]]
-    const rows: any[] = XLSX.utils.sheet_to_json(ws)
-    return NextResponse.json({ rows, count: rows.length })
+    // defval: null ensures empty cells still appear as keys (needed for column validation)
+    const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: null })
+    // Normalize header keys: trim leading/trailing whitespace
+    const normalizedRows = rows.map((row: any) => {
+      const norm: any = {}
+      for (const [k, v] of Object.entries(row)) norm[k.trim()] = v
+      return norm
+    })
+    return NextResponse.json({ rows: normalizedRows, count: normalizedRows.length })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

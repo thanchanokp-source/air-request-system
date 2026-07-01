@@ -15,7 +15,7 @@ const GW_REQUIRED = [
   "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
   "Original Shipment Date", "Plan Shipment Date",
   "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
-  "Reason delay", "department ที่ต้องเคลม", "Country", "Port", "WEIGHT(KG)",
+  "Reason delay", "Claim", "Country", "Port", "WEIGHT(KG)",
   "Brand name", "BU",
 ]
 
@@ -30,14 +30,18 @@ export default function NewRequestPage() {
   const [error, setError] = useState("")
   const router = useRouter()
 
-  const [vpMerList, setVpMerList] = useState<any[]>([])
   const [vpMerSelected, setVpMerSelected] = useState<{ name: string; email: string } | null>(null)
+  const [vpMerUsers, setVpMerUsers] = useState<any[]>([])
 
   useEffect(() => {
     const role = isGW ? "VP_MER_GW" : "VP_MER"
     fetch(`/api/users/by-role?role=${role}`)
       .then(r => r.json())
-      .then(d => setVpMerList(Array.isArray(d) ? d : []))
+      .then(users => {
+        const list = Array.isArray(users) ? users : []
+        setVpMerUsers(list)
+        if (list.length === 1) setVpMerSelected({ name: list[0].name, email: list[0].email })
+      })
   }, [isGW])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -55,12 +59,36 @@ export default function NewRequestPage() {
       return
     }
     const required = isGW ? GW_REQUIRED : NYG_REQUIRED
-    const cols = Object.keys(data.rows[0])
-    const missing = required.filter(c => !cols.includes(c))
-    if (missing.length > 0) {
-      setError(`Template ไม่ตรง — คอลัมน์ที่หายไป: ${missing.join(", ")}`)
+    const cols = Object.keys(data.rows[0]).map((c: string) => c.toLowerCase())
+
+    // 1. ตรวจ discriminating column — ถ้าไม่มี = ผิด template
+    const discriminator = isGW ? "claim" : "factory"
+    if (!cols.includes(discriminator)) {
+      setError("ข้อมูลไม่ถูกต้อง กรุณาใช้ template ที่กำหนด")
       return
     }
+
+    // 2. ตรวจ required columns ครบไหม — ถ้าไม่ครบ = ผิด template
+    const missing = required.filter(c => !cols.includes(c.toLowerCase()))
+    if (missing.length > 0) {
+      setError("ข้อมูลไม่ถูกต้อง กรุณาใช้ template ที่กำหนด")
+      return
+    }
+
+    // 3. ตรวจ WEIGHT(KG) มีข้อมูลทุก row ไหม
+    const getVal = (row: any, key: string) => {
+      const k = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase())
+      return k ? row[k] : null
+    }
+    const missingWeight = data.rows.some((row: any) => {
+      const w = getVal(row, "WEIGHT(KG)")
+      return w === null || w === undefined || w === ""
+    })
+    if (missingWeight) {
+      setError("กรุณาเพิ่มข้อมูลช่อง WEIGHT(KG)")
+      return
+    }
+
     setPreview(data.rows)
   }
 
@@ -87,6 +115,9 @@ export default function NewRequestPage() {
     }
     setLoading(false)
     if (data.id) {
+      if (data.missingPorts?.length > 0) {
+        alert(`⚠️ Port ต่อไปนี้ไม่มีใน Master — Est. Air Freight จะเป็น 0:\n\n${data.missingPorts.join(", ")}\n\nกรุณาเพิ่ม Rate ใน Master > Port แล้วใช้ Recalculate`)
+      }
       router.push(`/requests/${data.id}`)
     } else {
       setError(data.error || "Something went wrong")
@@ -109,20 +140,30 @@ export default function NewRequestPage() {
           <h2 className="font-semibold text-gray-800">
             เลือก {isGW ? "VP MER GW" : "VP MER"} <span className="text-red-500">*</span>
           </h2>
-          <select
-            value={vpMerSelected?.email || ""}
-            onChange={e => {
-              const u = vpMerList.find(x => x.email === e.target.value)
-              setVpMerSelected(u ? { name: u.name, email: u.email } : null)
-            }}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400">
-            <option value="">-- เลือก {isGW ? "VP MER GW" : "VP MER"} --</option>
-            {vpMerList.map(u => (
-              <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
-            ))}
-          </select>
-          {vpMerSelected && (
-            <p className="text-xs text-green-600">เลือก: {vpMerSelected.name} · {vpMerSelected.email}</p>
+
+          {vpMerUsers.length === 0 ? (
+            <p className="text-sm text-red-500">ไม่พบผู้อนุมัติใน Master — กรุณาเพิ่ม {isGW ? "VP_MER_GW" : "VP_MER"} ใน User Management</p>
+          ) : vpMerUsers.length === 1 ? (
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-green-800">{vpMerUsers[0].name}</p>
+                <p className="text-xs text-green-600">{vpMerUsers[0].email}</p>
+              </div>
+              <span className="ml-auto text-xs text-green-500 font-medium">Auto-selected</span>
+            </div>
+          ) : (
+            <select
+              value={vpMerSelected?.email || ""}
+              onChange={e => {
+                const u = vpMerUsers.find(u => u.email === e.target.value)
+                setVpMerSelected(u ? { name: u.name, email: u.email } : null)
+              }}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+              <option value="">-- เลือก {isGW ? "VP MER GW" : "VP MER"} --</option>
+              {vpMerUsers.map(u => (
+                <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
+              ))}
+            </select>
           )}
         </div>
 
@@ -130,7 +171,7 @@ export default function NewRequestPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-800">Upload Excel File</h2>
-            <a href={isGW ? "/air-request-template_GW.xlsx" : "/air-request-template_NYG.xlsx"} download
+            <a href={isGW ? "/api/template?bu=GW" : "/api/template?bu=NYG"} download
               className="flex items-center gap-1.5 text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
               ⬇ Download Template {isGW ? "(GW)" : "(NYG)"}
             </a>

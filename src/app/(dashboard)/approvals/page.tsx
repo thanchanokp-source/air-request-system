@@ -44,8 +44,8 @@ export default function ApprovalsPage() {
              (r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PENDING"))
     }
     if (role === "VP_SCM") return r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PASSED")
-    if (role === "PRESIDENT") return items.some((i: any) => i.itemStatus === "VP_PASSED")
-    if (role === "LOGISTICS") return r.bu !== "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
+    if (role === "PRESIDENT") return r.status === "PENDING_PRESIDENT" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED" || i.itemStatus === "VP_PASSED")
+    if (role === "LOGISTICS") return r.bu !== "GW" && (r.status === "PENDING_SCM" || r.status === "PENDING_PRESIDENT")
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }
@@ -56,8 +56,8 @@ export default function ApprovalsPage() {
     if (role === "PRESIDENT_GW") return r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED")
-    if (role === "SCM_NYK") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "SCM_GW_PENDING" && i.claimDepartment === "NYK")
-    if (role === "SCM_NYG") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "SCM_GW_PENDING" && i.claimDepartment === "NYG")
+    if (role === "SCM_NYK") return r.bu === "GW" && items.some((i: any) => (i.itemStatus === "LOG_PASSED" || i.itemStatus === "SCM_GW_PENDING") && i.claimDepartment === "NYK")
+    if (role === "SCM_NYG") return r.bu === "GW" && items.some((i: any) => (i.itemStatus === "LOG_PASSED" || i.itemStatus === "SCM_GW_PENDING") && i.claimDepartment === "NYG")
     return false
   })
 
@@ -70,8 +70,8 @@ export default function ApprovalsPage() {
       return items.filter((i: any) => i.itemStatus === "PENDING")
     }
     if (role === "VP_SCM") return items.filter((i: any) => i.itemStatus === "PASSED")
-    if (role === "PRESIDENT") return items.filter((i: any) => i.itemStatus === "VP_PASSED")
-    if (role === "LOGISTICS") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
+    if (role === "PRESIDENT") return items.filter((i: any) => i.itemStatus === "VP_MER_PASSED" || i.itemStatus === "VP_PASSED")
+    if (role === "LOGISTICS") return items.filter((i: any) => i.itemStatus !== "REJECTED")
     if (role.startsWith("DVM_") || role.startsWith("CLAIM_")) {
       return items.filter((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }
@@ -82,8 +82,8 @@ export default function ApprovalsPage() {
     if (role === "PRESIDENT_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW") return items.filter((i: any) => i.itemStatus === "LOG_PASSED")
-    if (role === "SCM_NYK") return items.filter((i: any) => i.itemStatus === "SCM_GW_PENDING" && i.claimDepartment === "NYK")
-    if (role === "SCM_NYG") return items.filter((i: any) => i.itemStatus === "SCM_GW_PENDING" && i.claimDepartment === "NYG")
+    if (role === "SCM_NYK") return items.filter((i: any) => (i.itemStatus === "LOG_PASSED" || i.itemStatus === "SCM_GW_PENDING") && i.claimDepartment === "NYK")
+    if (role === "SCM_NYG") return items.filter((i: any) => (i.itemStatus === "LOG_PASSED" || i.itemStatus === "SCM_GW_PENDING") && i.claimDepartment === "NYG")
     return items.filter((i: any) => i.itemStatus !== "REJECTED")
   }
 
@@ -167,7 +167,7 @@ export default function ApprovalsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b">
-                    <tr>{["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT","CLAIM DEPT","INVOICE NO"].map(h =>
+                    <tr>{["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
@@ -191,6 +191,7 @@ export default function ApprovalsPage() {
                         <td className="px-3 py-1.5">{item.port}</td>
                         <td className="px-3 py-1.5">{item.claimDepartment || "-"}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.invoiceNo || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{item.hawbNo || "-"}</td>
                       </tr>
                     ))}
                   </tbody>

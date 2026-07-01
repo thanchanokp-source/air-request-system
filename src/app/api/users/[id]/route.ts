@@ -8,9 +8,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const { id } = await params
-  const { name, email, password, role, bu, isActive, priority, claimDepartment } = await req.json()
+  const { name, email, password, role, bu, isActive, priority, claimDepartment, procurementType } = await req.json()
   const data: any = { name, email, role, bu: bu || "NYG", isActive, priority: priority ?? null }
-  data.claimDepartment = role === "CLAIM_GW" ? (claimDepartment || null) : null
+  const needsDept = ["CLAIM_GW","SCM_NYK","SCM_NYG"].includes(role)
+  data.claimDepartment = needsDept ? (claimDepartment || null) : null
+  const isProcurement = role === "CLAIM_PROCUREMENT" || role === "DVM_PROCUREMENT"
+  data.procurementType = isProcurement ? (procurementType || null) : null
   if (password) data.password = await bcrypt.hash(password, 10)
   const user = await prisma.user.update({ where: { id }, data })
   return NextResponse.json({ id: user.id })

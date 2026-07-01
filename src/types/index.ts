@@ -41,10 +41,10 @@ export const STATUS_COLORS: Record<string, string> = {
 
 export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> = {
   // NYG flow
-  PENDING_VP_MER: { approve: "PENDING_SCM", reject: "REJECTED" },
+  PENDING_VP_MER: { approve: "PENDING_PRESIDENT", reject: "REJECTED" },
   PENDING_SCM: { approve: "PENDING_VP_SCM" },
-  PENDING_VP_SCM: { approve: "PENDING_PRESIDENT", reject: "REJECTED" },
-  PENDING_PRESIDENT: { approve: "PENDING_LOGISTICS", reject: "REJECTED" },
+  PENDING_VP_SCM: { approve: "PENDING_CLAIM", reject: "REJECTED" },
+  PENDING_PRESIDENT: { approve: "PENDING_SCM", reject: "REJECTED" },
   PENDING_LOGISTICS: { approve: "PENDING_CLAIM" },
   PENDING_CLAIM: { approve: "PENDING_VP_CLAIM", reject: "REJECTED" },
   PENDING_VP_CLAIM: { approve: "COMPLETED", reject: "REJECTED" },

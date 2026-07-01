@@ -1,15 +1,18 @@
 "use client"
 import { signIn } from "next-auth/react"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
+import Link from "next/link"
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const params = useSearchParams()
+  const registered = params.get("registered")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -30,7 +33,7 @@ export default function LoginPage() {
         {/* Logo circle floating above card */}
         <div className="flex justify-center mb-0 relative z-10">
           <div className="w-36 h-36 rounded-full bg-white shadow-lg flex items-center justify-center" style={{ marginBottom: "-72px" }}>
-            <Image src="/LOGO.png" alt="Nan Yang Textile" width={110} height={110} className="object-contain" />
+            <Image src="/LOGO.png" alt="Nan Yang Textile" width={80} height={80} className="object-contain" loading="eager" unoptimized />
           </div>
         </div>
 
@@ -76,6 +79,7 @@ export default function LoginPage() {
               />
             </div>
 
+            {registered && <p className="text-green-600 text-xs text-center">สมัครสำเร็จ — เข้าสู่ระบบได้เลย</p>}
             {error && <p className="text-red-500 text-xs text-center">{error}</p>}
 
             <button
@@ -83,11 +87,20 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full py-3 rounded-xl text-white font-semibold text-sm disabled:opacity-50 transition-all"
               style={{ background: "linear-gradient(90deg, #1e3a8a, #3b82f6)" }}>
-              {loading ? "Logging in..." : "LOGIN"}
+                      {loading ? "Logging in..." : "LOGIN"}
             </button>
+
+            <p className="text-center text-xs text-gray-400 pt-1">
+              ยังไม่มีบัญชี?{" "}
+              <Link href="/register" className="text-blue-600 font-medium hover:underline">สมัครใช้งาน</Link>
+            </p>
           </form>
         </div>
       </div>
     </div>
   )
+}
+
+export default function LoginPage() {
+  return <Suspense><LoginForm /></Suspense>
 }

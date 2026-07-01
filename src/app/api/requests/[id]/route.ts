@@ -35,12 +35,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
   const request = await prisma.airRequest.findUnique({ where: { id } })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
-  if ((role !== "MER_USER" && role !== "MER_GW") || request.createdById !== userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
-  if (request.status !== "PENDING_VP_MER" && request.status !== "PENDING_VP_MER_GW") {
-    return NextResponse.json({ error: "Cannot delete request in current status" }, { status: 400 })
-  }
+  return NextResponse.json({ error: "ไม่อนุญาตให้ลบ Document กรุณาให้ VP MER Reject แทน" }, { status: 403 })
   await prisma.airRequest.delete({ where: { id } })
   return NextResponse.json({ ok: true })
 }

@@ -42,26 +42,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "ไม่พบข้อมูลในไฟล์" }, { status: 400 })
     }
 
-    // Match rows to items by SO number
-    const matched: { itemId: string; so: string; invoiceNo: string | null; qtyActualShip: number | null; actualAirFreight: number | null; bookingDate: Date | null }[] = []
+    // Match rows to items by SO + SUB
+    const matched: { itemId: string; so: string; invoiceNo: string | null; hawbNo: string | null; qtyActualShip: number | null; actualAirFreight: number | null; bookingDate: Date | null }[] = []
     const unmatched: string[] = []
 
     for (const row of rows) {
       const so = String(row["SO"] || "").trim()
+      const sub = String(row["SUB"] || "").trim()
       if (!so) continue
 
-      const item = request.items.find((i: any) => i.so === so)
+      const item = request.items.find((i: any) => i.so === so && (i.sub || "") === sub)
       if (!item) {
-        unmatched.push(so)
+        unmatched.push(sub ? `${so}/${sub}` : so)
         continue
       }
 
-      const invoiceNo = row["Invoice No"] ? String(row["Invoice No"]).trim() : null
+      const invoiceNo = row["INV NO."] ? String(row["INV NO."]).trim() : (row["Invoice No"] ? String(row["Invoice No"]).trim() : null)
+      const hawbNo = row["HAWB#"] ? String(row["HAWB#"]).trim() : null
       const qtyActualShip = row["QTY Actual Ship (pcs)"] != null ? Number(row["QTY Actual Ship (pcs)"]) : null
-      const actualAirFreight = row["Actual Air Freight (THB)"] != null ? parseFloat(String(row["Actual Air Freight (THB)"])) : null
+      const rawFreight = row["Actual Airfreight"] ?? row["Actual Air Freight (THB)"]
+      const actualAirFreight = rawFreight != null ? parseFloat(String(rawFreight)) : null
       const bookingDate = parseDate(row["Booking Date"])
 
-      matched.push({ itemId: item.id, so, invoiceNo, qtyActualShip, actualAirFreight: isNaN(actualAirFreight!) ? null : actualAirFreight, bookingDate })
+      matched.push({ itemId: item.id, so, invoiceNo, hawbNo, qtyActualShip, actualAirFreight: isNaN(actualAirFreight!) ? null : actualAirFreight, bookingDate })
     }
 
     if (matched.length === 0) {
@@ -72,6 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const m of matched) {
       const data: any = {}
       if (m.invoiceNo !== null) data.invoiceNo = m.invoiceNo
+      if (m.hawbNo !== null) data.hawbNo = m.hawbNo
       if (m.qtyActualShip !== null && !isNaN(m.qtyActualShip)) data.qtyActualShip = m.qtyActualShip
       if (m.actualAirFreight !== null) data.actualAirFreight = m.actualAirFreight
       if (m.bookingDate !== null) data.bookingDate = m.bookingDate

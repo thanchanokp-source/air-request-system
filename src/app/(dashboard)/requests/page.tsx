@@ -30,14 +30,17 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
   if (itemStatus === "REJECTED") return "Rejected"
   if (itemStatus === "COMPLETED") return "Completed"
   if (itemStatus === "PENDING") {
+    if (docStatus === "PENDING_PRESIDENT" || docStatus === "PENDING_PRESIDENT_GW") return "President"
     if (docStatus === "PENDING_SCM") return "SCM"
-    if (docStatus === "PENDING_PRESIDENT_GW") return "President"
+    if (docStatus === "PENDING_VP_SCM") return "VP SCM"
+    if (docStatus === "PENDING_CLAIM") return "Claim"
+    if (docStatus === "PENDING_LOGISTICS") return "Logistics"
     return "VP MER"
   }
-  if (itemStatus === "VP_MER_PASSED") return "SCM"
+  if (itemStatus === "VP_MER_PASSED") return "President"
   if (itemStatus === "PASSED") return "VP SCM"
-  if (itemStatus === "VP_PASSED") return "President"
-  if (itemStatus === "PRES_PASSED") return "Logistics"
+  if (itemStatus === "VP_PASSED") return "Claim"
+  if (itemStatus === "PRES_PASSED") return "SCM"
   if (itemStatus === "LOG_PASSED") return "Claim"
   if (itemStatus === "CLAIM_PASSED") return "VP Claim"
   if (itemStatus === "SCM_GW_PENDING") return "SCM (GW)"
@@ -69,10 +72,11 @@ const CurrentStepBadge = ({ docStatus, itemStatus }: { docStatus: string; itemSt
 export default function RequestsPage() {
   const { data: session } = useSession()
   const role = (session?.user as any)?.role || ""
+  const userId = (session?.user as any)?.id || ""
   const userBu = (session?.user as any)?.bu || "NYG"
   const [activeBu, setActiveBu] = useState<string>(userBu === "ALL" ? "NYG" : userBu)
   const [requests, setRequests] = useState<any[]>([])
-  const [statusFilter, setStatusFilter] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [brandF, setBrandF] = useState<string[]>([])
   const [styleF, setStyleF] = useState<string[]>([])
   const [soF, setSoF] = useState<string[]>([])
@@ -84,6 +88,7 @@ export default function RequestsPage() {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set())
+  const [deletingAtt, setDeletingAtt] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
@@ -100,10 +105,11 @@ export default function RequestsPage() {
     port?: string[], country?: string[], claim?: string[], invoice?: string[]
   }) => rows.filter(row => {
     const r = row.request
-    const statusMatch = !statusFilter ||
-      (statusFilter === "COMPLETED" && row.itemStatus === "COMPLETED") ||
-      (statusFilter === "REJECTED" && row.itemStatus === "REJECTED") ||
-      (statusFilter === "PENDING" && row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED")
+    const statusMatch = !statusFilter.length || statusFilter.some(s =>
+      (s === "COMPLETED" && row.itemStatus === "COMPLETED") ||
+      (s === "REJECTED" && row.itemStatus === "REJECTED") ||
+      (s === "PENDING" && row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED")
+    )
     return statusMatch &&
       (!opts.brand?.length || opts.brand.includes(r.brandName)) &&
       (!opts.style?.length || opts.style.includes(row.style)) &&
@@ -167,11 +173,11 @@ export default function RequestsPage() {
     { key: "PENDING_ACCOUNTING", label: "ACCOUNTING" },
   ] : [
     { key: "PENDING_VP_MER", label: "VP MER" },
+    { key: "PENDING_PRESIDENT", label: "PRESIDENT" },
     { key: "PENDING_SCM", label: "SCM" },
     { key: "PENDING_VP_SCM", label: "VP SCM" },
-    { key: "PENDING_PRESIDENT", label: "PRESIDENT" },
-    { key: "PENDING_LOGISTICS", label: "LOGISTICS" },
     { key: "PENDING_CLAIM", label: "CLAIM" },
+    { key: "PENDING_LOGISTICS", label: "LOGISTICS" },
     { key: "PENDING_VP_CLAIM", label: "VP CLAIM" },
   ]
 
@@ -287,21 +293,15 @@ export default function RequestsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {(statusFilter || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length) && (
-            <button onClick={() => { setStatusFilter(""); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]) }}
+          {!!(statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length) && (
+            <button onClick={() => { setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]) }}
               className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
               Clear All
             </button>
           )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
-            <option value="">All Status</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="PENDING">Pending</option>
-            <option value="REJECTED">Rejected</option>
-          </select>
+          <MultiSelect label="All Status" options={["COMPLETED","PENDING","REJECTED"]} value={statusFilter} onChange={setStatusFilter} />
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF} />
@@ -327,20 +327,17 @@ export default function RequestsPage() {
                 <span className="text-gray-400 text-xs w-4 shrink-0">{isDocExp ? "▼" : "▶"}</span>
                 <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
                   className="font-bold text-blue-700 hover:underline text-sm shrink-0">{dg.request.documentNo}</Link>
-                {role === "MER_USER" && dg.request.status === "PENDING_VP_MER" && (
-                  <button onClick={e => { e.stopPropagation(); deleteRequest(dg.request.id) }}
-                    className="text-red-400 hover:text-red-600 text-xs shrink-0" title="Delete">✕</button>
-                )}
                 <span className="text-xs text-gray-500 truncate">{dg.request.brandName} · {dg.request.buName}</span>
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
                   <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
                 )}
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-auto shrink-0">{dg.styles.length} style(s) · {dg.total} SO(s)</span>
                 {(dg.request.attachments || []).filter((a: any) => ["MER_USER","VP_MER"].includes(a.uploadedBy?.role)).map((att: any) => (
-                  <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                    className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full hover:bg-orange-100 whitespace-nowrap font-medium shrink-0">
-                    📎 {att.fileName}
-                  </a>
+                  <span key={att.id} className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full whitespace-nowrap font-medium shrink-0">
+                    <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="hover:underline">
+                      📎 {att.fileName}
+                    </a>
+                  </span>
                 ))}
               </div>
 

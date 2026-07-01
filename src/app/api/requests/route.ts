@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange } from "@/lib/notify"
+import { sendMail } from "@/lib/email"
 import crypto from "crypto"
 
 const parseDate = (val: any): Date | null => {
@@ -59,12 +60,20 @@ export async function POST(req: NextRequest) {
     }
     const isGW = bu === "GW"
 
-    const portNames = [...new Set(items.map((i: any) => String(i["Port"] || "")).filter(Boolean))] as string[]
+    // Case-insensitive column lookup (handles template header casing variations)
+    const col = (item: any, key: string) => {
+      const k = Object.keys(item).find(k => k.toLowerCase() === key.toLowerCase()) ?? key
+      return item[k]
+    }
 
-    const portList = await prisma.masterPort.findMany({ where: { port: { in: portNames } } })
+    const portNames = [...new Set(items.map((i: any) => String(col(i, "Port") || "").trim()).filter(Boolean))] as string[]
 
+    // Case-insensitive: normalize both sides to uppercase
+    const portList = await prisma.masterPort.findMany({ where: { isActive: true } })
     const portRates: Record<string, number> = {}
-    for (const p of portList) portRates[p.port] = p.ratePerKg
+    for (const p of portList) portRates[p.port.trim().toUpperCase()] = p.ratePerKg
+
+    const missingPorts = portNames.filter(p => !(p.toUpperCase() in portRates))
 
     const first = items[0]
     const docNo = await generateDocumentNo()
@@ -72,8 +81,8 @@ export async function POST(req: NextRequest) {
     const request = await prisma.airRequest.create({
       data: {
         documentNo: docNo,
-        brandName: String(first["Brand name"] || first["BRAND"] || ""),
-        buName: String(first["BU"] || ""),
+        brandName: String(col(first, "Brand name") || col(first, "BRAND") || ""),
+        buName: String(col(first, "BU") || ""),
         bu: isGW ? "GW" : "NYG",
         status: isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER",
         createdById: userId,
@@ -81,28 +90,26 @@ export async function POST(req: NextRequest) {
         vpMerToken: crypto.randomUUID(),
         items: {
           create: items.map((item: any) => {
-            const port = String(item["Port"] || "")
-            const qty = Number(item["QTY Request ship Air (pcs)"] || 0)
-            const rate = portRates[port] || 0
-            const gw = parseFloat(String(item["WEIGHT(KG)"] || "0")) || 0
-            // GW: "Claim" column = dept to claim; NYG: "Factory" column
-            const claimDept = isGW ? String(item["Claim"] || "") : undefined
-            // TODO: auto-calculate claimPercentage based on formula (TBD)
+            const port = String(col(item, "Port") || "").trim()
+            const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
+            const rate = portRates[port.toUpperCase()] || 0
+            const gw = parseFloat(String(col(item, "WEIGHT(KG)") || "0")) || 0
+            const claimDept = isGW ? String(col(item, "Claim") || "") : undefined
             const claimPct: number | null = isGW ? null : (undefined as any)
             return {
-              style: String(item["STYLE"] || ""),
-              so: String(item["SO"] || ""),
-              customerPO: String(item["CUSTOMER PO"] || ""),
-              description: String(item["DESCRIPTION"] || ""),
-              gmtType: String(item["GMT_TYPE"] || ""),
-              originalShipmentDate: parseDate(item["Original Shipment Date"]),
-              planShipmentDate: parseDate(item["Plan Shipment Date"]),
-              qtyOriginalShipment: Number(item["QTY Original Shipment (pcs)"] || 0),
+              style: String(col(item, "STYLE") || ""),
+              so: String(col(item, "SO") || ""),
+              sub: String(col(item, "SUB") || "") || null,
+              customerPO: String(col(item, "CUSTOMER PO") || ""),
+              description: String(col(item, "DESCRIPTION") || ""),
+              gmtType: String(col(item, "GMT_TYPE") || ""),
+              originalShipmentDate: parseDate(col(item, "Original Shipment Date")),
+              planShipmentDate: parseDate(col(item, "Plan Shipment Date")),
+              qtyOriginalShipment: Number(col(item, "QTY Original Shipment (pcs)") || 0),
               qtyRequestAir: qty,
-              reasonDelay: String(item["Reason delay"] || ""),
-              // NYG: "Factory" column; GW: "Claim" column (claim dept)
-              factory: isGW ? String(item["Claim"] || "") : String(item["Factory"] || ""),
-              country: String(item["Country"] || ""),
+              reasonDelay: String(col(item, "Reason delay") || ""),
+              factory: isGW ? String(col(item, "Claim") || "") : String(col(item, "Factory") || ""),
+              country: String(col(item, "Country") || ""),
               port,
               grossWeight: gw,
               airFreight: gw * rate,
@@ -114,8 +121,54 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    notifyStatusChange(request.id, isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER").catch(() => {})
-    return NextResponse.json({ id: request.id })
+    try {
+      await notifyStatusChange(request.id, isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER")
+    } catch (err) {
+      console.error("[notify] send failed:", err)
+    }
+
+    if (missingPorts.length > 0) {
+      try {
+        const APP_URL = process.env.APP_URL || "http://localhost:3000"
+        const portListHtml = missingPorts.map(p => `<li style="padding:3px 0;font-family:Arial,sans-serif;">${p}</li>`).join("")
+        const html = `
+<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0">
+  <tr><td align="center">
+    <table width="460" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+      <tr><td style="background:#b45309;padding:20px;text-align:center">
+        <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif">⚠ PORT RATE MISSING</p>
+        <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
+      </td></tr>
+      <tr><td style="padding:28px 32px">
+        <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">เอกสาร <strong>${docNo}</strong> มี Port ที่ยังไม่มีค่า Freight Rate ใน Master</p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 16px">Est. Air Freight ของ Port ต่อไปนี้จะเป็น 0 — กรุณาเพิ่ม Rate ใน Master &gt; Port:</p>
+        <ul style="margin:0 0 20px;padding-left:20px;color:#1e293b;font-size:13px;">
+          ${portListHtml}
+        </ul>
+        <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 20px">หลังเพิ่ม Rate แล้ว ให้เปิดเอกสารแล้วกด <strong>Recalculate</strong> เพื่ออัพเดทยอด</p>
+        <div style="text-align:center">
+          <a href="${APP_URL}/master/port" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">เปิด Master Port →</a>
+        </div>
+      </td></tr>
+      <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
+        <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table></body></html>`
+
+        const subject = `[Port Missing] ${docNo} — Port ไม่มี Freight Rate (${missingPorts.join(", ")})`
+        const lgUsers = await (prisma.user as any).findMany({ where: { role: "LOGISTICS", isActive: true }, select: { email: true } })
+        const adminUsers = await (prisma.user as any).findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
+        const recipients = [...lgUsers, ...adminUsers].map((u: any) => u.email).filter(Boolean)
+        if (recipients.length) await sendMail(recipients, subject, html)
+      } catch (err) {
+        console.error("[notify] missing port email failed:", err)
+      }
+    }
+
+    return NextResponse.json({ id: request.id, missingPorts })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

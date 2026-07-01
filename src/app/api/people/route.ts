@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-
-const PEOPLE_API = "http://172.16.9.89:8080/info/people.php/getList"
+import { fetchPeopleList } from "@/lib/people"
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -12,23 +11,22 @@ export async function GET(req: NextRequest) {
   if (!q) return NextResponse.json([])
 
   try {
-    const res = await fetch(PEOPLE_API, { method: "POST" })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    const all: any[] = Array.isArray(data) ? data : []
+    const all = await fetchPeopleList()
 
     const filtered = all
       .filter(p => {
         const name = (p.NA_EN || p.NA_TH || "").toLowerCase()
         const mail = (p.MAIL || "").toLowerCase()
-        return name.includes(q) || mail.includes(q)
+        const dept = (p.DEPT || "").toLowerCase()
+        return name.includes(q) || mail.includes(q) || dept.includes(q)
       })
-      .slice(0, 20)
+      .slice(0, 30)
       .map(p => ({
         name: p.NA_EN || p.NA_TH || "",
-        email: p.MAIL || "",
+        email: p.MAIL || null,
         dept: p.DEPT || "",
         bu: p.BU || "",
+        pos: p.POS_EN || "",
       }))
 
     return NextResponse.json(filtered)

@@ -11,6 +11,7 @@ const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isN
 const fmtNum = (v: any) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "-"
 
 const PRESIDENT_STATUSES = [
+  "PENDING_SCM","PENDING_VP_SCM",
   "PENDING_LOGISTICS","PENDING_LOGISTICS_GW","PENDING_CLAIM","PENDING_CLAIM_GW",
   "PENDING_SCM_GW","PENDING_ACCOUNTING","COMPLETED"
 ]
@@ -51,6 +52,9 @@ export default function FilesPage() {
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
+  const [combineMode, setCombineMode] = useState(false)
+  const [selectedForCombine, setSelectedForCombine] = useState<Set<string>>(new Set())
+  const [combineLoading, setCombineLoading] = useState(false)
 
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => {
@@ -107,6 +111,62 @@ export default function FilesPage() {
     finally { setPdfLoading(null) }
   }
 
+  const generateCombinedPdf = async () => {
+    if (selectedForCombine.size === 0) return
+    setCombineLoading(true)
+    try {
+      // Group by reqId → itemId list
+      const reqItemMap: Record<string, string[]> = {}
+      selectedForCombine.forEach(key => {
+        const [rId, iId] = key.split(":")
+        if (!reqItemMap[rId]) reqItemMap[rId] = []
+        reqItemMap[rId].push(iId)
+      })
+      // Fetch full request data for each unique reqId
+      const reqDataMap: Record<string, any> = {}
+      await Promise.all(Object.keys(reqItemMap).map(async rId => {
+        reqDataMap[rId] = await fetch(`/api/requests/${rId}`).then(r => r.json())
+      }))
+      // Build ordered pages matching display order (filtered list order)
+      const pages: { req: any; item: any }[] = []
+      filtered.forEach(req => {
+        const itemIds = reqItemMap[req.id]
+        if (!itemIds) return
+        const fullReq = reqDataMap[req.id]
+        ;(req.items || []).forEach((item: any) => {
+          if (itemIds.includes(item.id)) {
+            const fullItem = fullReq?.items?.find((i: any) => i.id === item.id) || item
+            pages.push({ req: fullReq || req, item: fullItem })
+          }
+        })
+      })
+      if (pages.length === 0) return
+      const [{ pdf }, { TransportationBookingPdf }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/request-pdf"),
+      ])
+      const generatedDate = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+      const element = React.createElement(TransportationBookingPdf as any, { pages, generatedDate })
+      const blob = await (pdf(element as any) as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `Transportation_Booking_${pages.length}SO.pdf`
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch { alert("Combined PDF generation failed") }
+    finally { setCombineLoading(false) }
+  }
+
+  const toggleCombineItem = (reqId: string, itemId: string) => {
+    const key = `${reqId}:${itemId}`
+    setSelectedForCombine(prev => {
+      const n = new Set(prev)
+      n.has(key) ? n.delete(key) : n.add(key)
+      return n
+    })
+  }
+
   const buOptions: BUFilter[] = ["ALL", "NYG", "GW"]
 
   return (
@@ -147,12 +207,20 @@ export default function FilesPage() {
         {/* Right: content */}
         <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 overflow-hidden">
           {/* Header */}
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
             <div>
               <h2 className="font-semibold text-gray-800">{FOLDER_LABELS[activeFolder]}</h2>
               <p className="text-xs text-gray-400 mt-0.5">{FOLDER_DESC[activeFolder]}</p>
             </div>
-            <span className="ml-auto text-xs text-gray-400">{filtered.length} document(s)</span>
+            <div className="ml-auto flex items-center gap-3">
+              <span className="text-xs text-gray-400">{filtered.length} document(s)</span>
+              {activeFolder === "BOOKING" && (
+                <button onClick={() => { setCombineMode(m => !m); setSelectedForCombine(new Set()) }}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${combineMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"}`}>
+                  {combineMode ? "✕ Cancel Combine" : "⊞ Combine Mode"}
+                </button>
+              )}
+            </div>
           </div>
 
           {loading && <div className="text-center py-16 text-gray-400">Loading...</div>}
@@ -211,6 +279,7 @@ export default function FilesPage() {
                                   <table className="w-full text-xs mt-2">
                                     <thead>
                                       <tr className="text-gray-500">
+                                        {combineMode && <th className="py-1 pr-2 w-6"></th>}
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">SO</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Style</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Description</th>
@@ -227,8 +296,17 @@ export default function FilesPage() {
                                     <tbody className="divide-y divide-blue-100">
                                       {items.map((item: any) => {
                                         const key = `${req.id}-${item.id}`
+                                        const combineKey = `${req.id}:${item.id}`
+                                        const isChecked = selectedForCombine.has(combineKey)
                                         return (
-                                          <tr key={item.id} className="hover:bg-blue-100/50">
+                                          <tr key={item.id} className={`hover:bg-blue-100/50 ${isChecked ? "bg-blue-100" : ""}`}>
+                                            {combineMode && (
+                                              <td className="py-1.5 pr-2">
+                                                <input type="checkbox" checked={isChecked}
+                                                  onChange={() => toggleCombineItem(req.id, item.id)}
+                                                  className="w-4 h-4 rounded border-gray-300 accent-blue-600" />
+                                              </td>
+                                            )}
                                             <td className="py-1.5 pr-3 font-medium text-gray-800">{item.so}</td>
                                             <td className="py-1.5 pr-3 text-gray-600">{item.style}</td>
                                             <td className="py-1.5 pr-3 text-gray-500 max-w-[140px] truncate">{item.description}</td>
@@ -265,6 +343,19 @@ export default function FilesPage() {
           </div>
         </div>
       </div>
+
+      {/* Floating combine action bar */}
+      {combineMode && selectedForCombine.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-900 text-white px-6 py-3 rounded-2xl shadow-2xl">
+          <span className="text-sm font-medium">{selectedForCombine.size} SO selected</span>
+          <button onClick={() => setSelectedForCombine(new Set())}
+            className="text-xs text-gray-400 hover:text-white">Clear</button>
+          <button onClick={generateCombinedPdf} disabled={combineLoading}
+            className="bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white text-sm font-semibold px-5 py-1.5 rounded-xl transition-colors">
+            {combineLoading ? "Generating..." : `⬇ Download Combined PDF`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
