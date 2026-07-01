@@ -94,9 +94,25 @@ export async function POST(req: NextRequest) {
             const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
             const rate = portRates[port.toUpperCase()] || 0
             const gw = parseFloat(String(col(item, "WEIGHT(KG)") || "0")) || 0
-            const claimDept = isGW ? String(col(item, "CLAIM DEPT 1") || "") : undefined
-            const pctRaw = isGW ? col(item, "%CLAIM1") : null
-            const claimPct: number | null = isGW && pctRaw != null && pctRaw !== "" ? (parseFloat(String(pctRaw)) || null) : null
+            // GW: read up to 3 claim splits from Excel (CLAIM DEPT 1/2/3 + %CLAIM + REASON)
+            // airCost is computed at display time from actualAirFreight so it stays accurate.
+            let claimDepts: any = null
+            let claimDept: string | null = null
+            let claimPct: number | null = null
+            if (isGW) {
+              const splits = [1, 2, 3]
+                .map(n => ({
+                  dept: String(col(item, `CLAIM DEPT ${n}`) || "").trim(),
+                  pct: parseFloat(String(col(item, `%CLAIM${n}`) ?? "")) || 0,
+                  reason: String(col(item, `REASON ${n}`) || "").trim() || null,
+                }))
+                .filter(s => s.dept)
+              if (splits.length > 0) {
+                claimDepts = splits
+                claimDept = splits[0].dept
+                claimPct = splits[0].pct || null
+              }
+            }
             return {
               style: String(col(item, "STYLE") || ""),
               so: String(col(item, "SO") || ""),
@@ -115,7 +131,7 @@ export async function POST(req: NextRequest) {
               grossWeight: gw,
               airFreight: gw * rate,
               marketRatePerKg: rate > 0 ? rate : null,
-              ...(isGW && { claimDepartment: claimDept || null, claimPercentage: claimPct }),
+              ...(isGW && { claimDepartment: claimDept, claimDepts, claimPercentage: claimPct }),
             }
           })
         }
