@@ -15,7 +15,7 @@ const GW_REQUIRED = [
   "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
   "Original Shipment Date", "Plan Shipment Date",
   "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
-  "Reason delay", "Claim", "Country", "Port", "WEIGHT(KG)",
+  "Reason delay", "Factory", "Country", "Port", "WEIGHT(KG)",
   "Brand name", "BU",
 ]
 
@@ -61,9 +61,8 @@ export default function NewRequestPage() {
     const required = isGW ? GW_REQUIRED : NYG_REQUIRED
     const cols = Object.keys(data.rows[0]).map((c: string) => c.toLowerCase())
 
-    // 1. ตรวจ discriminating column — ถ้าไม่มี = ผิด template
-    const discriminator = isGW ? "claim" : "factory"
-    if (!cols.includes(discriminator)) {
+    // 1. ตรวจ discriminating column — template ใหม่ NYG/GW ใช้ column เดียวกัน (Factory)
+    if (!cols.includes("factory")) {
       setError("ข้อมูลไม่ถูกต้อง กรุณาใช้ template ที่กำหนด")
       return
     }

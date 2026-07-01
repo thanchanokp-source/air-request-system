@@ -94,8 +94,9 @@ export async function POST(req: NextRequest) {
             const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
             const rate = portRates[port.toUpperCase()] || 0
             const gw = parseFloat(String(col(item, "WEIGHT(KG)") || "0")) || 0
-            const claimDept = isGW ? String(col(item, "Claim") || "") : undefined
-            const claimPct: number | null = isGW ? null : (undefined as any)
+            const claimDept = isGW ? String(col(item, "CLAIM DEPT 1") || "") : undefined
+            const pctRaw = isGW ? col(item, "%CLAIM1") : null
+            const claimPct: number | null = isGW && pctRaw != null && pctRaw !== "" ? (parseFloat(String(pctRaw)) || null) : null
             return {
               style: String(col(item, "STYLE") || ""),
               so: String(col(item, "SO") || ""),
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
               qtyOriginalShipment: Number(col(item, "QTY Original Shipment (pcs)") || 0),
               qtyRequestAir: qty,
               reasonDelay: String(col(item, "Reason delay") || ""),
-              factory: isGW ? String(col(item, "Claim") || "") : String(col(item, "Factory") || ""),
+              factory: String(col(item, "Factory") || ""),
               country: String(col(item, "Country") || ""),
               port,
               grossWeight: gw,
