@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
+import { getSplits } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
@@ -56,8 +57,8 @@ export default function ApprovalsPage() {
     if (role === "PRESIDENT_GW") return r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED")
-    if (role === "SCM_NYK") return r.bu === "GW" && items.some((i: any) => (i.itemStatus === "LOG_PASSED" || i.itemStatus === "SCM_GW_PENDING") && i.claimDepartment === "NYK")
-    if (role === "SCM_NYG") return r.bu === "GW" && items.some((i: any) => (i.itemStatus === "LOG_PASSED" || i.itemStatus === "SCM_GW_PENDING") && i.claimDepartment === "NYG")
+    if (role === "SCM_NYK") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "SCM_GW_PENDING" && getSplits(i).some((s: any) => s.dept === "NYK" && s.status === "SCM_PENDING"))
+    if (role === "SCM_NYG") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "SCM_GW_PENDING" && getSplits(i).some((s: any) => s.dept === "NYG" && s.status === "SCM_PENDING"))
     return false
   })
 

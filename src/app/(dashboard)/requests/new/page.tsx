@@ -88,6 +88,24 @@ export default function NewRequestPage() {
       return
     }
 
+    // 4. GW: ผลรวม %CLAIM1/2/3 ของแต่ละ SO ที่มี claim ต้อง = 100
+    if (isGW) {
+      for (let r = 0; r < data.rows.length; r++) {
+        const row = data.rows[r]
+        const depts = [1, 2, 3].map(n => String(getVal(row, `CLAIM DEPT ${n}`) || "").trim())
+        if (!depts.some(d => d)) continue // ไม่มี claim ใน row นี้ ข้าม
+        const sum = [1, 2, 3].reduce((a, n) => {
+          if (!depts[n - 1]) return a
+          return a + (parseFloat(String(getVal(row, `%CLAIM${n}`) ?? "")) || 0)
+        }, 0)
+        if (Math.round(sum) !== 100) {
+          const so = getVal(row, "SO") || `แถว ${r + 2}`
+          setError(`SO ${so}: ผลรวม %CLAIM ต้อง = 100 (ตอนนี้ ${sum}%)`)
+          return
+        }
+      }
+    }
+
     setPreview(data.rows)
   }
 

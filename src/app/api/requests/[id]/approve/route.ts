@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES, GW_SCM_DEPTS } from "@/types"
+import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange } from "@/lib/notify"
+import { getSplits, routeSplitsAfterClaimGw, approveScmSplit, completeAcctSplits, deriveGwItemStatus } from "@/lib/claim"
 
 const getClaimDept = (role: string) => {
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
@@ -23,13 +24,6 @@ async function recalcDocStatus(id: string): Promise<string> {
   if (s.has("LOG_PASSED")) return "PENDING_CLAIM"
   if (s.has("CLAIM_PASSED")) return "PENDING_VP_CLAIM"
   return "COMPLETED"
-}
-
-// GW: after CLAIM_GW approves, route item based on claimDepartment
-// NYG/NYK → SCM_GW_PENDING; GW/Supplier → ACCOUNTING_PENDING
-function gwItemStatusAfterClaim(claimDept: string | null): string {
-  if (claimDept && GW_SCM_DEPTS.includes(claimDept)) return "SCM_GW_PENDING"
-  return "ACCOUNTING_PENDING"
 }
 
 async function recalcDocStatusGW(id: string): Promise<string> {
@@ -573,8 +567,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const iid of itemIds) {
       const itemData = await prisma.airRequestItem.findUnique({ where: { id: iid } })
       if (!itemData || itemData.requestId !== id || itemData.itemStatus !== "LOG_PASSED") continue
-      const nextItemStatus = gwItemStatusAfterClaim(itemData.claimDepartment)
-      await prisma.airRequestItem.update({ where: { id: iid }, data: { itemStatus: nextItemStatus } })
+      const routed = routeSplitsAfterClaimGw(getSplits(itemData))
+      await prisma.airRequestItem.update({ where: { id: iid }, data: { claimDepts: routed as any, itemStatus: deriveGwItemStatus(routed) } })
     }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Batch approve ${itemIds.length} SO(s)` }
@@ -597,10 +591,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData) return NextResponse.json({ error: "Item not found" }, { status: 404 })
     if (itemData.requestId !== id) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    const newItemStatus = action === "approve_so"
-      ? gwItemStatusAfterClaim(itemData.claimDepartment)
-      : "REJECTED"
-    await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
+    if (action === "approve_so") {
+      // Route each claim split → SCM (NYK/NYG) or Accounting; item status is derived.
+      const routed = routeSplitsAfterClaimGw(getSplits(itemData))
+      await prisma.airRequestItem.update({
+        where: { id: itemId },
+        data: { claimDepts: routed as any, itemStatus: deriveGwItemStatus(routed), itemComment: comment || null },
+      })
+    } else {
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "REJECTED", itemComment: comment || null } })
+    }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: action === "approve_so" ? "APPROVE" : "REJECT", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so}${comment ? ` - ${comment}` : ""}` }
     })
@@ -619,16 +619,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (action === "approve_so" && !body.crNo) return NextResponse.json({ error: "กรุณาใส่ CR NO ก่อน Approve" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
-    if (itemData.itemStatus !== "SCM_GW_PENDING") return NextResponse.json({ error: "Item not pending SCM_GW" }, { status: 400 })
     const expectedDept = userRole === "SCM_NYK" ? "NYK" : "NYG"
-    if (itemData.claimDepartment !== expectedDept) return NextResponse.json({ error: "Forbidden: wrong dept" }, { status: 403 })
-    const newItemStatus = action === "approve_so" ? "ACCOUNTING_PENDING" : "REJECTED"
-    await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: newItemStatus, itemComment: comment || null } })
-    if (action === "approve_so" && body.crNo) {
-      await prisma.airRequest.update({ where: { id }, data: { crNo: String(body.crNo) } as any })
+    const splits = getSplits(itemData)
+    // This SCM dept must have a split still waiting on SCM.
+    const mySplit = splits.find(s => s.dept === expectedDept && s.status === "SCM_PENDING")
+    if (!mySplit) return NextResponse.json({ error: "ไม่มีส่วน claim ของแผนกนี้ที่รออนุมัติ" }, { status: 400 })
+    if (action === "approve_so") {
+      const updated = approveScmSplit(splits, expectedDept, body.crNo ? String(body.crNo) : undefined)
+      await prisma.airRequestItem.update({
+        where: { id: itemId },
+        data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated), itemComment: comment || null },
+      })
+      if (body.crNo) await prisma.airRequest.update({ where: { id }, data: { crNo: String(body.crNo) } as any })
+    } else {
+      // Rejecting one portion rejects the whole SO (MER must resubmit).
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "REJECTED", itemComment: comment || null } })
     }
     await prisma.approvalLog.create({
-      data: { requestId: id, userId, action: action === "approve_so" ? "APPROVE" : "REJECT", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so}${comment ? ` - ${comment}` : ""}` }
+      data: { requestId: id, userId, action: action === "approve_so" ? "APPROVE" : "REJECT", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} (${expectedDept})${comment ? ` - ${comment}` : ""}` }
     })
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) {
@@ -645,7 +653,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
     if (itemData.itemStatus !== "ACCOUNTING_PENDING") return NextResponse.json({ error: "Item not at Accounting stage" }, { status: 400 })
-    await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "COMPLETED", itemComment: comment || null } })
+    const completed = completeAcctSplits(getSplits(itemData))
+    await prisma.airRequestItem.update({
+      where: { id: itemId },
+      data: { claimDepts: completed as any, itemStatus: deriveGwItemStatus(completed), itemComment: comment || null },
+    })
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so}${comment ? ` - ${comment}` : ""}` }
     })

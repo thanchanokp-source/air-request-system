@@ -7,6 +7,8 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { ROLE_ACTIONS, STATUS_LABELS, STYLE_APPROVER_STATUSES } from "@/types"
 import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
+import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
+import { getSplits } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -371,10 +373,11 @@ export default function RequestDetailPage() {
   const isLogisticsGW = role === "LOGISTICS_GW" && (req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && presPassedItems.length > 0 && isGWRequest
   const userClaimDept = (session?.user as any)?.claimDepartment || null
   const isClaimGW = false // replaced by isDvmClaim (new GW P1 flow via claimForward)
-  const scmGwItems = (req?.items || []).filter((i: any) => i.itemStatus === "SCM_GW_PENDING" && (
-    role === "SCM_NYK" ? i.claimDepartment === "NYK" :
-    role === "SCM_NYG" ? i.claimDepartment === "NYG" : true
-  ))
+  const myScmDept = role === "SCM_NYK" ? "NYK" : role === "SCM_NYG" ? "NYG" : null
+  const scmGwItems = (req?.items || []).filter((i: any) =>
+    i.itemStatus === "SCM_GW_PENDING" &&
+    getSplits(i).some((s: any) => s.status === "SCM_PENDING" && (myScmDept ? s.dept === myScmDept : true))
+  )
   const isScmGW = (role === "SCM_NYK" || role === "SCM_NYG") && req?.status === "PENDING_SCM_GW" && scmGwItems.length > 0 && isGWRequest
   const accountingItems = (req?.items || []).filter((i: any) => i.itemStatus === "ACCOUNTING_PENDING")
   const isAccounting = role === "ACCOUNTING" && req?.status === "PENDING_ACCOUNTING" && accountingItems.length > 0 && isGWRequest
@@ -2629,9 +2632,7 @@ export default function RequestDetailPage() {
                   <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
                   <span className="font-semibold text-gray-800 w-28 shrink-0">{item.so}</span>
                   <span className="text-xs text-gray-500 flex-1 min-w-0 truncate">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
-                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-                    Dept: {item.factory || item.claimDepartment || "-"}
-                  </span>
+                  <ClaimSplitBadges item={item} />
                   {!isRejRow && (
                     <div className="flex gap-2">
                       <button onClick={async () => {
@@ -2674,29 +2675,33 @@ export default function RequestDetailPage() {
                   </div>
                 )}
                 {isExp && (
-                  <div className="border-t border-gray-100 overflow-x-auto">
-                    <table className="text-xs w-full">
-                      <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","INVOICE NO","BOOKING DATE","DEPT","% CLAIM","COUNTRY","PORT"].map(h =>
-                          <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="hover:bg-gray-50">
-                          <td className="px-3 py-2 font-medium">{item.so}</td>
-                          <td className="px-3 py-2">{item.style}</td>
-                          <td className="px-3 py-2">{item.description}</td>
-                          <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
-                          <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
-                          <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
-                          <td className="px-3 py-2">{item.factory || item.claimDepartment || "-"}</td>
-                          <td className="px-3 py-2">{item.claimPercentage != null ? `${item.claimPercentage}%` : "-"}</td>
-                          <td className="px-3 py-2">{item.country}</td>
-                          <td className="px-3 py-2">{item.port}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <div className="border-t border-gray-100 p-3 space-y-3">
+                    <div className="overflow-x-auto">
+                      <table className="text-xs w-full">
+                        <thead className="bg-gray-50">
+                          <tr>{["SO","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","INVOICE NO","BOOKING DATE","COUNTRY","PORT"].map(h =>
+                            <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-medium">{item.so}</td>
+                            <td className="px-3 py-2">{item.style}</td>
+                            <td className="px-3 py-2">{item.description}</td>
+                            <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
+                            <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                            <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
+                            <td className="px-3 py-2">{item.country}</td>
+                            <td className="px-3 py-2">{item.port}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">การแบ่ง Claim</p>
+                      <ClaimSplitTable item={item} highlightDept={role === "SCM_NYK" ? "NYK" : role === "SCM_NYG" ? "NYG" : null} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -2729,9 +2734,7 @@ export default function RequestDetailPage() {
                   <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
                   <span className="font-semibold text-gray-800 w-28 shrink-0">{item.so}</span>
                   <span className="text-xs text-gray-500 flex-1 min-w-0 truncate">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-                    Dept: {item.claimDepartment || "-"}
-                  </span>
+                  <ClaimSplitBadges item={item} />
                   <button onClick={async () => {
                       setSubmitting(item.id)
                       const res = await fetch(`/api/requests/${id}/approve`, {
@@ -2747,29 +2750,33 @@ export default function RequestDetailPage() {
                   </button>
                 </div>
                 {isExp && (
-                  <div className="border-t border-gray-100 overflow-x-auto">
-                    <table className="text-xs w-full">
-                      <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","INV NO","BOOKING DATE","DEPT","% CLAIM","COUNTRY","PORT"].map(h =>
-                          <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="hover:bg-gray-50">
-                          <td className="px-3 py-2 font-medium">{item.so}</td>
-                          <td className="px-3 py-2">{item.style}</td>
-                          <td className="px-3 py-2">{item.description}</td>
-                          <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
-                          <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
-                          <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
-                          <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
-                          <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
-                          <td className="px-3 py-2">{item.claimPercentage != null ? `${item.claimPercentage}%` : "-"}</td>
-                          <td className="px-3 py-2">{item.country}</td>
-                          <td className="px-3 py-2">{item.port}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <div className="border-t border-gray-100 p-3 space-y-3">
+                    <div className="overflow-x-auto">
+                      <table className="text-xs w-full">
+                        <thead className="bg-gray-50">
+                          <tr>{["SO","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","INV NO","BOOKING DATE","COUNTRY","PORT"].map(h =>
+                            <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-medium">{item.so}</td>
+                            <td className="px-3 py-2">{item.style}</td>
+                            <td className="px-3 py-2">{item.description}</td>
+                            <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
+                            <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                            <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
+                            <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
+                            <td className="px-3 py-2">{item.country}</td>
+                            <td className="px-3 py-2">{item.port}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">การแบ่ง Claim</p>
+                      <ClaimSplitTable item={item} />
+                    </div>
                   </div>
                 )}
               </div>

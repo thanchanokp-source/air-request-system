@@ -67,3 +67,37 @@ export function totalPct(splits: ClaimSplit[]): number {
 export function initialGwSplitStatus(dept: string): string {
   return GW_SCM_DEPTS.includes(dept) ? SPLIT_STATUS.SCM_PENDING : SPLIT_STATUS.ACCT_PENDING
 }
+
+// Coarse item.itemStatus derived from the per-split statuses.
+// Sequential processing: all SCM splits clear before the doc moves to Accounting.
+export function deriveGwItemStatus(splits: ClaimSplit[]): string {
+  if (splits.length === 0) return "LOG_PASSED"
+  const st = splits.map(s => s.status)
+  if (st.every(s => s === SPLIT_STATUS.COMPLETED)) return "COMPLETED"
+  if (st.every(s => s === SPLIT_STATUS.REJECTED)) return "REJECTED"
+  if (st.some(s => s === SPLIT_STATUS.SCM_PENDING)) return "SCM_GW_PENDING"
+  if (st.some(s => s === SPLIT_STATUS.ACCT_PENDING)) return "ACCOUNTING_PENDING"
+  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING)) return "LOG_PASSED"
+  return "LOG_PASSED"
+}
+
+// Apply CLAIM_GW's SO approval: route every split to SCM or Accounting.
+export function routeSplitsAfterClaimGw(splits: ClaimSplit[]): ClaimSplit[] {
+  return splits.map(s => ({ ...s, status: initialGwSplitStatus(s.dept) }))
+}
+
+// SCM (NYK/NYG) approves its own portion: that dept's split → Accounting.
+export function approveScmSplit(splits: ClaimSplit[], dept: string, crNo?: string): ClaimSplit[] {
+  return splits.map(s =>
+    s.dept === dept && s.status === SPLIT_STATUS.SCM_PENDING
+      ? { ...s, status: SPLIT_STATUS.ACCT_PENDING, crNo: crNo ?? s.crNo }
+      : s
+  )
+}
+
+// Accounting closes every remaining Accounting-pending split.
+export function completeAcctSplits(splits: ClaimSplit[]): ClaimSplit[] {
+  return splits.map(s =>
+    s.status === SPLIT_STATUS.ACCT_PENDING ? { ...s, status: SPLIT_STATUS.COMPLETED } : s
+  )
+}
