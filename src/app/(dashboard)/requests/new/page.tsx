@@ -112,7 +112,7 @@ export default function NewRequestPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file || preview.length === 0) return
-    if (!vpMerSelected) { setError(`กรุณาเลือก ${isGW ? "VP MER GW" : "VP MER"} ก่อน Submit`); return }
+    if (!vpMerSelected) { setError(`กรุณาเลือก ${isGW ? "DPM GW" : "VP MER"} ก่อน Submit`); return }
     setLoading(true)
     setError("")
     const res = await fetch("/api/requests", {
@@ -155,7 +155,7 @@ export default function NewRequestPage() {
         {/* Select VP MER */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
           <h2 className="font-semibold text-gray-800">
-            เลือก {isGW ? "VP MER GW" : "VP MER"} <span className="text-red-500">*</span>
+            เลือก {isGW ? "DPM GW" : "VP MER"} <span className="text-red-500">*</span>
           </h2>
 
           {vpMerUsers.length === 0 ? (
@@ -176,7 +176,7 @@ export default function NewRequestPage() {
                 setVpMerSelected(u ? { name: u.name, email: u.email } : null)
               }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
-              <option value="">-- เลือก {isGW ? "VP MER GW" : "VP MER"} --</option>
+              <option value="">-- เลือก {isGW ? "DPM GW" : "VP MER"} --</option>
               {vpMerUsers.map(u => (
                 <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
               ))}

@@ -15,7 +15,7 @@ const STATUS_SUBJECT: Record<string, string> = {
   PENDING_VP_CLAIM:    "[VP Claim] รอ Approve",
   PENDING_VP_NYK:      "[VP NYK] รอ Approve",
   // GW
-  PENDING_VP_MER_GW:   "[VP MER – GW] รอ Approve",
+  PENDING_VP_MER_GW:   "[DPM – GW] รอ Approve",
   PENDING_DPM_GW:      "[DPM – GW] รอ Approve",
   PENDING_GM_GW:       "[GM – GW] รอ Approve",
   PENDING_PRESIDENT_GW:"[President – GW] รอ Approve",

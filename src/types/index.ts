@@ -9,7 +9,7 @@ export const STATUS_LABELS: Record<string, string> = {
   PENDING_VP_CLAIM: "Pending VP Claim",
   PENDING_VP_NYK: "Pending VP NYK",
   // GW
-  PENDING_VP_MER_GW: "Pending VP MER (GW)",
+  PENDING_VP_MER_GW: "Pending DPM (GW)",
   PENDING_PRESIDENT_GW: "Pending President (GW)",
   PENDING_LOGISTICS_GW: "Pending Logistics (GW)",
   PENDING_CLAIM_GW: "Pending Claim (GW)",

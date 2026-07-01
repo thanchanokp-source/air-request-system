@@ -3886,14 +3886,14 @@ export default function RequestDetailPage() {
                         {f.includes("Date") ? fmtDate(item[f])
                           : f === "grossWeight" ? fmtNum(item[f], 2)
                           : f === "airFreight" || f === "actualAirFreight" ? fmtNum(item[f])
-                          : f === "claimDepartment" ? (isGWRequest ? (req.claimDepartment ?? "-") : (item[f] ?? "-"))
+                          : f === "claimDepartment" ? (isGWRequest ? (getSplits(item).map((s: any) => `${s.dept} ${s.pct}%`).join(", ") || "-") : (item[f] ?? "-"))
                           : item[f] ?? "-"}
                       </td>
                     ))}
                     <td className="px-2 py-1.5">
                       {(() => {
                         const pendingLabel = isGWRequest
-                          ? (req.status === "PENDING_PRESIDENT_GW" ? "President GW" : "VP MER GW")
+                          ? (req.status === "PENDING_PRESIDENT_GW" ? "President GW" : "DPM GW")
                           : "VP MER"
                         const SD: Record<string, [string, string]> = {
                           PENDING: [pendingLabel, "bg-yellow-100 text-yellow-700"],
