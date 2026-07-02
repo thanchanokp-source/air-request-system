@@ -153,8 +153,8 @@ export default function NewRequestPage() {
           <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[260px]">
             <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
             <div className="text-center">
-              <p className="font-semibold text-gray-800 text-sm">กำลังส่งคำขอ...</p>
-              <p className="text-xs text-gray-400 mt-1">กรุณาอย่าปิดหน้านี้</p>
+              <p className="font-semibold text-gray-800 text-sm">Submitting request...</p>
+              <p className="text-xs text-gray-400 mt-1">Please do not close this page.</p>
             </div>
           </div>
         </div>
