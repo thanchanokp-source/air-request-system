@@ -6,6 +6,7 @@ import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits } from "@/lib/claim"
+import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
@@ -168,7 +169,7 @@ export default function ApprovalsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b">
-                    <tr>{["SO","STYLE","DESCRIPTION","GMT","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
+                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
@@ -177,8 +178,9 @@ export default function ApprovalsPage() {
                       <tr key={item.id} className="hover:bg-gray-50">
                         <td className="px-3 py-1.5 font-medium">{item.so}</td>
                         <td className="px-3 py-1.5">{item.style}</td>
+                        <td className="px-3 py-1.5">{item.sub || "-"}</td>
+                        <td className="px-3 py-1.5">{item.customerPO || "-"}</td>
                         <td className="px-3 py-1.5">{item.description}</td>
-                        <td className="px-3 py-1.5">{item.gmtType}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                         <td className="px-3 py-1.5">{item.qtyOriginalShipment}</td>
@@ -190,7 +192,7 @@ export default function ApprovalsPage() {
                         <td className="px-3 py-1.5">{item.factory}</td>
                         <td className="px-3 py-1.5">{item.country}</td>
                         <td className="px-3 py-1.5">{item.port}</td>
-                        <td className="px-3 py-1.5">{item.claimDepartment || "-"}</td>
+                        <td className="px-3 py-1.5"><ClaimSplitBadges item={item} /></td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.invoiceNo || "-"}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.hawbNo || "-"}</td>
                       </tr>
