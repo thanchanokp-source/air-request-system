@@ -93,6 +93,8 @@ export default function RequestDetailPage() {
   const [claimApproversList, setClaimApproversList] = useState<any[]>([])
   const [recalculating, setRecalculating] = useState(false)
   const [deletingAtt, setDeletingAtt] = useState<string | null>(null)
+  const [hawbRefreshKey, setHawbRefreshKey] = useState(0)
+  const [importingLg, setImportingLg] = useState(false)
   const claimAutoSaveReady = useRef(false)
 
   // Claim Forward (Option B) state
@@ -1386,6 +1388,70 @@ export default function RequestDetailPage() {
         <div className="bg-white rounded-xl border p-5 space-y-4">
           <div className="flex items-center justify-between border-b pb-2 flex-wrap gap-2">
             <h2 className="font-semibold text-gray-800">LOGISTICS</h2>
+            {/* Excel export/import — top-right of the Logistics frame */}
+            <div className="flex items-center gap-2">
+              <button onClick={async () => {
+                const XLSX = await import("xlsx")
+                const headers = ["SO","STYLE","CUSTOMER PO","DESCRIPTION","QTY AIR","VWT(KG)","CLAIM DEPT","HAWB#","INV NO.","TOTAL AIR (THB) by HAWB"]
+                const rows = presPassedItems.map((i: any) => [
+                  i.so, i.style, i.customerPO || "", i.description || "",
+                  (i.qtyActualShip ?? i.qtyRequestAir), i.grossWeight ?? "",
+                  getSplits(i).map((s: any) => `${s.dept} ${s.pct}%`).join(", "),
+                  i.hawbNo || "", i.invoiceNo || "", "",
+                ])
+                const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+                ws["!cols"] = [12,14,14,24,10,10,22,16,16,22].map(w => ({ wch: w }))
+                const wb = XLSX.utils.book_new()
+                XLSX.utils.book_append_sheet(wb, ws, "LG")
+                XLSX.writeFile(wb, `${req?.documentNo || id}_LG.xlsx`)
+              }} className="text-xs bg-slate-100 border border-slate-300 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-200 font-medium whitespace-nowrap">
+                ⬇ Export
+              </button>
+              <label className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer whitespace-nowrap ${importingLg ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"}`}>
+                {importingLg ? "กำลัง Import..." : "⬆ Import"}
+                <input type="file" accept=".xlsx,.xls" className="hidden" disabled={importingLg}
+                  onChange={async e => {
+                    const file = e.target.files?.[0]; e.target.value = ""
+                    if (!file) return
+                    setImportingLg(true)
+                    try {
+                      const XLSX = await import("xlsx")
+                      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
+                      const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" })
+                      const soToId: Record<string, string> = {}
+                      presPassedItems.forEach((i: any) => { soToId[String(i.so).trim()] = i.id })
+                      const groups: Record<string, { total: number; items: { id: string; inv: string }[] }> = {}
+                      for (const r of rows) {
+                        const hawb = String(r["HAWB#"] || "").trim()
+                        const so = String(r["SO"] || "").trim()
+                        const iid = soToId[so]
+                        if (!hawb || !iid) continue
+                        const total = parseFloat(String(r["TOTAL AIR (THB) by HAWB"] || "").replace(/,/g, "")) || 0
+                        const inv = String(r["INV NO."] || "").trim()
+                        if (!groups[hawb]) groups[hawb] = { total: 0, items: [] }
+                        if (total > groups[hawb].total) groups[hawb].total = total
+                        groups[hawb].items.push({ id: iid, inv })
+                      }
+                      if (Object.keys(groups).length === 0) { alert("ไม่พบข้อมูล HAWB# / SO ที่ตรงกัน"); setImportingLg(false); return }
+                      let created = 0
+                      for (const [hawbNo, g] of Object.entries(groups)) {
+                        if (g.total <= 0 || g.items.length === 0) continue
+                        const itemInvoices: Record<string, string> = {}
+                        g.items.forEach(it => { if (it.inv) itemInvoices[it.id] = it.inv })
+                        const res = await fetch(`/api/requests/${id}/hawb`, {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ hawbNo, totalCharge: g.total, itemIds: g.items.map(x => x.id), itemInvoices }),
+                        })
+                        if (res.ok) created++
+                      }
+                      const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json())
+                      setHawbRefreshKey(k => k + 1)
+                      alert(`สร้าง HAWB จาก Excel สำเร็จ ${created} รายการ`)
+                    } catch (err) { console.error(err); alert("Import ไม่สำเร็จ — ตรวจไฟล์ Excel") }
+                    finally { setImportingLg(false) }
+                  }} />
+              </label>
+            </div>
           </div>
 
           {/* HAWB-based flow (NYG + GW) */}
@@ -1393,6 +1459,7 @@ export default function RequestDetailPage() {
             <HawbSection
               requestId={id as string}
               presPassedItems={presPassedItems}
+              refreshSignal={hawbRefreshKey}
               reqInfo={req ? { documentNo: req.documentNo, brandName: req.brandName, buName: req.buName } : undefined}
               onReqRefresh={async () => {
                 const res = await fetch(`/api/requests/${id}`)
