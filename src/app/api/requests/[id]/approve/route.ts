@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange } from "@/lib/notify"
-import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, approveGwDeptSplits } from "@/lib/claim"
+import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, finalizeGwCr, GW_DEPT_ACCEPTED } from "@/lib/claim"
 
 const getClaimDept = (role: string) => {
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
@@ -742,6 +742,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Priority chain per role (some depts single approver, some sequential).
   // SCM_NYK must enter CR NO. When all splits approved → item ACCOUNTING_PENDING
   // → doc PENDING_ACCOUNTING (Accounting is read-only, gets notified).
+  // SCM NYK returns later to enter the CR NO (one per document) → finalizes all
+  // its ACCEPTED splits so those SOs can proceed to Accounting.
+  if (action === "finalize_cr_gw" && userRole === "SCM_NYK") {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "ไม่ได้อยู่ใน GW Claim stage" }, { status: 400 })
+    const cr = body.crNo ? String(body.crNo).trim() : ""
+    if (!cr) return NextResponse.json({ error: "กรุณาใส่ CR NO" }, { status: 400 })
+    await prisma.airRequest.update({ where: { id }, data: { crNo: cr } as any })
+    const items = await prisma.airRequestItem.findMany({ where: { requestId: id } })
+    let finalizedCount = 0
+    for (const it of items) {
+      const splits = getSplits(it)
+      if (!splits.some((s: any) => s.dept === "SCM NYK" && s.status === GW_DEPT_ACCEPTED)) continue
+      const updated = finalizeGwCr(splits, ["SCM NYK"], cr)
+      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated) } })
+      finalizedCount++
+    }
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `CR NO: ${cr} — SCM NYK finalized ${finalizedCount} SO` }
+    })
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      notifyStatusChange(id, nextDocStatus).catch(() => {})
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
   if (action === "approve_so_claim_gw" && ["CLAIM_GW", "SCM_NYK", "SCM_NYG"].includes(userRole)) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "ไม่ได้อยู่ใน GW Claim stage" }, { status: 400 })
@@ -750,11 +778,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
     if (itemData.itemStatus !== "LOG_PASSED") return NextResponse.json({ error: "Item already approved" }, { status: 400 })
     const myDepts = gwDeptsForRole(userRole)
-    if (!hasPendingGwSplit(itemData, myDepts)) {
+    // SCM NYK can approve/accept WITHOUT a CR number (added later); guard only
+    // against re-approving an already-accepted/finalized split.
+    if (!hasApprovableGwSplit(itemData, myDepts)) {
       return NextResponse.json({ error: "ไม่มีส่วน claim ของแผนกนี้ที่รออนุมัติ" }, { status: 400 })
-    }
-    if (userRole === "SCM_NYK" && !body.crNo && !(request as any).crNo) {
-      return NextResponse.json({ error: "กรุณาใส่ CR NO ก่อน Approve" }, { status: 400 })
     }
 
     // Priority chain for this role — all lower-priority approvers must go first.
@@ -790,14 +817,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const chainComplete = allApprovers.length === 0 || allApprovers.every((u: any) => approvedIds.has(u.id))
 
     if (chainComplete) {
-      const crNo = userRole === "SCM_NYK" ? (body.crNo ? String(body.crNo) : ((request as any).crNo || undefined)) : undefined
-      const updated = approveGwDeptSplits(getSplits(itemData), myDepts, crNo)
+      // SCM NYK: if CR already on the doc → finalize; otherwise mark ACCEPTED
+      // (awaiting CR). Other depts → APPROVED directly.
+      const existingCr = (request as any).crNo || null
+      const crNo = userRole === "SCM_NYK" ? (existingCr || (body.crNo ? String(body.crNo) : undefined)) : undefined
+      const target = userRole === "SCM_NYK" && !crNo ? GW_DEPT_ACCEPTED : undefined
+      const updated = approveGwDeptSplits(getSplits(itemData), myDepts, crNo, target)
       await prisma.airRequestItem.update({
         where: { id: itemId },
         data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated), itemComment: comment || null },
       })
+      const acceptNote = target === GW_DEPT_ACCEPTED ? "accepted (awaiting CR)" : "approved"
       await prisma.approvalLog.create({
-        data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — ${myDepts.join("/")} approved` }
+        data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — ${myDepts.join("/")} ${acceptNote}` }
       })
       const nextDocStatus = await recalcDocStatusGW(id)
       if (nextDocStatus !== request.status) {

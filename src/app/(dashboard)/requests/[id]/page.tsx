@@ -59,6 +59,7 @@ export default function RequestDetailPage() {
   const [lgQuickSo, setLgQuickSo] = useState("")
   const [soActualOverride, setSoActualOverride] = useState<Record<string, string>>({})
   const [crNoInput, setCrNoInput] = useState("")
+  const [savingCr, setSavingCr] = useState(false)
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selectedStyles, setSelectedStyles] = useState<Set<string>>(new Set())
@@ -2050,20 +2051,40 @@ export default function RequestDetailPage() {
             </div>
           </div>
 
-          {/* CR NO — one per DOCUMENT (not per SO) */}
+          {/* CR NO — one per DOCUMENT, entered anytime (Approve first, CR later) */}
           {role === "SCM_NYK" && (
-            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-              <label className="text-xs font-semibold text-blue-800 shrink-0">CR NO <span className="text-red-500">*</span></label>
-              <input
-                value={crNoInput}
-                onChange={e => setCrNoInput(e.target.value)}
-                disabled={!!req.crNo}
-                placeholder={req.crNo ? req.crNo : "ใส่ CR NO ครั้งเดียว — ใช้กับทั้งเอกสาร"}
-                className={`flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-500 ${!crNoInput.trim() && !req.crNo ? "border-red-300 bg-red-50" : "border-blue-200 bg-white"}`}
-              />
-              {req.crNo
-                ? <span className="text-xs text-green-700 font-medium shrink-0 whitespace-nowrap">✓ บันทึกแล้ว: {req.crNo}</span>
-                : <span className="text-xs text-blue-500 shrink-0 whitespace-nowrap">1 DOC = 1 CR NO</span>}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 space-y-1.5">
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                💡 กด <b>Approve</b> เพื่อยอมรับเคลมของแต่ละ SO ได้เลย (ยังไม่ต้องมี CR) — เมื่อได้เลข CR แล้วค่อยกลับมาใส่ที่นี่ครั้งเดียว ใช้กับทั้งเอกสาร
+              </p>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-blue-800 shrink-0">CR NO <span className="text-red-500">*</span></label>
+                <input
+                  value={crNoInput}
+                  onChange={e => setCrNoInput(e.target.value)}
+                  disabled={!!req.crNo || savingCr}
+                  placeholder={req.crNo ? req.crNo : "ใส่ CR NO เมื่อได้เลขแล้ว"}
+                  className={`flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-500 ${!crNoInput.trim() && !req.crNo ? "border-blue-200 bg-white" : "border-blue-200 bg-white"}`}
+                />
+                {req.crNo
+                  ? <span className="text-xs text-green-700 font-medium shrink-0 whitespace-nowrap">✓ บันทึกแล้ว: {req.crNo}</span>
+                  : <button
+                      onClick={async () => {
+                        if (!crNoInput.trim()) return
+                        setSavingCr(true)
+                        const res = await fetch(`/api/requests/${id}/approve`, {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "finalize_cr_gw", crNo: crNoInput.trim() })
+                        })
+                        if (res.ok) { setReq(await res.json()); setCrNoInput("") }
+                        else { const e = await res.json(); alert(e.error || "Error") }
+                        setSavingCr(false)
+                      }}
+                      disabled={!crNoInput.trim() || savingCr}
+                      className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 shrink-0 whitespace-nowrap">
+                      {savingCr ? "..." : "บันทึก CR NO"}
+                    </button>}
+              </div>
             </div>
           )}
 
@@ -2091,6 +2112,8 @@ export default function RequestDetailPage() {
             // Who has approved this item so far
             const itemApprovals: any[] = item.claimApprovals || []
             const iHaveApproved = itemApprovals.some((a: any) => a.userId === myUserId)
+            // SCM NYK accepted this SO but CR NO not yet entered (awaiting finalize).
+            const awaitingCr = isGwClaimP1Role && getSplits(item).some((s: any) => gwClaimDepts.includes(s.dept) && s.status === "DEPT_ACCEPTED")
             // Can I approve? All lower-priority approvers must have approved first
             const lowerApprovers = myPriority !== null
               ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority)
@@ -2124,7 +2147,9 @@ export default function RequestDetailPage() {
                     </span>
                   )}
                   {iHaveApproved && !isPassed && (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">You approved ✓</span>
+                    awaitingCr
+                      ? <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap font-medium">ยอมรับแล้ว · รอ CR</span>
+                      : <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">You approved ✓</span>
                   )}
 
                   {/* Attach — priority 1 only */}
@@ -2151,8 +2176,7 @@ export default function RequestDetailPage() {
                             setDvmSelected(prev => { const n = new Set(prev); n.delete(item.id); return n })
                           } else { const err = await res.json(); alert(err.error || "Error") }
                           setSubmitting(null)
-                        }} disabled={isSub || (role === "SCM_NYK" && !(crNoInput.trim() || req.crNo))}
-                        title={role === "SCM_NYK" && !(crNoInput.trim() || req.crNo) ? "กรุณาใส่ CR NO ก่อน Approve" : ""}
+                        }} disabled={isSub}
                         className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
                         {isSub ? "..." : "Approve"}
                       </button>

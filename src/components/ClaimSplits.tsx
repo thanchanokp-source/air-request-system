@@ -9,6 +9,7 @@ function fmt(n: number) {
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   CLAIM_PENDING: { text: "รออนุมัติ", cls: "bg-gray-100 text-gray-600" },
   CLAIM_PASSED:  { text: "รอ VP",     cls: "bg-violet-100 text-violet-700" },
+  DEPT_ACCEPTED: { text: "รอ CR",      cls: "bg-amber-100 text-amber-700" },
   DEPT_APPROVED: { text: "อนุมัติแล้ว", cls: "bg-green-100 text-green-700" },
   COMPLETED:     { text: "เสร็จ",      cls: "bg-green-100 text-green-700" },
   REJECTED:      { text: "Reject",    cls: "bg-red-100 text-red-700" },
