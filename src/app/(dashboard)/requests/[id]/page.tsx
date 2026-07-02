@@ -2870,7 +2870,7 @@ export default function RequestDetailPage() {
                   const isGW = req.bu === "GW"
                   const fmtD = (v: any) => { if (!v) return ""; const d = new Date(v); if (isNaN(d.getTime())) return ""; return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}` }
                   const DEPT_LABEL: Record<string,string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
-                  const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","HAWB#","HAWB Total Cost (THB)","CLAIM DEPT 1","%CLAIM1","Actual Airfreight 1","REASON 1","CLAIM DEPT 2","%CLAIM2","Actual Airfreight 2","REASON 2","CLAIM DEPT 3","%CLAIM3","Actual Airfreight 3","REASON 3"]
+                  const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","HAWB#","Total HAWB#","CLAIM DEPT 1","%CLAIM1","ACTUAL AIRFREIGHT1","REASON 1","CLAIM DEPT 2","%CLAIM2","ACTUAL AIRFREIGHT2","REASON 2","CLAIM DEPT 3","%CLAIM3","ACTUAL AIRFREIGHT3","REASON 3"]
                   const rows = allLgItems.map((item: any) => {
                     const invNo = soInvMap[item.id] || ""
                     const hawbGrp = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
@@ -2921,7 +2921,7 @@ export default function RequestDetailPage() {
                       const subNo = String(row["SUB"] || "").trim()
                       const inv = String(row["INV NO."] || row["Invoice No"] || "").trim()
                       const hawbNo = String(row["HAWB#"] || "").trim()
-                      const hawbCost = String(row["HAWB Total Cost (THB)"] || "").trim()
+                      const hawbCost = String(row["Total HAWB#"] || row["HAWB Total Cost (THB)"] || "").trim()
                       if (!soNo || !inv) return
                       const found = allLgItems.find((i: any) => i.so === soNo && (i.sub || "") === subNo)
                       if (found) updates[(found as any).id] = inv
