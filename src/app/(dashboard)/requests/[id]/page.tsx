@@ -223,6 +223,11 @@ export default function RequestDetailPage() {
 
   useEffect(() => {
     if (!role) return
+    // GW claim roles use their own role as the priority group.
+    if (["CLAIM_GW", "SCM_NYK", "SCM_NYG"].includes(role)) {
+      fetch(`/api/users/by-role?role=${role}`).then(r => r.json()).then(setClaimApproversList)
+      return
+    }
     const isDvm = role.startsWith("DVM_") || role.startsWith("CLAIM_")
     const isVp = ["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION"].includes(role)
     if (isDvm || isVp) {
@@ -304,7 +309,8 @@ export default function RequestDetailPage() {
   }
   const isDvmClaim = (role.startsWith("DVM_") || role.startsWith("CLAIM_") || role === "SCM_NYK" || role === "SCM_NYG") && (req?.items || []).some((i: any) => {
     if (isGwClaimP1Role) {
-      return (i.itemStatus === "LOG_PASSED" || i.itemStatus === "CLAIM_PASSED") && gwClaimDepts.includes(i.claimDepartment)
+      // GW parallel: my dept has a split on this SO still awaiting approval.
+      return i.itemStatus === "LOG_PASSED" && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED")
     }
     // NYG DVM: my dept is on the SO and its split still awaits DVM approval.
     return i.itemStatus === "LOG_PASSED" && mySplitStatus(i) === null
@@ -324,8 +330,9 @@ export default function RequestDetailPage() {
       : (!claimDept || itemDeptList.includes(claimDept))
     if (!matchDept) return false
     if (isGwClaimP1Role) {
-      if (isDvmClaim) return i.itemStatus === "LOG_PASSED" || i.itemStatus === "CLAIM_PASSED" || i.itemStatus === "REJECTED"
-      return false
+      // GW: show SOs at claim stage where my dept has a split (+ rejected history).
+      if (i.itemStatus === "REJECTED") return true
+      return i.itemStatus === "LOG_PASSED" && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept))
     }
     // NYG: my dept is on this SO (matchDept). Show claim-stage items + rejected history.
     if (i.itemStatus === "REJECTED") return true
@@ -2027,7 +2034,7 @@ export default function RequestDetailPage() {
               ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority)
               : []
             const lowerApproved = lowerApprovers.every((u: any) => itemApprovals.some((a: any) => a.userId === u.id))
-            const canApproveNow = isGwClaimP1Role ? isPending : (isPending && !iHaveApproved && lowerApproved)
+            const canApproveNow = isPending && !iHaveApproved && lowerApproved
             // Next approver info
             const nextApprover = claimApproversList.find((u: any) =>
               !itemApprovals.some((a: any) => a.userId === u.id)
@@ -2069,21 +2076,27 @@ export default function RequestDetailPage() {
 
                   {/* Approve button — only if it's my turn */}
                   {isMyTurn && (
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
+                      {role === "SCM_NYK" && (
+                        <input value={crNoInput} onChange={e => setCrNoInput(e.target.value)}
+                          placeholder="CR NO *"
+                          className="w-32 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      )}
                       <button onClick={async () => {
                           setSubmitting(item.id)
                           const approveAction = isGwClaimP1Role ? "approve_so_claim_gw" : "approve_so"
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: approveAction, itemId: item.id })
+                            body: JSON.stringify({ action: approveAction, itemId: item.id, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined })
                           })
                           if (res.ok) {
                             setReq(await res.json())
                             setDvmSelected(prev => { const n = new Set(prev); n.delete(item.id); return n })
                           } else { const err = await res.json(); alert(err.error || "Error") }
                           setSubmitting(null)
-                        }} disabled={isSub}
-                        className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+                        }} disabled={isSub || (role === "SCM_NYK" && !(crNoInput.trim() || req.crNo))}
+                        title={role === "SCM_NYK" && !(crNoInput.trim() || req.crNo) ? "กรุณาใส่ CR NO ก่อน Approve" : ""}
+                        className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
                         {isSub ? "..." : "Approve"}
                       </button>
                       {!isGwClaimP1Role && (
@@ -2740,14 +2753,15 @@ export default function RequestDetailPage() {
       )}
 
 
-      {/* ACCOUNTING: approve ACCOUNTING_PENDING items → COMPLETED */}
+      {/* ACCOUNTING: read-only view — notified when all departments approved */}
       {isAccounting && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-gray-800">SO APPROVAL — ACCOUNTING</h2>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">ACCOUNTING</span>
-            <span className="text-xs text-gray-500">{accountingItems.length} pending</span>
+            <h2 className="font-semibold text-gray-800">ACCOUNTING — เอกสารพร้อมตรวจสอบ</h2>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">READ ONLY</span>
+            <span className="text-xs text-gray-500">{accountingItems.length} SO</span>
           </div>
+          <p className="text-xs text-gray-400">ทุกแผนก claim อนุมัติครบแล้ว — Accounting ตรวจสอบ/ดาวน์โหลดเอกสารได้ (ไม่ต้องกด approve)</p>
           {req.crNo && (
             <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
               <span className="text-xs font-semibold text-blue-800">CR NO:</span>
@@ -2755,7 +2769,6 @@ export default function RequestDetailPage() {
             </div>
           )}
           {accountingItems.map((item: any) => {
-            const isSub = submitting === item.id
             const isExp = expanded.has(item.id)
             return (
               <div key={item.id} className="rounded-xl border border-blue-200 overflow-hidden">
@@ -2764,19 +2777,6 @@ export default function RequestDetailPage() {
                   <span className="font-semibold text-gray-800 w-28 shrink-0">{item.so}</span>
                   <span className="text-xs text-gray-500 flex-1 min-w-0 truncate">{item.style} · {item.description} · qty {item.qtyRequestAir}</span>
                   <ClaimSplitBadges item={item} />
-                  <button onClick={async () => {
-                      setSubmitting(item.id)
-                      const res = await fetch(`/api/requests/${id}/approve`, {
-                        method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "approve_so", itemId: item.id })
-                      })
-                      if (!res.ok) { const err = await res.json(); alert(err.error || "Error"); setSubmitting(null); return }
-                      setReq(await res.json())
-                      setSubmitting(null)
-                    }} disabled={isSub}
-                    className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
-                    {isSub ? "..." : "Approve → Complete"}
-                  </button>
                 </div>
                 {isExp && (
                   <div className="border-t border-gray-100 p-3 space-y-3">

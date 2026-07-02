@@ -1,5 +1,6 @@
 import { prisma } from "./prisma"
 import { sendMail } from "./email"
+import { getSplits } from "./claim"
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
@@ -220,7 +221,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 
     const req = await prisma.airRequest.findUnique({
       where: { id: requestId },
-      include: { items: { select: { claimDepartment: true, assignedDvm: true } } }
+      include: { items: { select: { claimDepartment: true, claimDepts: true, assignedDvm: true } } }
     })
     if (!req) return
 
@@ -307,11 +308,18 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       return
     }
 
-    // For PENDING_CLAIM_GW — send to CLAIM_GW users matching claim dept
+    // For PENDING_CLAIM_GW — parallel per-dept: notify every claim role that has
+    // a split on this doc (CLAIM_GW for GW/SUPPLIER, SCM_NYK for NYK, SCM_NYG for NYG).
     if (newStatus === "PENDING_CLAIM_GW") {
-      const claimDept = (req as any).claimDepartment
+      const depts = new Set<string>()
+      for (const it of req.items) getSplits(it).forEach(s => depts.add(s.dept))
+      const rolesNeeded = new Set<string>()
+      if ([...depts].some(d => d === "NYK")) rolesNeeded.add("SCM_NYK")
+      if ([...depts].some(d => d === "NYG")) rolesNeeded.add("SCM_NYG")
+      if ([...depts].some(d => ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"].includes(d))) rolesNeeded.add("CLAIM_GW")
+      if (rolesNeeded.size === 0) return
       const users = await (prisma.user as any).findMany({
-        where: { role: "CLAIM_GW", isActive: true, ...(claimDept ? { claimDepartment: claimDept } : {}) },
+        where: { role: { in: [...rolesNeeded] }, isActive: true },
         select: { email: true }
       })
       const recipients = users.map((u: any) => u.email).filter(Boolean)
@@ -320,6 +328,12 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const html = buildHtml(req, newStatus, link)
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
       await sendMail(recipients, `${subject} — ${req.documentNo}`, html)
+      return
+    }
+
+    // For PENDING_ACCOUNTING — all departments approved; notify Accounting (read-only).
+    if (newStatus === "PENDING_ACCOUNTING") {
+      await notifyClaimFinalToAccounting(requestId)
       return
     }
 

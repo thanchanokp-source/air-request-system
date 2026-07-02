@@ -63,43 +63,44 @@ export function totalPct(splits: ClaimSplit[]): number {
   return splits.reduce((s, x) => s + (Number(x.pct) || 0), 0)
 }
 
-// Where a GW split goes right after CLAIM_GW approves the SO.
-export function initialGwSplitStatus(dept: string): string {
-  return GW_SCM_DEPTS.includes(dept) ? SPLIT_STATUS.SCM_PENDING : SPLIT_STATUS.ACCT_PENDING
+// ── GW claim: PARALLEL per-department ──────────────────────────────
+// After President, Logistics (booking) runs parallel with Claim. Each claim
+// department approves ONLY its own split, independently. Departments:
+//   NYK → SCM_NYK (must enter CR NO)   NYG → SCM_NYG
+//   GW / SUPPLIER* → CLAIM_GW
+// When every split is DEPT_APPROVED → item goes to Accounting (read-only,
+// notified). Accounting does NOT approve — it is the terminal/notify step.
+export const GW_DEPT_APPROVED = "DEPT_APPROVED"
+
+// Departments a GW claim role is responsible for.
+export function gwDeptsForRole(role: string): string[] {
+  if (role === "SCM_NYK") return ["NYK"]
+  if (role === "SCM_NYG") return ["NYG"]
+  if (role === "CLAIM_GW") return ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+  return []
 }
 
-// Coarse item.itemStatus derived from the per-split statuses.
-// Sequential processing: all SCM splits clear before the doc moves to Accounting.
-export function deriveGwItemStatus(splits: ClaimSplit[]): string {
-  if (splits.length === 0) return "LOG_PASSED"
-  const st = splits.map(s => s.status)
-  if (st.every(s => s === SPLIT_STATUS.COMPLETED)) return "COMPLETED"
-  if (st.every(s => s === SPLIT_STATUS.REJECTED)) return "REJECTED"
-  if (st.some(s => s === SPLIT_STATUS.SCM_PENDING)) return "SCM_GW_PENDING"
-  if (st.some(s => s === SPLIT_STATUS.ACCT_PENDING)) return "ACCOUNTING_PENDING"
-  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING)) return "LOG_PASSED"
-  return "LOG_PASSED"
+// Does this item have a split for one of `depts` still awaiting approval?
+export function hasPendingGwSplit(item: any, depts: string[]): boolean {
+  return getSplits(item).some(s => depts.includes(s.dept) && s.status !== GW_DEPT_APPROVED && s.status !== SPLIT_STATUS.REJECTED)
 }
 
-// Apply CLAIM_GW's SO approval: route every split to SCM or Accounting.
-export function routeSplitsAfterClaimGw(splits: ClaimSplit[]): ClaimSplit[] {
-  return splits.map(s => ({ ...s, status: initialGwSplitStatus(s.dept) }))
-}
-
-// SCM (NYK/NYG) approves its own portion: that dept's split → Accounting.
-export function approveScmSplit(splits: ClaimSplit[], dept: string, crNo?: string): ClaimSplit[] {
+// Mark this role's departments' splits as approved.
+export function approveGwDeptSplits(splits: ClaimSplit[], depts: string[], crNo?: string): ClaimSplit[] {
   return splits.map(s =>
-    s.dept === dept && s.status === SPLIT_STATUS.SCM_PENDING
-      ? { ...s, status: SPLIT_STATUS.ACCT_PENDING, crNo: crNo ?? s.crNo }
+    depts.includes(s.dept) && s.status !== GW_DEPT_APPROVED && s.status !== SPLIT_STATUS.REJECTED
+      ? { ...s, status: GW_DEPT_APPROVED, crNo: crNo ?? s.crNo }
       : s
   )
 }
 
-// Accounting closes every remaining Accounting-pending split.
-export function completeAcctSplits(splits: ClaimSplit[]): ClaimSplit[] {
-  return splits.map(s =>
-    s.status === SPLIT_STATUS.ACCT_PENDING ? { ...s, status: SPLIT_STATUS.COMPLETED } : s
-  )
+// Coarse item.itemStatus from parallel per-dept splits.
+export function deriveGwItemStatus(splits: ClaimSplit[]): string {
+  if (splits.length === 0) return "LOG_PASSED"
+  const st = splits.map(s => s.status)
+  if (st.some(s => s === SPLIT_STATUS.REJECTED)) return "REJECTED" // reject one portion → SO rejected
+  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING)) return "LOG_PASSED" // some dept still pending
+  return "ACCOUNTING_PENDING" // every dept approved → to Accounting (terminal/notify)
 }
 
 // ── NYG claim flow (per split: DVM → VP, per department) ───────────
