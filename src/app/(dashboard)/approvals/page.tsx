@@ -201,10 +201,10 @@ export default function ApprovalsPage() {
                         <td className="px-3 py-1.5 text-blue-700">{fmtNum(item.grossWeight, 2)}</td>
                         <td className="px-3 py-1.5 text-blue-700">{fmtNum(item.airFreight)}</td>
                         <td className="px-3 py-1.5 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
-                        <td className="px-3 py-1.5">{item.reasonDelay}</td>
-                        <td className="px-3 py-1.5">{item.factory}</td>
-                        <td className="px-3 py-1.5">{item.country}</td>
-                        <td className="px-3 py-1.5">{item.port}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{item.reasonDelay}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{item.factory}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{item.country}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{item.port}</td>
                         <td className="px-3 py-1.5"><ClaimSplitBadges item={item} /></td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.invoiceNo || "-"}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.hawbNo || "-"}</td>

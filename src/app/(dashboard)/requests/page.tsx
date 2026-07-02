@@ -397,10 +397,10 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2 text-blue-700">{fmtNum(row.grossWeight, 2)}</td>
                                     <td className="px-3 py-2 text-blue-700">{fmtNum(row.airFreight)}</td>
                                     <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(row.actualAirFreight)}</td>
-                                    <td className="px-3 py-2">{row.factory}</td>
-                                    <td className="px-3 py-2">{row.country}</td>
-                                    <td className="px-3 py-2">{row.port}</td>
-                                    <td className="px-3 py-2">{row.claimDepartment || "-"}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">{row.factory}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">{row.country}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">{row.port}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">{row.claimDepartment || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.invoiceNo || "-"}</td>
                                     <td className="px-3 py-2 max-w-[150px] truncate" title={row.reasonDelay}>{row.reasonDelay || "-"}</td>
                                     <td className="px-3 py-2"><SoBadge s={row.itemStatus} docStatus={row.request.status} /></td>
