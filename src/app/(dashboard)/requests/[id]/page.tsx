@@ -2050,6 +2050,23 @@ export default function RequestDetailPage() {
             </div>
           </div>
 
+          {/* CR NO — one per DOCUMENT (not per SO) */}
+          {role === "SCM_NYK" && (
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+              <label className="text-xs font-semibold text-blue-800 shrink-0">CR NO <span className="text-red-500">*</span></label>
+              <input
+                value={crNoInput}
+                onChange={e => setCrNoInput(e.target.value)}
+                disabled={!!req.crNo}
+                placeholder={req.crNo ? req.crNo : "ใส่ CR NO ครั้งเดียว — ใช้กับทั้งเอกสาร"}
+                className={`flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-500 ${!crNoInput.trim() && !req.crNo ? "border-red-300 bg-red-50" : "border-blue-200 bg-white"}`}
+              />
+              {req.crNo
+                ? <span className="text-xs text-green-700 font-medium shrink-0 whitespace-nowrap">✓ บันทึกแล้ว: {req.crNo}</span>
+                : <span className="text-xs text-blue-500 shrink-0 whitespace-nowrap">1 DOC = 1 CR NO</span>}
+            </div>
+          )}
+
           {/* Priority order reference */}
           {claimApproversList.length > 1 && (
             <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
@@ -2122,11 +2139,6 @@ export default function RequestDetailPage() {
                   {/* Approve button — only if it's my turn */}
                   {isMyTurn && (
                     <div className="flex items-center gap-2">
-                      {role === "SCM_NYK" && (
-                        <input value={crNoInput} onChange={e => setCrNoInput(e.target.value)}
-                          placeholder="CR NO *"
-                          className="w-32 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
-                      )}
                       <button onClick={async () => {
                           setSubmitting(item.id)
                           const approveAction = isGwClaimP1Role ? "approve_so_claim_gw" : "approve_so"
