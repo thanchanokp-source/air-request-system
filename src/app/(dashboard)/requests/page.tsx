@@ -308,7 +308,7 @@ export default function RequestsPage() {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-1.5">
           <MultiSelect label="All Status" options={["COMPLETED","PENDING","REJECTED"]} value={statusFilter} onChange={setStatusFilter} />
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />

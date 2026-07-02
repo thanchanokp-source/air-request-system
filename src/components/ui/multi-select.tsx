@@ -28,9 +28,9 @@ export function MultiSelect({ label, options, value, onChange }: Props) {
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen(!open)}
-        className={`w-full border rounded-lg px-3 py-2 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-300 ${value.length > 0 ? "border-blue-400 bg-blue-50" : "border-gray-300 bg-white"}`}>
+        className={`w-full border rounded-lg px-2 py-1.5 text-xs text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-300 ${value.length > 0 ? "border-blue-400 bg-blue-50" : "border-gray-300 bg-white"}`}>
         <span className={`truncate ${value.length > 0 ? "text-blue-700 font-medium" : "text-gray-500"}`}>{display}</span>
-        <span className="text-gray-400 text-xs ml-1 shrink-0">▼</span>
+        <span className="text-gray-400 text-[10px] ml-1 shrink-0">▼</span>
       </button>
       {open && (
         <div className="absolute z-50 top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-gray-200 rounded-xl shadow-lg">
