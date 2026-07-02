@@ -41,9 +41,11 @@ export const authOptions: NextAuthOptions = {
           // Try presidentToken
           const presReq = await (prisma.airRequest as any).findFirst({ where: { presidentToken: token } })
           if (presReq) {
-            const presUser = await (prisma.user as any).findFirst({ where: { role: "PRESIDENT", isActive: true } })
+            const isGW = presReq.bu === "GW"
+            const presRole = isGW ? "PRESIDENT_GW" : "PRESIDENT"
+            const presUser = await (prisma.user as any).findFirst({ where: { role: presRole, isActive: true } })
             if (presUser) {
-              return { id: presUser.id, email: presUser.email, name: presUser.name, role: "PRESIDENT", bu: presUser.bu || "NYG", claimDepartment: null, priority: null }
+              return { id: presUser.id, email: presUser.email, name: presUser.name, role: presRole, bu: isGW ? "GW" : (presUser.bu || "NYG"), claimDepartment: null, priority: null }
             }
             return null
           }
@@ -65,12 +67,23 @@ export const authOptions: NextAuthOptions = {
             if (vpScmUser) return { id: vpScmUser.id, email: vpScmUser.email, name: vpScmUser.name, role: "VP_SCM", bu: vpScmUser.bu || "NYG", claimDepartment: null, priority: null }
             return null
           }
-          // Try logisticsToken
+          // Try logisticsToken (BU-aware: LOGISTICS_GW for GW)
           const logReq = await (prisma.airRequest as any).findFirst({ where: { logisticsToken: token } })
           if (logReq) {
-            const logUser = await (prisma.user as any).findFirst({ where: { role: "LOGISTICS", isActive: true } })
-            if (logUser) return { id: logUser.id, email: logUser.email, name: logUser.name, role: "LOGISTICS", bu: logUser.bu || "NYG", claimDepartment: null, priority: null }
+            const isGW = logReq.bu === "GW"
+            const logRole = isGW ? "LOGISTICS_GW" : "LOGISTICS"
+            const logUser = await (prisma.user as any).findFirst({ where: { role: logRole, isActive: true } })
+            if (logUser) return { id: logUser.id, email: logUser.email, name: logUser.name, role: logRole, bu: isGW ? "GW" : (logUser.bu || "NYG"), claimDepartment: null, priority: null }
             return null
+          }
+          // GW claim per-dept tokens
+          for (const [field, gwRole] of [["claimGwToken", "CLAIM_GW"], ["scmNykToken", "SCM_NYK"], ["scmNygToken", "SCM_NYG"]] as const) {
+            const cReq = await (prisma.airRequest as any).findFirst({ where: { [field]: token } })
+            if (cReq) {
+              const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true } })
+              if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, bu: "GW", claimDepartment: (u as any).claimDepartment ?? null, priority: (u as any).priority ?? null }
+              return null
+            }
           }
           // Try accountingToken
           const acReq = await (prisma.airRequest as any).findFirst({ where: { accountingToken: token } })

@@ -88,6 +88,9 @@ model AirRequest {
   assignedVpScm    String?
   logisticsToken   String?
   accountingToken  String?
+  claimGwToken     String?
+  scmNykToken      String?
+  scmNygToken      String?
   crNo             String?
   claimNextEmail   String?
   claimNextToken   String?

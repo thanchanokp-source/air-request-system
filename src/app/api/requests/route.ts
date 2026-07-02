@@ -128,7 +128,15 @@ export async function POST(req: NextRequest) {
         createdById: userId,
         assignedVpMer,
         vpMerToken: crypto.randomUUID(),
-        ...(isGW ? { gmToken: crypto.randomUUID() } : {}),
+        ...(isGW ? {
+          gmToken: crypto.randomUUID(),
+          presidentToken: crypto.randomUUID(),
+          logisticsToken: crypto.randomUUID(),
+          accountingToken: crypto.randomUUID(),
+          claimGwToken: crypto.randomUUID(),
+          scmNykToken: crypto.randomUUID(),
+          scmNygToken: crypto.randomUUID(),
+        } : {}),
         items: {
           create: items.map((item: any) => {
             const port = String(col(item, "Port") || "").trim()

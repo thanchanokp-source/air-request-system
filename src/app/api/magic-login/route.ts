@@ -20,11 +20,14 @@ export async function GET(req: NextRequest) {
   const byVpScm      = byVpMer || byPresident || byScm ? null : await (prisma.airRequest as any).findFirst({ where: { vpScmToken: token } })
   const byLogistics  = byVpMer || byPresident || byScm || byVpScm ? null : await (prisma.airRequest as any).findFirst({ where: { logisticsToken: token } })
   const byAccounting = byVpMer || byPresident || byScm || byVpScm || byLogistics ? null : await (prisma.airRequest as any).findFirst({ where: { accountingToken: token } })
-  const byClaimNext  = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting ? null : await (prisma.airRequest as any).findFirst({ where: { claimNextToken: token } })
+  const byClaimGw    = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting ? null : await (prisma.airRequest as any).findFirst({ where: { claimGwToken: token } })
+  const byScmNyk     = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw ? null : await (prisma.airRequest as any).findFirst({ where: { scmNykToken: token } })
+  const byScmNyg     = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNyk ? null : await (prisma.airRequest as any).findFirst({ where: { scmNygToken: token } })
+  const byClaimNext  = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNyk || byScmNyg ? null : await (prisma.airRequest as any).findFirst({ where: { claimNextToken: token } })
 
-  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byGm ? "gm" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimNext ? "claimNext" : "none")
+  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byGm ? "gm" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimGw ? "claimGw" : byScmNyk ? "scmNyk" : byScmNyg ? "scmNyg" : byClaimNext ? "claimNext" : "none")
 
-  if (!byVpMer && !byGm && !byPresident && !byScm && !byVpScm && !byLogistics && !byAccounting && !byClaimNext) {
+  if (!byVpMer && !byGm && !byPresident && !byScm && !byVpScm && !byLogistics && !byAccounting && !byClaimGw && !byScmNyk && !byScmNyg && !byClaimNext) {
     console.log("[magic-login] token not found")
     return NextResponse.redirect(new URL("/login?error=invalid-token", req.url))
   }

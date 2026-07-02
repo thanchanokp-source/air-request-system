@@ -266,6 +266,34 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       return
     }
 
+    // PENDING_PRESIDENT_GW — magic link to President (GW)
+    if (newStatus === "PENDING_PRESIDENT_GW") {
+      const users = await (prisma.user as any).findMany({ where: { role: "PRESIDENT_GW", isActive: true }, select: { email: true } })
+      const recipients = users.map((u: any) => u.email).filter(Boolean)
+      if (!recipients.length) return
+      const link = `${APP_URL}/requests/${requestId}`
+      const token = (req as any).presidentToken
+      const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
+      const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
+      const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
+      await sendMail(recipients, `${subject} — ${req.documentNo}`, html)
+      return
+    }
+
+    // PENDING_LOGISTICS_GW — magic link to Logistics (GW)
+    if (newStatus === "PENDING_LOGISTICS_GW") {
+      const users = await (prisma.user as any).findMany({ where: { role: "LOGISTICS_GW", isActive: true }, select: { email: true } })
+      const recipients = users.map((u: any) => u.email).filter(Boolean)
+      if (!recipients.length) return
+      const link = `${APP_URL}/requests/${requestId}`
+      const token = (req as any).logisticsToken
+      const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
+      const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
+      const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
+      await sendMail(recipients, `${subject} — ${req.documentNo}`, html)
+      return
+    }
+
     // PENDING_PRESIDENT — send magic link to President
     if (newStatus === "PENDING_PRESIDENT") {
       const presidentUser = await (prisma.user as any).findFirst({ where: { role: "PRESIDENT", isActive: true }, select: { email: true } })
@@ -333,16 +361,23 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       if (depts.has("SCM NYG")) rolesNeeded.add("SCM_NYG")
       if ([...depts].some(d => ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"].includes(d))) rolesNeeded.add("CLAIM_GW")
       if (rolesNeeded.size === 0) return
-      const users = await (prisma.user as any).findMany({
-        where: { role: { in: [...rolesNeeded] }, isActive: true },
-        select: { email: true }
-      })
-      const recipients = users.map((u: any) => u.email).filter(Boolean)
-      if (!recipients.length) return
       const link = `${APP_URL}/requests/${requestId}`
-      const html = buildHtml(req, newStatus, link)
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
-      await sendMail(recipients, `${subject} — ${req.documentNo}`, html)
+      // Send each claim role its own magic link (per-role token).
+      const roleToken: Record<string, string> = {
+        CLAIM_GW: (req as any).claimGwToken,
+        SCM_NYK: (req as any).scmNykToken,
+        SCM_NYG: (req as any).scmNygToken,
+      }
+      for (const role of rolesNeeded) {
+        const users = await (prisma.user as any).findMany({ where: { role, isActive: true }, select: { email: true } })
+        const recipients = users.map((u: any) => u.email).filter(Boolean)
+        if (!recipients.length) continue
+        const token = roleToken[role]
+        const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
+        const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
+        await sendMail(recipients, `${subject} — ${req.documentNo}`, html)
+      }
       return
     }
 
