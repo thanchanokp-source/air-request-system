@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits, gwDeptsForRole, hasPendingGwSplit } from "@/lib/claim"
+import { getSplits, gwDeptsForRole, hasPendingGwSplit, splitAirCost } from "@/lib/claim"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -123,6 +123,12 @@ export default function ApprovalsPage() {
 
   const docGroups = myRequests.filter(r => filtered.some(f => f.request.id === r.id))
 
+  const isClaimRole = role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG"
+  const myDepts = isClaimRole ? gwDeptsForRole(role) : []
+  // Sum of this SO's air-freight portion for the current claim role's departments.
+  const myClaimForItem = (item: any) =>
+    getSplits(item).filter((s: any) => myDepts.includes(s.dept)).reduce((sum: number, s: any) => sum + splitAirCost(item, s), 0)
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -165,6 +171,12 @@ export default function ApprovalsPage() {
           const reqItems = filtered.filter(f => f.request.id === req.id)
           const estTotal = reqItems.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
           const actTotal = reqItems.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
+          // Claim amount per department across this whole document (THB).
+          const deptSums: Record<string, number> = {}
+          reqItems.forEach((i: any) => getSplits(i).forEach((s: any) => {
+            deptSums[s.dept] = (deptSums[s.dept] || 0) + splitAirCost(i, s)
+          }))
+          const myDocTotal = reqItems.reduce((s: number, i: any) => s + myClaimForItem(i), 0)
           return (
             <div key={req.id} className="bg-white rounded-xl border overflow-hidden">
               <div className="px-4 py-3 bg-gray-50 border-b flex flex-wrap items-center gap-2">
@@ -174,6 +186,12 @@ export default function ApprovalsPage() {
                   <StatusBadge status={req.status} />
                   <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">EST {fmtNum(estTotal)} ฿</span>
                   <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">ACT {fmtNum(actTotal)} ฿</span>
+                  {Object.entries(deptSums).map(([dept, sum]) => (
+                    <span key={dept} className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{dept} {fmtNum(sum)} ฿</span>
+                  ))}
+                  {isClaimRole && (
+                    <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">claim แผนกฉัน {fmtNum(myDocTotal)} ฿</span>
+                  )}
                 </div>
                 <Link href={`/requests/${req.id}`} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium shrink-0 ml-auto">
                   Open →
@@ -182,7 +200,7 @@ export default function ApprovalsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b">
-                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
+                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["CLAIM แผนกฉัน (THB)"] : []),"REASON","FACTORY","COUNTRY","PORT","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
@@ -201,6 +219,7 @@ export default function ApprovalsPage() {
                         <td className="px-3 py-1.5 text-blue-700">{fmtNum(item.grossWeight, 2)}</td>
                         <td className="px-3 py-1.5 text-blue-700">{fmtNum(item.airFreight)}</td>
                         <td className="px-3 py-1.5 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
+                        {isClaimRole && <td className="px-3 py-1.5 font-bold text-red-700 whitespace-nowrap">{fmtNum(myClaimForItem(item))} ฿</td>}
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.reasonDelay}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.factory}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.country}</td>
