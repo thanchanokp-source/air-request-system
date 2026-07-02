@@ -275,6 +275,17 @@ export default function FilesPage() {
                             {/* Items under document */}
                             {expandedDocs.has(docKey) && (
                               <div className="pl-20 pr-5 pb-3 bg-blue-50 border-t border-blue-100">
+                                {activeFolder === "LOGISTICS" && (req.attachments || []).some((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)) && (
+                                  <div className="flex flex-wrap gap-2 mt-2">
+                                    <span className="text-xs text-gray-500 font-medium py-1">ไฟล์ Logistics:</span>
+                                    {(req.attachments || []).filter((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)).map((a: any) => (
+                                      <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer"
+                                        className="text-xs bg-white border border-orange-200 text-orange-700 px-2 py-1 rounded hover:bg-orange-50 font-medium">
+                                        📎 {a.category}: {a.fileName}
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-xs mt-2">
                                     <thead>
