@@ -394,7 +394,7 @@ export default function RequestDetailPage() {
     setLgDraftSaving(false)
     router.push("/approvals")
   }
-  const isVpMerGW = role === "DPM_GW" && req?.status === "PENDING_VP_MER_GW" && isGWRequest
+  const isVpMerGW = (role === "DPM_GW" || role === "VP_MER_GW") && req?.status === "PENDING_VP_MER_GW" && isGWRequest
   const isPresidentGW = role === "PRESIDENT_GW" && req?.status === "PENDING_PRESIDENT_GW" && isGWRequest
   const isLogisticsGW = role === "LOGISTICS_GW" && (req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && presPassedItems.length > 0 && isGWRequest
   const userClaimDept = (session?.user as any)?.claimDepartment || null

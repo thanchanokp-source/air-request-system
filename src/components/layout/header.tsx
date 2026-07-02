@@ -3,6 +3,12 @@ import { signOut } from "next-auth/react"
 import { useEffect, useState } from "react"
 import Link from "next/link"
 
+const ROLE_LABEL: Record<string, string> = {
+  VP_MER_GW: "DPM (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)", PRESIDENT_GW: "President (GW)",
+  LOGISTICS_GW: "Logistics (GW)", CLAIM_GW: "Claim (GW)", SCM_NYK: "SCM NYK", SCM_NYG: "SCM NYG",
+  ACCOUNTING: "Accounting", MER_USER: "MER", MER_GW: "MER (GW)",
+}
+
 export default function Header({ user, onMenuClick }: { user: any; onMenuClick?: () => void }) {
   const [count, setCount] = useState(0)
 
@@ -33,7 +39,7 @@ export default function Header({ user, onMenuClick }: { user: any; onMenuClick?:
         </Link>
         <div className="text-right">
           <p className="text-sm font-medium text-gray-900 leading-tight">{user.name || user.email}</p>
-          <p className="text-xs text-gray-500">{user.role}</p>
+          <p className="text-xs text-gray-500">{ROLE_LABEL[user.role] || user.role}</p>
         </div>
         <button onClick={() => signOut({ callbackUrl: "/login" })} className="text-xs text-gray-500 hover:text-red-600 border border-gray-300 px-2 md:px-3 py-1 rounded whitespace-nowrap">
           Logout

@@ -34,11 +34,16 @@ export default function NewRequestPage() {
   const [vpMerUsers, setVpMerUsers] = useState<any[]>([])
 
   useEffect(() => {
-    const role = isGW ? "DPM_GW" : "VP_MER"
-    fetch(`/api/users/by-role?role=${role}`)
-      .then(r => r.json())
-      .then(users => {
-        const list = Array.isArray(users) ? users : []
+    // GW first approver may be role DPM_GW or legacy VP_MER_GW — fetch both.
+    const roles = isGW ? ["DPM_GW", "VP_MER_GW"] : ["VP_MER"]
+    Promise.all(roles.map(r => fetch(`/api/users/by-role?role=${r}`).then(res => res.json()).catch(() => [])))
+      .then(results => {
+        const seen = new Set<string>()
+        const list: any[] = []
+        for (const res of results) {
+          if (!Array.isArray(res)) continue
+          for (const u of res) { if (u?.email && !seen.has(u.email)) { seen.add(u.email); list.push(u) } }
+        }
         setVpMerUsers(list)
         if (list.length === 1) setVpMerSelected({ name: list[0].name, email: list[0].email })
       })

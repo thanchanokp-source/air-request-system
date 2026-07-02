@@ -53,7 +53,7 @@ export default function ApprovalsPage() {
     if (CLAIM_VP_ROLES.includes(role)) {
       return items.some((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
     }
-    if (role === "DPM_GW") return (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail || r.status === "PENDING_DPM_GW")
+    if (role === "DPM_GW" || role === "VP_MER_GW") return (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail || r.status === "PENDING_DPM_GW")
     if (role === "PRESIDENT_GW") return r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED")
@@ -79,7 +79,7 @@ export default function ApprovalsPage() {
     if (CLAIM_VP_ROLES.includes(role)) {
       return items.filter((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
     }
-    if (role === "DPM_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
+    if (role === "DPM_GW" || role === "VP_MER_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "PRESIDENT_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW") return items.filter((i: any) => i.itemStatus === "LOG_PASSED")
