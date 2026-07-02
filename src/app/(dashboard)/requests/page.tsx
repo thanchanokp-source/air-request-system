@@ -180,7 +180,6 @@ export default function RequestsPage() {
     { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
     { key: "PENDING_LOGISTICS_GW", label: "LOGISTICS" },
     { key: "PENDING_CLAIM_GW", label: "CLAIM" },
-    { key: "PENDING_ACCOUNTING", label: "ACCOUNTING (read)" },
   ] : [
     { key: "PENDING_VP_MER", label: "VP MER" },
     { key: "PENDING_PRESIDENT", label: "PRESIDENT" },
