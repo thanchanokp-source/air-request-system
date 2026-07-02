@@ -362,10 +362,6 @@ export default function RequestsPage() {
                   </span>
                 ))}
               </div>
-              {/* Approval progress chain */}
-              <div className="px-3 sm:px-4 py-2 border-b border-gray-100 bg-white">
-                <ApprovalChain status={dg.request.status} bu={dg.request.bu === "GW" ? "GW" : "NYG"} items={dg.request.items} />
-              </div>
 
               {/* Style groups */}
               {isDocExp && (
