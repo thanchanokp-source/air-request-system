@@ -1392,17 +1392,24 @@ export default function RequestDetailPage() {
             <div className="flex items-center gap-2">
               <button onClick={async () => {
                 const XLSX = await import("xlsx")
-                const headers = ["SO","STYLE","CUSTOMER PO","DESCRIPTION","QTY AIR","VWT(KG)","CLAIM DEPT","HAWB#","INV NO.","TOTAL AIR (THB) by HAWB"]
-                const rows = presPassedItems.map((i: any) => [
-                  i.so, i.style, i.customerPO || "", i.description || "",
-                  (i.qtyActualShip ?? i.qtyRequestAir), i.grossWeight ?? "",
-                  getSplits(i).map((s: any) => `${s.dept} ${s.pct}%`).join(", "),
-                  i.hawbNo || "", i.invoiceNo || "", "",
-                ])
+                // Full MER template columns; LG fills INV NO. / Actual Airfreight (= HAWB total) / HAWB#.
+                const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","Actual Airfreight","HAWB#","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
+                const rows = presPassedItems.map((i: any) => {
+                  const d: any[] = getSplits(i)
+                  return [
+                    req?.documentNo || "", req?.brandName || "", "GW", i.style || "", i.so || "", i.sub || "", i.customerPO || "",
+                    i.description || "", i.grossWeight ?? "", fmtDate(i.originalShipmentDate), fmtDate(i.planShipmentDate),
+                    i.qtyOriginalShipment ?? "", i.qtyRequestAir ?? "", i.reasonDelay || "", i.factory || "", i.country || "", i.port || "",
+                    i.invoiceNo || "", i.actualAirFreight ?? "", i.hawbNo || "",
+                    d[0]?.dept || "", d[0]?.pct ?? "", d[0]?.reason || "",
+                    d[1]?.dept || "", d[1]?.pct ?? "", d[1]?.reason || "",
+                    d[2]?.dept || "", d[2]?.pct ?? "", d[2]?.reason || "",
+                  ]
+                })
                 const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-                ws["!cols"] = [12,14,14,24,10,10,22,16,16,22].map(w => ({ wch: w }))
+                ws["!cols"] = [16,16,6,14,12,8,14,24,10,20,20,22,22,16,14,12,12,16,16,16,14,8,16,14,8,16,14,8,16].map(w => ({ wch: w }))
                 const wb = XLSX.utils.book_new()
-                XLSX.utils.book_append_sheet(wb, ws, "LG")
+                XLSX.utils.book_append_sheet(wb, ws, "GW")
                 XLSX.writeFile(wb, `${req?.documentNo || id}_LG.xlsx`)
               }} className="text-xs bg-slate-100 border border-slate-300 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-200 font-medium whitespace-nowrap">
                 ⬇ Export
@@ -1426,7 +1433,7 @@ export default function RequestDetailPage() {
                         const so = String(r["SO"] || "").trim()
                         const iid = soToId[so]
                         if (!hawb || !iid) continue
-                        const total = parseFloat(String(r["TOTAL AIR (THB) by HAWB"] || "").replace(/,/g, "")) || 0
+                        const total = parseFloat(String(r["Actual Airfreight"] || "").replace(/,/g, "")) || 0
                         const inv = String(r["INV NO."] || "").trim()
                         if (!groups[hawb]) groups[hawb] = { total: 0, items: [] }
                         if (total > groups[hawb].total) groups[hawb].total = total
