@@ -227,7 +227,7 @@ export default function NewRequestPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     {Object.keys(preview[0] || {}).map(k => (
-                      <th key={k} className="text-left px-3 py-2 font-medium text-gray-600 whitespace-nowrap">{k}</th>
+                      <th key={k} className="text-left px-3 py-2 font-bold text-gray-800 whitespace-nowrap">{k}</th>
                     ))}
                   </tr>
                 </thead>
