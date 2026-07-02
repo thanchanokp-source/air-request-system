@@ -251,13 +251,16 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       return
     }
 
-    // PENDING_GM_GW — notify all GM (GW) approvers
+    // PENDING_GM_GW — notify all GM (GW) approvers with a magic link (reuses vpMerToken;
+    // authorize resolves it to a GM session while the doc is at PENDING_GM_GW)
     if (newStatus === "PENDING_GM_GW") {
       const gmUsers = await (prisma.user as any).findMany({ where: { role: "GM_GW", isActive: true }, select: { email: true } })
       const recipients = gmUsers.map((u: any) => u.email).filter(Boolean)
       if (!recipients.length) return
       const link = `${APP_URL}/requests/${requestId}`
-      const html = buildHtml(req, newStatus, link)
+      const token = (req as any).vpMerToken
+      const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
+      const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
       await sendMail(recipients, `${subject} — ${req.documentNo}`, html)
       return

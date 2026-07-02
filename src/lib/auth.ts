@@ -19,10 +19,16 @@ export const authOptions: NextAuthOptions = {
           // Try vpMerToken
           const airReq = await (prisma.airRequest as any).findFirst({ where: { vpMerToken: token } })
           if (airReq) {
+            const isGW = airReq.bu === "GW"
+            // GW: the same request token also serves the GM stage (after DPM approves).
+            if (isGW && airReq.status === "PENDING_GM_GW") {
+              const gmUser = await (prisma.user as any).findFirst({ where: { role: "GM_GW", isActive: true } })
+              if (gmUser) return { id: gmUser.id, email: gmUser.email, name: gmUser.name, role: "GM_GW", bu: "GW", claimDepartment: null, priority: null }
+              return null
+            }
             const assignedEmail = airReq.assignedVpMer
             if (!assignedEmail) return null
             const user = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
-            const isGW = airReq.bu === "GW"
             const vpRole = isGW ? "VP_MER_GW" : "VP_MER"
             if (user) {
               // Always grant VP_MER role for this session — they are the designated approver
