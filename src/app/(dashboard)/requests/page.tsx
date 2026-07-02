@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, Fragment } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
@@ -364,7 +364,7 @@ export default function RequestsPage() {
               </div>
               {/* Approval progress chain */}
               <div className="px-3 sm:px-4 py-2 border-b border-gray-100 bg-white">
-                <ApprovalChain status={dg.request.status} bu={dg.request.bu === "GW" ? "GW" : "NYG"} />
+                <ApprovalChain status={dg.request.status} bu={dg.request.bu === "GW" ? "GW" : "NYG"} items={dg.request.items} />
               </div>
 
               {/* Style groups */}
@@ -390,7 +390,8 @@ export default function RequestsPage() {
                               </thead>
                               <tbody className="divide-y divide-gray-50">
                                 {sg.rows.map((row: any) => (
-                                  <tr key={row.id} className={`hover:bg-blue-50/30 ${row.itemStatus === "REJECTED" ? "opacity-50" : ""}`}>
+                                  <Fragment key={row.id}>
+                                  <tr className={`hover:bg-blue-50/30 ${row.itemStatus === "REJECTED" ? "opacity-50" : ""}`}>
                                     <td className="px-3 py-2 font-medium whitespace-nowrap">{row.so}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.customerPO || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
@@ -409,6 +410,12 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2"><SoBadge s={row.itemStatus} docStatus={row.request.status} /></td>
                                     <td className="px-3 py-2"><CurrentStepBadge docStatus={row.request.status} itemStatus={row.itemStatus} /></td>
                                   </tr>
+                                  <tr className="bg-gray-50/40">
+                                    <td colSpan={20} className="px-6 py-1.5">
+                                      <ApprovalChain status={row.request.status} bu={dg.request.bu === "GW" ? "GW" : "NYG"} soItem={row} sm />
+                                    </td>
+                                  </tr>
+                                  </Fragment>
                                 ))}
                               </tbody>
                             </table>
