@@ -1391,6 +1391,19 @@ export default function RequestDetailPage() {
             {/* Excel export/import — top-right of the Logistics frame */}
             <div className="flex items-center gap-2">
               <button onClick={async () => {
+                if (!confirm("ล้างข้อมูล Logistics ทั้งหมด (HAWB, INV, Actual Air) ของเอกสารนี้?")) return
+                setImportingLg(true)
+                try {
+                  const res = await fetch(`/api/requests/${id}/logistics-clear`, { method: "POST" })
+                  if (res.ok) {
+                    const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json())
+                    setHawbRefreshKey(k => k + 1)
+                  } else { alert("ล้างข้อมูลไม่สำเร็จ") }
+                } finally { setImportingLg(false) }
+              }} className="text-xs bg-red-50 border border-red-200 text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-100 font-medium whitespace-nowrap">
+                🗑 ล้างข้อมูล
+              </button>
+              <button onClick={async () => {
                 const XLSX = await import("xlsx")
                 // Full MER template columns; LG fills INV NO. / Actual Airfreight (= HAWB total) / HAWB#.
                 const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","Actual Airfreight","HAWB#","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
