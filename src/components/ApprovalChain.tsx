@@ -53,7 +53,7 @@ export function ApprovalChain({ status, bu, items }: { status: string; bu: strin
     const stages = NYG_STAGES
     const cur = completed ? 99 : (stages.find(s => s.key === status)?.ord ?? -1)
     return (
-      <div className="flex items-center flex-wrap gap-y-2 overflow-x-auto py-1">
+      <div className="flex items-center gap-0 overflow-x-auto py-1">
         {stages.map((s, i) => (
           <div key={s.key} className="flex items-center shrink-0">
             <Chip state={rejected ? "pending" : completed || s.ord < cur ? "done" : s.ord === cur ? "active" : "pending"} label={s.label} />
@@ -87,7 +87,7 @@ export function ApprovalChain({ status, bu, items }: { status: string; bu: strin
   }
 
   return (
-    <div className="flex items-center flex-wrap gap-1.5 gap-y-2 overflow-x-auto py-1">
+    <div className="flex items-center gap-1.5 overflow-x-auto py-1">
       {GW_PRE.map(s => (
         <div key={s.key} className="flex items-center shrink-0">
           <Chip state={rejected ? "pending" : stateFor(s.ord)} label={s.label} />
