@@ -2870,15 +2870,17 @@ export default function RequestDetailPage() {
                   const isGW = req.bu === "GW"
                   const fmtD = (v: any) => { if (!v) return ""; const d = new Date(v); if (isNaN(d.getTime())) return ""; return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}` }
                   const DEPT_LABEL: Record<string,string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
-                  const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","Actual Airfreight","HAWB#","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
+                  const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","HAWB#","HAWB Total Cost (THB)","CLAIM DEPT 1","%CLAIM1","Actual Airfreight 1","REASON 1","CLAIM DEPT 2","%CLAIM2","Actual Airfreight 2","REASON 2","CLAIM DEPT 3","%CLAIM3","Actual Airfreight 3","REASON 3"]
                   const rows = allLgItems.map((item: any) => {
                     const invNo = soInvMap[item.id] || ""
                     const hawbGrp = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
                     const hawbNo = hawbGrp?.hawbNo || ""
-                    const actualFreight = hawbGrp && parseFloat(hawbGrp.totalCost) > 0
+                    const af = hawbGrp && parseFloat(hawbGrp.totalCost) > 0
                       ? Math.round(item.qtyRequestAir * getHawbCalc(hawbGrp).avgPerUnit * 100) / 100
-                      : (item.actualAirFreight ?? "")
+                      : (typeof item.actualAirFreight === "number" ? item.actualAirFreight : 0)
                     const d: any[] = Array.isArray(item.claimDepts) && item.claimDepts.length > 0 ? item.claimDepts : []
+                    // Actual airfreight split per claim dept = SO actual × dept% (blank if no data yet)
+                    const deptAmt = (pct: any) => (af > 0 && pct) ? Math.round(af * (Number(pct) / 100) * 100) / 100 : ""
                     return [
                       req.documentNo, req.brandName || "", isGW ? "GW" : "NYG",
                       item.style || "", item.so || "", (item as any).sub || "", item.customerPO || "",
@@ -2887,15 +2889,14 @@ export default function RequestDetailPage() {
                       item.qtyOriginalShipment ?? item.qtyRequestAir ?? "", item.qtyRequestAir ?? "",
                       item.reasonDelay || "", item.factory || "",
                       item.country || "", item.port || "",
-                      invNo, actualFreight, hawbNo,
-                      d[0]?.dept ? (DEPT_LABEL[d[0].dept] || d[0].dept) : "", d[0]?.pct ?? "", d[0]?.reason || "",
-                      d[1]?.dept ? (DEPT_LABEL[d[1].dept] || d[1].dept) : "", d[1]?.pct ?? "", d[1]?.reason || "",
-                      d[2]?.dept ? (DEPT_LABEL[d[2].dept] || d[2].dept) : "", d[2]?.pct ?? "", d[2]?.reason || "",
+                      invNo, hawbNo, hawbGrp?.totalCost || "",
+                      d[0]?.dept ? (DEPT_LABEL[d[0].dept] || d[0].dept) : "", d[0]?.pct ?? "", deptAmt(d[0]?.pct), d[0]?.reason || "",
+                      d[1]?.dept ? (DEPT_LABEL[d[1].dept] || d[1].dept) : "", d[1]?.pct ?? "", deptAmt(d[1]?.pct), d[1]?.reason || "",
+                      d[2]?.dept ? (DEPT_LABEL[d[2].dept] || d[2].dept) : "", d[2]?.pct ?? "", deptAmt(d[2]?.pct), d[2]?.reason || "",
                     ]
                   })
                   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-                  const colWidths = [16,16,6,14,12,8,14,24,10,20,20,22,22,16,14,12,12,16,14,16,14,8,16,14,8,16,14,8,16]
-                  ws["!cols"] = colWidths.map(w => ({ wch: w }))
+                  ws["!cols"] = [16,16,6,14,12,8,14,24,10,20,20,22,22,16,14,12,12,16,16,20,14,8,18,16,14,8,18,16,14,8,18,16].map(w => ({ wch: w }))
                   const wb = XLSX.utils.book_new()
                   XLSX.utils.book_append_sheet(wb, ws, isGW ? "GW" : "NYG")
                   XLSX.writeFile(wb, `${req.documentNo}_LG.xlsx`)
