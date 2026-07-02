@@ -564,8 +564,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
     const freshItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
-    const readyItems = freshItems.filter((i: any) => (i as any).invoiceNo && (i as any).bookingDate && i.actualAirFreight != null)
-    if (readyItems.length === 0) return NextResponse.json({ error: "กรุณาใส่ Invoice No / Booking Date / Actual THB อย่างน้อย 1 SO ก่อน Confirm" }, { status: 400 })
+    // Ready = has actual air freight (from HAWB avg). Invoice/booking are optional.
+    const readyItems = freshItems.filter((i: any) => i.actualAirFreight != null)
+    if (readyItems.length === 0) return NextResponse.json({ error: "กรุณาจัด HAWB + ใส่ Total Air อย่างน้อย 1 SO ก่อน Confirm" }, { status: 400 })
     for (const item of readyItems) {
       await prisma.airRequestItem.update({ where: { id: item.id }, data: { itemStatus: "LOG_PASSED" } })
     }

@@ -352,7 +352,10 @@ export default function RequestDetailPage() {
   const isPresidentRole = role === "PRESIDENT" && vpPassedItems.length > 0
   const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0 && !isGWRequest
   const isLgParallelAtScm = role === "LOGISTICS" && (req?.status === "PENDING_SCM" || req?.status === "PENDING_PRESIDENT") && !isGWRequest
-  const allLgItems = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
+  // GW Logistics uses the same Air Waybill Entry UI (at its own PENDING_LOGISTICS_GW stage).
+  const isLgGwEntry = role === "LOGISTICS_GW" && (req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && isGWRequest
+  const showAwbEntry = isLgParallelAtScm || isLgGwEntry
+  const allLgItems = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && (isLgGwEntry ? i.itemStatus === "PRES_PASSED" : true))
   const uniqueInvNos = [...new Set(Object.values(soInvMap).filter(Boolean))]
   const assignedHawbInvNos = new Set(hawbGroups.flatMap(g => g.invNos))
   const addHawbGroup = () => setHawbGroups(p => [...p, { id: Math.random().toString(36).slice(2), hawbNo: "", bookingDate: "", totalCost: "", invNos: [] }])
@@ -392,8 +395,11 @@ export default function RequestDetailPage() {
       })
     })
     setLgDraftSaving(true)
-    await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save_logistics_draft", itemLogistics: itemLogisticsData, itemActuals: itemActualsData }) })
+    // GW: forward to Claim (approve). NYG parallel: save draft only (no status change).
+    const action = isLgGwEntry ? "approve" : "save_logistics_draft"
+    const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, itemLogistics: itemLogisticsData, itemActuals: itemActualsData }) })
     setLgDraftSaving(false)
+    if (isLgGwEntry && !res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "บันทึกไม่สำเร็จ"); return }
     router.push("/approvals")
   }
   const isVpMerGW = (role === "DPM_GW" || role === "VP_MER_GW") && req?.status === "PENDING_VP_MER_GW" && isGWRequest
@@ -1384,7 +1390,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* Logistics: NYG = HAWB flow, GW = Excel upload */}
-      {(isLogisticsRole || isLogisticsGW) && (
+      {isLogisticsRole && (
         <div className="bg-white rounded-xl border p-5 space-y-4">
           <div className="flex items-center justify-between border-b pb-2 flex-wrap gap-2">
             <h2 className="font-semibold text-gray-800">LOGISTICS</h2>
@@ -2849,7 +2855,7 @@ export default function RequestDetailPage() {
           </div>
         </div>
       )}
-      {isLgParallelAtScm && (
+      {showAwbEntry && (
         <div className="space-y-4 border border-orange-200 rounded-xl bg-orange-50/30 p-4">
           {/* Header */}
           <div className="flex items-center justify-between flex-wrap gap-2">
