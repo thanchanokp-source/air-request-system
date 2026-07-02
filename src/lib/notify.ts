@@ -314,8 +314,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const depts = new Set<string>()
       for (const it of req.items) getSplits(it).forEach(s => depts.add(s.dept))
       const rolesNeeded = new Set<string>()
-      if ([...depts].some(d => d === "NYK")) rolesNeeded.add("SCM_NYK")
-      if ([...depts].some(d => d === "NYG")) rolesNeeded.add("SCM_NYG")
+      if (depts.has("SCM NYK")) rolesNeeded.add("SCM_NYK")
+      if (depts.has("SCM NYG")) rolesNeeded.add("SCM_NYG")
       if ([...depts].some(d => ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"].includes(d))) rolesNeeded.add("CLAIM_GW")
       if (rolesNeeded.size === 0) return
       const users = await (prisma.user as any).findMany({

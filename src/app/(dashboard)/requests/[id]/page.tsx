@@ -293,12 +293,12 @@ export default function RequestDetailPage() {
   const CLAIM_VP_ROLES_LOCAL = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
   const claimDept = role.startsWith("DVM_") ? role.replace("DVM_", "")
     : role.startsWith("CLAIM_") ? role.replace("CLAIM_", "")
-    : role === "SCM_NYK" ? "NYK"
-    : role === "SCM_NYG" ? "NYG"
+    : role === "SCM_NYK" ? "SCM NYK"
+    : role === "SCM_NYG" ? "SCM NYG"
     : CLAIM_VP_ROLES_LOCAL.includes(role) ? role.replace("VP_", "") : ""
   const claimDeptRole = claimDept
   const isGwClaimP1Role = (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") && isGWRequest
-  const gwClaimDepts = role === "CLAIM_GW" ? ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"] : role === "SCM_NYK" ? ["NYK"] : role === "SCM_NYG" ? ["NYG"] : []
+  const gwClaimDepts = role === "CLAIM_GW" ? ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"] : role === "SCM_NYK" ? ["SCM NYK"] : role === "SCM_NYG" ? ["SCM NYG"] : []
   // NYG per-split: my dept's split status (null = still waiting my DVM). undefined = my dept not on this SO.
   const mySplitStatus = (i: any): string | null | undefined => {
     const list: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0

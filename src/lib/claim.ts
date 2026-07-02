@@ -72,10 +72,13 @@ export function totalPct(splits: ClaimSplit[]): number {
 // notified). Accounting does NOT approve — it is the terminal/notify step.
 export const GW_DEPT_APPROVED = "DEPT_APPROVED"
 
-// Departments a GW claim role is responsible for.
+// GW claim department values (exactly as stored in the Excel CLAIM DEPT column).
+export const GW_CLAIM_DEPTS = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
+
+// Departments a GW claim role is responsible for (must match the Excel values).
 export function gwDeptsForRole(role: string): string[] {
-  if (role === "SCM_NYK") return ["NYK"]
-  if (role === "SCM_NYG") return ["NYG"]
+  if (role === "SCM_NYK") return ["SCM NYK"]
+  if (role === "SCM_NYG") return ["SCM NYG"]
   if (role === "CLAIM_GW") return ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
   return []
 }
