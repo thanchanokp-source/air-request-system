@@ -82,6 +82,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm }: { status: strin
     map[s.dept].total++
     if (s.status === "DEPT_APPROVED" || s.status === "COMPLETED") map[s.dept].done++
   }
+  const claimReached = completed || cur >= 3 // doc/SO has reached the Logistics∥Claim stage
   const claimDepts = Object.entries(map).map(([dept, c]) => ({ dept, done: c.done === c.total }))
 
   return (
@@ -95,12 +96,19 @@ export function ApprovalChain({ status, bu, items, soItem, sm }: { status: strin
       {/* Logistics ∥ Claim — adjacent (no line) = parallel */}
       <Chip sm={sm} state={rejected ? "pending" : parallelState} label="Logistics" />
       <Chip sm={sm} state={rejected ? "pending" : parallelState} label="Claim" />
-      {claimDepts.map(d => (
-        <span key={d.dept}
-          className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${d.done ? "bg-green-100 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
-          {d.done ? "✓" : "●"} {d.dept}
-        </span>
-      ))}
+      {claimDepts.map(d => {
+        // 3 states: done (green ✓), reached-but-pending (amber ●), not-yet-reached (gray ○)
+        const cls = d.done ? "bg-green-100 text-green-700 border-green-300"
+          : claimReached ? "bg-amber-50 text-amber-700 border-amber-300"
+          : "bg-gray-50 text-gray-400 border-gray-200"
+        const icon = d.done ? "✓" : claimReached ? "●" : "○"
+        return (
+          <span key={d.dept}
+            className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${cls}`}>
+            {icon} {d.dept}
+          </span>
+        )
+      })}
       {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected</span>}
       {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
     </div>
