@@ -7,6 +7,15 @@ import { notifyStatusChange } from "@/lib/notify"
 import { sendMail } from "@/lib/email"
 import crypto from "crypto"
 
+// Normalize a year that may be 2-digit or Thai Buddhist (พ.ศ.) to Gregorian.
+const normYear = (y: number): number => {
+  if (y < 100) return y + 2000          // 26 → 2026
+  if (y >= 2400 && y <= 2600) return y - 543 // พ.ศ. 2569 → 2026
+  return y
+}
+
+// Accepts many user date formats: Excel Date/serial, DD/MM/YY(YY), YYYY-MM-DD,
+// separators / - . , 2-digit or Buddhist years, and month-name strings.
 const parseDate = (val: any): Date | null => {
   if (val == null || val === "") return null
   // Real Excel date (cellDates:true) → already a Date object
@@ -17,16 +26,29 @@ const parseDate = (val: any): Date | null => {
     return isNaN(d.getTime()) ? null : d
   }
   const s = String(val).trim()
-  // DD/MM/YY or DD/MM/YYYY (also accept - or . separators) — Thai/Excel text dates
-  const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/)
+  if (!s) return null
+
+  // ISO-like: YYYY-MM-DD / YYYY/MM/DD
+  let m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/)
   if (m) {
-    const dd = parseInt(m[1], 10)
-    const mm = parseInt(m[2], 10)
-    let year = parseInt(m[3], 10)
-    if (year < 100) year += 2000
+    const d = new Date(normYear(+m[1]), +m[2] - 1, +m[3])
+    return isNaN(d.getTime()) ? null : d
+  }
+
+  // Numeric with separators: a/b/year  (Thai default = DD/MM, auto-detect if a or b > 12)
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/)
+  if (m) {
+    let a = +m[1], b = +m[2]
+    const year = normYear(+m[3])
+    let dd: number, mm: number
+    if (a > 12 && b <= 12) { dd = a; mm = b }        // clearly DD/MM
+    else if (b > 12 && a <= 12) { mm = a; dd = b }   // clearly MM/DD
+    else { dd = a; mm = b }                           // ambiguous → DD/MM (Thai)
     const d = new Date(year, mm - 1, dd)
     return isNaN(d.getTime()) ? null : d
   }
+
+  // Month-name formats (e.g. "13 Feb 2026", "Feb 13, 2026")
   const d = new Date(s)
   return isNaN(d.getTime()) ? null : d
 }
