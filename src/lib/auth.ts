@@ -16,14 +16,7 @@ export const authOptions: NextAuthOptions = {
         // Magic link login — token validates identity without password
         if (credentials?.magicToken) {
           const token = credentials.magicToken
-          // Try vpMerToken
-          // GM (GW) — dedicated token, always resolves to a GM_GW session
-          const gmReq = await (prisma.airRequest as any).findFirst({ where: { gmToken: token } })
-          if (gmReq) {
-            const gmUser = await (prisma.user as any).findFirst({ where: { role: "GM_GW", isActive: true } })
-            if (gmUser) return { id: gmUser.id, email: gmUser.email, name: gmUser.name, role: "GM_GW", bu: "GW", claimDepartment: null, priority: null }
-            return null
-          }
+          // Try vpMerToken first (most common — DPM/VP MER)
           const airReq = await (prisma.airRequest as any).findFirst({ where: { vpMerToken: token } })
           if (airReq) {
             const isGW = airReq.bu === "GW"
@@ -37,6 +30,13 @@ export const authOptions: NextAuthOptions = {
             }
             // Guest VP MER session
             return { id: `vp_mer_guest_${token}`, email: assignedEmail, name: assignedEmail, role: vpRole, bu: isGW ? "GW" : "NYG", claimDepartment: null, priority: null }
+          }
+          // GM (GW) — dedicated token, always resolves to a GM_GW session
+          const gmReq = await (prisma.airRequest as any).findFirst({ where: { gmToken: token } })
+          if (gmReq) {
+            const gmUser = await (prisma.user as any).findFirst({ where: { role: "GM_GW", isActive: true } })
+            if (gmUser) return { id: gmUser.id, email: gmUser.email, name: gmUser.name, role: "GM_GW", bu: "GW", claimDepartment: null, priority: null }
+            return null
           }
           // Try presidentToken
           const presReq = await (prisma.airRequest as any).findFirst({ where: { presidentToken: token } })
