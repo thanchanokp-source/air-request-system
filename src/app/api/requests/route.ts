@@ -8,8 +8,26 @@ import { sendMail } from "@/lib/email"
 import crypto from "crypto"
 
 const parseDate = (val: any): Date | null => {
-  if (!val) return null
-  const d = new Date(val)
+  if (val == null || val === "") return null
+  // Real Excel date (cellDates:true) → already a Date object
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val
+  // Excel serial number
+  if (typeof val === "number") {
+    const d = new Date(Math.round((val - 25569) * 86400 * 1000))
+    return isNaN(d.getTime()) ? null : d
+  }
+  const s = String(val).trim()
+  // DD/MM/YY or DD/MM/YYYY (also accept - or . separators) — Thai/Excel text dates
+  const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/)
+  if (m) {
+    const dd = parseInt(m[1], 10)
+    const mm = parseInt(m[2], 10)
+    let year = parseInt(m[3], 10)
+    if (year < 100) year += 2000
+    const d = new Date(year, mm - 1, dd)
+    return isNaN(d.getTime()) ? null : d
+  }
+  const d = new Date(s)
   return isNaN(d.getTime()) ? null : d
 }
 
