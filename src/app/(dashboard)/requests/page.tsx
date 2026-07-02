@@ -11,7 +11,7 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING_LOGISTICS: "Pending Logistics", PENDING_CLAIM: "Pending Claim",
   PENDING_VP_CLAIM: "Pending VP Claim",
   PENDING_VP_NYK: "Pending VP NYK",
-  PENDING_VP_MER_GW: "Pending DPM (GW)", PENDING_PRESIDENT_GW: "Pending President (GW)",
+  PENDING_VP_MER_GW: "Pending DPM (GW)", PENDING_GM_GW: "Pending GM (GW)", PENDING_PRESIDENT_GW: "Pending President (GW)",
   PENDING_LOGISTICS_GW: "Pending Logistics (GW)", PENDING_CLAIM_GW: "Pending Claim (GW)",
   COMPLETED: "Completed", REJECTED: "Rejected"
 }
@@ -37,6 +37,7 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
     if (docStatus === "PENDING_CLAIM") return "Claim"
     if (docStatus === "PENDING_LOGISTICS") return "Logistics"
     if (docStatus === "PENDING_VP_MER_GW") return "DPM GW"
+    if (docStatus === "PENDING_GM_GW") return "GM GW"
     return "VP MER"
   }
   if (itemStatus === "VP_MER_PASSED") return "President"
@@ -52,6 +53,7 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
 
 const STEP_COLORS: Record<string, string> = {
   "DPM GW": "bg-yellow-100 text-yellow-700",
+  "GM GW": "bg-orange-100 text-orange-700",
   "VP MER": "bg-yellow-100 text-yellow-700",
   "SCM": "bg-orange-100 text-orange-700",
   "VP SCM": "bg-amber-100 text-amber-700",
@@ -174,11 +176,11 @@ export default function RequestsPage() {
 
   const POSITIONS = activeBu === "GW" ? [
     { key: "PENDING_VP_MER_GW", label: "DPM" },
+    { key: "PENDING_GM_GW", label: "GM" },
     { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
     { key: "PENDING_LOGISTICS_GW", label: "LOGISTICS" },
     { key: "PENDING_CLAIM_GW", label: "CLAIM" },
-    { key: "PENDING_SCM_GW", label: "SCM" },
-    { key: "PENDING_ACCOUNTING", label: "ACCOUNTING" },
+    { key: "PENDING_ACCOUNTING", label: "ACCOUNTING (read)" },
   ] : [
     { key: "PENDING_VP_MER", label: "VP MER" },
     { key: "PENDING_PRESIDENT", label: "PRESIDENT" },
@@ -267,7 +269,7 @@ export default function RequestsPage() {
             let step: string | undefined
             if (r.itemStatus === "PENDING") {
               step = activeBu === "GW"
-                ? (r.request.status === "PENDING_PRESIDENT_GW" ? "PENDING_PRESIDENT_GW" : "PENDING_VP_MER_GW")
+                ? r.request.status // PENDING_VP_MER_GW / PENDING_GM_GW / PENDING_PRESIDENT_GW
                 : (r.request.status === "PENDING_SCM" ? "PENDING_SCM" : "PENDING_VP_MER")
             } else {
               step = ITEM_TO_STEP[r.itemStatus]

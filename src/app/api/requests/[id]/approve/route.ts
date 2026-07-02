@@ -158,6 +158,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED", rejectionReason: comment || "Rejected by VP MER GW" } })
       } else {
         await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PENDING" } })
+        await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_GM_GW" } })
+        notifyStatusChange(id, "PENDING_GM_GW").catch(() => {})
+      }
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // GW GM: per-style approve/reject at PENDING_GM_GW (between DPM and President)
+  if (request.status === "PENDING_GM_GW" && (action === "approve_style" || action === "reject_style")) {
+    if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
+    if (action === "reject_style" && !comment) return NextResponse.json({ error: "กรุณาระบุเหตุผลก่อน Reject" }, { status: 400 })
+    const newItemStatus = action === "approve_style" ? "VP_MER_PASSED" : "REJECTED"
+    await prisma.airRequestItem.updateMany({
+      where: { requestId: id, style, itemStatus: "PENDING" },
+      data: { itemStatus: newItemStatus, itemComment: comment || null }
+    })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: action === "approve_style" ? "APPROVE" : "REJECT", fromStatus: "PENDING_GM_GW", toStatus: "PENDING_GM_GW", comment: `Style: ${style}${comment ? ` - ${comment}` : ""}` }
+    })
+    const pendingCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
+    if (pendingCount === 0) {
+      const passedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "VP_MER_PASSED" } })
+      if (passedCount === 0) {
+        await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED", rejectionReason: comment || "Rejected by GM GW" } })
+      } else {
+        await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PENDING" } })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_PRESIDENT_GW" } })
         notifyStatusChange(id, "PENDING_PRESIDENT_GW").catch(() => {})
       }

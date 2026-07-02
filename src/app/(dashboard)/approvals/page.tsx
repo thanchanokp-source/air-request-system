@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits } from "@/lib/claim"
+import { getSplits, gwDeptsForRole, hasPendingGwSplit } from "@/lib/claim"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -58,11 +58,13 @@ export default function ApprovalsPage() {
       return items.some((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
     }
     if (role === "DPM_GW" || role === "VP_MER_GW") return (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail || r.status === "PENDING_DPM_GW")
+    if (role === "GM_GW") return r.status === "PENDING_GM_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "PRESIDENT_GW") return r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
-    if (role === "CLAIM_GW") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED")
-    if (role === "SCM_NYK") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "SCM_GW_PENDING" && getSplits(i).some((s: any) => s.dept === "NYK" && s.status === "SCM_PENDING"))
-    if (role === "SCM_NYG") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "SCM_GW_PENDING" && getSplits(i).some((s: any) => s.dept === "NYG" && s.status === "SCM_PENDING"))
+    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") {
+      const myDepts = gwDeptsForRole(role)
+      return r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED" && hasPendingGwSplit(i, myDepts))
+    }
     return false
   })
 
@@ -83,12 +85,13 @@ export default function ApprovalsPage() {
     if (CLAIM_VP_ROLES.includes(role)) {
       return items.filter((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
     }
-    if (role === "DPM_GW" || role === "VP_MER_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
+    if (role === "DPM_GW" || role === "VP_MER_GW" || role === "GM_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "PRESIDENT_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
-    if (role === "CLAIM_GW") return items.filter((i: any) => i.itemStatus === "LOG_PASSED")
-    if (role === "SCM_NYK") return items.filter((i: any) => (i.itemStatus === "LOG_PASSED" || i.itemStatus === "SCM_GW_PENDING") && i.claimDepartment === "NYK")
-    if (role === "SCM_NYG") return items.filter((i: any) => (i.itemStatus === "LOG_PASSED" || i.itemStatus === "SCM_GW_PENDING") && i.claimDepartment === "NYG")
+    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") {
+      const myDepts = gwDeptsForRole(role)
+      return items.filter((i: any) => i.itemStatus === "LOG_PASSED" && hasPendingGwSplit(i, myDepts))
+    }
     return items.filter((i: any) => i.itemStatus !== "REJECTED")
   }
 

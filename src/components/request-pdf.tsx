@@ -29,12 +29,13 @@ function ItemPage({ req, item }: { req: any; item: any }) {
   const styleLogsByPos: Record<string, { name: string; date: string }> = {}
   const isGW = req.bu === "GW"
   const styleLevelPositions = isGW
-    ? ["DPM GW", "PRESIDENT GW", "LOGISTICS GW"]
+    ? ["DPM GW", "GM GW", "PRESIDENT GW", "LOGISTICS GW"]
     : ["VP MER", "SCM", "VP SCM", "PRESIDENT", "LOGISTICS"]
   const roleToPos: Record<string, string> = isGW
     ? {
         VP_MER_GW: "DPM GW",
         DPM_GW: "DPM GW",
+        GM_GW: "GM GW",
         PRESIDENT_GW: "PRESIDENT GW",
         LOGISTICS_GW: "LOGISTICS GW",
       }

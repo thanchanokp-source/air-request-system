@@ -395,6 +395,7 @@ export default function RequestDetailPage() {
     router.push("/approvals")
   }
   const isVpMerGW = (role === "DPM_GW" || role === "VP_MER_GW") && req?.status === "PENDING_VP_MER_GW" && isGWRequest
+  const isGmGW = role === "GM_GW" && req?.status === "PENDING_GM_GW" && isGWRequest
   const isPresidentGW = role === "PRESIDENT_GW" && req?.status === "PENDING_PRESIDENT_GW" && isGWRequest
   const isLogisticsGW = role === "LOGISTICS_GW" && (req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && presPassedItems.length > 0 && isGWRequest
   const userClaimDept = (session?.user as any)?.claimDepartment || null
@@ -407,7 +408,7 @@ export default function RequestDetailPage() {
   const isScmGW = (role === "SCM_NYK" || role === "SCM_NYG") && req?.status === "PENDING_SCM_GW" && scmGwItems.length > 0 && isGWRequest
   const accountingItems = (req?.items || []).filter((i: any) => i.itemStatus === "ACCOUNTING_PENDING")
   const isAccounting = role === "ACCOUNTING" && req?.status === "PENDING_ACCOUNTING" && accountingItems.length > 0 && isGWRequest
-  const isGWApprover = isVpMerGW || isPresidentGW || isLogisticsGW || isClaimGW || isScmGW || isAccounting
+  const isGWApprover = isVpMerGW || isGmGW || isPresidentGW || isLogisticsGW || isClaimGW || isScmGW || isAccounting
   const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
 
   const presidentNewFlow = role === "PRESIDENT" && req?.status === "PENDING_PRESIDENT"
@@ -1101,12 +1102,12 @@ export default function RequestDetailPage() {
       )}
 
       {/* GW Style Approval — VP_MER_GW (PENDING → VP_MER_PASSED) and PRESIDENT_GW (PENDING → PRES_PASSED) */}
-      {(isVpMerGW || isPresidentGW) && (
+      {(isVpMerGW || isGmGW || isPresidentGW) && (
         <div className="space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <h2 className="font-semibold text-gray-800">STYLES ({styleGroups.length})</h2>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW · {isVpMerGW ? "VP MER" : "President"}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW · {isVpMerGW ? "DPM" : isGmGW ? "GM" : "President"}</span>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex gap-4 text-xs font-medium">

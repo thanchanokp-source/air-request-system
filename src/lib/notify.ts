@@ -56,7 +56,7 @@ function buildHtml(req: any, newStatus: string, link: string, approveUrl?: strin
     PENDING_CLAIM:"Pending Claim (DVM)", PENDING_VP_CLAIM:"Pending VP Claim",
     PENDING_VP_NYK:"Pending VP NYK", COMPLETED:"Completed", REJECTED:"Rejected",
     // GW
-    PENDING_VP_MER_GW:"Pending DPM (GW)", PENDING_PRESIDENT_GW:"Pending President (GW)",
+    PENDING_VP_MER_GW:"Pending DPM (GW)", PENDING_GM_GW:"Pending GM (GW)", PENDING_PRESIDENT_GW:"Pending President (GW)",
     PENDING_LOGISTICS_GW:"Pending Logistics (GW)", PENDING_CLAIM_GW:"Pending Claim (GW)",
     PENDING_SCM_GW:"Pending SCM (GW)", PENDING_ACCOUNTING:"Pending Accounting",
   }
@@ -248,6 +248,18 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
       await sendMail([assignedEmail], `${subject} — ${req.documentNo}`, html)
+      return
+    }
+
+    // PENDING_GM_GW — notify all GM (GW) approvers
+    if (newStatus === "PENDING_GM_GW") {
+      const gmUsers = await (prisma.user as any).findMany({ where: { role: "GM_GW", isActive: true }, select: { email: true } })
+      const recipients = gmUsers.map((u: any) => u.email).filter(Boolean)
+      if (!recipients.length) return
+      const link = `${APP_URL}/requests/${requestId}`
+      const html = buildHtml(req, newStatus, link)
+      const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
+      await sendMail(recipients, `${subject} — ${req.documentNo}`, html)
       return
     }
 

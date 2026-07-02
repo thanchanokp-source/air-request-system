@@ -12,6 +12,12 @@ const nav = [
   { href: "/master/description", label: "MASTER DESCRIPTION", adminOnly: true }
 ]
 
+const ROLE_LABEL: Record<string, string> = {
+  VP_MER_GW: "DPM (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)", PRESIDENT_GW: "President (GW)",
+  LOGISTICS_GW: "Logistics (GW)", CLAIM_GW: "Claim (GW)", SCM_NYK: "SCM NYK", SCM_NYG: "SCM NYG",
+  ACCOUNTING: "Accounting", MER_USER: "MER", MER_GW: "MER (GW)",
+}
+
 export default function Sidebar({ role, onClose }: { role: string; onClose?: () => void }) {
   const path = usePathname()
   const isAdmin = role === "ADMIN"
@@ -45,7 +51,7 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
           </Link>
         ))}
       </nav>
-      <div className="p-3 text-xs border-t" style={{borderColor:"#8b2a2a",color:"#e8b0b0"}}>{role}</div>
+      <div className="p-3 text-xs border-t" style={{borderColor:"#8b2a2a",color:"#e8b0b0"}}>{ROLE_LABEL[role] || role}</div>
     </div>
   )
 }
