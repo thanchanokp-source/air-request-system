@@ -15,6 +15,8 @@ export default function ApprovalsPage() {
   const { data: session } = useSession()
   const role = (session?.user as any)?.role || ""
   const userEmail = session?.user?.email || ""
+  const isGwRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
+  const claimDeptOptions = isGwRole ? ["NYK", "NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [brandF, setBrandF] = useState<string[]>([])
@@ -109,7 +111,7 @@ export default function ApprovalsPage() {
       (!cpF.length || cpF.includes(row.customerPO)) &&
       (!portF.length || portF.includes(row.port)) &&
       (!countryF.length || countryF.includes(row.country)) &&
-      (!claimF.length || claimF.includes(row.claimDepartment)) &&
+      (!claimF.length || getSplits(row).some((s: any) => claimF.includes(s.dept)) || claimF.includes(row.claimDepartment)) &&
       (!invoiceF.length || invoiceF.includes(row.invoiceNo))
   })
 
@@ -141,7 +143,7 @@ export default function ApprovalsPage() {
           <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF} />
           <MultiSelect label="All Port" options={ports} value={portF} onChange={setPortF} />
           <MultiSelect label="All Country" options={countries} value={countryF} onChange={setCountryF} />
-          <MultiSelect label="Claim Dept" options={["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]} value={claimF} onChange={setClaimF} />
+          <MultiSelect label="Claim Dept" options={claimDeptOptions} value={claimF} onChange={setClaimF} />
           <MultiSelect label="Invoice No..." options={invoices} value={invoiceF} onChange={setInvoiceF} />
         </div>
       </div>
