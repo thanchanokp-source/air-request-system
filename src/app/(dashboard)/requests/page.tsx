@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
@@ -80,6 +80,15 @@ export default function RequestsPage() {
   const userId = (session?.user as any)?.id || ""
   const userBu = (session?.user as any)?.bu || "NYG"
   const [activeBu, setActiveBu] = useState<string>(userBu === "ALL" ? "NYG" : userBu)
+  // Session loads after first render — sync the active BU tab to the user's BU once it's known.
+  const buInit = useRef(false)
+  useEffect(() => {
+    if (buInit.current) return
+    const bu = (session?.user as any)?.bu
+    if (!bu) return
+    if (bu !== "ALL") setActiveBu(bu)
+    buInit.current = true
+  }, [session])
   const [requests, setRequests] = useState<any[]>([])
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [brandF, setBrandF] = useState<string[]>([])
