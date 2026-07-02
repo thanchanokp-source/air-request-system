@@ -374,7 +374,14 @@ export default function RequestDetailPage() {
     const avgPerUnit = totalQty > 0 ? totalCost / totalQty : 0
     return { items, totalQty, totalCost, avgPerUnit, hasOverride, overrideTotal }
   }
+  const LG_REQUIRED_FILES = [{ key: "INV", label: "INV" }, { key: "AWB", label: "AWB" }, { key: "EXPENSE", label: "Expense" }]
   const saveLgHawb = async () => {
+    // GW Logistics must attach INV + AWB + Expense before forwarding.
+    if (isLgGwEntry) {
+      const cats = new Set((req?.attachments || []).map((a: any) => a.category).filter(Boolean))
+      const missing = LG_REQUIRED_FILES.filter(f => !cats.has(f.key)).map(f => f.label)
+      if (missing.length) { alert(`กรุณาแนบไฟล์ให้ครบก่อน Save: ${missing.join(", ")}`); return }
+    }
     const itemLogisticsData: Record<string, { invoiceNo: string; hawbNo: string; bookingDate: string }> = {}
     const itemActualsData: Record<string, string> = {}
 
@@ -401,6 +408,15 @@ export default function RequestDetailPage() {
     setLgDraftSaving(false)
     if (isLgGwEntry && !res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "บันทึกไม่สำเร็จ"); return }
     router.push("/approvals")
+  }
+  const uploadLgFile = async (file: File, category: string) => {
+    setLgDraftSaving(true)
+    const form = new FormData()
+    form.append("file", file); form.append("category", category)
+    const res = await fetch(`/api/requests/${id}/attachments`, { method: "POST", body: form })
+    if (res.ok) { const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json()) }
+    else alert("อัปโหลดไฟล์ไม่สำเร็จ")
+    setLgDraftSaving(false)
   }
   const isVpMerGW = (role === "DPM_GW" || role === "VP_MER_GW") && req?.status === "PENDING_VP_MER_GW" && isGWRequest
   const isGmGW = role === "GM_GW" && req?.status === "PENDING_GM_GW" && isGWRequest
@@ -2949,6 +2965,33 @@ export default function RequestDetailPage() {
               </button>
             </div>
           </div>
+
+          {/* Required attachments (GW) — must attach INV / AWB / Expense before Save */}
+          {isLgGwEntry && (
+            <div className="bg-white rounded-xl border border-orange-200 p-3">
+              <p className="text-xs font-semibold text-orange-800 mb-2">แนบไฟล์ (บังคับก่อน Save): INV · AWB · Expense</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {LG_REQUIRED_FILES.map(f => {
+                  const att = (req?.attachments || []).find((a: any) => a.category === f.key)
+                  return (
+                    <div key={f.key} className={`rounded-lg border p-2 flex items-center justify-between gap-2 ${att ? "border-green-300 bg-green-50" : "border-gray-300 bg-gray-50"}`}>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-gray-700">{f.label} {att ? "✓" : <span className="text-red-500">*</span>}</p>
+                        {att ? (
+                          <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline truncate block">{att.fileName}</a>
+                        ) : <p className="text-[10px] text-gray-400">ยังไม่แนบ</p>}
+                      </div>
+                      <label className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer whitespace-nowrap shrink-0">
+                        {att ? "เปลี่ยน" : "แนบ"}
+                        <input type="file" className="hidden" disabled={lgDraftSaving}
+                          onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; if (file) uploadLgFile(file, f.key) }} />
+                      </label>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
 
           {/* INV Assignment Table */}

@@ -185,6 +185,7 @@ model RequestAttachment {
   fileSize     Int
   mimeType     String
   claimDept    String?
+  category     String?
   createdAt    DateTime   @default(now())
   request      AirRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   uploadedBy   User       @relation(fields: [uploadedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
