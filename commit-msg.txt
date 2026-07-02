@@ -1,0 +1,11 @@
+feat: replace Logistics manual form with Excel file upload
+
+- New API: POST /api/requests/[id]/logistics-upload
+  Parses Excel, matches SO, updates invoiceNo/qtyActualShip/actualAirFreight/bookingDate per item
+- Request detail page: Logistics section now shows upload zone + download template button
+  Preview table reads from DB state after upload
+  Confirm button reads ready items from DB (not form state)
+- Logistics edit section (PENDING_CLAIM stage): also converted to file re-upload
+- Both NYG and GW supported with correct template link
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id               String              @id @default(cuid())
+  name             String?
+  email            String              @unique
+  password         String?
+  role             String              @default("MER_USER")
+  claimDepartment  String?
+  isActive         Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  priority         Int?
+  bu               String              @default("NYG")
+  procurementType  String?
+  resetToken       String?             @unique
+  resetTokenExpiry DateTime?
+  airRequests      AirRequest[]
+  approvals        ApprovalLog[]
+  claimApprovals   ClaimApproval[]
+  attachments      RequestAttachment[]
+}
+
+model MasterBrand {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  isActive Boolean @default(true)
+}
+
+model MasterBU {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  isActive Boolean @default(true)
+}
+
+model MasterDescription {
+  id            String  @id @default(cuid())
+  name          String  @unique
+  weightPerUnit Float   @default(0)
+  isActive      Boolean @default(true)
+}
+
+model MasterGMTType {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  isActive Boolean @default(true)
+}
+
+model MasterPort {
+  id        String   @id @default(cuid())
+  country   String
+  port      String   @unique
+  ratePerKg Float    @default(0)
+  isActive  Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
+
+model AirRequest {
+  id               String              @id @default(cuid())
+  documentNo       String              @unique
+  brandName        String
+  buName           String
+  status           String              @default("DRAFT")
+  claimDepartment  String?
+  rejectionReason  String?
+  createdById      String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  invoiceNo        String?
+  actualAirFreight Float?
+  bookingDate      DateTime?
+  airline          String?
+  assignedVpMer    String?
+  vpMerToken       String?
+  presidentToken   String?
+  scmToken         String?
+  vpScmToken       String?
+  assignedVpScm    String?
+  logisticsToken   String?
+  accountingToken  String?
+  claimNextEmail   String?
+  claimNextToken   String?
+  claimNextName    String?
+  bu               String              @default("NYG")
+  createdBy        User                @relation(fields: [createdById], references: [id])
+  items            AirRequestItem[]
+  approvalLogs     ApprovalLog[]
+  attachments      RequestAttachment[]
+  hawbGroups       HawbGroup[]
+}
+
+model ClaimApproval {
+  id        String         @id @default(cuid())
+  itemId    String
+  userId    String
+  role      String
+  createdAt DateTime       @default(now())
+  item      AirRequestItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id])
+
+  @@unique([itemId, userId])
+}
+
+model HawbGroup {
+  id          String           @id @default(cuid())
+  requestId   String
+  hawbNo      String
+  totalCharge Float
+  createdAt   DateTime         @default(now())
+  request     AirRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  items       AirRequestItem[]
+}
+
+model AirRequestItem {
+  id                   String          @id @default(cuid())
+  requestId            String
+  hawbGroupId          String?
+  style                String
+  so                   String
+  sub                  String?
+  customerPO           String?
+  description          String?
+  gmtType              String?
+  originalShipmentDate DateTime?
+  planShipmentDate     DateTime?
+  qtyOriginalShipment  Int
+  qtyRequestAir        Int
+  itemStatus           String          @default("PENDING")
+  itemComment          String?
+  reasonDelay          String
+  factory              String
+  country              String
+  port                 String
+  grossWeight          Float?
+  airFreight           Float?
+  marketRatePerKg      Float?
+  actualAirFreight     Float?
+  claimDepartment      String?
+  invoiceNo            String?
+  hawbNo               String?
+  bookingDate          DateTime?
+  assignedDvm          String?
+  claimPercentage      Float?
+  qtyActualShip        Int?
+  request              AirRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  hawbGroup            HawbGroup?      @relation(fields: [hawbGroupId], references: [id], onDelete: SetNull)
+  claimApprovals       ClaimApproval[]
+}
+
+model ApprovalLog {
+  id         String     @id @default(cuid())
+  requestId  String
+  userId     String
+  action     String
+  fromStatus String
+  toStatus   String
+  comment    String?
+  createdAt  DateTime   @default(now())
+  request    AirRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user       User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model RequestAttachment {
+  id           String     @id @default(cuid())
+  requestId    String
+  itemId       String?
+  uploadedById String
+  fileName     String
+  filePath     String
+  fileSize     Int
+  mimeType     String
+  claimDept    String?
+  createdAt    DateTime   @default(now())
+  request      AirRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  uploadedBy   User       @relation(fields: [uploadedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}

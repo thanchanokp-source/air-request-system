@@ -1,0 +1,13 @@
+.git
+.next
+node_modules
+npm-debug.log*
+.env
+.env.local
+.env*.local
+uploads
+*.pptx
+*.mjs
+README.md
+# keep docker-engines (pre-built Prisma engines + client)
+docker-engines/*.gz

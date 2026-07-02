@@ -4026,6 +4026,49 @@ export default function RequestDetailPage() {
         const canAttach = role === "MER_USER" || role === "SCM_USER"
         const canDelete = role === "MER_USER" || role === "MER_GW"
         const isUploadingReq = uploadingItem === "_req"
+        // LG file categories → grouped as a "LOGISTICS FILES" folder, split by type.
+        const LG_CATS: Record<string, { label: string; icon: string }> = {
+          INV: { label: "Invoice", icon: "🧾" },
+          AWB: { label: "Air Waybill", icon: "✈️" },
+          EXPENSE: { label: "Expense", icon: "💰" },
+        }
+        const lgAtts = allAttachments.filter((a: any) => a.category && LG_CATS[a.category])
+        const otherAtts = allAttachments.filter((a: any) => !(a.category && LG_CATS[a.category]))
+        const attRow = (att: any) => (
+          <div key={att.id} className="px-5 py-2.5 flex items-center justify-between hover:bg-gray-50">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-lg shrink-0">📎</span>
+              <div className="min-w-0">
+                <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
+                  className="text-sm font-medium text-blue-700 hover:underline truncate block">
+                  {att.fileName}
+                </a>
+                <p className="text-xs text-gray-400">
+                  {att.uploadedBy?.name}
+                  {att.claimDept && <span className="ml-1">({att.claimDept})</span>}
+                  {att.itemId && <span className="ml-1 text-gray-300">· SO attached</span>}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0 ml-4">
+              <span className="text-xs text-gray-400">{fmtDT(att.createdAt)}</span>
+              {canDelete && (
+                <button
+                  disabled={deletingAtt === att.id}
+                  onClick={async () => {
+                    if (!confirm(`ลบไฟล์ "${att.fileName}"?`)) return
+                    setDeletingAtt(att.id)
+                    await fetch(`/api/attachments/${att.id}`, { method: "DELETE" })
+                    setReq((prev: any) => ({ ...prev, attachments: prev.attachments.filter((a: any) => a.id !== att.id) }))
+                    setDeletingAtt(null)
+                  }}
+                  className="text-red-400 hover:text-red-600 text-xs font-medium disabled:opacity-40">
+                  {deletingAtt === att.id ? "..." : "✕"}
+                </button>
+              )}
+            </div>
+          </div>
+        )
         return (
           <div className="bg-white rounded-xl border">
             <div className="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
@@ -4040,42 +4083,27 @@ export default function RequestDetailPage() {
             </div>
             {allAttachments.length === 0
               ? <p className="text-center py-5 text-xs text-gray-300">No attachments</p>
-              : <div className="divide-y divide-gray-50">
-                  {allAttachments.map((att: any) => (
-                    <div key={att.id} className="px-5 py-2.5 flex items-center justify-between hover:bg-gray-50">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-lg shrink-0">📎</span>
-                        <div className="min-w-0">
-                          <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer"
-                            className="text-sm font-medium text-blue-700 hover:underline truncate block">
-                            {att.fileName}
-                          </a>
-                          <p className="text-xs text-gray-400">
-                            {att.uploadedBy?.name}
-                            {att.claimDept && <span className="ml-1">({att.claimDept})</span>}
-                            {att.itemId && <span className="ml-1 text-gray-300">· SO attached</span>}
-                          </p>
+              : <div>
+                  {otherAtts.length > 0 && (
+                    <div className="divide-y divide-gray-50">{otherAtts.map(attRow)}</div>
+                  )}
+                  {lgAtts.length > 0 && (
+                    <div className="border-t border-gray-100">
+                      <div className="px-5 py-2 bg-indigo-50 text-xs font-semibold text-indigo-700 flex items-center gap-1">
+                        📁 LOGISTICS FILES <span className="text-indigo-300 font-normal">({lgAtts.length})</span>
+                      </div>
+                      {["INV", "AWB", "EXPENSE"].filter(cat => lgAtts.some((a: any) => a.category === cat)).map(cat => (
+                        <div key={cat}>
+                          <div className="px-5 py-1.5 bg-gray-50 text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+                            {LG_CATS[cat].icon} {LG_CATS[cat].label}
+                          </div>
+                          <div className="divide-y divide-gray-50">
+                            {lgAtts.filter((a: any) => a.category === cat).map(attRow)}
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0 ml-4">
-                        <span className="text-xs text-gray-400">{fmtDT(att.createdAt)}</span>
-                        {canDelete && (
-                          <button
-                            disabled={deletingAtt === att.id}
-                            onClick={async () => {
-                              if (!confirm(`ลบไฟล์ "${att.fileName}"?`)) return
-                              setDeletingAtt(att.id)
-                              await fetch(`/api/attachments/${att.id}`, { method: "DELETE" })
-                              setReq((prev: any) => ({ ...prev, attachments: prev.attachments.filter((a: any) => a.id !== att.id) }))
-                              setDeletingAtt(null)
-                            }}
-                            className="text-red-400 hover:text-red-600 text-xs font-medium disabled:opacity-40">
-                            {deletingAtt === att.id ? "..." : "✕"}
-                          </button>
-                        )}
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
             }
           </div>
