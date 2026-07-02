@@ -2,6 +2,7 @@
 
 import React from "react"
 import { useState, useEffect, useCallback } from "react"
+import { getSplits } from "@/lib/claim"
 
 interface Item {
   id: string; so: string; style: string; customerPO?: string; country?: string
@@ -36,6 +37,8 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
   const [generatingReport, setGeneratingReport] = useState(false)
   const [reportFile, setReportFile] = useState<any>(null)
   const [downloadingHawbId, setDownloadingHawbId] = useState<string | null>(null)
+  const [invMap, setInvMap] = useState<Record<string, string>>({})
+  const [importing, setImporting] = useState(false)
 
   const loadHawbs = useCallback(async () => {
     const res = await fetch(`/api/requests/${requestId}/hawb`)
@@ -62,16 +65,18 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
   const createHawb = async () => {
     if (!hawbNo.trim() || chargeNum <= 0 || checked.size === 0) return
     setSaving(true)
+    const itemInvoices: Record<string, string> = {}
+    for (const iid of checked) if (invMap[iid]?.trim()) itemInvoices[iid] = invMap[iid].trim()
     const res = await fetch(`/api/requests/${requestId}/hawb`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hawbNo: hawbNo.trim(), totalCharge: chargeNum, itemIds: [...checked] })
+      body: JSON.stringify({ hawbNo: hawbNo.trim(), totalCharge: chargeNum, itemIds: [...checked], itemInvoices })
     })
     const data = await res.json()
     if (res.ok) {
       await loadHawbs()
       onReqRefresh()
-      setChecked(new Set()); setHawbNo(""); setTotalCharge(""); setModalOpen(false)
+      setChecked(new Set()); setHawbNo(""); setTotalCharge(""); setModalOpen(false); setInvMap({})
     } else {
       alert(data.error || "สร้าง HAWB ไม่สำเร็จ")
     }
@@ -127,10 +132,87 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
     }
   }
 
+  const EXPORT_HEADERS = ["SO","STYLE","CUSTOMER PO","DESCRIPTION","QTY AIR","VWT(KG)","CLAIM DEPT","HAWB#","INV NO.","TOTAL AIR (THB) by HAWB"]
+
+  // Export: MER data of every SO + blank columns for LG to fill (HAWB#, INV, Total Air per HAWB).
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx")
+    const rows = presPassedItems.map((i: any) => [
+      i.so, i.style, i.customerPO || "", i.description || "",
+      (i.qtyActualShip ?? i.qtyRequestAir), i.grossWeight ?? "",
+      getSplits(i).map((s: any) => `${s.dept} ${s.pct}%`).join(", "),
+      i.hawbNo || "", i.invoiceNo || "", "",
+    ])
+    const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEADERS, ...rows])
+    ws["!cols"] = [12,14,14,24,10,10,22,16,16,22].map(w => ({ wch: w }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "LG")
+    XLSX.writeFile(wb, `${reqInfo?.documentNo || requestId}_LG.xlsx`)
+  }
+
+  // Import: read filled Excel → group by HAWB# → create each HAWB (total ÷ qty = avg; set INV per SO).
+  const importExcel = async (file: File) => {
+    setImporting(true)
+    try {
+      const XLSX = await import("xlsx")
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
+      const rows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" })
+      const soToId: Record<string, string> = {}
+      presPassedItems.forEach((i: any) => { soToId[String(i.so).trim()] = i.id })
+      const alreadyAssigned = new Set(hawbs.flatMap(h => h.items.map(i => i.id)))
+      const groups: Record<string, { total: number; items: { id: string; inv: string }[] }> = {}
+      for (const r of rows) {
+        const hawb = String(r["HAWB#"] || "").trim()
+        const so = String(r["SO"] || "").trim()
+        const id = soToId[so]
+        if (!hawb || !id || alreadyAssigned.has(id)) continue
+        const total = parseFloat(String(r["TOTAL AIR (THB) by HAWB"] || "").replace(/,/g, "")) || 0
+        const inv = String(r["INV NO."] || "").trim()
+        if (!groups[hawb]) groups[hawb] = { total: 0, items: [] }
+        if (total > groups[hawb].total) groups[hawb].total = total
+        groups[hawb].items.push({ id, inv })
+      }
+      const hawbNos = Object.keys(groups)
+      if (hawbNos.length === 0) { alert("ไม่พบข้อมูล HAWB# / SO ที่ตรงกัน"); return }
+      let created = 0
+      for (const [hawbNo, g] of Object.entries(groups)) {
+        if (g.total <= 0 || g.items.length === 0) continue
+        const itemInvoices: Record<string, string> = {}
+        g.items.forEach(it => { if (it.inv) itemInvoices[it.id] = it.inv })
+        const res = await fetch(`/api/requests/${requestId}/hawb`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hawbNo, totalCharge: g.total, itemIds: g.items.map(x => x.id), itemInvoices }),
+        })
+        if (res.ok) created++
+      }
+      await loadHawbs(); onReqRefresh()
+      alert(`สร้าง HAWB จาก Excel สำเร็จ ${created} รายการ`)
+    } catch (e) {
+      console.error(e); alert("Import ไม่สำเร็จ — ตรวจไฟล์ Excel")
+    } finally {
+      setImporting(false)
+    }
+  }
+
   if (loading) return <div className="text-xs text-gray-400 py-4 text-center">กำลังโหลด...</div>
 
   return (
     <div className="space-y-4">
+
+      {/* Excel export/import toolbar */}
+      <div className="flex flex-wrap items-center gap-2 pb-1">
+        <span className="text-xs text-gray-400 mr-1">วิธีที่ 1 — ผ่าน Excel:</span>
+        <button onClick={exportExcel}
+          className="text-xs bg-slate-100 border border-slate-300 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-200 font-medium">
+          ⬇ Export (กรอก HAWB#/INV/Total Air)
+        </button>
+        <label className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer ${importing ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"}`}>
+          {importing ? "กำลัง Import..." : "⬆ Import Excel"}
+          <input type="file" accept=".xlsx,.xls" className="hidden" disabled={importing}
+            onChange={e => { const f = e.target.files?.[0]; if (f) importExcel(f); e.target.value = "" }} />
+        </label>
+        <span className="text-xs text-gray-300">| วิธีที่ 2 — สร้าง HAWB เองด้านล่าง</span>
+      </div>
 
       {/* Unassigned SOs */}
       {unassigned.length > 0 && (
@@ -280,13 +362,31 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Total Charge (THB)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Total Air ของ HAWB นี้ (THB)</label>
                 <input
                   type="number" value={totalCharge}
                   onChange={e => setTotalCharge(e.target.value)}
                   placeholder="0.00"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* INV per SO (1 HAWB มีได้หลาย INV) */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Invoice No. ต่อ SO</label>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {selectedItems.map(item => (
+                    <div key={item.id} className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 w-24 shrink-0 truncate">SO {item.so}</span>
+                      <input
+                        value={invMap[item.id] || ""}
+                        onChange={e => setInvMap(prev => ({ ...prev, [item.id]: e.target.value }))}
+                        placeholder="INV No."
+                        className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {chargeNum > 0 && totalQty > 0 && (
