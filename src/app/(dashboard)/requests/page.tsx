@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits } from "@/lib/claim"
+import { ApprovalChain } from "@/components/ApprovalChain"
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING_VP_MER: "Pending VP MER", PENDING_SCM: "Pending SCM",
@@ -360,6 +361,10 @@ export default function RequestsPage() {
                     </a>
                   </span>
                 ))}
+              </div>
+              {/* Approval progress chain */}
+              <div className="px-3 sm:px-4 py-2 border-b border-gray-100 bg-white">
+                <ApprovalChain status={dg.request.status} bu={dg.request.bu === "GW" ? "GW" : "NYG"} />
               </div>
 
               {/* Style groups */}

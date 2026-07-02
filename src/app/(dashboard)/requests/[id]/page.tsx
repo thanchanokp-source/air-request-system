@@ -9,6 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import { getSplits, deptSplitStatus } from "@/lib/claim"
+import { ApprovalChain } from "@/components/ApprovalChain"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -679,6 +680,13 @@ export default function RequestDetailPage() {
           </button>
         )}
       </div>
+
+      {/* Approval progress chain */}
+      {req && (
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-2.5">
+          <ApprovalChain status={req.status} bu={isGWRequest ? "GW" : "NYG"} />
+        </div>
+      )}
 
       {/* Freight Cost Summary — visible to all roles */}
       {(() => {
