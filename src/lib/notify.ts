@@ -258,7 +258,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const recipients = gmUsers.map((u: any) => u.email).filter(Boolean)
       if (!recipients.length) return
       const link = `${APP_URL}/requests/${requestId}`
-      const token = (req as any).vpMerToken
+      const token = (req as any).gmToken
       const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
       const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"

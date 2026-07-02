@@ -14,16 +14,17 @@ export async function GET(req: NextRequest) {
 
   // Validate token — check all token types in order
   const byVpMer      = await (prisma.airRequest as any).findFirst({ where: { vpMerToken: token } })
-  const byPresident  = byVpMer ? null : await (prisma.airRequest as any).findFirst({ where: { presidentToken: token } })
+  const byGm         = byVpMer ? null : await (prisma.airRequest as any).findFirst({ where: { gmToken: token } })
+  const byPresident  = byVpMer || byGm ? null : await (prisma.airRequest as any).findFirst({ where: { presidentToken: token } })
   const byScm        = byVpMer || byPresident ? null : await (prisma.airRequest as any).findFirst({ where: { scmToken: token } })
   const byVpScm      = byVpMer || byPresident || byScm ? null : await (prisma.airRequest as any).findFirst({ where: { vpScmToken: token } })
   const byLogistics  = byVpMer || byPresident || byScm || byVpScm ? null : await (prisma.airRequest as any).findFirst({ where: { logisticsToken: token } })
   const byAccounting = byVpMer || byPresident || byScm || byVpScm || byLogistics ? null : await (prisma.airRequest as any).findFirst({ where: { accountingToken: token } })
   const byClaimNext  = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting ? null : await (prisma.airRequest as any).findFirst({ where: { claimNextToken: token } })
 
-  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimNext ? "claimNext" : "none")
+  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byGm ? "gm" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimNext ? "claimNext" : "none")
 
-  if (!byVpMer && !byPresident && !byScm && !byVpScm && !byLogistics && !byAccounting && !byClaimNext) {
+  if (!byVpMer && !byGm && !byPresident && !byScm && !byVpScm && !byLogistics && !byAccounting && !byClaimNext) {
     console.log("[magic-login] token not found")
     return NextResponse.redirect(new URL("/login?error=invalid-token", req.url))
   }

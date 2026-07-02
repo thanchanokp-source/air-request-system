@@ -81,6 +81,7 @@ model AirRequest {
   airline          String?
   assignedVpMer    String?
   vpMerToken       String?
+  gmToken          String?
   presidentToken   String?
   scmToken         String?
   vpScmToken       String?

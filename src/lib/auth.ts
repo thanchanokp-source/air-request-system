@@ -17,15 +17,16 @@ export const authOptions: NextAuthOptions = {
         if (credentials?.magicToken) {
           const token = credentials.magicToken
           // Try vpMerToken
+          // GM (GW) — dedicated token, always resolves to a GM_GW session
+          const gmReq = await (prisma.airRequest as any).findFirst({ where: { gmToken: token } })
+          if (gmReq) {
+            const gmUser = await (prisma.user as any).findFirst({ where: { role: "GM_GW", isActive: true } })
+            if (gmUser) return { id: gmUser.id, email: gmUser.email, name: gmUser.name, role: "GM_GW", bu: "GW", claimDepartment: null, priority: null }
+            return null
+          }
           const airReq = await (prisma.airRequest as any).findFirst({ where: { vpMerToken: token } })
           if (airReq) {
             const isGW = airReq.bu === "GW"
-            // GW: the same request token also serves the GM stage (after DPM approves).
-            if (isGW && airReq.status === "PENDING_GM_GW") {
-              const gmUser = await (prisma.user as any).findFirst({ where: { role: "GM_GW", isActive: true } })
-              if (gmUser) return { id: gmUser.id, email: gmUser.email, name: gmUser.name, role: "GM_GW", bu: "GW", claimDepartment: null, priority: null }
-              return null
-            }
             const assignedEmail = airReq.assignedVpMer
             if (!assignedEmail) return null
             const user = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
