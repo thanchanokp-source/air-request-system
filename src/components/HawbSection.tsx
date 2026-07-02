@@ -38,6 +38,8 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
   const [reportFile, setReportFile] = useState<any>(null)
   const [downloadingHawbId, setDownloadingHawbId] = useState<string | null>(null)
   const [invMap, setInvMap] = useState<Record<string, string>>({})
+  const [quickInv, setQuickInv] = useState("")
+  const [soInput, setSoInput] = useState("")
 
   const loadHawbs = useCallback(async () => {
     const res = await fetch(`/api/requests/${requestId}/hawb`)
@@ -152,6 +154,34 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
               </button>
             )}
           </div>
+
+          {/* Quick assign: type INV No, then type SO + Enter to add that SO into this INV */}
+          <div className="flex flex-wrap items-end gap-2 bg-gray-50 border border-gray-200 rounded-lg p-2">
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Invoice No.</label>
+              <input value={quickInv} onChange={e => setQuickInv(e.target.value)} placeholder="INV No."
+                className="w-40 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-500 mb-0.5">พิมพ์ SO + Enter (เข้า INV ด้านซ้าย)</label>
+              <input value={soInput} onChange={e => setSoInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== "Enter") return
+                  e.preventDefault()
+                  const so = soInput.trim()
+                  if (!so) return
+                  if (!quickInv.trim()) { alert("กรุณาใส่ Invoice No. ก่อน"); return }
+                  const item = unassigned.find((i: any) => String(i.so) === so)
+                  if (!item) { alert(`ไม่พบ SO ${so} ในรายการที่ยังไม่มี HAWB`); return }
+                  setChecked(prev => { const n = new Set(prev); n.add(item.id); return n })
+                  setInvMap(prev => ({ ...prev, [item.id]: quickInv.trim() }))
+                  setSoInput("")
+                }}
+                placeholder="เช่น 1250212" disabled={!quickInv.trim()}
+                className="w-40 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:opacity-50" />
+            </div>
+            <span className="text-[10px] text-gray-400 pb-1">เลือกแล้ว {checked.size} SO — กด "สร้าง HAWB" เพื่อใส่ Total Air</span>
+          </div>
           <div className="border border-gray-200 rounded-lg overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 border-b">
@@ -160,7 +190,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                     <input type="checkbox" checked={checked.size === unassigned.length && unassigned.length > 0}
                       onChange={toggleAll} className="rounded" />
                   </th>
-                  {["SO","STYLE","CLAIM TO","QTY AIR","VWT (KG)"].map(h =>
+                  {["SO","STYLE","CLAIM TO","QTY AIR","VWT (KG)","INV No."].map(h =>
                     <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>
                   )}
                 </tr>
@@ -176,6 +206,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                     <td className="px-3 py-2">{item.claimDepartment || <span className="text-gray-300">—</span>}</td>
                     <td className="px-3 py-2 text-right">{item.qtyActualShip ?? item.qtyRequestAir}</td>
                     <td className="px-3 py-2 text-right">{item.grossWeight != null ? fmt(item.grossWeight) : "—"}</td>
+                    <td className="px-3 py-2">{invMap[item.id] ? <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">{invMap[item.id]}</span> : <span className="text-gray-300">—</span>}</td>
                   </tr>
                 ))}
               </tbody>

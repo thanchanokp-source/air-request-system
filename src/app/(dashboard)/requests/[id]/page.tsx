@@ -1468,35 +1468,6 @@ export default function RequestDetailPage() {
             />
           )}
 
-          {/* Upload zone */}
-          <div className="border-2 border-dashed border-blue-200 rounded-xl p-5 bg-blue-50 text-center space-y-2">
-            <p className="text-sm text-blue-700 font-medium">อัปโหลดไฟล์ Excel ที่กรอก Invoice No / QTY Actual / Actual Air Freight / Booking Date แล้ว</p>
-            <input
-              type="file" accept=".xlsx,.xls"
-              disabled={submitting === "_log_upload"}
-              onChange={async (e) => {
-                const f = e.target.files?.[0]
-                if (!f) return
-                setSubmitting("_log_upload")
-                const form = new FormData()
-                form.append("file", f)
-                const res = await fetch(`/api/requests/${id}/logistics-upload`, { method: "POST", body: form })
-                const data = await res.json()
-                if (res.ok) {
-                  setReq(data.request)
-                  const msg = `อัปโหลดสำเร็จ: match ${data.matched} SO` + (data.unmatched?.length ? ` · ไม่พบ SO: ${data.unmatched.join(", ")}` : "")
-                  alert(msg)
-                } else {
-                  alert(data.error || "Upload failed")
-                }
-                setSubmitting(null)
-                e.target.value = ""
-              }}
-              className="block mx-auto text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 disabled:opacity-50"
-            />
-            {submitting === "_log_upload" && <p className="text-xs text-blue-500">กำลังประมวลผล...</p>}
-          </div>
-
           {/* Preview table — shows DB state after upload */}
           {pendingLogItems.length > 0 && (
             <div className="border border-gray-200 rounded-lg overflow-x-auto">
