@@ -15,8 +15,6 @@ const GW_PRE: Node[] = [
   { key: "PENDING_GM_GW", label: "GM", ord: 1 },
   { key: "PENDING_PRESIDENT_GW", label: "President", ord: 2 },
 ]
-const GW_ACCOUNTING: Node = { key: "PENDING_ACCOUNTING", label: "Accounting", ord: 5 }
-
 const NYG_STAGES: Node[] = [
   { key: "PENDING_VP_MER", label: "VP MER", ord: 0 },
   { key: "PENDING_PRESIDENT", label: "President", ord: 1 },
@@ -89,29 +87,22 @@ export function ApprovalChain({ status, bu, items }: { status: string; bu: strin
   }
 
   return (
-    <div className="flex items-center flex-wrap gap-y-2 overflow-x-auto py-1">
+    <div className="flex items-center flex-wrap gap-1.5 gap-y-2 overflow-x-auto py-1">
       {GW_PRE.map(s => (
         <div key={s.key} className="flex items-center shrink-0">
           <Chip state={rejected ? "pending" : stateFor(s.ord)} label={s.label} />
           <Link done={completed || cur > s.ord} />
         </div>
       ))}
-      {/* Parallel branch: Logistics ∥ Claim */}
-      <div className="flex flex-col gap-1 border border-dashed border-gray-300 rounded-lg px-2 py-1 shrink-0">
-        <span className="text-[9px] text-gray-400 leading-none">parallel</span>
-        <Chip state={rejected ? "pending" : parallelState} label="Logistics" />
-        <div className="flex items-center gap-1 flex-wrap">
-          <Chip state={rejected ? "pending" : parallelState} label="Claim" />
-          {claimDepts.map(d => (
-            <span key={d.dept}
-              className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap ${d.done ? "bg-green-100 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
-              {d.done ? "✓" : "●"} {d.dept}
-            </span>
-          ))}
-        </div>
-      </div>
-      <Link done={completed || cur >= 5} />
-      <Chip state={rejected ? "pending" : stateFor(5)} label="Accounting (read)" />
+      {/* Logistics ∥ Claim — adjacent (no line between) to indicate they run in parallel */}
+      <Chip state={rejected ? "pending" : parallelState} label="Logistics" />
+      <Chip state={rejected ? "pending" : parallelState} label="Claim" />
+      {claimDepts.map(d => (
+        <span key={d.dept}
+          className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${d.done ? "bg-green-100 text-green-700 border-green-300" : "bg-amber-50 text-amber-700 border-amber-300"}`}>
+          {d.done ? "✓" : "●"} {d.dept}
+        </span>
+      ))}
       {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected</span>}
       {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
     </div>
