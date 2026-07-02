@@ -280,17 +280,43 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       return
     }
 
-    // PENDING_LOGISTICS_GW — magic link to Logistics (GW)
+    // PENDING_LOGISTICS_GW (after President approves) — Logistics ∥ Claim run in parallel.
+    // Notify 3 groups: Logistics (booking), Claim departments (per split), Accounting (read alert).
     if (newStatus === "PENDING_LOGISTICS_GW") {
-      const users = await (prisma.user as any).findMany({ where: { role: "LOGISTICS_GW", isActive: true }, select: { email: true } })
-      const recipients = users.map((u: any) => u.email).filter(Boolean)
-      if (!recipients.length) return
       const link = `${APP_URL}/requests/${requestId}`
-      const token = (req as any).logisticsToken
-      const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
-      const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
-      await sendMail(recipients, `${subject} — ${req.documentNo}`, html)
+      // 1) Logistics GW
+      const lgUsers = await (prisma.user as any).findMany({ where: { role: "LOGISTICS_GW", isActive: true }, select: { email: true } })
+      const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
+      if (lgEmails.length) {
+        const t = (req as any).logisticsToken
+        const ml = t ? `${APP_URL}/api/magic-login?token=${t}&redirect=/approvals` : undefined
+        await sendMail(lgEmails, `[Logistics – GW] President Approved — กรุณาเตรียม Booking — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
+      }
+      // 2) Claim departments (parallel) — per-role magic link
+      const depts = new Set<string>()
+      for (const it of req.items) getSplits(it).forEach(s => depts.add(s.dept))
+      const roleToken: Record<string, string> = { CLAIM_GW: (req as any).claimGwToken, SCM_NYK: (req as any).scmNykToken, SCM_NYG: (req as any).scmNygToken }
+      const claimRoles = new Set<string>()
+      if (depts.has("SCM NYK")) claimRoles.add("SCM_NYK")
+      if (depts.has("SCM NYG")) claimRoles.add("SCM_NYG")
+      if ([...depts].some(d => ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"].includes(d))) claimRoles.add("CLAIM_GW")
+      for (const role of claimRoles) {
+        const us = await (prisma.user as any).findMany({ where: { role, isActive: true }, select: { email: true } })
+        const em = us.map((u: any) => u.email).filter(Boolean)
+        if (!em.length) continue
+        const t = roleToken[role]
+        const ml = t ? `${APP_URL}/api/magic-login?token=${t}&redirect=/approvals` : undefined
+        await sendMail(em, `[Claim – GW] President Approved — รอ Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
+      }
+      // 3) Accounting (read alert)
+      const acUsers = await (prisma.user as any).findMany({ where: { role: "ACCOUNTING", isActive: true }, select: { email: true } })
+      const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
+      if (acEmails.length) {
+        const t = (req as any).accountingToken
+        const ml = t ? `${APP_URL}/api/magic-login?token=${t}&redirect=/requests/${requestId}` : undefined
+        await sendMail(acEmails, `[Accounting – GW] President Approved (Alert) — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
+      }
       return
     }
 

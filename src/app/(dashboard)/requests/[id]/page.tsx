@@ -1424,8 +1424,8 @@ export default function RequestDetailPage() {
             )}
           </div>
 
-          {/* NYG: HAWB-based flow */}
-          {isLogisticsRole && (
+          {/* HAWB-based flow (NYG + GW) */}
+          {(isLogisticsRole || isLogisticsGW) && (
             <HawbSection
               requestId={id as string}
               presPassedItems={presPassedItems}
