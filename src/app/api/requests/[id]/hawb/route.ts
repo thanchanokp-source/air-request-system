@@ -28,10 +28,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const role = (session.user as any).role
-  if (role !== "LOGISTICS") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (role !== "LOGISTICS" && role !== "LOGISTICS_GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { id } = await params
-  const { hawbNo, totalCharge, itemIds } = await req.json()
+  // itemInvoices: optional { itemId: invoiceNo } — 1 HAWB may hold several INVs, each over several SOs.
+  const { hawbNo, totalCharge, itemIds, itemInvoices } = await req.json()
 
   if (!hawbNo || !totalCharge || !Array.isArray(itemIds) || itemIds.length === 0) {
     return NextResponse.json({ error: "hawbNo, totalCharge, itemIds required" }, { status: 400 })
@@ -59,12 +60,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     include: { items: { select: { id: true, so: true, style: true, qtyRequestAir: true, qtyActualShip: true } } }
   })
 
-  // Calculate and save actualAirFreight per item
+  // avg/pc = HAWB total ÷ total qty → actualAirFreight per SO. Also store INV per SO if provided.
   for (const item of items) {
     const qty = item.qtyActualShip ?? item.qtyRequestAir
+    const inv = itemInvoices && typeof itemInvoices === "object" ? itemInvoices[item.id] : undefined
     await prisma.airRequestItem.update({
       where: { id: item.id },
-      data: { actualAirFreight: parseFloat((costPerPc * qty).toFixed(2)) }
+      data: {
+        actualAirFreight: parseFloat((costPerPc * qty).toFixed(2)),
+        hawbNo,
+        ...(inv ? { invoiceNo: String(inv) } : {}),
+      }
     })
   }
 

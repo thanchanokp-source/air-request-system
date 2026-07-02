@@ -128,7 +128,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const userId = (session.user as any).id
   const role = (session.user as any).role
-  if (role !== "LOGISTICS") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (role !== "LOGISTICS" && role !== "LOGISTICS_GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   const { id } = await params
 
