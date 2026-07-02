@@ -1385,43 +1385,7 @@ export default function RequestDetailPage() {
       {(isLogisticsRole || isLogisticsGW) && (
         <div className="bg-white rounded-xl border p-5 space-y-4">
           <div className="flex items-center justify-between border-b pb-2 flex-wrap gap-2">
-            <h2 className="font-semibold text-gray-800">
-              LOGISTICS
-              {isLogisticsGW && <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium align-middle">GW</span>}
-            </h2>
-            {isLogisticsGW && (
-              <button type="button" onClick={async () => {
-                const XLSX = await import("xlsx")
-                const fmtD = (v: any) => { if (!v) return ""; const d = new Date(v); if (isNaN(d.getTime())) return ""; return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}` }
-                const DEPT_LABEL: Record<string,string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
-                const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","Actual Airfreight","HAWB#","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
-                const items = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
-                const rows = items.map((item: any) => {
-                  const d: any[] = Array.isArray(item.claimDepts) && item.claimDepts.length > 0 ? item.claimDepts : []
-                  return [
-                    req.documentNo, req.brandName || "", "GW",
-                    item.style || "", item.so || "", (item as any).sub || "", item.customerPO || "",
-                    item.description || "", item.grossWeight ?? "",
-                    fmtD(item.originalShipmentDate), fmtD(item.planShipmentDate),
-                    item.qtyOriginalShipment ?? item.qtyRequestAir ?? "", item.qtyRequestAir ?? "",
-                    item.reasonDelay || "", item.factory || "",
-                    item.country || "", item.port || "",
-                    item.invoiceNo || "", item.actualAirFreight ?? "", item.hawbNo || "",
-                    d[0]?.dept ? (DEPT_LABEL[d[0].dept] || d[0].dept) : "", d[0]?.pct ?? "", d[0]?.reason || "",
-                    d[1]?.dept ? (DEPT_LABEL[d[1].dept] || d[1].dept) : "", d[1]?.pct ?? "", d[1]?.reason || "",
-                    d[2]?.dept ? (DEPT_LABEL[d[2].dept] || d[2].dept) : "", d[2]?.pct ?? "", d[2]?.reason || "",
-                  ]
-                })
-                const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-                const colWidths = [16,16,6,14,12,8,14,24,10,20,20,22,22,16,14,12,12,16,14,16,14,8,16,14,8,16,14,8,16]
-                ws["!cols"] = colWidths.map(w => ({ wch: w }))
-                const wb = XLSX.utils.book_new()
-                XLSX.utils.book_append_sheet(wb, ws, "GW")
-                XLSX.writeFile(wb, `${req.documentNo}_LG_GW.xlsx`)
-              }} className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
-                ⬇ Download Template (GW)
-              </button>
-            )}
+            <h2 className="font-semibold text-gray-800">LOGISTICS</h2>
           </div>
 
           {/* HAWB-based flow (NYG + GW) */}
