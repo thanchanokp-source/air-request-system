@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
+import { getSplits } from "@/lib/claim"
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING_VP_MER: "Pending VP MER", PENDING_SCM: "Pending SCM",
@@ -87,6 +88,7 @@ export default function RequestsPage() {
   const [countryF, setCountryF] = useState<string[]>([])
   const [claimF, setClaimF] = useState<string[]>([])
   const [invoiceF, setInvoiceF] = useState<string[]>([])
+  const [hawbF, setHawbF] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set())
@@ -104,7 +106,7 @@ export default function RequestsPage() {
 
   const applyFilters = (rows: any[], opts: {
     brand?: string[], style?: string[], so?: string[], cp?: string[],
-    port?: string[], country?: string[], claim?: string[], invoice?: string[]
+    port?: string[], country?: string[], claim?: string[], invoice?: string[], hawb?: string[]
   }) => rows.filter(row => {
     const r = row.request
     const statusMatch = !statusFilter.length || statusFilter.some(s =>
@@ -119,8 +121,9 @@ export default function RequestsPage() {
       (!opts.cp?.length || opts.cp.includes(row.customerPO)) &&
       (!opts.port?.length || opts.port.includes(row.port)) &&
       (!opts.country?.length || opts.country.includes(row.country)) &&
-      (!opts.claim?.length || opts.claim.includes(row.claimDepartment)) &&
-      (!opts.invoice?.length || opts.invoice.includes(row.invoiceNo))
+      (!opts.claim?.length || getSplits(row).some((s: any) => opts.claim!.includes(s.dept)) || opts.claim.includes(row.claimDepartment)) &&
+      (!opts.invoice?.length || opts.invoice.includes(row.invoiceNo)) &&
+      (!opts.hawb?.length || opts.hawb.includes(row.hawbNo))
   })
   const uniq = (arr: (string | null | undefined)[]) => [...new Set(arr.filter(Boolean) as string[])].sort()
 
@@ -132,8 +135,9 @@ export default function RequestsPage() {
   const ports    = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.port))
   const countries = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, claim: claimF, invoice: invoiceF }).map(r => r.country))
   const invoices = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF }).map(r => r.invoiceNo))
+  const hawbs    = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.hawbNo))
 
-  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF })
+  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF })
 
   const docGroups = buRequests.map(req => {
     const reqRows = filtered.filter(row => row.request.id === req.id)
@@ -144,8 +148,10 @@ export default function RequestsPage() {
       if (!styleMap[s]) styleMap[s] = []
       styleMap[s].push(row)
     }
-    return { request: req, styles: Object.entries(styleMap).map(([style, rows]) => ({ style, rows })), total: reqRows.length }
-  }).filter(Boolean) as { request: any, styles: { style: string, rows: any[] }[], total: number }[]
+    const estTotal = reqRows.reduce((s: number, r: any) => s + (r.airFreight || 0), 0)
+    const actTotal = reqRows.reduce((s: number, r: any) => s + (r.actualAirFreight || 0), 0)
+    return { request: req, styles: Object.entries(styleMap).map(([style, rows]) => ({ style, rows })), total: reqRows.length, estTotal, actTotal }
+  }).filter(Boolean) as { request: any, styles: { style: string, rows: any[] }[], total: number, estTotal: number, actTotal: number }[]
 
   const toggleDoc = (id: string) => setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleStyle = (k: string) => setExpandedStyles(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })
@@ -295,14 +301,14 @@ export default function RequestsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {!!(statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length) && (
-            <button onClick={() => { setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]) }}
+          {!!(statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length) && (
+            <button onClick={() => { setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]) }}
               className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
               Clear All
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
           <MultiSelect label="All Status" options={["COMPLETED","PENDING","REJECTED"]} value={statusFilter} onChange={setStatusFilter} />
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
@@ -310,8 +316,9 @@ export default function RequestsPage() {
           <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF} />
           <MultiSelect label="All Port" options={ports} value={portF} onChange={setPortF} />
           <MultiSelect label="All Country" options={countries} value={countryF} onChange={setCountryF} />
-          <MultiSelect label="Claim Dept" options={["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]} value={claimF} onChange={setClaimF} />
+          <MultiSelect label="Claim Dept" options={activeBu === "GW" ? ["NYK","NYG","GW","SUPPLIER"] : ["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"]} value={claimF} onChange={setClaimF} />
           <MultiSelect label="Invoice No..." options={invoices} value={invoiceF} onChange={setInvoiceF} />
+          <MultiSelect label="HAWB#..." options={hawbs} value={hawbF} onChange={setHawbF} />
         </div>
       </div>
 
@@ -333,7 +340,9 @@ export default function RequestsPage() {
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
                   <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
                 )}
-                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-auto shrink-0">{dg.styles.length} style(s) · {dg.total} SO(s)</span>
+                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ml-auto">EST {fmtNum(dg.estTotal)} ฿</span>
+                <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {fmtNum(dg.actTotal)} ฿</span>
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{dg.styles.length} style(s) · {dg.total} SO(s)</span>
                 {(dg.request.attachments || []).filter((a: any) => ["MER_USER","VP_MER"].includes(a.uploadedBy?.role)).map((att: any) => (
                   <span key={att.id} className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full whitespace-nowrap font-medium shrink-0">
                     <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="hover:underline">

@@ -27,6 +27,7 @@ export default function ApprovalsPage() {
   const [countryF, setCountryF] = useState<string[]>([])
   const [claimF, setClaimF] = useState<string[]>([])
   const [invoiceF, setInvoiceF] = useState<string[]>([])
+  const [hawbF, setHawbF] = useState<string[]>([])
 
   useEffect(() => {
     fetch("/api/requests?mine=true").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
@@ -102,6 +103,7 @@ export default function ApprovalsPage() {
   const ports = [...new Set(allRows.map(r => r.port).filter(Boolean))].sort()
   const countries = [...new Set(allRows.map(r => r.country).filter(Boolean))].sort()
   const invoices = [...new Set(allRows.map(r => r.invoiceNo).filter(Boolean))].sort()
+  const hawbs = [...new Set(allRows.map(r => r.hawbNo).filter(Boolean))].sort()
 
   const filtered = allRows.filter(row => {
     const r = row.request
@@ -112,7 +114,8 @@ export default function ApprovalsPage() {
       (!portF.length || portF.includes(row.port)) &&
       (!countryF.length || countryF.includes(row.country)) &&
       (!claimF.length || getSplits(row).some((s: any) => claimF.includes(s.dept)) || claimF.includes(row.claimDepartment)) &&
-      (!invoiceF.length || invoiceF.includes(row.invoiceNo))
+      (!invoiceF.length || invoiceF.includes(row.invoiceNo)) &&
+      (!hawbF.length || hawbF.includes(row.hawbNo))
   })
 
   const docGroups = myRequests.filter(r => filtered.some(f => f.request.id === r.id))
@@ -129,8 +132,8 @@ export default function ApprovalsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {(brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length) && (
-            <button onClick={() => { setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]) }}
+          {(brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length) && (
+            <button onClick={() => { setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]) }}
               className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
               Clear All
             </button>
@@ -145,6 +148,7 @@ export default function ApprovalsPage() {
           <MultiSelect label="All Country" options={countries} value={countryF} onChange={setCountryF} />
           <MultiSelect label="Claim Dept" options={claimDeptOptions} value={claimF} onChange={setClaimF} />
           <MultiSelect label="Invoice No..." options={invoices} value={invoiceF} onChange={setInvoiceF} />
+          <MultiSelect label="HAWB#..." options={hawbs} value={hawbF} onChange={setHawbF} />
         </div>
       </div>
 
@@ -156,6 +160,8 @@ export default function ApprovalsPage() {
       <div className="space-y-4">
         {docGroups.map(req => {
           const reqItems = filtered.filter(f => f.request.id === req.id)
+          const estTotal = reqItems.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
+          const actTotal = reqItems.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
           return (
             <div key={req.id} className="bg-white rounded-xl border overflow-hidden">
               <div className="px-4 py-3 bg-gray-50 border-b flex flex-wrap items-center gap-2">
@@ -163,6 +169,8 @@ export default function ApprovalsPage() {
                   <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm shrink-0">{req.documentNo}</Link>
                   <span className="text-xs text-gray-500 truncate">{req.brandName} · {req.buName}</span>
                   <StatusBadge status={req.status} />
+                  <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">EST {fmtNum(estTotal)} ฿</span>
+                  <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">ACT {fmtNum(actTotal)} ฿</span>
                 </div>
                 <Link href={`/requests/${req.id}`} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium shrink-0 ml-auto">
                   Open →
