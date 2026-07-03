@@ -190,7 +190,7 @@ export default function ApprovalsPage() {
                     <span key={dept} className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{dept} {fmtNum(sum)} ฿</span>
                   ))}
                   {isClaimRole && (
-                    <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">claim แผนกฉัน {fmtNum(myDocTotal)} ฿</span>
+                    <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">My Claim {fmtNum(myDocTotal)} ฿</span>
                   )}
                 </div>
                 <Link href={`/requests/${req.id}`} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium shrink-0 ml-auto">
@@ -200,7 +200,7 @@ export default function ApprovalsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b">
-                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["CLAIM แผนกฉัน (THB)"] : []),"REASON","FACTORY","COUNTRY","PORT","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
+                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["MY CLAIM (THB)"] : []),"REASON","FACTORY","COUNTRY","PORT","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
