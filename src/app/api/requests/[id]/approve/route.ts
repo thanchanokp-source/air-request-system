@@ -591,7 +591,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Request is not at Claim stage" }, { status: 400 })
     }
     if (!Array.isArray(itemIds) || itemIds.length === 0) return NextResponse.json({ error: "itemIds required" }, { status: 400 })
-    const myDepts = gwDeptsForRole(userRole)
+    const myDepts = gwDeptsForRole(userRole, userClaimDept)
     for (const iid of itemIds) {
       const itemData = await prisma.airRequestItem.findUnique({ where: { id: iid } })
       if (!itemData || itemData.requestId !== id || itemData.itemStatus !== "LOG_PASSED") continue
@@ -777,7 +777,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
     if (itemData.itemStatus !== "LOG_PASSED") return NextResponse.json({ error: "Item already approved" }, { status: 400 })
-    const myDepts = gwDeptsForRole(userRole)
+    // Scope CLAIM_GW to its own dept (GW vs SUPPLIER) via the user's claimDepartment.
+    const myDepts = gwDeptsForRole(userRole, userClaimDept)
     // SCM NYK can approve/accept WITHOUT a CR number (added later); guard only
     // against re-approving an already-accepted/finalized split.
     if (!hasApprovableGwSplit(itemData, myDepts)) {

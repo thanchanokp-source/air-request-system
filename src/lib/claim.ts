@@ -76,10 +76,17 @@ export const GW_DEPT_APPROVED = "DEPT_APPROVED"
 export const GW_CLAIM_DEPTS = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
 
 // Departments a GW claim role is responsible for (must match the Excel values).
-export function gwDeptsForRole(role: string): string[] {
+// CLAIM_GW is one role split into GW vs SUPPLIER people via User.claimDepartment,
+// so pass claimDept to scope a user to only their own splits.
+export function gwDeptsForRole(role: string, claimDept?: string | null): string[] {
   if (role === "SCM_NYK") return ["SCM NYK"]
   if (role === "SCM_NYG") return ["SCM NYG"]
-  if (role === "CLAIM_GW") return ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+  if (role === "CLAIM_GW") {
+    if (claimDept === "GW") return ["GW"]
+    if (claimDept === "SUPPLIER") return ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+    // no/unknown tag → handle all GW+SUPPLIER (backward compatible)
+    return ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+  }
   return []
 }
 

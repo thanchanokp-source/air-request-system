@@ -220,6 +220,7 @@ export default function RequestDetailPage() {
   }, [id])
 
   const role = (session?.user as any)?.role || ""
+  const myClaimDept: string | null = (session?.user as any)?.claimDepartment || null
   const myPriority: number | null = (session?.user as any)?.priority ?? null
   const myUserId: string = (session?.user as any)?.id || ""
   const isGWRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
@@ -303,7 +304,9 @@ export default function RequestDetailPage() {
     : CLAIM_VP_ROLES_LOCAL.includes(role) ? role.replace("VP_", "") : ""
   const claimDeptRole = claimDept
   const isGwClaimP1Role = (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") && isGWRequest
-  const gwClaimDepts = role === "CLAIM_GW" ? ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"] : role === "SCM_NYK" ? ["SCM NYK"] : role === "SCM_NYG" ? ["SCM NYG"] : []
+  const gwClaimDepts = role === "CLAIM_GW"
+    ? (myClaimDept === "GW" ? ["GW"] : myClaimDept === "SUPPLIER" ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"] : ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"])
+    : role === "SCM_NYK" ? ["SCM NYK"] : role === "SCM_NYG" ? ["SCM NYG"] : []
   // NYG per-split: my dept's split status (null = still waiting my DVM). undefined = my dept not on this SO.
   const mySplitStatus = (i: any): string | null | undefined => {
     const list: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
