@@ -596,7 +596,7 @@ export async function notifyClaimFinalToAccounting(requestId: string) {
     if (!req) return
 
     const accountingUsers = await (prisma.user as any).findMany({
-      where: { role: "ACCOUNTING", isActive: true },
+      where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true },
       select: { email: true }
     })
     const recipients: string[] = accountingUsers.map((u: any) => u.email).filter(Boolean)

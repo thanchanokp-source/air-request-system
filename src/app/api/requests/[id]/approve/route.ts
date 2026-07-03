@@ -23,7 +23,9 @@ async function recalcDocStatus(id: string): Promise<string> {
   if (s.has("PRES_PASSED")) return "PENDING_LOGISTICS"
   if (s.has("LOG_PASSED")) return "PENDING_CLAIM"
   if (s.has("CLAIM_PASSED")) return "PENDING_VP_CLAIM"
-  return "COMPLETED"
+  // All claim splits done + LG data already entered (LOG_PASSED precedes claim) →
+  // complete file → notify Accounting (terminal, same as GW).
+  return "PENDING_ACCOUNTING"
 }
 
 async function recalcDocStatusGW(id: string): Promise<string> {
@@ -703,9 +705,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const item = request.items.find((i: any) => i.id === itemId)
     if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    // Reset the SO for re-assignment: clear claim dept + splits + this SO's approvals.
+    await (prisma as any).claimApproval.deleteMany({ where: { itemId } })
     await prisma.airRequestItem.update({
       where: { id: itemId },
-      data: { itemStatus: "PENDING", claimDepartment: null, itemComment: comment || null }
+      data: { itemStatus: "PENDING", claimDepartment: null, claimDepts: null, itemComment: comment || null } as any
     })
     await prisma.approvalLog.create({
       data: {
@@ -716,6 +720,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     const newStatus = await recalcDocStatus(id)
     await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
+    // Alert SCM (re-select claim dept). PENDING_SCM notify targets the SCM user.
+    if (newStatus === "PENDING_SCM") notifyStatusChange(id, "PENDING_SCM").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
