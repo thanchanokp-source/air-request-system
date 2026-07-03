@@ -559,7 +559,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const d = data as any
         await prisma.airRequestItem.update({
           where: { id: iid },
-          data: { invoiceNo: d.invoiceNo || null, bookingDate: d.bookingDate ? new Date(d.bookingDate) : null } as any
+          data: { invoiceNo: d.invoiceNo || null, hawbNo: d.hawbNo || null, bookingDate: d.bookingDate ? new Date(d.bookingDate) : null } as any
         })
       }
     }
@@ -626,7 +626,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const d = data as any
         await prisma.airRequestItem.update({
           where: { id: iid },
-          data: { invoiceNo: d.invoiceNo || null, bookingDate: d.bookingDate ? new Date(d.bookingDate) : null } as any
+          data: { invoiceNo: d.invoiceNo || null, hawbNo: d.hawbNo || null, bookingDate: d.bookingDate ? new Date(d.bookingDate) : null } as any
         })
       }
     }
