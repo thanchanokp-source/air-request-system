@@ -13,8 +13,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params
 
   await prisma.hawbGroup.deleteMany({ where: { requestId: id } })
+  // Clear logistics fields on ALL items of this doc (not just PRES_PASSED) so
+  // nothing lingers regardless of the current item status.
   const upd = await prisma.airRequestItem.updateMany({
-    where: { requestId: id, itemStatus: "PRES_PASSED" },
+    where: { requestId: id },
     data: { invoiceNo: null, hawbNo: null, actualAirFreight: null, qtyActualShip: null, bookingDate: null } as any,
   })
 
