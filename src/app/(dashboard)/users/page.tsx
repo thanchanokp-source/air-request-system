@@ -24,6 +24,7 @@ const MASTER_ROLES_GW = [
   { role: "PRESIDENT_GW",        label: "President (GW)",            hint: "Approves 3rd",                  needsPriority: false, bu: "GW" },
   { role: "LOGISTICS_GW",        label: "Logistics (GW)",            hint: "Booking + manage Logistics",          needsPriority: false, bu: "GW" },
   { role: "CLAIM_GW",            label: "Claim-GW",                  hint: "Priority 1 = handles first",         needsPriority: true,  bu: "GW" },
+  { role: "SCM_NYK_APPROVER",    label: "Claim-SCM NYK Action Approver", hint: "Approves NYK claim first → alerts EVP + CR user", needsPriority: true, bu: "GW" },
   { role: "SCM_NYK",             label: "Claim-SCM NYK User",        hint: "Enter CR NO then send to Accounting",       needsPriority: true, bu: "GW" },
   { role: "SCM_NYK_EVP",        label: "Claim-SCM NYK EVP",         hint: "Approves after SCM NYK User",         needsPriority: true, bu: "GW" },
   { role: "SCM_NYG",             label: "Claim-SCM NYG",             hint: "1st in NYG chain",           needsPriority: true, bu: "GW" },
@@ -64,7 +65,7 @@ const FLOW_ORDER: string[] = [
   "LOGISTICS", "ACCOUNTING",
   // GW flow
   "MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW",
-  "CLAIM_GW", "SCM_NYK", "SCM_NYK_EVP",
+  "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK", "SCM_NYK_EVP",
   "SCM_NYG", "SCM_NYG_VP", "SCM_NYG_VP_PROD_G1G3", "SCM_NYG_VP_PROD_G2G4", "SCM_NYG_EVP",
   "ACCOUNTING_GW",
   // Other
@@ -79,7 +80,7 @@ const ROLE_ACTION: Record<string, ActionType> = {
   CLAIM_COMMERCIAL: "Approver", CLAIM_PRODUCTION: "Approver",
   CLAIM_NYG: "Approver", CLAIM_NYK: "Approver", CLAIM_PROCUREMENT: "Approver",
   CLAIM_GW: "Approver",
-  SCM_NYK: "User", SCM_NYK_EVP: "Approver", SCM_NYG: "Approver", SCM_NYG_VP: "Approver",
+  SCM_NYK_APPROVER: "Approver", SCM_NYK: "User", SCM_NYK_EVP: "Approver", SCM_NYG: "Approver", SCM_NYG_VP: "Approver",
   SCM_NYG_VP_PROD_G1G3: "Approver", SCM_NYG_VP_PROD_G2G4: "Approver", SCM_NYG_EVP: "Approver",
   // Users — enter data / upload
   MER_USER: "User", MER_GW: "User", SCM_USER: "User",
@@ -109,6 +110,7 @@ const ROLE_LABEL: Record<string, string> = {
   PRESIDENT_GW: "President (GW)", LOGISTICS_GW: "Logistics (GW)", ACCOUNTING_GW: "Account (GW)",
   CLAIM_GW: "Claim-GW",
   // GW SCM NYK chain
+  SCM_NYK_APPROVER:     "Claim-SCM NYK Action Approver",
   SCM_NYK:              "Claim-SCM NYK User",
   SCM_NYK_EVP:          "Claim-SCM NYK EVP",
   // GW SCM NYG chain

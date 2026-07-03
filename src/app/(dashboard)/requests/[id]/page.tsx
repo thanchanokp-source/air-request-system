@@ -223,14 +223,14 @@ export default function RequestDetailPage() {
   const myClaimDept: string | null = (session?.user as any)?.claimDepartment || null
   const myPriority: number | null = (session?.user as any)?.priority ?? null
   const myUserId: string = (session?.user as any)?.id || ""
-  const isGWRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
+  const isGWRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
   const isGWRequest = req?.bu === "GW"
   const isProcureDvm = (role === "DVM_PROCUREMENT" || role === "CLAIM_PROCUREMENT") && req?.status === "PENDING_CLAIM"
 
   useEffect(() => {
     if (!role) return
     // GW claim roles use their own role as the priority group.
-    if (["CLAIM_GW", "SCM_NYK", "SCM_NYG"].includes(role)) {
+    if (["CLAIM_GW", "SCM_NYK", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(role)) {
       fetch(`/api/users/by-role?role=${role}`).then(r => r.json()).then(setClaimApproversList)
       return
     }
@@ -303,10 +303,11 @@ export default function RequestDetailPage() {
     : role === "SCM_NYG" ? "SCM NYG"
     : CLAIM_VP_ROLES_LOCAL.includes(role) ? role.replace("VP_", "") : ""
   const claimDeptRole = claimDept
-  const isGwClaimP1Role = (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") && isGWRequest
+  const isNykClaimRole = role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP"
+  const isGwClaimP1Role = (role === "CLAIM_GW" || isNykClaimRole || role === "SCM_NYG") && isGWRequest
   const gwClaimDepts = role === "CLAIM_GW"
     ? (myClaimDept === "GW" ? ["GW"] : myClaimDept === "SUPPLIER" ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"] : ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"])
-    : role === "SCM_NYK" ? ["SCM NYK"] : role === "SCM_NYG" ? ["SCM NYG"] : []
+    : isNykClaimRole ? ["SCM NYK"] : role === "SCM_NYG" ? ["SCM NYG"] : []
   // NYG per-split: my dept's split status (null = still waiting my DVM). undefined = my dept not on this SO.
   const mySplitStatus = (i: any): string | null | undefined => {
     const list: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
@@ -315,7 +316,7 @@ export default function RequestDetailPage() {
     if (!list.includes(claimDept)) return undefined
     return deptSplitStatus(i, claimDept)
   }
-  const isDvmClaim = (role.startsWith("DVM_") || role.startsWith("CLAIM_") || role === "SCM_NYK" || role === "SCM_NYG") && (req?.items || []).some((i: any) => {
+  const isDvmClaim = (role.startsWith("DVM_") || role.startsWith("CLAIM_") || isNykClaimRole || role === "SCM_NYG") && (req?.items || []).some((i: any) => {
     if (isGwClaimP1Role) {
       // GW parallel: my dept has a split on this SO still awaiting approval.
       return i.itemStatus === "LOG_PASSED" && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED")
@@ -327,7 +328,7 @@ export default function RequestDetailPage() {
     i.itemStatus === "CLAIM_PASSED" && mySplitStatus(i) === "CLAIM_PASSED"
   )
   const isClaimApprover = isDvmClaim || isVpClaim
-  const isClaimP1ForForward = ((role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_") || role === "SCM_NYK" || role === "SCM_NYG") && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
+  const isClaimP1ForForward = ((role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_") || isNykClaimRole || role === "SCM_NYG") && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
   const isClaimNextApprover = role === "CLAIM_NEXT_APPROVER" && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
   const myClaimItems = req?.items?.filter((i: any) => {
     const itemDeptList: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
@@ -2043,6 +2044,9 @@ export default function RequestDetailPage() {
                   if (i.itemStatus !== "LOG_PASSED") return false
                   const appr: any[] = i.claimApprovals || []
                   if (appr.some((a: any) => a.userId === myUserId)) return false
+                  // NYK: SCM_NYK (CR user) never approves; EVP only after the Approver.
+                  if (role === "SCM_NYK") return false
+                  if (role === "SCM_NYK_EVP" && !appr.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")) return false
                   const lower = myPriority !== null ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority) : []
                   return lower.every((u: any) => appr.some((a: any) => a.userId === u.id))
                 })
@@ -2132,13 +2136,16 @@ export default function RequestDetailPage() {
             const itemApprovals: any[] = item.claimApprovals || []
             const iHaveApproved = itemApprovals.some((a: any) => a.userId === myUserId)
             // SCM NYK accepted this SO but CR NO not yet entered (awaiting finalize).
-            const awaitingCr = isGwClaimP1Role && getSplits(item).some((s: any) => gwClaimDepts.includes(s.dept) && s.status === "DEPT_ACCEPTED")
+            const awaitingCr = isGwClaimP1Role && getSplits(item).some((s: any) => gwClaimDepts.includes(s.dept) && (s.status === "DEPT_ACCEPTED" || s.status === "APPROVER_PASSED"))
             // Can I approve? All lower-priority approvers must have approved first
             const lowerApprovers = myPriority !== null
               ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority)
               : []
             const lowerApproved = lowerApprovers.every((u: any) => itemApprovals.some((a: any) => a.userId === u.id))
-            const canApproveNow = isPending && !iHaveApproved && lowerApproved
+            // NYK: SCM_NYK (CR user) never approves; SCM_NYK_EVP only after the Approver.
+            const approverApprovedThisItem = (item.claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
+            const nykBlocked = role === "SCM_NYK" || (role === "SCM_NYK_EVP" && !approverApprovedThisItem)
+            const canApproveNow = isPending && !iHaveApproved && lowerApproved && !nykBlocked
             // Next approver info
             const nextApprover = claimApproversList.find((u: any) =>
               !itemApprovals.some((a: any) => a.userId === u.id)
@@ -2317,13 +2324,15 @@ export default function RequestDetailPage() {
                 onClick={async () => {
                   const ids = [...dvmSelected]
                   let updated: any = req
+                  const approveAction = isGwClaimP1Role ? "approve_so_claim_gw" : "approve_so"
                   for (const itemId of ids) {
                     setSubmitting(itemId)
                     const res = await fetch(`/api/requests/${id}/approve`, {
                       method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "approve_so", itemId })
+                      body: JSON.stringify({ action: approveAction, itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined })
                     })
                     if (res.ok) updated = await res.json()
+                    else { const e = await res.json(); alert(e.error || "Error"); break }
                   }
                   setReq(updated)
                   setDvmSelected(new Set())

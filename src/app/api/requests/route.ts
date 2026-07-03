@@ -135,6 +135,8 @@ export async function POST(req: NextRequest) {
           accountingToken: crypto.randomUUID(),
           claimGwToken: crypto.randomUUID(),
           scmNykToken: crypto.randomUUID(),
+          scmNykApproverToken: crypto.randomUUID(),
+          scmNykEvpToken: crypto.randomUUID(),
           scmNygToken: crypto.randomUUID(),
         } : {}),
         items: {

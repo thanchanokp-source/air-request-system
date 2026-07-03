@@ -220,7 +220,8 @@ export async function sendPasswordSetupEmail(email: string, name: string, token:
 // only emails GW-tagged users (not SUPPLIER) and vice-versa.
 function gwClaimGroups(depts: Set<string>, req: any): { role: string; claimDept?: string; token?: string }[] {
   const groups: { role: string; claimDept?: string; token?: string }[] = []
-  if (depts.has("SCM NYK")) groups.push({ role: "SCM_NYK", token: (req as any).scmNykToken })
+  // NYK entry point is the APPROVER (EVP + CR user are alerted later, after approve).
+  if (depts.has("SCM NYK")) groups.push({ role: "SCM_NYK_APPROVER", token: (req as any).scmNykApproverToken })
   if (depts.has("SCM NYG")) groups.push({ role: "SCM_NYG", token: (req as any).scmNygToken })
   if (depts.has("GW")) groups.push({ role: "CLAIM_GW", claimDept: "GW", token: (req as any).claimGwToken })
   if ([...depts].some(d => ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"].includes(d))) groups.push({ role: "CLAIM_GW", claimDept: "SUPPLIER", token: (req as any).claimGwToken })
@@ -236,6 +237,47 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       include: { items: { select: { claimDepartment: true, claimDepts: true, assignedDvm: true } } }
     })
     if (!req) return
+
+    // NYK APPROVER approved → alert SCM_NYK_EVP (approve) + SCM_NYK (enter CR) in
+    // parallel, including the LG data (INV / HAWB / Actual) for context.
+    if (newStatus === "NYK_APPROVER_DONE") {
+      const items = await prisma.airRequestItem.findMany({
+        where: { requestId, itemStatus: { not: "REJECTED" } },
+        select: { so: true, invoiceNo: true, hawbNo: true, actualAirFreight: true, claimDepts: true, claimDepartment: true, claimPercentage: true }
+      })
+      const nykItems = items.filter((i: any) => getSplits(i).some(s => s.dept === "SCM NYK"))
+      if (nykItems.length === 0) return
+      const link = `${APP_URL}/requests/${requestId}`
+      const rows = nykItems.map((i: any) => {
+        const nyk = getSplits(i).find(s => s.dept === "SCM NYK")
+        const actual = i.actualAirFreight ?? 0
+        const amt = nyk ? Math.round(actual * (Number(nyk.pct) || 0) / 100 * 100) / 100 : 0
+        const cell = (v: any, right = false) => `<td style="padding:6px 10px;border-bottom:1px solid #eee${right ? ";text-align:right" : ""}">${v}</td>`
+        return `<tr>${cell(i.so)}${cell(i.invoiceNo || "-")}${cell(i.hawbNo || "-")}${cell(actual.toLocaleString(), true)}${cell(amt.toLocaleString(), true)}</tr>`
+      }).join("")
+      const lgTable = `<table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial;margin-top:12px">
+        <thead><tr style="background:#f1f5f9">
+          <th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">INV NO.</th><th style="padding:6px 10px;text-align:left">HAWB#</th><th style="padding:6px 10px;text-align:right">Actual Air (THB)</th><th style="padding:6px 10px;text-align:right">NYK Claim (THB)</th>
+        </tr></thead><tbody>${rows}</tbody></table>`
+      const sendNyk = async (role: string, tokenField: string, subject: string, intro: string) => {
+        const users = await (prisma.user as any).findMany({ where: { role, isActive: true }, select: { email: true } })
+        const emails = users.map((u: any) => u.email).filter(Boolean)
+        if (!emails.length) return
+        const token = (req as any)[tokenField]
+        const magic = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : link
+        const html = `<div style="font-family:Arial;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+          <p style="font-size:11px;letter-spacing:2px;color:#94a3b8;text-transform:uppercase;margin:0">Nan Yang Textile · Air Request</p>
+          <h2 style="font-size:18px;margin:6px 0 2px">${(req as any).documentNo}</h2>
+          <p style="font-size:13px;color:#334155;margin:8px 0">${intro}</p>
+          ${lgTable}
+          <div style="text-align:center;margin-top:20px"><a href="${magic}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 30px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Open Document →</a></div>
+        </div>`
+        await sendMail(emails, `${subject} — ${(req as any).documentNo}`, html)
+      }
+      await sendNyk("SCM_NYK_EVP", "scmNykEvpToken", "[Claim – SCM NYK EVP] Pending Approval", "The SCM NYK Approver has approved. Please review and approve.")
+      await sendNyk("SCM_NYK", "scmNykToken", "[Claim – SCM NYK] Please enter CR NO", "The SCM NYK Approver has approved. Please enter the CR NO for this document.")
+      return
+    }
 
     // For PENDING_VP_MER — send magic link to open in web (no email approve/reject buttons)
     if (newStatus === "PENDING_VP_MER") {

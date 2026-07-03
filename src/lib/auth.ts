@@ -77,7 +77,7 @@ export const authOptions: NextAuthOptions = {
             return null
           }
           // GW claim per-dept tokens
-          for (const [field, gwRole] of [["claimGwToken", "CLAIM_GW"], ["scmNykToken", "SCM_NYK"], ["scmNygToken", "SCM_NYG"]] as const) {
+          for (const [field, gwRole] of [["claimGwToken", "CLAIM_GW"], ["scmNykApproverToken", "SCM_NYK_APPROVER"], ["scmNykEvpToken", "SCM_NYK_EVP"], ["scmNykToken", "SCM_NYK"], ["scmNygToken", "SCM_NYG"]] as const) {
             const cReq = await (prisma.airRequest as any).findFirst({ where: { [field]: token } })
             if (cReq) {
               const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true } })

@@ -15,7 +15,7 @@ export default function ApprovalsPage() {
   const { data: session } = useSession()
   const role = (session?.user as any)?.role || ""
   const userEmail = session?.user?.email || ""
-  const isGwRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
+  const isGwRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
   const claimDeptOptions = isGwRole ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -61,7 +61,7 @@ export default function ApprovalsPage() {
     if (role === "GM_GW") return r.status === "PENDING_GM_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "PRESIDENT_GW") return r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
-    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") {
+    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED" && hasPendingGwSplit(i, myDepts))
     }
@@ -88,7 +88,7 @@ export default function ApprovalsPage() {
     if (role === "DPM_GW" || role === "VP_MER_GW" || role === "GM_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "PRESIDENT_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
-    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") {
+    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return items.filter((i: any) => i.itemStatus === "LOG_PASSED" && hasPendingGwSplit(i, myDepts))
     }
@@ -123,7 +123,7 @@ export default function ApprovalsPage() {
 
   const docGroups = myRequests.filter(r => filtered.some(f => f.request.id === r.id))
 
-  const isClaimRole = role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG"
+  const isClaimRole = role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG"
   const myDepts = isClaimRole ? gwDeptsForRole(role, userClaimDept) : []
   // Sum of this SO's air-freight portion for the current claim role's departments.
   const myClaimForItem = (item: any) =>

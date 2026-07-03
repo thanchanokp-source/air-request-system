@@ -79,7 +79,7 @@ export const GW_CLAIM_DEPTS = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
 // CLAIM_GW is one role split into GW vs SUPPLIER people via User.claimDepartment,
 // so pass claimDept to scope a user to only their own splits.
 export function gwDeptsForRole(role: string, claimDept?: string | null): string[] {
-  if (role === "SCM_NYK") return ["SCM NYK"]
+  if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return ["SCM NYK"]
   if (role === "SCM_NYG") return ["SCM NYG"]
   if (role === "CLAIM_GW") {
     if (claimDept === "GW") return ["GW"]
@@ -95,6 +95,18 @@ export function gwDeptsForRole(role: string, claimDept?: string | null): string[
 // "accepted, awaiting CR" — the split is NOT yet final and the SO does not go
 // to Accounting until CR is entered.
 export const GW_DEPT_ACCEPTED = "DEPT_ACCEPTED"
+
+// NYK sub-flow: SCM_NYK_APPROVER approves first, then in parallel SCM_NYK_EVP
+// approves AND SCM_NYK (User) enters CR NO. Split is only DEPT_APPROVED when all
+// three are done. This intermediate = approver done, waiting on EVP and/or CR.
+export const GW_NYK_APPROVER_PASSED = "APPROVER_PASSED"
+
+// Compute a NYK split's status from the three parallel conditions.
+export function nykSplitStatus(o: { approver: boolean; evp: boolean; cr: boolean }): string {
+  if (o.approver && o.evp && o.cr) return GW_DEPT_APPROVED
+  if (o.approver) return GW_NYK_APPROVER_PASSED
+  return SPLIT_STATUS.CLAIM_PENDING
+}
 
 // Does this item have a split for one of `depts` NOT yet fully finalized?
 // (includes DEPT_ACCEPTED so SCM NYK still sees the SO to come back for CR)
@@ -118,6 +130,16 @@ export function approveGwDeptSplits(splits: ClaimSplit[], depts: string[], crNo?
   )
 }
 
+// Force the given depts' splits to a specific status (used by the NYK sub-flow
+// where status is computed from approver/EVP/CR conditions). Never touches REJECTED.
+export function setGwSplitStatus(splits: ClaimSplit[], depts: string[], status: string, crNo?: string): ClaimSplit[] {
+  return splits.map(s =>
+    depts.includes(s.dept) && s.status !== SPLIT_STATUS.REJECTED
+      ? { ...s, status, crNo: crNo ?? s.crNo }
+      : s
+  )
+}
+
 // Finalize SCM NYK's accepted splits once CR NO arrives: DEPT_ACCEPTED → APPROVED.
 export function finalizeGwCr(splits: ClaimSplit[], depts: string[], crNo: string): ClaimSplit[] {
   return splits.map(s =>
@@ -132,8 +154,8 @@ export function deriveGwItemStatus(splits: ClaimSplit[]): string {
   if (splits.length === 0) return "LOG_PASSED"
   const st = splits.map(s => s.status)
   if (st.some(s => s === SPLIT_STATUS.REJECTED)) return "REJECTED" // reject one portion → SO rejected
-  // still pending: not accepted, OR accepted by SCM NYK but awaiting CR NO
-  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_DEPT_ACCEPTED)) return "LOG_PASSED"
+  // still pending: not accepted, awaiting CR, or NYK approver-done but EVP/CR incomplete
+  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_DEPT_ACCEPTED || s === GW_NYK_APPROVER_PASSED)) return "LOG_PASSED"
   return "ACCOUNTING_PENDING" // every dept fully approved → to Accounting (terminal/notify)
 }
 

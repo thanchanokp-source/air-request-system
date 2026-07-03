@@ -90,6 +90,8 @@ model AirRequest {
   accountingToken  String?
   claimGwToken     String?
   scmNykToken      String?
+  scmNykApproverToken String?
+  scmNykEvpToken   String?
   scmNygToken      String?
   crNo             String?
   claimNextEmail   String?
