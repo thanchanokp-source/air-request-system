@@ -234,7 +234,7 @@ export default function RequestsPage() {
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900">AIR REQUESTS</h1>
-          {userBu === "ALL" ? (
+          {(userBu === "ALL" || role === "ADMIN") ? (
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
               {["NYG","GW"].map(bu => (
                 <button key={bu} onClick={() => setActiveBu(bu)}
