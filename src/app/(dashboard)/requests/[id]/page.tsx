@@ -2058,6 +2058,18 @@ export default function RequestDetailPage() {
             </div>
           </div>
 
+          {/* Attach supporting files — by DOCUMENT (GW claim) */}
+          {isGwClaimP1Role && (
+            <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2 flex-wrap">
+              <span className="text-xs text-gray-600">Attach supporting files (by document)</span>
+              <label className={`cursor-pointer text-xs px-3 py-1.5 rounded-lg border font-medium ${uploadingItem === "_req" ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "border-blue-300 text-blue-600 hover:bg-blue-50"}`}>
+                {uploadingItem === "_req" ? "Uploading..." : "📎 Attach File"}
+                <input type="file" className="hidden" multiple disabled={uploadingItem === "_req"}
+                  onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
+              </label>
+            </div>
+          )}
+
           {/* CR NO — one per DOCUMENT, entered anytime (Approve first, CR later) */}
           {role === "SCM_NYK" && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 space-y-1.5">
@@ -2159,8 +2171,8 @@ export default function RequestDetailPage() {
                       : <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">You approved ✓</span>
                   )}
 
-                  {/* Attach — priority 1 only */}
-                  {isP1 && isPending && (
+                  {/* Attach — priority 1 only (NYG per-SO; GW uses by-document attach above) */}
+                  {isP1 && isPending && !isGwClaimP1Role && (
                     <label className={`cursor-pointer text-xs px-2 py-1 rounded border ${isUploading ? "opacity-50 pointer-events-none" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
                       {isUploading ? "Uploading..." : "📎 Attach"}
                       <input type="file" className="hidden" disabled={isUploading}
@@ -2258,7 +2270,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -2276,6 +2288,7 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
                           <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
                           <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "-"}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                           <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                           <td className="px-3 py-2">{item.factory}</td>
@@ -2508,7 +2521,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -2526,6 +2539,7 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
                           <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
                           <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "-"}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                           <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                           <td className="px-3 py-2">{item.factory}</td>
