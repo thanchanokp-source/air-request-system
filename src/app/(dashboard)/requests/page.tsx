@@ -200,11 +200,24 @@ export default function RequestsPage() {
     { key: "PENDING_VP_CLAIM", label: "VP CLAIM" },
   ]
 
-  const claimRows = allRows.filter(r => r.itemStatus === "LOG_PASSED")
+  // CLAIM box breakdown = who each pending SO is still waiting on.
   const claimByDept: Record<string, number> = {}
-  for (const r of claimRows) {
-    const dept = r.claimDepartment || r.request?.claimDepartment || "Unassigned"
-    claimByDept[dept] = (claimByDept[dept] || 0) + 1
+  for (const r of allRows) {
+    const st = r.itemStatus
+    if (st === "REJECTED" || st === "COMPLETED") continue
+    if (activeBu === "GW") {
+      // Parallel stage: count each split still awaiting approval (per dept).
+      if (st !== "PRES_PASSED" && st !== "LOG_PASSED") continue
+      getSplits(r).forEach((s: any) => {
+        if (s.status !== "DEPT_APPROVED" && s.status !== "REJECTED") {
+          claimByDept[s.dept] = (claimByDept[s.dept] || 0) + 1
+        }
+      })
+    } else {
+      if (st !== "LOG_PASSED") continue
+      const dept = r.claimDepartment || r.request?.claimDepartment || "Unassigned"
+      claimByDept[dept] = (claimByDept[dept] || 0) + 1
+    }
   }
 
   const totalCompleted = allRows.filter(r => r.itemStatus === "COMPLETED").length
@@ -274,14 +287,22 @@ export default function RequestsPage() {
             CLAIM_PASSED: "PENDING_VP_CLAIM",
           }
           const count = allRows.filter(r => {
-            if (r.itemStatus === "REJECTED" || r.itemStatus === "COMPLETED") return false
+            const st = r.itemStatus
+            if (st === "REJECTED" || st === "COMPLETED") return false
+            // GW parallel stage (PRES_PASSED): an SO waits on LG and/or Claim, so it
+            // is counted under BOTH boxes for whichever side is still outstanding.
+            if (activeBu === "GW" && st === "PRES_PASSED" && r.request.status === "PENDING_CLAIM_GW") {
+              if (key === "PENDING_LOGISTICS_GW") return r.actualAirFreight == null
+              if (key === "PENDING_CLAIM_GW") return getSplits(r).some((s: any) => s.status !== "DEPT_APPROVED" && s.status !== "REJECTED")
+              return false
+            }
             let step: string | undefined
-            if (r.itemStatus === "PENDING") {
+            if (st === "PENDING") {
               step = activeBu === "GW"
                 ? r.request.status // PENDING_VP_MER_GW / PENDING_GM_GW / PENDING_PRESIDENT_GW
                 : (r.request.status === "PENDING_SCM" ? "PENDING_SCM" : "PENDING_VP_MER")
             } else {
-              step = ITEM_TO_STEP[r.itemStatus]
+              step = ITEM_TO_STEP[st]
             }
             return step === key
           }).length
