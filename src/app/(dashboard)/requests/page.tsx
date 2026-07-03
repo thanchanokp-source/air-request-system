@@ -400,7 +400,11 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2 whitespace-nowrap">{row.factory}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.country}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.port}</td>
-                                    <td className="px-3 py-2 whitespace-nowrap">{row.claimDepartment || "-"}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">
+                                      {getSplits(row).length > 0
+                                        ? getSplits(row).map((s: any) => `${s.dept}${s.pct != null ? ` ${s.pct}%` : ""}`).join(" · ")
+                                        : "-"}
+                                    </td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.invoiceNo || "-"}</td>
                                     <td className="px-3 py-2 max-w-[150px] truncate" title={row.reasonDelay}>{row.reasonDelay || "-"}</td>
                                     <td className="px-3 py-2"><SoBadge s={row.itemStatus} docStatus={row.request.status} /></td>
