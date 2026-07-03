@@ -63,7 +63,7 @@ export default function ApprovalsPage() {
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
-      return r.bu === "GW" && items.some((i: any) => i.itemStatus === "LOG_PASSED" && hasPendingGwSplit(i, myDepts))
+      return r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }
     return false
   })
@@ -90,7 +90,7 @@ export default function ApprovalsPage() {
     if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
-      return items.filter((i: any) => i.itemStatus === "LOG_PASSED" && hasPendingGwSplit(i, myDepts))
+      return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }
     return items.filter((i: any) => i.itemStatus !== "REJECTED")
   }

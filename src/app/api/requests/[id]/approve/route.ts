@@ -213,7 +213,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (presPassedCount === 0) {
         await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED" } })
       } else {
-        await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_LOGISTICS_GW" } })
+        // Open Logistics ∥ Claim in parallel. PENDING_LOGISTICS_GW notify still
+        // alerts LG + Claim depts + Accounting; the doc sits at the parallel stage.
+        await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_CLAIM_GW" } })
         notifyStatusChange(id, "PENDING_LOGISTICS_GW").catch(() => {})
       }
     }
@@ -546,11 +548,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
-  // GW LOGISTICS: enter invoice/booking/actual per SO at PENDING_LOGISTICS_GW
+  // GW LOGISTICS (parallel with Claim): enter invoice/HAWB/actual per SO. Saving
+  // data does NOT advance the SO — it only completes the Logistics side; the SO
+  // reaches Accounting when Claim is also fully approved.
   if (action === "approve" && userRole === "LOGISTICS_GW") {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (request.status !== "PENDING_LOGISTICS_GW" && request.status !== "PENDING_PRESIDENT_GW") {
-      return NextResponse.json({ error: "Request is not at Logistics stage" }, { status: 400 })
+    if (!["PENDING_CLAIM_GW", "PENDING_LOGISTICS_GW", "PENDING_PRESIDENT_GW"].includes(request.status)) {
+      return NextResponse.json({ error: "Request is not at the Logistics stage" }, { status: 400 })
     }
     if (itemActuals && typeof itemActuals === "object") {
       for (const [iid, val] of Object.entries(itemActuals)) {
@@ -567,17 +571,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         })
       }
     }
-    const freshItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
-    // Ready = has actual air freight (from HAWB avg). Invoice/booking are optional.
+    // Parallel-stage items (PRES_PASSED). Ready = has actual air freight.
+    const freshItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: { in: ["PRES_PASSED", "LOG_PASSED"] } } })
     const readyItems = freshItems.filter((i: any) => i.actualAirFreight != null)
     if (readyItems.length === 0) return NextResponse.json({ error: "Please assign a HAWB and enter Total Air for at least 1 SO before confirming" }, { status: 400 })
-    for (const item of readyItems) {
-      await prisma.airRequestItem.update({ where: { id: item.id }, data: { itemStatus: "LOG_PASSED" } })
+    // Re-derive: an SO goes to Accounting only if Claim is done AND LG data present.
+    for (const item of freshItems) {
+      const lgDone = item.actualAirFreight != null
+      const derived = deriveGwItemStatus(getSplits(item), lgDone)
+      if (derived !== item.itemStatus) await prisma.airRequestItem.update({ where: { id: item.id }, data: { itemStatus: derived } })
     }
-    // Move to PENDING_CLAIM_GW only when no PRES_PASSED and no PENDING (awaiting president) remain
-    const remainingPres = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
-    const remainingPending = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
-    const nextStatus = (remainingPres === 0 && remainingPending === 0) ? "PENDING_CLAIM_GW" : request.status
+    const nextStatus = await recalcDocStatusGW(id)
     if (nextStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextStatus } })
       notifyStatusChange(id, nextStatus).catch(() => {})
@@ -598,9 +602,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const myDepts = gwDeptsForRole(userRole, userClaimDept)
     for (const iid of itemIds) {
       const itemData = await prisma.airRequestItem.findUnique({ where: { id: iid } })
-      if (!itemData || itemData.requestId !== id || itemData.itemStatus !== "LOG_PASSED") continue
+      if (!itemData || itemData.requestId !== id || !["PRES_PASSED", "LOG_PASSED"].includes(itemData.itemStatus)) continue
       const updated = approveGwDeptSplits(getSplits(itemData), myDepts)
-      await prisma.airRequestItem.update({ where: { id: iid }, data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated) } })
+      await prisma.airRequestItem.update({ where: { id: iid }, data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated, itemData.actualAirFreight != null) } })
     }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Batch approve ${itemIds.length} SO(s)` }
@@ -776,7 +780,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const hasEvp = appr.some((a: any) => a.user?.role === "SCM_NYK_EVP")
       const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: true }, doneStatus)
       const updated = setGwSplitStatus(splits, [nykDept], splitStatus, cr)
-      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: isGW ? deriveGwItemStatus(updated) : deriveNygItemStatus(updated) } })
+      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: isGW ? deriveGwItemStatus(updated, it.actualAirFreight != null) : deriveNygItemStatus(updated) } })
       finalizedCount++
     }
     await prisma.approvalLog.create({
@@ -840,7 +844,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
-    if (itemData.itemStatus !== "LOG_PASSED") return NextResponse.json({ error: "Item already approved" }, { status: 400 })
+    if (!["PRES_PASSED", "LOG_PASSED"].includes(itemData.itemStatus)) return NextResponse.json({ error: "Item already approved" }, { status: 400 })
+    const itemLgDone = (itemData as any).actualAirFreight != null
 
     // ── NYK 3-role sub-flow: APPROVER approves first → then EVP approve ∥ CR entry ──
     if (userRole === "SCM_NYK_APPROVER" || userRole === "SCM_NYK_EVP") {
@@ -862,7 +867,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const crNo = (request as any).crNo || null
       const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: !!crNo })
       const updated = setGwSplitStatus(getSplits(itemData), ["SCM NYK"], splitStatus, crNo || undefined)
-      await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated), itemComment: comment || null } })
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated, itemLgDone), itemComment: comment || null } })
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
       })
@@ -918,7 +923,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const updated = approveGwDeptSplits(getSplits(itemData), myDepts)
       await prisma.airRequestItem.update({
         where: { id: itemId },
-        data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated), itemComment: comment || null },
+        data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated, itemLgDone), itemComment: comment || null },
       })
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — ${myDepts.join("/")} approved` }

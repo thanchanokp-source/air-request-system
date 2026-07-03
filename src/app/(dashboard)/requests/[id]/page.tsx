@@ -322,8 +322,8 @@ export default function RequestDetailPage() {
   }
   const isDvmClaim = (role.startsWith("DVM_") || role.startsWith("CLAIM_") || isNykClaimRole || role === "SCM_NYG") && (req?.items || []).some((i: any) => {
     if (isGwClaimP1Role) {
-      // GW parallel: my dept has a split on this SO still awaiting approval.
-      return i.itemStatus === "LOG_PASSED" && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED")
+      // GW parallel (Logistics ∥ Claim): SO sits at PRES_PASSED; my dept has a split still awaiting approval.
+      return ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED")
     }
     // NYG DVM: my dept is on the SO and its split still awaits DVM approval.
     return i.itemStatus === "LOG_PASSED" && mySplitStatus(i) === null
@@ -343,9 +343,9 @@ export default function RequestDetailPage() {
       : (!claimDept || itemDeptList.includes(claimDept))
     if (!matchDept) return false
     if (isGwClaimP1Role) {
-      // GW: show SOs at claim stage where my dept has a split (+ rejected history).
+      // GW: show SOs at the parallel claim stage where my dept has a split (+ rejected history).
       if (i.itemStatus === "REJECTED") return true
-      return i.itemStatus === "LOG_PASSED" && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept))
+      return ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept))
     }
     // NYG: my dept is on this SO (matchDept). Show claim-stage items + rejected history.
     if (i.itemStatus === "REJECTED") return true
@@ -364,7 +364,7 @@ export default function RequestDetailPage() {
   const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0 && !isGWRequest
   const isLgParallelAtScm = role === "LOGISTICS" && (req?.status === "PENDING_SCM" || req?.status === "PENDING_PRESIDENT") && !isGWRequest
   // GW Logistics uses the same Air Waybill Entry UI (at its own PENDING_LOGISTICS_GW stage).
-  const isLgGwEntry = role === "LOGISTICS_GW" && (req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && isGWRequest
+  const isLgGwEntry = role === "LOGISTICS_GW" && (req?.status === "PENDING_CLAIM_GW" || req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && isGWRequest
   const showAwbEntry = isLgParallelAtScm || isLgGwEntry
   const allLgItems = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && (isLgGwEntry ? i.itemStatus === "PRES_PASSED" : true))
   const uniqueInvNos = [...new Set(Object.values(soInvMap).filter(Boolean))]

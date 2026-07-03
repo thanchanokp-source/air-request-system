@@ -152,14 +152,18 @@ export function finalizeGwCr(splits: ClaimSplit[], depts: string[], crNo: string
   )
 }
 
-// Coarse item.itemStatus from parallel per-dept splits.
-export function deriveGwItemStatus(splits: ClaimSplit[]): string {
-  if (splits.length === 0) return "LOG_PASSED"
+// Coarse item.itemStatus. Logistics ∥ Claim run in PARALLEL after President:
+// the SO reaches Accounting only when the claim is fully approved AND Logistics
+// has entered data (actualAirFreight). `lgDone` = actualAirFreight != null.
+// While either side is incomplete the SO stays PRES_PASSED (the parallel stage).
+export function deriveGwItemStatus(splits: ClaimSplit[], lgDone: boolean = true): string {
+  if (splits.length === 0) return "PRES_PASSED"
   const st = splits.map(s => s.status)
   if (st.some(s => s === SPLIT_STATUS.REJECTED)) return "REJECTED" // reject one portion → SO rejected
-  // still pending: not accepted, awaiting CR, or NYK approver-done but EVP/CR incomplete
-  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_DEPT_ACCEPTED || s === GW_NYK_APPROVER_PASSED)) return "LOG_PASSED"
-  return "ACCOUNTING_PENDING" // every dept fully approved → to Accounting (terminal/notify)
+  // claim not fully approved yet (incl. NYK approver-done but EVP/CR incomplete)
+  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_DEPT_ACCEPTED || s === GW_NYK_APPROVER_PASSED)) return "PRES_PASSED"
+  // claim fully approved → wait for Logistics data before going to Accounting
+  return lgDone ? "ACCOUNTING_PENDING" : "PRES_PASSED"
 }
 
 // ── NYG claim flow (per split: DVM → VP, per department) ───────────
