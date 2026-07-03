@@ -25,9 +25,10 @@ export async function POST(req: NextRequest) {
   const expiry = new Date(Date.now() + 48 * 60 * 60 * 1000)
 
   const isProcurement = role === "CLAIM_PROCUREMENT" || role === "DVM_PROCUREMENT"
-  // GW roles always belong to BU "GW" (never fall back to NYG).
-  const isGwRole = role.endsWith("_GW") || role.startsWith("SCM_NYK") || role.startsWith("SCM_NYG")
-  const resolvedBu = isGwRole ? "GW" : (bu || "NYG")
+  // GW-only roles always belong to BU "GW". SCM_NYK* exist in BOTH BU, so their
+  // bu comes from the selected master role (form).
+  const isGwOnlyRole = role.endsWith("_GW") || role.startsWith("SCM_NYG")
+  const resolvedBu = isGwOnlyRole ? "GW" : (bu || "NYG")
 
   try {
     const user = await prisma.user.create({

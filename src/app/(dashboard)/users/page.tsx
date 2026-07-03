@@ -10,8 +10,11 @@ const MASTER_ROLES_NYG = [
   { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
   { role: "CLAIM_COMMERCIAL",     label: "Claim – Commercial",    hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
   { role: "CLAIM_PRODUCTION",     label: "Claim – Production",    hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
-  { role: "CLAIM_NYK",            label: "Claim – SCM NYK",       hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
   { role: "CLAIM_PROCUREMENT",    label: "Claim – Procurement",   hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
+  // SCM NYK uses the 3-role flow (Approver → EVP + CR) — same as GW, but BU = NYG.
+  { role: "SCM_NYK_APPROVER",     label: "Claim-SCM NYK Action Approver", hint: "Approves NYK claim first → alerts EVP + CR user", needsPriority: true, bu: "NYG" },
+  { role: "SCM_NYK",              label: "Claim-SCM NYK User",    hint: "Enter CR NO",                             needsPriority: true, bu: "NYG" },
+  { role: "SCM_NYK_EVP",          label: "Claim-SCM NYK EVP",     hint: "Approves after the Action Approver",      needsPriority: true, bu: "NYG" },
   { role: "LOGISTICS",            label: "Logistics",             hint: "Manage HAWB + Generate PDF",               needsPriority: false, bu: "NYG" },
   { role: "ACCOUNTING",           label: "Accounting",            hint: "Receives final file + closes document",              needsPriority: false, bu: "NYG" },
 ]

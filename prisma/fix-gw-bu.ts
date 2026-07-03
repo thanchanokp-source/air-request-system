@@ -6,7 +6,8 @@ const prisma = new PrismaClient()
 
 async function main() {
   const users = await prisma.user.findMany({ select: { id: true, email: true, role: true, bu: true } })
-  const isGwRole = (r: string) => r.endsWith("_GW") || r.startsWith("SCM_NYK") || r.startsWith("SCM_NYG")
+  // SCM_NYK* excluded — they legitimately exist in both BU (NYG & GW).
+  const isGwRole = (r: string) => r.endsWith("_GW") || r.startsWith("SCM_NYG")
   const wrong = users.filter(u => isGwRole(u.role) && u.bu !== "GW")
   if (wrong.length === 0) { console.log("All GW-role users already have bu = GW."); return }
 

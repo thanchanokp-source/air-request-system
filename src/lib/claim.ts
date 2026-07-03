@@ -79,7 +79,9 @@ export const GW_CLAIM_DEPTS = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
 // CLAIM_GW is one role split into GW vs SUPPLIER people via User.claimDepartment,
 // so pass claimDept to scope a user to only their own splits.
 export function gwDeptsForRole(role: string, claimDept?: string | null): string[] {
-  if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return ["SCM NYK"]
+  // NYK claim exists in both BU: dept "SCM NYK" (GW) and "NYK" (NYG). A user is
+  // only in one BU, so returning both is safe and keeps visibility working.
+  if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return ["SCM NYK", "NYK"]
   if (role === "SCM_NYG") return ["SCM NYG"]
   if (role === "CLAIM_GW") {
     if (claimDept === "GW") return ["GW"]
