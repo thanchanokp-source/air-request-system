@@ -186,14 +186,15 @@ export default function RequestDetailPage() {
             }
             if (item.actualAirFreight != null) actuals[item.id] = String(item.actualAirFreight)
           })
-          if (Object.keys(logistics).length > 0) setItemLogistics(logistics)
-          if (Object.keys(actuals).length > 0) setItemActuals(actuals)
+          // Always reset from DB (don't merge) so state never leaks across documents
+          setItemLogistics(logistics)
+          setItemActuals(actuals)
           // Reconstruct soInvMap from saved invoiceNo per item
           const restoredInvMap: Record<string, string> = {}
           logItems.forEach((item: any) => {
             if (item.invoiceNo) restoredInvMap[item.id] = item.invoiceNo
           })
-          if (Object.keys(restoredInvMap).length > 0) setSoInvMap(restoredInvMap)
+          setSoInvMap(restoredInvMap)
           // Reconstruct hawbGroups from saved hawbNo per item, summing actualAirFreight as totalCost
           const hawbRestoreMap: Record<string, { hawbNo: string; invNos: Set<string>; totalCost: number }> = {}
           logItems.forEach((item: any) => {
@@ -203,15 +204,16 @@ export default function RequestDetailPage() {
               hawbRestoreMap[item.hawbNo].totalCost += item.actualAirFreight || 0
             }
           })
-          if (Object.keys(hawbRestoreMap).length > 0) {
-            setHawbGroups(Object.values(hawbRestoreMap).map(h => ({
-              id: Math.random().toString(36).slice(2),
-              hawbNo: h.hawbNo,
-              bookingDate: "",
-              totalCost: h.totalCost > 0 ? String(Math.round(h.totalCost * 100) / 100) : "",
-              invNos: [...h.invNos]
-            })))
-          }
+          setHawbGroups(Object.values(hawbRestoreMap).map(h => ({
+            id: Math.random().toString(36).slice(2),
+            hawbNo: h.hawbNo,
+            bookingDate: "",
+            totalCost: h.totalCost > 0 ? String(Math.round(h.totalCost * 100) / 100) : "",
+            invNos: [...h.invNos]
+          })))
+        } else {
+          // No logistics-relevant items on this doc → clear any leftover state
+          setItemLogistics({}); setItemActuals({}); setSoInvMap({}); setHawbGroups([])
         }
       })
       .catch(() => setLoading(false))
@@ -1419,6 +1421,8 @@ export default function RequestDetailPage() {
                 try {
                   const res = await fetch(`/api/requests/${id}/logistics-clear`, { method: "POST" })
                   if (res.ok) {
+                    // Clear local logistics state too so nothing lingers in the UI
+                    setSoInvMap({}); setItemLogistics({}); setItemActuals({}); setHawbGroups([])
                     const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json())
                     setHawbRefreshKey(k => k + 1)
                   } else { alert("ล้างข้อมูลไม่สำเร็จ") }
@@ -2916,6 +2920,22 @@ export default function RequestDetailPage() {
               <p className="text-xs text-orange-500 mt-0.5">กรอก INV NO. ในตาราง กด Enter ไปแถวถัดไป · จากนั้นจัด HAWB ด้านล่าง</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              <button type="button"
+                onClick={async () => {
+                  if (!confirm("ล้างข้อมูล Logistics ทั้งหมด (HAWB, INV, Actual Air) ของเอกสารนี้?")) return
+                  setImportingLg(true)
+                  try {
+                    const res = await fetch(`/api/requests/${id}/logistics-clear`, { method: "POST" })
+                    if (res.ok) {
+                      setSoInvMap({}); setItemLogistics({}); setItemActuals({}); setHawbGroups([])
+                      const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json())
+                      setHawbRefreshKey(k => k + 1)
+                    } else { alert("ล้างข้อมูลไม่สำเร็จ") }
+                  } finally { setImportingLg(false) }
+                }}
+                className="text-xs bg-red-50 border border-red-200 text-red-600 px-3 py-1 rounded-lg hover:bg-red-100 font-medium whitespace-nowrap">
+                🗑 ล้างข้อมูล
+              </button>
               <button type="button"
                 onClick={async () => {
                   const XLSX = await import("xlsx")
