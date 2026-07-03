@@ -2,6 +2,8 @@
 import { useEffect, useState, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import React from "react"
+import { MultiSelect } from "@/components/ui/multi-select"
+import { getSplits } from "@/lib/claim"
 
 type FolderType = "FINAL" | "LOGISTICS" | "BOOKING"
 type BUFilter = "ALL" | "NYG" | "GW"
@@ -55,6 +57,12 @@ export default function FilesPage() {
   const [combineMode, setCombineMode] = useState(false)
   const [selectedForCombine, setSelectedForCombine] = useState<Set<string>>(new Set())
   const [combineLoading, setCombineLoading] = useState(false)
+  const [brandF, setBrandF] = useState<string[]>([])
+  const [styleF, setStyleF] = useState<string[]>([])
+  const [soF, setSoF] = useState<string[]>([])
+  const [cpF, setCpF] = useState<string[]>([])
+  const [claimF, setClaimF] = useState<string[]>([])
+  const [invoiceF, setInvoiceF] = useState<string[]>([])
 
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => {
@@ -63,12 +71,30 @@ export default function FilesPage() {
     })
   }, [])
 
-  const filtered = useMemo(() => {
-    return requests.filter(r => {
-      if (activeBU !== "ALL" && r.bu !== activeBU) return false
-      return qualifies(r, activeFolder)
-    })
-  }, [requests, activeFolder, activeBU])
+  const folderFiltered = useMemo(() =>
+    requests.filter(r => (activeBU === "ALL" || r.bu === activeBU) && qualifies(r, activeFolder)),
+    [requests, activeFolder, activeBU])
+
+  const uniq = (arr: any[]) => [...new Set(arr.filter(Boolean))].sort()
+  const brandOpts = useMemo(() => uniq(folderFiltered.map(r => r.brandName)), [folderFiltered])
+  const styleOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.style))), [folderFiltered])
+  const soOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.so))), [folderFiltered])
+  const cpOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.customerPO))), [folderFiltered])
+  const invoiceOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.invoiceNo))), [folderFiltered])
+  const claimOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).flatMap((i: any) => getSplits(i).map((s: any) => s.dept)))), [folderFiltered])
+
+  const hasFilter = [brandF, styleF, soF, cpF, claimF, invoiceF].some(f => f.length > 0)
+
+  const filtered = useMemo(() => folderFiltered.filter(r => {
+    const items = r.items || []
+    if (brandF.length && !brandF.includes(r.brandName)) return false
+    if (styleF.length && !items.some((i: any) => styleF.includes(i.style))) return false
+    if (soF.length && !items.some((i: any) => soF.includes(i.so))) return false
+    if (cpF.length && !items.some((i: any) => cpF.includes(i.customerPO))) return false
+    if (invoiceF.length && !items.some((i: any) => invoiceF.includes(i.invoiceNo))) return false
+    if (claimF.length && !items.some((i: any) => getSplits(i).some((s: any) => claimF.includes(s.dept)) || claimF.includes(i.claimDepartment))) return false
+    return true
+  }), [folderFiltered, brandF, styleF, soF, cpF, invoiceF, claimF])
 
   const grouped = useMemo(() => {
     const byYear: Record<string, Record<string, any[]>> = {}
@@ -223,6 +249,23 @@ export default function FilesPage() {
             </div>
           </div>
 
+          {/* Filters */}
+          <div className="px-5 py-3 border-b border-gray-100 flex items-start gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-gray-500 mt-2 shrink-0">FILTERS</span>
+            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 min-w-0">
+              <MultiSelect label="All Brand" options={brandOpts} value={brandF} onChange={setBrandF} />
+              <MultiSelect label="All Style" options={styleOpts} value={styleF} onChange={setStyleF} />
+              <MultiSelect label="SO..." options={soOpts} value={soF} onChange={setSoF} />
+              <MultiSelect label="Customer PO..." options={cpOpts} value={cpF} onChange={setCpF} />
+              <MultiSelect label="Claim Dept" options={claimOpts} value={claimF} onChange={setClaimF} />
+              <MultiSelect label="Invoice No..." options={invoiceOpts} value={invoiceF} onChange={setInvoiceF} />
+            </div>
+            {hasFilter && (
+              <button onClick={() => { setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setClaimF([]); setInvoiceF([]) }}
+                className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 font-medium shrink-0 mt-0.5">Clear</button>
+            )}
+          </div>
+
           {loading && <div className="text-center py-16 text-gray-400">Loading...</div>}
           {!loading && filtered.length === 0 && (
             <div className="text-center py-16 text-gray-300">
@@ -245,7 +288,7 @@ export default function FilesPage() {
                   </span>
                 </button>
 
-                {expandedYears.has(year) && Object.keys(grouped[year]).map(month => {
+                {(expandedYears.has(year) || hasFilter) && Object.keys(grouped[year]).map(month => {
                   const monthKey = `${year}-${month}`
                   return (
                     <div key={monthKey} className="border-t border-gray-50">
@@ -257,7 +300,7 @@ export default function FilesPage() {
                         <span className="text-xs text-gray-400 ml-auto">{grouped[year][month].length} docs</span>
                       </button>
 
-                      {expandedMonths.has(monthKey) && grouped[year][month].map((req: any) => {
+                      {(expandedMonths.has(monthKey) || hasFilter) && grouped[year][month].map((req: any) => {
                         const docKey = req.id
                         const items: any[] = req.items || []
                         return (
@@ -273,7 +316,7 @@ export default function FilesPage() {
                             </button>
 
                             {/* Items under document */}
-                            {expandedDocs.has(docKey) && (
+                            {(expandedDocs.has(docKey) || hasFilter) && (
                               <div className="pl-20 pr-5 pb-3 bg-blue-50 border-t border-blue-100">
                                 {activeFolder === "LOGISTICS" && (req.attachments || []).some((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)) && (
                                   <div className="flex flex-wrap gap-2 mt-2">
