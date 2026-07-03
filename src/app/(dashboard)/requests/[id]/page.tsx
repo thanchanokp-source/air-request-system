@@ -2132,19 +2132,28 @@ export default function RequestDetailPage() {
             </div>
           )}
 
-          {/* CR NO — one per DOCUMENT, entered anytime (Approve first, CR later) */}
-          {role === "SCM_NYK" && (
+          {/* CR NO — one per DOCUMENT. Flow: Approver approves first → then the CR
+              user (in parallel with the EVP) enters the CR NO. Locked until the
+              Approver has approved every SCM NYK SO. */}
+          {role === "SCM_NYK" && (() => {
+            const nykSOs = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && getSplits(i).some((s: any) => s.dept === "SCM NYK" && s.status !== "REJECTED"))
+            const approverAllDone = nykSOs.length > 0 && nykSOs.every((i: any) => (i.claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER"))
+            const awaitingCount = nykSOs.filter((i: any) => !(i.claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER")).length
+            const crLocked = !approverAllDone && !req.crNo
+            return (
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 space-y-1.5">
               <p className="text-[11px] text-blue-700 leading-relaxed">
-                💡 Press <b>Approve</b> to accept the claim for each SO right away (no CR needed yet) — once you have the CR number, come back and enter it here once for the entire document
+                {crLocked
+                  ? <>⏳ Waiting for the <b>SCM NYK Approver</b> to approve first — you can enter the CR NO once all SOs are approved{awaitingCount > 0 ? ` (${awaitingCount} SO remaining)` : ""}</>
+                  : <>💡 Once you have the CR number, enter it here once for the entire document (runs in parallel with the EVP approval)</>}
               </p>
               <div className="flex items-center gap-2">
                 <label className="text-xs font-semibold text-blue-800 shrink-0">CR NO <span className="text-red-500">*</span></label>
                 <input
                   value={crNoInput}
                   onChange={e => setCrNoInput(e.target.value)}
-                  disabled={!!req.crNo || savingCr}
-                  placeholder={req.crNo ? req.crNo : "Enter CR NO once you have the number"}
+                  disabled={crLocked || !!req.crNo || savingCr}
+                  placeholder={req.crNo ? req.crNo : crLocked ? "Waiting for the SCM NYK Approver…" : "Enter CR NO once you have the number"}
                   className={`flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-500 ${!crNoInput.trim() && !req.crNo ? "border-blue-200 bg-white" : "border-blue-200 bg-white"}`}
                 />
                 {req.crNo
@@ -2161,13 +2170,14 @@ export default function RequestDetailPage() {
                         else { const e = await res.json(); alert(e.error || "Error") }
                         setSavingCr(false)
                       }}
-                      disabled={!crNoInput.trim() || savingCr}
+                      disabled={crLocked || !crNoInput.trim() || savingCr}
                       className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 shrink-0 whitespace-nowrap">
                       {savingCr ? "..." : "Save CR NO"}
                     </button>}
               </div>
             </div>
-          )}
+            )
+          })()}
 
           {/* Priority order reference */}
           {claimApproversList.length > 1 && (

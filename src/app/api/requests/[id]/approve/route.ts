@@ -751,8 +751,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     const cr = body.crNo ? String(body.crNo).trim() : ""
     if (!cr) return NextResponse.json({ error: "Please enter CR NO" }, { status: 400 })
-    await prisma.airRequest.update({ where: { id }, data: { crNo: cr } as any })
     const items = await prisma.airRequestItem.findMany({ where: { requestId: id }, include: { claimApprovals: { include: { user: { select: { role: true } } } } } })
+    // Flow: SCM NYK Approver approves first; only THEN may the CR user (running in
+    // parallel with the EVP) enter the CR NO. Block CR entry until every active
+    // SCM NYK SO has been approved by the Approver.
+    const nykSOs = items.filter(it => getSplits(it).some((s: any) => s.dept === "SCM NYK" && s.status !== "REJECTED"))
+    if (nykSOs.length === 0) return NextResponse.json({ error: "No SCM NYK claim SO awaiting a CR NO" }, { status: 400 })
+    const awaitingApprover = nykSOs.filter(it => !((it as any).claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER"))
+    if (awaitingApprover.length > 0) return NextResponse.json({ error: `Waiting for the SCM NYK Approver to approve all SOs before entering the CR NO (${awaitingApprover.length} SO remaining)` }, { status: 400 })
+    await prisma.airRequest.update({ where: { id }, data: { crNo: cr } as any })
     let finalizedCount = 0
     for (const it of items) {
       const splits = getSplits(it)
