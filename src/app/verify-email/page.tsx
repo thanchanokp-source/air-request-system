@@ -13,7 +13,7 @@ function VerifyEmailContent() {
   const [message, setMessage] = useState("")
 
   useEffect(() => {
-    if (!token) { setStatus("error"); setMessage("ไม่พบ token"); return }
+    if (!token) { setStatus("error"); setMessage("Token not found"); return }
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 10000)
     fetch(`/api/verify-email?token=${token}`, { signal: controller.signal })
@@ -23,15 +23,15 @@ function VerifyEmailContent() {
         try {
           const d = JSON.parse(text)
           if (d.ok) setStatus("success")
-          else { setStatus("error"); setMessage(d.error || "เกิดข้อผิดพลาด") }
+          else { setStatus("error"); setMessage(d.error || "An error occurred") }
         } catch {
-          setStatus("error"); setMessage("Server error — กรุณาลองใหม่")
+          setStatus("error"); setMessage("Server error — please try again")
         }
       })
       .catch(e => {
         clearTimeout(timeout)
         setStatus("error")
-        setMessage(e?.name === "AbortError" ? "หมดเวลา กรุณาลองใหม่" : "เชื่อมต่อไม่ได้")
+        setMessage(e?.name === "AbortError" ? "Request timed out, please try again" : "Unable to connect")
       })
     return () => { clearTimeout(timeout); controller.abort() }
   }, [token])
@@ -49,27 +49,27 @@ function VerifyEmailContent() {
           {status === "loading" && (
             <>
               <div className="text-3xl animate-pulse">⏳</div>
-              <p className="text-gray-500 text-sm">กำลังยืนยัน email...</p>
+              <p className="text-gray-500 text-sm">Verifying email...</p>
             </>
           )}
           {status === "success" && (
             <>
               <div className="text-4xl">✅</div>
-              <h2 className="text-lg font-bold text-gray-800">ยืนยัน Email สำเร็จ</h2>
-              <p className="text-gray-500 text-sm">สามารถเข้าสู่ระบบได้แล้ว</p>
+              <h2 className="text-lg font-bold text-gray-800">Email Verified</h2>
+              <p className="text-gray-500 text-sm">You can now sign in</p>
               <button onClick={() => router.push("/login")}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm"
                 style={{ background: "linear-gradient(90deg, #1e3a8a, #3b82f6)" }}>
-                เข้าสู่ระบบ
+                Sign In
               </button>
             </>
           )}
           {status === "error" && (
             <>
               <div className="text-4xl">❌</div>
-              <h2 className="text-lg font-bold text-gray-800">ยืนยันไม่สำเร็จ</h2>
+              <h2 className="text-lg font-bold text-gray-800">Verification Failed</h2>
               <p className="text-red-500 text-sm">{message}</p>
-              <Link href="/register" className="block text-xs text-blue-600 hover:underline">สมัครใหม่</Link>
+              <Link href="/register" className="block text-xs text-blue-600 hover:underline">Register again</Link>
             </>
           )}
         </div>

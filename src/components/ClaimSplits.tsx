@@ -7,11 +7,11 @@ function fmt(n: number) {
 }
 
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
-  CLAIM_PENDING: { text: "รออนุมัติ", cls: "bg-gray-100 text-gray-600" },
-  CLAIM_PASSED:  { text: "รอ VP",     cls: "bg-violet-100 text-violet-700" },
-  DEPT_ACCEPTED: { text: "รอ CR",      cls: "bg-amber-100 text-amber-700" },
-  DEPT_APPROVED: { text: "อนุมัติแล้ว", cls: "bg-green-100 text-green-700" },
-  COMPLETED:     { text: "เสร็จ",      cls: "bg-green-100 text-green-700" },
+  CLAIM_PENDING: { text: "Pending", cls: "bg-gray-100 text-gray-600" },
+  CLAIM_PASSED:  { text: "Awaiting VP",     cls: "bg-violet-100 text-violet-700" },
+  DEPT_ACCEPTED: { text: "Awaiting CR",      cls: "bg-amber-100 text-amber-700" },
+  DEPT_APPROVED: { text: "Approved", cls: "bg-green-100 text-green-700" },
+  COMPLETED:     { text: "Done",      cls: "bg-green-100 text-green-700" },
   REJECTED:      { text: "Reject",    cls: "bg-red-100 text-red-700" },
 }
 
@@ -34,7 +34,7 @@ export function ClaimSplitBadges({ item }: { item: any }) {
 // Full breakdown table — dept, %, air cost, reason, status.
 export function ClaimSplitTable({ item, highlightDept }: { item: any; highlightDept?: string | null }) {
   const splits = getSplits(item)
-  if (splits.length === 0) return <span className="text-gray-300 text-xs">ไม่มีข้อมูล claim</span>
+  if (splits.length === 0) return <span className="text-gray-300 text-xs">No claim data</span>
   const sumPct = totalPct(splits)
   const sumCost = splits.reduce((a, s) => a + splitAirCost(item, s), 0)
   return (
@@ -42,7 +42,7 @@ export function ClaimSplitTable({ item, highlightDept }: { item: any; highlightD
       <table className="text-xs w-full">
         <thead className="bg-gray-50">
           <tr>
-            {["CLAIM DEPT", "% CLAIM", "ค่า AIR (THB)", "REASON", "STATUS"].map(h => (
+            {["CLAIM DEPT", "% CLAIM", "AIR COST (THB)", "REASON", "STATUS"].map(h => (
               <th key={h} className="px-3 py-1.5 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -62,10 +62,10 @@ export function ClaimSplitTable({ item, highlightDept }: { item: any; highlightD
             )
           })}
           <tr className="bg-gray-50 border-t font-semibold">
-            <td className="px-3 py-1.5">รวม</td>
+            <td className="px-3 py-1.5">Total</td>
             <td className={`px-3 py-1.5 ${sumPct !== 100 ? "text-red-600" : ""}`}>{sumPct}%</td>
             <td className="px-3 py-1.5 text-green-700">{fmt(sumCost)}</td>
-            <td className="px-3 py-1.5" colSpan={2}>{sumPct !== 100 ? "⚠ ผลรวมต้อง = 100%" : ""}</td>
+            <td className="px-3 py-1.5" colSpan={2}>{sumPct !== 100 ? "⚠ Total must = 100%" : ""}</td>
           </tr>
         </tbody>
       </table>

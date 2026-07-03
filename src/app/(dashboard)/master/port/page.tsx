@@ -122,7 +122,7 @@ export default function MasterPortPage() {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-400">* Rate ที่บันทึกจะถูก snapshot ตอน submit request — การแก้ไขไม่กระทบ request เดิม</p>
+      <p className="text-xs text-gray-400">* The saved rate is snapshotted when a request is submitted — later edits do not affect existing requests</p>
     </div>
   )
 }

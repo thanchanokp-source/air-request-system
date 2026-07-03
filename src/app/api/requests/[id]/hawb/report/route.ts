@@ -149,7 +149,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     orderBy: { createdAt: "asc" }
   })
 
-  if (hawbs.length === 0) return NextResponse.json({ error: "ยังไม่มี HAWB" }, { status: 400 })
+  if (hawbs.length === 0) return NextResponse.json({ error: "No HAWB yet" }, { status: 400 })
 
   const buffer = await renderToBuffer(React.createElement(ReportDoc, { request, hawbs }) as React.ReactElement<any>)
 

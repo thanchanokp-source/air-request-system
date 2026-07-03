@@ -31,6 +31,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(filtered)
   } catch {
-    return NextResponse.json({ error: "ไม่สามารถเชื่อมต่อ People Directory ได้" }, { status: 503 })
+    return NextResponse.json({ error: "Unable to connect to the People Directory" }, { status: 503 })
   }
 }

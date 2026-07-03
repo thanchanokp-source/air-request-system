@@ -142,7 +142,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW VP_MER: per-style approve/reject at PENDING_VP_MER_GW
   if (request.status === "PENDING_VP_MER_GW" && (action === "approve_style" || action === "reject_style")) {
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
-    if (action === "reject_style" && !comment) return NextResponse.json({ error: "กรุณาระบุเหตุผลก่อน Reject" }, { status: 400 })
+    if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
     const newItemStatus = action === "approve_style" ? "VP_MER_PASSED" : "REJECTED"
     await prisma.airRequestItem.updateMany({
       where: { requestId: id, style, itemStatus: "PENDING" },
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW GM: per-style approve/reject at PENDING_GM_GW (between DPM and President)
   if (request.status === "PENDING_GM_GW" && (action === "approve_style" || action === "reject_style")) {
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
-    if (action === "reject_style" && !comment) return NextResponse.json({ error: "กรุณาระบุเหตุผลก่อน Reject" }, { status: 400 })
+    if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
     const newItemStatus = action === "approve_style" ? "VP_MER_PASSED" : "REJECTED"
     await prisma.airRequestItem.updateMany({
       where: { requestId: id, style, itemStatus: "PENDING" },
@@ -194,7 +194,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW PRESIDENT: per-style approve/reject at PENDING_PRESIDENT_GW
   if (request.status === "PENDING_PRESIDENT_GW" && (action === "approve_style" || action === "reject_style")) {
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
-    if (action === "reject_style" && !comment) return NextResponse.json({ error: "กรุณาระบุเหตุผลก่อน Reject" }, { status: 400 })
+    if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
     const newItemStatus = action === "approve_style" ? "PRES_PASSED" : "REJECTED"
     await prisma.airRequestItem.updateMany({
       where: { requestId: id, style, itemStatus: "PENDING" },
@@ -219,7 +219,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // VP MER per-style: approve → VP_MER_PASSED (SCM can start immediately), reject → REJECTED
   if (request.status === "PENDING_VP_MER" && (action === "approve_style" || action === "reject_style")) {
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
-    if (action === "reject_style" && !comment) return NextResponse.json({ error: "กรุณาระบุเหตุผลก่อน Reject" }, { status: 400 })
+    if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
 
     const newItemStatus = action === "approve_style" ? "VP_MER_PASSED" : "REJECTED"
     await prisma.airRequestItem.updateMany({
@@ -255,7 +255,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // NYG President per-style approve/reject at PENDING_PRESIDENT (items are VP_MER_PASSED)
   if (request.status === "PENDING_PRESIDENT" && (action === "approve_style" || action === "reject_style") && userRole === "PRESIDENT") {
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
-    if (action === "reject_style" && !comment) return NextResponse.json({ error: "กรุณาระบุเหตุผลก่อน Reject" }, { status: 400 })
+    if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
 
     const newItemStatus = action === "approve_style" ? "PRES_PASSED" : "REJECTED"
     await prisma.airRequestItem.updateMany({
@@ -294,7 +294,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // SCM forwards VP_MER_PASSED items at PENDING_VP_MER (same style-complete rule as PENDING_SCM)
   if (request.status === "PENDING_VP_MER" && action === "approve" && userRole !== "LOGISTICS") {
     const toForward = Object.entries(soClaimData || {}).filter(([, dept]) => dept)
-    if (toForward.length === 0) return NextResponse.json({ error: "กรุณาระบุ Claim Dept อย่างน้อย 1 SO ก่อน Forward" }, { status: 400 })
+    if (toForward.length === 0) return NextResponse.json({ error: "Please assign a Claim Dept for at least 1 SO before forwarding" }, { status: 400 })
 
     const forwardingIds = new Set(toForward.map(([itemId]) => itemId))
     const allVpMerPassedItems = await prisma.airRequestItem.findMany({
@@ -310,7 +310,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const [s, counts] of Object.entries(styleMap)) {
       if (counts.forwarding > 0 && counts.forwarding < counts.total) {
         return NextResponse.json(
-          { error: `Style "${s}" ต้องใส่ Claim Dept ครบทุก SO ก่อน Forward (${counts.forwarding}/${counts.total} SO)` },
+          { error: `Style "${s}" must have a Claim Dept assigned for all SOs before forwarding (${counts.forwarding}/${counts.total} SO)` },
           { status: 400 }
         )
       }
@@ -403,7 +403,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Partial SCM forwarding: forward only assigned items, advance when all done
   if (request.status === "PENDING_SCM" && action === "approve" && userRole !== "LOGISTICS") {
     const toForward = Object.entries(soClaimData || {}).filter(([, dept]) => dept)
-    if (toForward.length === 0) return NextResponse.json({ error: "กรุณาระบุ Claim Dept อย่างน้อย 1 SO ก่อน Forward" }, { status: 400 })
+    if (toForward.length === 0) return NextResponse.json({ error: "Please assign a Claim Dept for at least 1 SO before forwarding" }, { status: 400 })
 
     // Validate: if forwarding any SO from a style, ALL pending SOs in that style must be included
     const forwardingIds = new Set(toForward.map(([itemId]) => itemId))
@@ -420,7 +420,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const [style, counts] of Object.entries(styleMap)) {
       if (counts.forwarding > 0 && counts.forwarding < counts.total) {
         return NextResponse.json(
-          { error: `Style "${style}" ต้องใส่ Claim Dept ครบทุก SO ก่อน Forward (${counts.forwarding}/${counts.total} SO)` },
+          { error: `Style "${style}" must have a Claim Dept assigned for all SOs before forwarding (${counts.forwarding}/${counts.total} SO)` },
           { status: 400 }
         )
       }
@@ -485,7 +485,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // VP SCM or President sends a style back to SCM (PASSED or VP_PASSED → PENDING)
   if (action === "back_to_scm_style") {
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
-    if (!comment) return NextResponse.json({ error: "กรุณาระบุเหตุผลก่อน Back to SCM" }, { status: 400 })
+    if (!comment) return NextResponse.json({ error: "Please provide a reason before sending back to SCM" }, { status: 400 })
     await prisma.airRequestItem.updateMany({
       where: { requestId: id, style, itemStatus: { in: ["PASSED", "VP_PASSED"] } },
       data: { itemStatus: "PENDING", claimDepartment: null, claimDepts: null, itemComment: comment } as any
@@ -566,7 +566,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const freshItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
     // Ready = has actual air freight (from HAWB avg). Invoice/booking are optional.
     const readyItems = freshItems.filter((i: any) => i.actualAirFreight != null)
-    if (readyItems.length === 0) return NextResponse.json({ error: "กรุณาจัด HAWB + ใส่ Total Air อย่างน้อย 1 SO ก่อน Confirm" }, { status: 400 })
+    if (readyItems.length === 0) return NextResponse.json({ error: "Please assign a HAWB and enter Total Air for at least 1 SO before confirming" }, { status: 400 })
     for (const item of readyItems) {
       await prisma.airRequestItem.update({ where: { id: item.id }, data: { itemStatus: "LOG_PASSED" } })
     }
@@ -632,7 +632,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     const freshItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
     const readyItems = freshItems.filter((i: any) => i.actualAirFreight != null)
-    if (readyItems.length === 0) return NextResponse.json({ error: "กรุณาสร้าง HAWB และคำนวณ Air Freight ก่อน Confirm" }, { status: 400 })
+    if (readyItems.length === 0) return NextResponse.json({ error: "Please create a HAWB and calculate Air Freight before confirming" }, { status: 400 })
     for (const item of readyItems) {
       await prisma.airRequestItem.update({ where: { id: item.id }, data: { itemStatus: "LOG_PASSED" } })
     }
@@ -695,7 +695,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (userRole === "CLAIM_NEXT_APPROVER") {
       const userEmail = session.user?.email || ""
       if (!userEmail || (request as any).claimNextEmail !== userEmail) {
-        return NextResponse.json({ error: "ไม่มีสิทธิ์ดำเนินการ" }, { status: 403 })
+        return NextResponse.json({ error: "You do not have permission to perform this action" }, { status: 403 })
       }
     }
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
@@ -721,7 +721,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (action === "approve_so_next" && userRole === "CLAIM_NEXT_APPROVER") {
     const userEmail = session.user?.email || ""
     if (!userEmail || (request as any).claimNextEmail !== userEmail) {
-      return NextResponse.json({ error: "ไม่มีสิทธิ์ approve เอกสารนี้" }, { status: 403 })
+      return NextResponse.json({ error: "You do not have permission to approve this document" }, { status: 403 })
     }
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
@@ -746,9 +746,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // its ACCEPTED splits so those SOs can proceed to Accounting.
   if (action === "finalize_cr_gw" && userRole === "SCM_NYK") {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "ไม่ได้อยู่ใน GW Claim stage" }, { status: 400 })
+    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     const cr = body.crNo ? String(body.crNo).trim() : ""
-    if (!cr) return NextResponse.json({ error: "กรุณาใส่ CR NO" }, { status: 400 })
+    if (!cr) return NextResponse.json({ error: "Please enter CR NO" }, { status: 400 })
     await prisma.airRequest.update({ where: { id }, data: { crNo: cr } as any })
     const items = await prisma.airRequestItem.findMany({ where: { requestId: id } })
     let finalizedCount = 0
@@ -772,7 +772,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (action === "approve_so_claim_gw" && ["CLAIM_GW", "SCM_NYK", "SCM_NYG"].includes(userRole)) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "ไม่ได้อยู่ใน GW Claim stage" }, { status: 400 })
+    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
@@ -782,7 +782,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // SCM NYK can approve/accept WITHOUT a CR number (added later); guard only
     // against re-approving an already-accepted/finalized split.
     if (!hasApprovableGwSplit(itemData, myDepts)) {
-      return NextResponse.json({ error: "ไม่มีส่วน claim ของแผนกนี้ที่รออนุมัติ" }, { status: 400 })
+      return NextResponse.json({ error: "No claim portion for this department awaiting approval" }, { status: 400 })
     }
 
     // Priority chain for this role — all lower-priority approvers must go first.
@@ -798,7 +798,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const done = await (prisma as any).claimApproval.findMany({ where: { itemId, userId: { in: lowerUsers.map((u: any) => u.id) } } })
         if (done.length < lowerUsers.length) {
           const nextUser = allApprovers.find((u: any) => u.priority !== null && u.priority < myPriority && !done.some((d: any) => d.userId === u.id))
-          return NextResponse.json({ error: `ต้องรอให้ผู้อนุมัติลำดับก่อนหน้าอนุมัติก่อน (Priority ${nextUser?.priority}: ${nextUser?.name})` }, { status: 400 })
+          return NextResponse.json({ error: `Must wait for the previous approver in the priority order (Priority ${nextUser?.priority}: ${nextUser?.name})` }, { status: 400 })
         }
       }
     }
@@ -850,7 +850,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const isVpClaimRole = CLAIM_VP_ROLES.includes(userRole)
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     if (request.status === "COMPLETED" || request.status === "REJECTED") {
-      return NextResponse.json({ error: "เอกสารปิดแล้ว ไม่สามารถอนุมัติได้" }, { status: 400 })
+      return NextResponse.json({ error: "The document is closed and cannot be approved" }, { status: 400 })
     }
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData) return NextResponse.json({ error: "Item not found" }, { status: 404 })
@@ -878,7 +878,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Guard: this approver's department must be one of the item's claim splits.
     const itemSplits = getSplits(itemData)
     if (itemSplits.length > 0 && !itemSplits.some(s => s.dept === dept)) {
-      return NextResponse.json({ error: "แผนกของคุณไม่ได้อยู่ใน claim ของ SO นี้" }, { status: 403 })
+      return NextResponse.json({ error: "Your department is not part of the claim for this SO" }, { status: 403 })
     }
 
     // Get all active approvers with priority set — users without priority are excluded
@@ -896,7 +896,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const done = await (prisma as any).claimApproval.findMany({ where: { itemId, userId: { in: lowerUsers.map((u: any) => u.id) } } })
         if (done.length < lowerUsers.length) {
           const nextUser = allApprovers.find((u: any) => u.priority !== null && u.priority < myPriority && !done.some((d: any) => d.userId === u.id))
-          return NextResponse.json({ error: `ต้องรอให้ผู้อนุมัติลำดับก่อนหน้าอนุมัติก่อน (Priority ${nextUser?.priority}: ${nextUser?.name})` }, { status: 400 })
+          return NextResponse.json({ error: `Must wait for the previous approver in the priority order (Priority ${nextUser?.priority}: ${nextUser?.name})` }, { status: 400 })
         }
       }
     }

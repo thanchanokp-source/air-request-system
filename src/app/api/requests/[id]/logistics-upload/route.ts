@@ -39,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const rows: any[] = XLSX.utils.sheet_to_json(ws)
 
     if (rows.length === 0) {
-      return NextResponse.json({ error: "ไม่พบข้อมูลในไฟล์" }, { status: 400 })
+      return NextResponse.json({ error: "No data found in the file" }, { status: 400 })
     }
 
     // Match rows to items by SO + SUB
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     if (matched.length === 0) {
-      return NextResponse.json({ error: "ไม่มี SO ที่ตรงกับ request นี้", unmatched }, { status: 400 })
+      return NextResponse.json({ error: "No SO matches this request", unmatched }, { status: 400 })
     }
 
     // Update matched items

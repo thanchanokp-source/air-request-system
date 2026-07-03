@@ -23,15 +23,15 @@ export default function RegisterPage() {
     e.preventDefault()
     setError("")
     if (!form.email.toLowerCase().endsWith("@nanyangtextile.com")) {
-      setError("ต้องใช้ email ของบริษัท (@nanyangtextile.com)")
+      setError("You must use a company email (@nanyangtextile.com)")
       return
     }
     if (form.password !== form.confirm) {
-      setError("รหัสผ่านไม่ตรงกัน")
+      setError("Passwords do not match")
       return
     }
     if (form.password.length < 6) {
-      setError("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร")
+      setError("Password must be at least 6 characters")
       return
     }
     setLoading(true)
@@ -43,10 +43,10 @@ export default function RegisterPage() {
     const data = await res.json()
     setLoading(false)
     if (data.ok) {
-      if (data.emailError) setError(`สมัครสำเร็จแต่ส่งอีเมลไม่ได้: ${data.emailError}`)
+      if (data.emailError) setError(`Registration succeeded but the email could not be sent: ${data.emailError}`)
       else setDone(true)
     } else {
-      setError(data.error || "เกิดข้อผิดพลาด")
+      setError(data.error || "An error occurred")
     }
   }
 
@@ -63,14 +63,14 @@ export default function RegisterPage() {
           {done ? (
             <div className="text-center space-y-4 py-4">
               <div className="text-4xl">📧</div>
-              <h2 className="text-lg font-bold text-gray-800">ตรวจสอบ Email ของคุณ</h2>
-              <p className="text-gray-500 text-sm leading-relaxed">ส่ง link ยืนยันไปที่ email แล้ว<br/>กรุณาคลิก link เพื่อเริ่มใช้งาน</p>
-              <p className="text-xs text-gray-400">Link มีอายุ 24 ชั่วโมง</p>
+              <h2 className="text-lg font-bold text-gray-800">Check Your Email</h2>
+              <p className="text-gray-500 text-sm leading-relaxed">A verification link has been sent to your email<br/>Please click the link to get started</p>
+              <p className="text-xs text-gray-400">The link is valid for 24 hours</p>
             </div>
           ) : (
           <>
           <div className="text-center mb-6">
-            <h1 className="text-xl font-bold text-gray-800">สมัครใช้งาน</h1>
+            <h1 className="text-xl font-bold text-gray-800">Sign Up</h1>
             <p className="text-gray-400 text-xs mt-1">Air Request System · Nan Yang Textile</p>
           </div>
 
@@ -92,11 +92,11 @@ export default function RegisterPage() {
               </select>
             </div>
 
-            <input type="password" placeholder="รหัสผ่าน (6 ตัวขึ้นไป)" value={form.password} onChange={set("password")} required
+            <input type="password" placeholder="Password (6+ characters)" value={form.password} onChange={set("password")} required
               autoComplete="new-password"
               className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
 
-            <input type="password" placeholder="ยืนยันรหัสผ่าน" value={form.confirm} onChange={set("confirm")} required
+            <input type="password" placeholder="Confirm password" value={form.confirm} onChange={set("confirm")} required
               autoComplete="new-password"
               className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
 
@@ -105,12 +105,12 @@ export default function RegisterPage() {
             <button type="submit" disabled={loading}
               className="w-full py-3 rounded-xl text-white font-semibold text-sm disabled:opacity-50"
               style={{ background: "linear-gradient(90deg, #1e3a8a, #3b82f6)" }}>
-              {loading ? "กำลังสมัคร..." : "สมัครใช้งาน"}
+              {loading ? "Signing up..." : "Sign Up"}
             </button>
 
             <p className="text-center text-xs text-gray-400 pt-1">
-              มีบัญชีแล้ว?{" "}
-              <Link href="/login" className="text-blue-600 font-medium hover:underline">เข้าสู่ระบบ</Link>
+              Already have an account?{" "}
+              <Link href="/login" className="text-blue-600 font-medium hover:underline">Sign In</Link>
             </p>
           </form>
           </>

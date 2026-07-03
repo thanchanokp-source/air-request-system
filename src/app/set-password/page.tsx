@@ -17,7 +17,7 @@ function SetPasswordForm() {
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    if (!token) { setTokenError("ไม่พบ token"); return }
+    if (!token) { setTokenError("Token not found"); return }
     fetch(`/api/set-password?token=${token}`)
       .then(r => r.json())
       .then(d => {
@@ -29,8 +29,8 @@ function SetPasswordForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
-    if (password !== confirm) { setError("รหัสผ่านไม่ตรงกัน"); return }
-    if (password.length < 6) { setError("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); return }
+    if (password !== confirm) { setError("Passwords do not match"); return }
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return }
     setLoading(true)
     const res = await fetch("/api/set-password", {
       method: "POST",
@@ -40,7 +40,7 @@ function SetPasswordForm() {
     const data = await res.json()
     setLoading(false)
     if (data.ok) setDone(true)
-    else setError(data.error || "เกิดข้อผิดพลาด")
+    else setError(data.error || "An error occurred")
   }
 
   return (
@@ -56,35 +56,35 @@ function SetPasswordForm() {
           {tokenError ? (
             <div className="text-center space-y-3">
               <p className="text-red-500 font-medium">{tokenError}</p>
-              <p className="text-gray-400 text-xs">กรุณาติดต่อ Admin เพื่อขอ link ใหม่</p>
+              <p className="text-gray-400 text-xs">Please contact Admin to request a new link</p>
             </div>
           ) : done ? (
             <div className="text-center space-y-4">
               <div className="text-4xl">✅</div>
-              <h2 className="text-lg font-bold text-gray-800">ตั้งรหัสผ่านสำเร็จ</h2>
-              <p className="text-gray-500 text-sm">สามารถเข้าสู่ระบบได้แล้ว</p>
+              <h2 className="text-lg font-bold text-gray-800">Password Set Successfully</h2>
+              <p className="text-gray-500 text-sm">You can now sign in</p>
               <button onClick={() => router.push("/login")}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm"
                 style={{ background: "linear-gradient(90deg, #1e3a8a, #3b82f6)" }}>
-                เข้าสู่ระบบ
+                Sign In
               </button>
             </div>
           ) : (
             <>
               <div className="text-center mb-5">
-                <h1 className="text-xl font-bold text-gray-800">ตั้งรหัสผ่าน</h1>
+                <h1 className="text-xl font-bold text-gray-800">Set Password</h1>
                 {userInfo && <p className="text-gray-400 text-xs mt-1">{userInfo.name} · {userInfo.email}</p>}
               </div>
               <form onSubmit={handleSubmit} className="space-y-3">
-                <input type="password" placeholder="รหัสผ่านใหม่ (6 ตัวขึ้นไป)" value={password} onChange={e => setPassword(e.target.value)} required
+                <input type="password" placeholder="New password (6+ characters)" value={password} onChange={e => setPassword(e.target.value)} required
                   className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-                <input type="password" placeholder="ยืนยันรหัสผ่าน" value={confirm} onChange={e => setConfirm(e.target.value)} required
+                <input type="password" placeholder="Confirm password" value={confirm} onChange={e => setConfirm(e.target.value)} required
                   className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                 {error && <p className="text-red-500 text-xs text-center">{error}</p>}
                 <button type="submit" disabled={loading}
                   className="w-full py-3 rounded-xl text-white font-semibold text-sm disabled:opacity-50"
                   style={{ background: "linear-gradient(90deg, #1e3a8a, #3b82f6)" }}>
-                  {loading ? "กำลังบันทึก..." : "บันทึกรหัสผ่าน"}
+                  {loading ? "Saving..." : "Save Password"}
                 </button>
               </form>
             </>

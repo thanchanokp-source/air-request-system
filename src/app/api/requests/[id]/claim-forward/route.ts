@@ -70,11 +70,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // P2+ must be the designated approver (check email, not token — token can be stale across sessions)
   const userEmail = session.user?.email || ""
   if (isClaimNext && (!userEmail || (request as any).claimNextEmail !== userEmail)) {
-    return NextResponse.json({ error: "ไม่มีสิทธิ์ดำเนินการ" }, { status: 403 })
+    return NextResponse.json({ error: "You do not have permission to perform this action" }, { status: 403 })
   }
 
   if (request.status !== "PENDING_CLAIM" && request.status !== "PENDING_CLAIM_GW") {
-    return NextResponse.json({ error: "เอกสารไม่ได้อยู่ในสถานะ PENDING_CLAIM" }, { status: 400 })
+    return NextResponse.json({ error: "The document is not in PENDING_CLAIM status" }, { status: 400 })
   }
 
   if (final) {

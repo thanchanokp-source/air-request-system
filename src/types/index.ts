@@ -70,7 +70,7 @@ export const ALL_BU_ROLES = ["ADMIN"]
 export const GW_CLAIM_DEPTS = ["NYK", "NYG", "GW", "SUPPLIER_IN", "SUPPLIER_OUT"] as const
 export const GW_CLAIM_DEPT_LABELS: Record<string, string> = {
   NYK: "NYK", NYG: "NYG", GW: "GW",
-  SUPPLIER_IN: "Supplier ใน", SUPPLIER_OUT: "Supplier นอก"
+  SUPPLIER_IN: "Supplier (Internal)", SUPPLIER_OUT: "Supplier (External)"
 }
 export const GW_SCM_DEPTS = ["NYK", "NYG"]
 

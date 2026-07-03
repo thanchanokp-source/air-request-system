@@ -7,10 +7,10 @@ import { notifyStatusChange } from "@/lib/notify"
 import { sendMail } from "@/lib/email"
 import crypto from "crypto"
 
-// Normalize a year that may be 2-digit or Thai Buddhist (พ.ศ.) to Gregorian.
+// Normalize a year that may be 2-digit or Thai Buddhist (B.E.) to Gregorian.
 const normYear = (y: number): number => {
   if (y < 100) return y + 2000          // 26 → 2026
-  if (y >= 2400 && y <= 2600) return y - 543 // พ.ศ. 2569 → 2026
+  if (y >= 2400 && y <= 2600) return y - 543 // B.E. 2569 → 2026
   return y
 }
 
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No items" }, { status: 400 })
     }
     if (!assignedVpMer) {
-      return NextResponse.json({ error: "กรุณาเลือก VP MER" }, { status: 400 })
+      return NextResponse.json({ error: "Please select a VP MER" }, { status: 400 })
     }
     const isGW = bu === "GW"
 
@@ -207,14 +207,14 @@ export async function POST(req: NextRequest) {
         <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
       </td></tr>
       <tr><td style="padding:28px 32px">
-        <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">เอกสาร <strong>${docNo}</strong> มี Port ที่ยังไม่มีค่า Freight Rate ใน Master</p>
-        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 16px">Est. Air Freight ของ Port ต่อไปนี้จะเป็น 0 — กรุณาเพิ่ม Rate ใน Master &gt; Port:</p>
+        <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">Document <strong>${docNo}</strong> has Port(s) without a Freight Rate in Master</p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 16px">Est. Air Freight for the following Ports will be 0 — please add a Rate in Master &gt; Port:</p>
         <ul style="margin:0 0 20px;padding-left:20px;color:#1e293b;font-size:13px;">
           ${portListHtml}
         </ul>
-        <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 20px">หลังเพิ่ม Rate แล้ว ให้เปิดเอกสารแล้วกด <strong>Recalculate</strong> เพื่ออัพเดทยอด</p>
+        <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 20px">After adding the Rate, open the document and click <strong>Recalculate</strong> to update the totals</p>
         <div style="text-align:center">
-          <a href="${APP_URL}/master/port" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">เปิด Master Port →</a>
+          <a href="${APP_URL}/master/port" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Master Port →</a>
         </div>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
   </td></tr>
 </table></body></html>`
 
-        const subject = `[Port Missing] ${docNo} — Port ไม่มี Freight Rate (${missingPorts.join(", ")})`
+        const subject = `[Port Missing] ${docNo} — Port has no Freight Rate (${missingPorts.join(", ")})`
         const lgUsers = await (prisma.user as any).findMany({ where: { role: "LOGISTICS", isActive: true }, select: { email: true } })
         const adminUsers = await (prisma.user as any).findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
         const recipients = [...lgUsers, ...adminUsers].map((u: any) => u.email).filter(Boolean)

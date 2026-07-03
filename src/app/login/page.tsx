@@ -79,7 +79,7 @@ function LoginForm() {
               />
             </div>
 
-            {registered && <p className="text-green-600 text-xs text-center">สมัครสำเร็จ — เข้าสู่ระบบได้เลย</p>}
+            {registered && <p className="text-green-600 text-xs text-center">Registration successful — you can now sign in</p>}
             {error && <p className="text-red-500 text-xs text-center">{error}</p>}
 
             <button
@@ -91,8 +91,8 @@ function LoginForm() {
             </button>
 
             <p className="text-center text-xs text-gray-400 pt-1">
-              ยังไม่มีบัญชี?{" "}
-              <Link href="/register" className="text-blue-600 font-medium hover:underline">สมัครใช้งาน</Link>
+              Don&apos;t have an account?{" "}
+              <Link href="/register" className="text-blue-600 font-medium hover:underline">Sign Up</Link>
             </p>
           </form>
         </div>

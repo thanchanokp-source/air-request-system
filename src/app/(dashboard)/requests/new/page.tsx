@@ -60,26 +60,26 @@ export default function NewRequestPage() {
     const res = await fetch("/api/upload", { method: "POST", body: form })
     const data = await res.json()
     if (!data.rows || data.rows.length === 0) {
-      setError("ไม่พบข้อมูลในไฟล์ กรุณาตรวจสอบและอัพโหลดใหม่")
+      setError("No data found in the file. Please check and upload again")
       return
     }
     const required = isGW ? GW_REQUIRED : NYG_REQUIRED
     const cols = Object.keys(data.rows[0]).map((c: string) => c.toLowerCase())
 
-    // 1. ตรวจ discriminating column — template ใหม่ NYG/GW ใช้ column เดียวกัน (Factory)
+    // 1. Check discriminating column — the new NYG/GW template uses the same column (Factory)
     if (!cols.includes("factory")) {
-      setError("ข้อมูลไม่ถูกต้อง กรุณาใช้ template ที่กำหนด")
+      setError("Invalid data. Please use the specified template")
       return
     }
 
-    // 2. ตรวจ required columns ครบไหม — ถ้าไม่ครบ = ผิด template
+    // 2. Check whether all required columns are present — if not, the template is wrong
     const missing = required.filter(c => !cols.includes(c.toLowerCase()))
     if (missing.length > 0) {
-      setError("ข้อมูลไม่ถูกต้อง กรุณาใช้ template ที่กำหนด")
+      setError("Invalid data. Please use the specified template")
       return
     }
 
-    // 3. ตรวจ WEIGHT(KG) มีข้อมูลทุก row ไหม
+    // 3. Check whether WEIGHT(KG) has data in every row
     const getVal = (row: any, key: string) => {
       const k = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase())
       return k ? row[k] : null
@@ -89,23 +89,23 @@ export default function NewRequestPage() {
       return w === null || w === undefined || w === ""
     })
     if (missingWeight) {
-      setError("กรุณาเพิ่มข้อมูลช่อง WEIGHT(KG)")
+      setError("Please fill in the WEIGHT(KG) field")
       return
     }
 
-    // 4. GW: ผลรวม %CLAIM1/2/3 ของแต่ละ SO ที่มี claim ต้อง = 100
+    // 4. GW: the sum of %CLAIM1/2/3 for each SO that has a claim must = 100
     if (isGW) {
       for (let r = 0; r < data.rows.length; r++) {
         const row = data.rows[r]
         const depts = [1, 2, 3].map(n => String(getVal(row, `CLAIM DEPT ${n}`) || "").trim())
-        if (!depts.some(d => d)) continue // ไม่มี claim ใน row นี้ ข้าม
+        if (!depts.some(d => d)) continue // no claim in this row, skip
         const sum = [1, 2, 3].reduce((a, n) => {
           if (!depts[n - 1]) return a
           return a + (parseFloat(String(getVal(row, `%CLAIM${n}`) ?? "")) || 0)
         }, 0)
         if (Math.round(sum) !== 100) {
-          const so = getVal(row, "SO") || `แถว ${r + 2}`
-          setError(`SO ${so}: ผลรวม %CLAIM ต้อง = 100 (ตอนนี้ ${sum}%)`)
+          const so = getVal(row, "SO") || `Row ${r + 2}`
+          setError(`SO ${so}: the sum of %CLAIM must = 100 (currently ${sum}%)`)
           return
         }
       }
@@ -117,7 +117,7 @@ export default function NewRequestPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file || preview.length === 0) return
-    if (!vpMerSelected) { setError(`กรุณาเลือก ${isGW ? "DPM GW" : "VP MER"} ก่อน Submit`); return }
+    if (!vpMerSelected) { setError(`Please select a ${isGW ? "DPM GW" : "VP MER"} before submitting`); return }
     setLoading(true)
     setError("")
     const res = await fetch("/api/requests", {
@@ -138,7 +138,7 @@ export default function NewRequestPage() {
     setLoading(false)
     if (data.id) {
       if (data.missingPorts?.length > 0) {
-        alert(`⚠️ Port ต่อไปนี้ไม่มีใน Master — Est. Air Freight จะเป็น 0:\n\n${data.missingPorts.join(", ")}\n\nกรุณาเพิ่ม Rate ใน Master > Port แล้วใช้ Recalculate`)
+        alert(`⚠️ The following Ports are not in Master — Est. Air Freight will be 0:\n\n${data.missingPorts.join(", ")}\n\nPlease add the Rate in Master > Port, then use Recalculate`)
       }
       router.push(`/requests/${data.id}`)
     } else {
@@ -171,11 +171,11 @@ export default function NewRequestPage() {
         {/* Select VP MER */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
           <h2 className="font-semibold text-gray-800">
-            เลือก {isGW ? "DPM GW" : "VP MER"} <span className="text-red-500">*</span>
+            Select {isGW ? "DPM GW" : "VP MER"} <span className="text-red-500">*</span>
           </h2>
 
           {vpMerUsers.length === 0 ? (
-            <p className="text-sm text-red-500">ไม่พบผู้อนุมัติใน Master — กรุณาเพิ่ม {isGW ? "DPM_GW" : "VP_MER"} ใน User Management</p>
+            <p className="text-sm text-red-500">No approver found in Master — please add a {isGW ? "DPM_GW" : "VP_MER"} in User Management</p>
           ) : vpMerUsers.length === 1 ? (
             <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
               <div>
@@ -192,7 +192,7 @@ export default function NewRequestPage() {
                 setVpMerSelected(u ? { name: u.name, email: u.email } : null)
               }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
-              <option value="">-- เลือก {isGW ? "DPM GW" : "VP MER"} --</option>
+              <option value="">-- Select {isGW ? "DPM GW" : "VP MER"} --</option>
               {vpMerUsers.map(u => (
                 <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
               ))}

@@ -51,7 +51,7 @@ export default function MasterDescriptionPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">MASTER DESCRIPTION</h1>
-          <p className="text-xs text-gray-400 mt-0.5">WT CHARGE/PC (KG) — ใช้คำนวณ Gross Weight</p>
+          <p className="text-xs text-gray-400 mt-0.5">WT CHARGE/PC (KG) — used to calculate Gross Weight</p>
         </div>
         <button onClick={() => setAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
           + ADD
@@ -132,7 +132,7 @@ export default function MasterDescriptionPage() {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-400">* ชื่อ Description ต้องตรงกับคอลัมน์ DESCRIPTION ใน Excel ที่ MER อัพโหลด</p>
+      <p className="text-xs text-gray-400">* The Description name must match the DESCRIPTION column in the Excel uploaded by MER</p>
     </div>
   )
 }

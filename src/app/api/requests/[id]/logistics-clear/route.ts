@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 // Clears all Logistics-entered data for a request: deletes HAWB groups and resets
-// per-SO invoice / hawb / actual air / booking. Used by the "ล้างข้อมูล" button.
+// per-SO invoice / hawb / actual air / booking. Used by the "Clear Data" button.
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

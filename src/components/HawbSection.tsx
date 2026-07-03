@@ -81,13 +81,13 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
       onReqRefresh()
       setChecked(new Set()); setHawbNo(""); setTotalCharge(""); setModalOpen(false); setInvMap({})
     } else {
-      alert(data.error || "สร้าง HAWB ไม่สำเร็จ")
+      alert(data.error || "Failed to create HAWB")
     }
     setSaving(false)
   }
 
   const deleteHawb = async (hawbId: string) => {
-    if (!confirm("ลบ HAWB นี้และรีเซ็ต Air Freight ของ SO ที่เกี่ยวข้อง?")) return
+    if (!confirm("Delete this HAWB and reset the Air Freight of the related SOs?")) return
     setDeletingId(hawbId)
     const res = await fetch(`/api/requests/${requestId}/hawb/${hawbId}`, { method: "DELETE" })
     if (res.ok) { await loadHawbs(); onReqRefresh() }
@@ -99,7 +99,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
     const res = await fetch(`/api/requests/${requestId}/hawb/report`, { method: "POST" })
     const data = await res.json()
     if (res.ok) { setReportFile(data) }
-    else { alert(data.error || "Generate PDF ไม่สำเร็จ") }
+    else { alert(data.error || "Failed to generate PDF") }
     setGeneratingReport(false)
   }
 
@@ -136,7 +136,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
   }
 
 
-  if (loading) return <div className="text-xs text-gray-400 py-4 text-center">กำลังโหลด...</div>
+  if (loading) return <div className="text-xs text-gray-400 py-4 text-center">Loading...</div>
 
   return (
     <div className="space-y-4">
@@ -145,12 +145,12 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
       {unassigned.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-600">SO ที่ยังไม่มี HAWB ({unassigned.length} รายการ)</p>
+            <p className="text-xs font-semibold text-gray-600">SOs without a HAWB ({unassigned.length} items)</p>
             {checked.size > 0 && (
               <button
                 onClick={() => { setModalOpen(true) }}
                 className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">
-                + สร้าง HAWB ({checked.size} SO)
+                + Create HAWB ({checked.size} SO)
               </button>
             )}
           </div>
@@ -163,24 +163,24 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                 className="w-40 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
             </div>
             <div>
-              <label className="block text-[10px] text-gray-500 mb-0.5">พิมพ์ SO + Enter (เข้า INV ด้านซ้าย)</label>
+              <label className="block text-[10px] text-gray-500 mb-0.5">Type SO + Enter (adds to the INV on the left)</label>
               <input value={soInput} onChange={e => setSoInput(e.target.value)}
                 onKeyDown={e => {
                   if (e.key !== "Enter") return
                   e.preventDefault()
                   const so = soInput.trim()
                   if (!so) return
-                  if (!quickInv.trim()) { alert("กรุณาใส่ Invoice No. ก่อน"); return }
+                  if (!quickInv.trim()) { alert("Please enter an Invoice No. first"); return }
                   const item = unassigned.find((i: any) => String(i.so) === so)
-                  if (!item) { alert(`ไม่พบ SO ${so} ในรายการที่ยังไม่มี HAWB`); return }
+                  if (!item) { alert(`SO ${so} not found among SOs without a HAWB`); return }
                   setChecked(prev => { const n = new Set(prev); n.add(item.id); return n })
                   setInvMap(prev => ({ ...prev, [item.id]: quickInv.trim() }))
                   setSoInput("")
                 }}
-                placeholder="เช่น 1250212" disabled={!quickInv.trim()}
+                placeholder="e.g. 1250212" disabled={!quickInv.trim()}
                 className="w-40 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:opacity-50" />
             </div>
-            <span className="text-[10px] text-gray-400 pb-1">เลือกแล้ว {checked.size} SO — กด "สร้าง HAWB" เพื่อใส่ Total Air</span>
+            <span className="text-[10px] text-gray-400 pb-1">{checked.size} SO selected — click "Create HAWB" to enter Total Air</span>
           </div>
           <div className="border border-gray-200 rounded-lg overflow-x-auto">
             <table className="w-full text-xs">
@@ -213,7 +213,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
             </table>
           </div>
           {checked.size === 0 && (
-            <p className="text-xs text-gray-400">☑ เลือก SO ที่จะรวมใน HAWB เดียวกัน แล้วกด "สร้าง HAWB"</p>
+            <p className="text-xs text-gray-400">☑ Select the SOs to combine into the same HAWB, then click "Create HAWB"</p>
           )}
         </div>
       )}
@@ -221,7 +221,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
       {/* HAWB List */}
       {hawbs.length > 0 && (
         <div className="space-y-3">
-          <p className="text-xs font-semibold text-gray-600">HAWB ที่สร้างแล้ว ({hawbs.length})</p>
+          <p className="text-xs font-semibold text-gray-600">Created HAWBs ({hawbs.length})</p>
           {hawbs.map(hawb => {
             const qty = hawb.items.reduce((s, i) => s + (i.qtyActualShip ?? i.qtyRequestAir), 0)
             const avg = qty > 0 ? hawb.totalCharge / qty : 0
@@ -246,7 +246,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                       disabled={deletingId === hawb.id}
                       onClick={() => deleteHawb(hawb.id)}
                       className="text-xs text-red-300 hover:text-red-100 disabled:opacity-40">
-                      {deletingId === hawb.id ? "..." : "ลบ"}
+                      {deletingId === hawb.id ? "..." : "Delete"}
                     </button>
                   </div>
                 </div>
@@ -270,7 +270,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                       </tr>
                     ))}
                     <tr className="bg-gray-50 border-t font-semibold">
-                      <td className="px-3 py-1.5" colSpan={3}>รวม {hawb.items.length} SO</td>
+                      <td className="px-3 py-1.5" colSpan={3}>Total {hawb.items.length} SO</td>
                       <td className="px-3 py-1.5 text-green-700">{fmt(hawbTotal)} THB</td>
                     </tr>
                   </tbody>
@@ -288,7 +288,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
             onClick={generateReport}
             disabled={generatingReport}
             className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50">
-            {generatingReport ? "กำลัง Generate..." : "📄 Generate PDF → บันทึก Logistics File"}
+            {generatingReport ? "Generating..." : "📄 Generate PDF → Save Logistics File"}
           </button>
           {reportFile && (
             <a href={`/api/attachments/${reportFile.id}`} target="_blank" rel="noreferrer"
@@ -299,26 +299,26 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
         </div>
       )}
       {unassigned.length > 0 && hawbs.length > 0 && (
-        <p className="text-xs text-amber-600">ยังมี SO ที่ไม่ได้ assign HAWB อีก {unassigned.length} รายการ</p>
+        <p className="text-xs text-amber-600">{unassigned.length} SOs still not assigned to a HAWB</p>
       )}
 
       {/* Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="bg-slate-800 text-white px-5 py-3 font-semibold text-sm">สร้าง HAWB</div>
+            <div className="bg-slate-800 text-white px-5 py-3 font-semibold text-sm">Create HAWB</div>
             <div className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">HAWB#</label>
                 <input
                   value={hawbNo}
                   onChange={e => setHawbNo(e.target.value)}
-                  placeholder="เช่น 37026130294"
+                  placeholder="e.g. 37026130294"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Total Air ของ HAWB นี้ (THB)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Total Air for this HAWB (THB)</label>
                 <input
                   type="number" value={totalCharge}
                   onChange={e => setTotalCharge(e.target.value)}
@@ -327,9 +327,9 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                 />
               </div>
 
-              {/* INV per SO (1 HAWB มีได้หลาย INV) */}
+              {/* INV per SO (1 HAWB can have multiple INVs) */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Invoice No. ต่อ SO</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Invoice No. per SO</label>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {selectedItems.map(item => (
                     <div key={item.id} className="flex items-center gap-2">
@@ -371,13 +371,13 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setModalOpen(false)}
                   className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">
-                  ยกเลิก
+                  Cancel
                 </button>
                 <button
                   onClick={createHawb}
                   disabled={saving || !hawbNo.trim() || chargeNum <= 0}
                   className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                  {saving ? "กำลังบันทึก..." : "ยืนยัน"}
+                  {saving ? "Saving..." : "Confirm"}
                 </button>
               </div>
             </div>

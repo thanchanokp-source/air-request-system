@@ -35,7 +35,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
 
   // MER files are locked after submission — VP MER must reject for a redo
   if (role === "MER_USER" || role === "MER_GW") {
-    return NextResponse.json({ error: "ไม่สามารถลบไฟล์หลังจาก submit แล้ว กรุณาให้ VP MER Reject เพื่อสร้างใหม่" }, { status: 400 })
+    return NextResponse.json({ error: "Files cannot be deleted after submission. Please have the VP MER Reject to redo" }, { status: 400 })
   }
 
   await supabase.storage.from(BUCKET).remove([att.filePath])

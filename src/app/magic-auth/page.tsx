@@ -28,8 +28,8 @@ function MagicAuthContent() {
     return (
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif" }}>
         <div style={{ textAlign: "center" }}>
-          <p style={{ color: "#ef4444", fontWeight: 700, fontSize: 16 }}>Link ไม่ถูกต้องหรือหมดอายุ</p>
-          <a href="/login" style={{ color: "#1d4ed8", fontSize: 14 }}>กลับสู่หน้า Login</a>
+          <p style={{ color: "#ef4444", fontWeight: 700, fontSize: 16 }}>Invalid or expired link</p>
+          <a href="/login" style={{ color: "#1d4ed8", fontSize: 14 }}>Back to Login</a>
         </div>
       </div>
     )
@@ -39,7 +39,7 @@ function MagicAuthContent() {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Arial, sans-serif" }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ width: 40, height: 40, border: "4px solid #e2e8f0", borderTop: "4px solid #1e3a8a", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
-        <p style={{ color: "#64748b", fontSize: 14 }}>กำลังเข้าสู่ระบบ...</p>
+        <p style={{ color: "#64748b", fontSize: 14 }}>Signing in...</p>
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     </div>

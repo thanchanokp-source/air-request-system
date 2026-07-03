@@ -273,7 +273,7 @@ export default function RequestDetailPage() {
     })
   }, [isProcureDvm, role]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // PROCUREMENT DVM "Approve เอง": when all dept items approved → auto-forward to VP_PROCUREMENT boss
+  // PROCUREMENT DVM "Approve self": when all dept items approved → auto-forward to VP_PROCUREMENT boss
   useEffect(() => {
     if (!isProcureDvm || procureDecision !== "approve" || claimFwdDone || !req || !vpProcureBoss || procureAutoFwdFired.current) return
     const deptItems = (req.items || []).filter((i: any) => i.claimDepartment === "PROCUREMENT")
@@ -386,7 +386,7 @@ export default function RequestDetailPage() {
     if (isLgGwEntry) {
       const cats = new Set((req?.attachments || []).map((a: any) => a.category).filter(Boolean))
       const missing = LG_REQUIRED_FILES.filter(f => !cats.has(f.key)).map(f => f.label)
-      if (missing.length) { alert(`กรุณาแนบไฟล์ให้ครบก่อน Save: ${missing.join(", ")}`); return }
+      if (missing.length) { alert(`Please attach all required files before Save: ${missing.join(", ")}`); return }
     }
     const itemLogisticsData: Record<string, { invoiceNo: string; hawbNo: string; bookingDate: string }> = {}
     const itemActualsData: Record<string, string> = {}
@@ -412,7 +412,7 @@ export default function RequestDetailPage() {
     const action = isLgGwEntry ? "approve" : "save_logistics_draft"
     const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, itemLogistics: itemLogisticsData, itemActuals: itemActualsData }) })
     setLgDraftSaving(false)
-    if (isLgGwEntry && !res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "บันทึกไม่สำเร็จ"); return }
+    if (isLgGwEntry && !res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Save failed"); return }
     router.push("/approvals")
   }
   const uploadLgFile = async (file: File, category: string) => {
@@ -421,7 +421,7 @@ export default function RequestDetailPage() {
     form.append("file", file); form.append("category", category)
     const res = await fetch(`/api/requests/${id}/attachments`, { method: "POST", body: form })
     if (res.ok) { const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json()) }
-    else alert("อัปโหลดไฟล์ไม่สำเร็จ")
+    else alert("File upload failed")
     setLgDraftSaving(false)
   }
   const isVpMerGW = (role === "DPM_GW" || role === "VP_MER_GW") && req?.status === "PENDING_VP_MER_GW" && isGWRequest
@@ -846,7 +846,7 @@ export default function RequestDetailPage() {
                 )}
                 {isBackScm && (
                   <div className="px-4 py-3 bg-orange-50 border-t border-orange-100 space-y-2">
-                    <label className="text-xs font-medium text-orange-700">Back to SCM — ระบุเหตุผล *</label>
+                    <label className="text-xs font-medium text-orange-700">Back to SCM — specify reason *</label>
                     <textarea value={backToScmComment} onChange={e => setBackToScmComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                     <div className="flex gap-2">
                       <button
@@ -991,7 +991,7 @@ export default function RequestDetailPage() {
                 )}
                 {isBackScm && isReady && (
                   <div className="px-4 py-3 bg-orange-50 border-t border-orange-100 space-y-2">
-                    <label className="text-xs font-medium text-orange-700">Back to SCM — ระบุเหตุผล *</label>
+                    <label className="text-xs font-medium text-orange-700">Back to SCM — specify reason *</label>
                     <textarea value={backToScmStyleComment} onChange={e => setBackToScmStyleComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                     <div className="flex gap-2">
                       <button onClick={() => backToScmStyleFn(g.style)} disabled={isSub || !backToScmStyleComment.trim()} className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{isSub ? "..." : "Confirm Back to SCM"}</button>
@@ -1093,7 +1093,7 @@ export default function RequestDetailPage() {
                 )}
                 {isBackScm && isReady && (
                   <div className="px-4 py-3 bg-orange-50 border-t border-orange-100 space-y-2">
-                    <label className="text-xs font-medium text-orange-700">Back to SCM — ระบุเหตุผล *</label>
+                    <label className="text-xs font-medium text-orange-700">Back to SCM — specify reason *</label>
                     <textarea value={backToScmStyleComment} onChange={e => setBackToScmStyleComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                     <div className="flex gap-2">
                       <button onClick={() => backToScmStyleFn(g.style)} disabled={isSub || !backToScmStyleComment.trim()} className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{isSub ? "..." : "Confirm Back to SCM"}</button>
@@ -1348,7 +1348,7 @@ export default function RequestDetailPage() {
 
           {/* Flat table */}
           {vpMerPassedItems.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">ยังไม่มี style ที่ VP MER approve</p>
+            <p className="text-sm text-gray-400 text-center py-6">No style has been approved by VP MER yet</p>
           ) : (
             <div className="bg-white rounded-xl border border-blue-100 overflow-hidden">
               <div className="overflow-x-auto">
@@ -1419,7 +1419,7 @@ export default function RequestDetailPage() {
             {/* Excel export/import — top-right of the Logistics frame */}
             <div className="flex items-center gap-2">
               <button onClick={async () => {
-                if (!confirm("ล้างข้อมูล Logistics ทั้งหมด (HAWB, INV, Actual Air) ของเอกสารนี้?")) return
+                if (!confirm("Clear all Logistics data (HAWB, INV, Actual Air) for this document?")) return
                 setImportingLg(true)
                 try {
                   const res = await fetch(`/api/requests/${id}/logistics-clear`, { method: "POST" })
@@ -1428,10 +1428,10 @@ export default function RequestDetailPage() {
                     setSoInvMap({}); setItemLogistics({}); setItemActuals({}); setHawbGroups([])
                     const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json())
                     setHawbRefreshKey(k => k + 1)
-                  } else { alert("ล้างข้อมูลไม่สำเร็จ") }
+                  } else { alert("Failed to clear data") }
                 } finally { setImportingLg(false) }
               }} className="text-xs bg-red-50 border border-red-200 text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-100 font-medium whitespace-nowrap">
-                🗑 ล้างข้อมูล
+                🗑 Clear data
               </button>
               <button onClick={async () => {
                 const XLSX = await import("xlsx")
@@ -1458,7 +1458,7 @@ export default function RequestDetailPage() {
                 ⬇ Export
               </button>
               <label className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer whitespace-nowrap ${importingLg ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"}`}>
-                {importingLg ? "กำลัง Import..." : "⬆ Import"}
+                {importingLg ? "Importing..." : "⬆ Import"}
                 <input type="file" accept=".xlsx,.xls" className="hidden" disabled={importingLg}
                   onChange={async e => {
                     const file = e.target.files?.[0]; e.target.value = ""
@@ -1482,7 +1482,7 @@ export default function RequestDetailPage() {
                         if (total > groups[hawb].total) groups[hawb].total = total
                         groups[hawb].items.push({ id: iid, inv })
                       }
-                      if (Object.keys(groups).length === 0) { alert("ไม่พบข้อมูล HAWB# / SO ที่ตรงกัน"); setImportingLg(false); return }
+                      if (Object.keys(groups).length === 0) { alert("No matching HAWB# / SO data found"); setImportingLg(false); return }
                       let created = 0
                       for (const [hawbNo, g] of Object.entries(groups)) {
                         if (g.total <= 0 || g.items.length === 0) continue
@@ -1496,8 +1496,8 @@ export default function RequestDetailPage() {
                       }
                       const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json())
                       setHawbRefreshKey(k => k + 1)
-                      alert(`สร้าง HAWB จาก Excel สำเร็จ ${created} รายการ`)
-                    } catch (err) { console.error(err); alert("Import ไม่สำเร็จ — ตรวจไฟล์ Excel") }
+                      alert(`Successfully created ${created} HAWB from Excel`)
+                    } catch (err) { console.error(err); alert("Import failed — check the Excel file") }
                     finally { setImportingLg(false) }
                   }} />
               </label>
@@ -1565,7 +1565,7 @@ export default function RequestDetailPage() {
             }
             return (
               <div className="space-y-1">
-                <p className="text-xs text-gray-400">{readyItems.length}/{pendingLogItems.length} SO พร้อม forward</p>
+                <p className="text-xs text-gray-400">{readyItems.length}/{pendingLogItems.length} SO ready to forward</p>
                 <button
                   disabled={submitting === "_" || !canConfirm}
                   onClick={async () => {
@@ -1751,7 +1751,7 @@ export default function RequestDetailPage() {
       {claimFwdDone && (
         <div className={`rounded-xl px-4 py-3 mb-4 text-sm font-medium flex items-center gap-2 ${claimFwdDone === "final" ? "bg-green-50 text-green-700 border border-green-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
           <span className="text-base">{claimFwdDone === "final" ? "✓" : "→"}</span>
-          {claimFwdDone === "final" ? "Approved — document is moving forward. แจ้ง Accounting แล้ว" : `Forwarded to ${claimFwdDone.replace("forwarded:","")} successfully.`}
+          {claimFwdDone === "final" ? "Approved — document is moving forward. Accounting has been notified." : `Forwarded to ${claimFwdDone.replace("forwarded:","")} successfully.`}
         </div>
       )}
       {claimFwdDone === "final" && myClaimItems.length > 0 && (
@@ -1834,7 +1834,7 @@ export default function RequestDetailPage() {
             {/* Person picker — shown when intent = "send", required before final action */}
             {nextIntent === "send" && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 space-y-2">
-                <p className="text-xs font-semibold text-blue-700">เลือกคนถัดไปที่จะรับ approve</p>
+                <p className="text-xs font-semibold text-blue-700">Select the next person to approve</p>
                 {!nextForwardTo ? (
                   <div className="relative">
                     <input value={nextFwdQ}
@@ -1849,7 +1849,7 @@ export default function RequestDetailPage() {
                       }}
                       onFocus={() => setNextFwdOpen(true)}
                       onBlur={() => setTimeout(() => setNextFwdOpen(false), 200)}
-                      placeholder="ค้นหาชื่อหรืออีเมล..."
+                      placeholder="Search name or email..."
                       className="w-full border border-blue-300 rounded-lg px-3 py-1.5 pr-7 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     {nextFwdQ && <button type="button" onMouseDown={e => { e.preventDefault(); setNextFwdQ(""); setNextFwdResults([]) }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">✕</button>}
@@ -1903,14 +1903,14 @@ export default function RequestDetailPage() {
                       {claimFwdSaving ? "Sending..." : `→ Forward to ${nextForwardTo.name}`}
                     </button>
                   ) : (
-                    <span className="text-xs text-orange-600 font-medium">เลือกคนถัดไปก่อน</span>
+                    <span className="text-xs text-orange-600 font-medium">Select the next person first</span>
                   )
                 )}
               </div>
             )}
             {allDone && nextIntent === "send_boss" && (
               <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-green-700">
-                <span className="animate-pulse">•</span> กำลังส่งต่อหัวหน้า...{vpProcureBoss ? ` (${vpProcureBoss.name})` : ""}
+                <span className="animate-pulse">•</span> Forwarding to supervisor...{vpProcureBoss ? ` (${vpProcureBoss.name})` : ""}
               </div>
             )}
 
@@ -1999,8 +1999,8 @@ export default function RequestDetailPage() {
           <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4 space-y-4">
             <div>
               <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">CLAIM APPROVAL</p>
-              <h3 className="font-bold text-gray-800 text-base">จะดำเนินการอย่างไรหลัง approve เสร็จ?</h3>
-              <p className="text-xs text-gray-400 mt-1">เลือกก่อน จากนั้นค่อย approve รายการ SO ทีละรายการ</p>
+              <h3 className="font-bold text-gray-800 text-base">What should happen after approval is complete?</h3>
+              <p className="text-xs text-gray-400 mt-1">Select first, then approve each SO one by one</p>
             </div>
             <div className="flex flex-col gap-3">
               <button onClick={() => { setNextIntent("send"); setNextInitialModal(false) }}
@@ -2008,7 +2008,7 @@ export default function RequestDetailPage() {
                 <span className="text-lg leading-none mt-0.5">→</span>
                 <div>
                   <p className="font-bold">Approve & Send to next</p>
-                  <p className="text-xs text-blue-400 group-hover:text-blue-100 mt-0.5">อนุมัติแล้วส่งต่อให้คนถัดไป approve</p>
+                  <p className="text-xs text-blue-400 group-hover:text-blue-100 mt-0.5">Approve and forward to the next person to approve</p>
                 </div>
               </button>
               <button onClick={() => { setNextIntent("done"); setNextInitialModal(false) }}
@@ -2016,7 +2016,7 @@ export default function RequestDetailPage() {
                 <span className="text-lg leading-none mt-0.5">✓</span>
                 <div>
                   <p className="font-bold">Approve & Done</p>
-                  <p className="text-xs text-green-200 mt-0.5">อนุมัติและจบ process</p>
+                  <p className="text-xs text-green-200 mt-0.5">Approve and finish the process</p>
                 </div>
               </button>
             </div>
@@ -2062,7 +2062,7 @@ export default function RequestDetailPage() {
           {role === "SCM_NYK" && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 space-y-1.5">
               <p className="text-[11px] text-blue-700 leading-relaxed">
-                💡 กด <b>Approve</b> เพื่อยอมรับเคลมของแต่ละ SO ได้เลย (ยังไม่ต้องมี CR) — เมื่อได้เลข CR แล้วค่อยกลับมาใส่ที่นี่ครั้งเดียว ใช้กับทั้งเอกสาร
+                💡 Press <b>Approve</b> to accept the claim for each SO right away (no CR needed yet) — once you have the CR number, come back and enter it here once for the entire document
               </p>
               <div className="flex items-center gap-2">
                 <label className="text-xs font-semibold text-blue-800 shrink-0">CR NO <span className="text-red-500">*</span></label>
@@ -2070,11 +2070,11 @@ export default function RequestDetailPage() {
                   value={crNoInput}
                   onChange={e => setCrNoInput(e.target.value)}
                   disabled={!!req.crNo || savingCr}
-                  placeholder={req.crNo ? req.crNo : "ใส่ CR NO เมื่อได้เลขแล้ว"}
+                  placeholder={req.crNo ? req.crNo : "Enter CR NO once you have the number"}
                   className={`flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-500 ${!crNoInput.trim() && !req.crNo ? "border-blue-200 bg-white" : "border-blue-200 bg-white"}`}
                 />
                 {req.crNo
-                  ? <span className="text-xs text-green-700 font-medium shrink-0 whitespace-nowrap">✓ บันทึกแล้ว: {req.crNo}</span>
+                  ? <span className="text-xs text-green-700 font-medium shrink-0 whitespace-nowrap">✓ Saved: {req.crNo}</span>
                   : <button
                       onClick={async () => {
                         if (!crNoInput.trim()) return
@@ -2089,7 +2089,7 @@ export default function RequestDetailPage() {
                       }}
                       disabled={!crNoInput.trim() || savingCr}
                       className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 shrink-0 whitespace-nowrap">
-                      {savingCr ? "..." : "บันทึก CR NO"}
+                      {savingCr ? "..." : "Save CR NO"}
                     </button>}
               </div>
             </div>
@@ -2155,7 +2155,7 @@ export default function RequestDetailPage() {
                   )}
                   {iHaveApproved && !isPassed && (
                     awaitingCr
-                      ? <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap font-medium">ยอมรับแล้ว · รอ CR</span>
+                      ? <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap font-medium">Accepted · Awaiting CR</span>
                       : <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">You approved ✓</span>
                   )}
 
@@ -2286,7 +2286,7 @@ export default function RequestDetailPage() {
                     </table>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-600 mb-1">การแบ่ง Claim</p>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
                       <ClaimSplitTable item={item} highlightDept={claimDept || null} />
                     </div>
                   </div>
@@ -2481,7 +2481,7 @@ export default function RequestDetailPage() {
                 )}
                 {backToScmSo === item.id && (
                   <div className="px-4 py-3 bg-orange-50 border-t border-orange-100 space-y-2">
-                    <label className="text-xs font-medium text-orange-700">Back to SCM — ระบุเหตุผล *</label>
+                    <label className="text-xs font-medium text-orange-700">Back to SCM — specify reason *</label>
                     <textarea value={backToScmSoComment} onChange={e => setBackToScmSoComment(e.target.value)} rows={2}
                       placeholder="Enter reason..." className="w-full border border-orange-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                     <div className="flex gap-2">
@@ -2536,7 +2536,7 @@ export default function RequestDetailPage() {
                     </table>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-600 mb-1">การแบ่ง Claim</p>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
                       <ClaimSplitTable item={item} highlightDept={claimDept || null} />
                     </div>
                   </div>
@@ -2598,7 +2598,7 @@ export default function RequestDetailPage() {
                     <input type="checkbox" checked={allSelected}
                       onChange={e => setClaimGwSelected(e.target.checked ? new Set(pendingItems.map((i:any) => i.id)) : new Set())}
                       className="w-4 h-4 rounded border-gray-300" />
-                    เลือกทั้งหมด
+                    Select All
                   </label>
                 )
               })()}
@@ -2624,12 +2624,12 @@ export default function RequestDetailPage() {
                 {submitting === "_batch" ? "..." : `Approve ${claimGwSelected.size} SO`}
               </button>
               <button onClick={() => setClaimGwSelected(new Set())}
-                className="text-sm text-gray-500 hover:text-gray-700">ยกเลิก</button>
+                className="text-sm text-gray-500 hover:text-gray-700">Cancel</button>
             </div>
           )}
           {req.claimDepartment && (
             <div className="text-sm text-gray-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-              Claim Department: <span className="font-semibold text-emerald-700">{req.claimDepartment === "SUPPLIER_IN" ? "Supplier ใน" : req.claimDepartment === "SUPPLIER_OUT" ? "Supplier นอก" : req.claimDepartment}</span>
+              Claim Department: <span className="font-semibold text-emerald-700">{req.claimDepartment === "SUPPLIER_IN" ? "Supplier (Internal)" : req.claimDepartment === "SUPPLIER_OUT" ? "Supplier (External)" : req.claimDepartment}</span>
             </div>
           )}
           {(req.items||[]).filter((i:any) => ["LOG_PASSED","COMPLETED","REJECTED"].includes(i.itemStatus)).map((item: any) => {
@@ -2743,11 +2743,11 @@ export default function RequestDetailPage() {
               <input
                 value={crNoInput}
                 onChange={e => setCrNoInput(e.target.value)}
-                placeholder={req.crNo ? req.crNo : "ใส่เลข CR NO ก่อน Approve"}
+                placeholder={req.crNo ? req.crNo : "Enter CR NO before Approve"}
                 className={`flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 ${!crNoInput.trim() && !req.crNo ? "border-red-300 bg-red-50" : "border-blue-200 bg-white"}`}
               />
               {(crNoInput.trim() || req.crNo) && (
-                <span className="text-xs text-green-700 font-medium shrink-0">✓ {req.crNo && !crNoInput.trim() ? `บันทึกแล้ว: ${req.crNo}` : ""}</span>
+                <span className="text-xs text-green-700 font-medium shrink-0">✓ {req.crNo && !crNoInput.trim() ? `Saved: ${req.crNo}` : ""}</span>
               )}
             </div>
           )}
@@ -2775,7 +2775,7 @@ export default function RequestDetailPage() {
                           setReq(await res.json())
                           setSubmitting(null)
                         }} disabled={isSub || !canApproveNyk}
-                        title={!canApproveNyk ? "กรุณาใส่ CR NO ก่อน Approve" : ""}
+                        title={!canApproveNyk ? "Please enter CR NO before Approve" : ""}
                         className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
                         {isSub ? "..." : "Approve → Accounting"}
                       </button>
@@ -2829,7 +2829,7 @@ export default function RequestDetailPage() {
                       </table>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-600 mb-1">การแบ่ง Claim</p>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
                       <ClaimSplitTable item={item} highlightDept={role === "SCM_NYK" ? "NYK" : role === "SCM_NYG" ? "NYG" : null} />
                     </div>
                   </div>
@@ -2845,11 +2845,11 @@ export default function RequestDetailPage() {
       {isAccounting && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-gray-800">ACCOUNTING — เอกสารพร้อมตรวจสอบ</h2>
+            <h2 className="font-semibold text-gray-800">ACCOUNTING — Document ready for review</h2>
             <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">READ ONLY</span>
             <span className="text-xs text-gray-500">{accountingItems.length} SO</span>
           </div>
-          <p className="text-xs text-gray-400">ทุกแผนก claim อนุมัติครบแล้ว — Accounting ตรวจสอบ/ดาวน์โหลดเอกสารได้ (ไม่ต้องกด approve)</p>
+          <p className="text-xs text-gray-400">All claim departments have approved — Accounting can review/download documents (no approval needed)</p>
           {req.crNo && (
             <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
               <span className="text-xs font-semibold text-blue-800">CR NO:</span>
@@ -2891,7 +2891,7 @@ export default function RequestDetailPage() {
                       </table>
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-gray-600 mb-1">การแบ่ง Claim</p>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
                       <ClaimSplitTable item={item} />
                     </div>
                   </div>
@@ -2910,7 +2910,7 @@ export default function RequestDetailPage() {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
             </svg>
-            <p className="text-orange-700 font-semibold text-base">กำลังบันทึก...</p>
+            <p className="text-orange-700 font-semibold text-base">Saving...</p>
           </div>
         </div>
       )}
@@ -2920,12 +2920,12 @@ export default function RequestDetailPage() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <p className="text-sm font-semibold text-orange-800">Logistics — Air Waybill Entry</p>
-              <p className="text-xs text-orange-500 mt-0.5">กรอก INV NO. ในตาราง กด Enter ไปแถวถัดไป · จากนั้นจัด HAWB ด้านล่าง</p>
+              <p className="text-xs text-orange-500 mt-0.5">Enter INV NO. in the table, press Enter to go to the next row · then organize HAWB below</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button type="button"
                 onClick={async () => {
-                  if (!confirm("ล้างข้อมูล Logistics ทั้งหมด (HAWB, INV, Actual Air) ของเอกสารนี้?")) return
+                  if (!confirm("Clear all Logistics data (HAWB, INV, Actual Air) for this document?")) return
                   setImportingLg(true)
                   try {
                     const res = await fetch(`/api/requests/${id}/logistics-clear`, { method: "POST" })
@@ -2933,11 +2933,11 @@ export default function RequestDetailPage() {
                       setSoInvMap({}); setItemLogistics({}); setItemActuals({}); setHawbGroups([])
                       const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json())
                       setHawbRefreshKey(k => k + 1)
-                    } else { alert("ล้างข้อมูลไม่สำเร็จ") }
+                    } else { alert("Failed to clear data") }
                   } finally { setImportingLg(false) }
                 }}
                 className="text-xs bg-red-50 border border-red-200 text-red-600 px-3 py-1 rounded-lg hover:bg-red-100 font-medium whitespace-nowrap">
-                🗑 ล้างข้อมูล
+                🗑 Clear data
               </button>
               <button type="button"
                 onClick={async () => {
@@ -3028,7 +3028,7 @@ export default function RequestDetailPage() {
           {/* Required attachments (GW) — must attach INV / AWB / Expense before Save */}
           {isLgGwEntry && (
             <div className="bg-white rounded-xl border border-orange-200 p-3">
-              <p className="text-xs font-semibold text-orange-800 mb-2">แนบไฟล์ (บังคับก่อน Save): INV · AWB · Expense</p>
+              <p className="text-xs font-semibold text-orange-800 mb-2">Attach files (required before Save): INV · AWB · Expense</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {LG_REQUIRED_FILES.map(f => {
                   const att = (req?.attachments || []).find((a: any) => a.category === f.key)
@@ -3038,10 +3038,10 @@ export default function RequestDetailPage() {
                         <p className="text-xs font-medium text-gray-700">{f.label} {att ? "✓" : <span className="text-red-500">*</span>}</p>
                         {att ? (
                           <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline truncate block">{att.fileName}</a>
-                        ) : <p className="text-[10px] text-gray-400">ยังไม่แนบ</p>}
+                        ) : <p className="text-[10px] text-gray-400">Not attached</p>}
                       </div>
                       <label className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer whitespace-nowrap shrink-0">
-                        {att ? "เปลี่ยน" : "แนบ"}
+                        {att ? "Change" : "Attach"}
                         <input type="file" className="hidden" disabled={lgDraftSaving}
                           onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; if (file) uploadLgFile(file, f.key) }} />
                       </label>
@@ -3064,7 +3064,7 @@ export default function RequestDetailPage() {
                     id="lg-quick-inv"
                     type="text"
                     value={lgQuickInv}
-                    placeholder="พิมพ์ INV..."
+                    placeholder="Type INV..."
                     onChange={e => setLgQuickInv(e.target.value)}
                     onKeyDown={e => {
                       if (e.key === "Enter" && lgQuickInv.trim()) {
@@ -3091,13 +3091,13 @@ export default function RequestDetailPage() {
                 </div>
                 {lgQuickInv.trim() && (
                   <div className="relative">
-                    <label className="block text-xs font-semibold text-orange-700 mb-1">SO No. <span className="font-normal text-orange-400">(พิมพ์+Enter หรือคลิกแถว)</span></label>
+                    <label className="block text-xs font-semibold text-orange-700 mb-1">SO No. <span className="font-normal text-orange-400">(type+Enter or click a row)</span></label>
                     <div className="relative">
                       <input
                         id="lg-quick-so"
                         type="text"
                         value={lgQuickSo}
-                        placeholder="ค้นหา SO..."
+                        placeholder="Search SO..."
                         autoComplete="off"
                         onChange={e => setLgQuickSo(e.target.value)}
                         onKeyDown={e => {
@@ -3116,7 +3116,7 @@ export default function RequestDetailPage() {
                       {lgQuickSo.trim() && (
                         <div className="absolute top-full mt-1 left-0 bg-white border border-orange-200 rounded-xl shadow-lg z-20 min-w-64 max-h-48 overflow-y-auto">
                           {allLgItems.filter((i: any) => i.so.includes(lgQuickSo.trim())).length === 0
-                            ? <p className="text-xs text-gray-400 px-3 py-2">ไม่พบ SO</p>
+                            ? <p className="text-xs text-gray-400 px-3 py-2">SO not found</p>
                             : allLgItems.filter((i: any) => i.so.includes(lgQuickSo.trim())).map((i: any) => {
                               const isAssigned = soInvMap[(i as any).id] === lgQuickInv.trim()
                               return (
@@ -3141,7 +3141,7 @@ export default function RequestDetailPage() {
                 )}
                 {lgQuickInv.trim() && (
                   <button type="button" onClick={() => { setLgQuickInv(""); setLgQuickSo("") }}
-                    className="text-xs text-gray-400 hover:text-red-500 pb-1.5">✕ ล้าง</button>
+                    className="text-xs text-gray-400 hover:text-red-500 pb-1.5">✕ Clear</button>
                 )}
               </div>
               {lgQuickInv.trim() && (() => {
@@ -3159,7 +3159,7 @@ export default function RequestDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-orange-400">คลิกแถวหรือพิมพ์ SO เพื่อเพิ่มเข้า {lgQuickInv}</p>
+                  <p className="text-xs text-orange-400">Click a row or type an SO to add it to {lgQuickInv}</p>
                 )
               })()}
             </div>
@@ -3276,7 +3276,7 @@ export default function RequestDetailPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold text-orange-800 uppercase tracking-wide">Air Waybill (HAWB)</p>
-                {hawbGroups.length === 0 && <span className="text-xs text-orange-400">กด "+ เพิ่ม HAWB" แล้วติ้กเลือก INV</span>}
+                {hawbGroups.length === 0 && <span className="text-xs text-orange-400">Press "+ Add HAWB" then tick to select INV</span>}
               </div>
 
               {hawbGroups.map((group, gi) => {
@@ -3306,14 +3306,14 @@ export default function RequestDetailPage() {
                           </span>
                         )}
                         <button type="button" onClick={() => removeHawbGroup(group.id)}
-                          className="ml-auto text-xs text-red-400 hover:text-red-600 font-medium shrink-0">ลบ</button>
+                          className="ml-auto text-xs text-red-400 hover:text-red-600 font-medium shrink-0">Delete</button>
                       </div>
                     </div>
 
                     <div className="p-4 space-y-4">
                       {/* INV checklist */}
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-2">เลือก INV ที่อยู่ใน HAWB นี้</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-2">Select INV in this HAWB</label>
                         <div className="space-y-1.5">
                           {uniqueInvNos.map(invNo => {
                             const isSelected = group.invNos.includes(invNo)
@@ -3332,9 +3332,9 @@ export default function RequestDetailPage() {
                                 <span className="flex-1 flex items-center gap-3">
                                   <span className={`text-sm font-semibold ${isSelected ? "text-orange-900" : isTaken ? "text-gray-400" : "text-gray-700"}`}>{invNo}</span>
                                   <span className="text-xs text-gray-400">{soCount} SO · {qty.toLocaleString()} pcs</span>
-                                  {isTaken && <span className="text-xs text-gray-400 italic">อยู่ใน HAWB อื่นแล้ว</span>}
+                                  {isTaken && <span className="text-xs text-gray-400 italic">Already in another HAWB</span>}
                                 </span>
-                                {isSelected && <span className="text-xs font-medium text-orange-600 shrink-0">✓ เลือกแล้ว</span>}
+                                {isSelected && <span className="text-xs font-medium text-orange-600 shrink-0">✓ Selected</span>}
                               </label>
                             )
                           })}
@@ -3351,12 +3351,12 @@ export default function RequestDetailPage() {
                           )}
                           {hasOverride && (
                             <p className="text-xs text-blue-700 mb-2">
-                              โหมดกรอก Actual Freight รายตัว · รวม = <strong>THB {totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}</strong>
+                              Per-item Actual Freight entry mode · total = <strong>THB {totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}</strong>
                               <button type="button" onClick={() => {
                                 const cleared: Record<string, string> = { ...soActualOverride }
                                 items.forEach((i: any) => { delete cleared[i.id] })
                                 setSoActualOverride(cleared)
-                              }} className="ml-2 text-red-400 hover:text-red-600">× ล้างค่า</button>
+                              }} className="ml-2 text-red-400 hover:text-red-600">× Clear values</button>
                             </p>
                           )}
                           <div className="overflow-x-auto">
@@ -3393,7 +3393,7 @@ export default function RequestDetailPage() {
                                   )
                                 })}
                                 <tr className="bg-orange-50 font-semibold text-orange-900">
-                                  <td colSpan={3} className="px-3 py-1.5 text-right text-xs text-orange-600">รวม</td>
+                                  <td colSpan={3} className="px-3 py-1.5 text-right text-xs text-orange-600">Total</td>
                                   <td className="px-3 py-1.5">{totalQty}</td>
                                   <td className="px-3 py-1.5">{totalCost > 0 ? totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</td>
                                 </tr>
@@ -3402,7 +3402,7 @@ export default function RequestDetailPage() {
                           </div>
                         </div>
                       ) : (
-                        <p className="text-xs text-center text-gray-400 py-2">ติ้กเลือก INV ด้านบนเพื่อดูรายการ SO และคำนวณ Freight</p>
+                        <p className="text-xs text-center text-gray-400 py-2">Tick INV above to view SO list and calculate Freight</p>
                       )}
                     </div>
                   </div>
@@ -3411,7 +3411,7 @@ export default function RequestDetailPage() {
 
               <button type="button" onClick={addHawbGroup}
                 className="w-full border-2 border-dashed border-orange-300 rounded-xl py-2.5 text-sm text-orange-600 hover:bg-orange-50 hover:border-orange-400 transition-colors font-medium">
-                + เพิ่ม Air Waybill (HAWB)
+                + Add Air Waybill (HAWB)
               </button>
             </div>
           )}
@@ -3429,7 +3429,7 @@ export default function RequestDetailPage() {
           {/* GW — claim dept info for CLAIM_GW */}
           {isGWRequest && req.claimDepartment && role === "CLAIM_GW" && (
             <div className="text-sm text-gray-600 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-              Claim Department: <span className="font-semibold text-emerald-700">{req.claimDepartment === "SUPPLIER_IN" ? "Supplier ใน" : req.claimDepartment === "SUPPLIER_OUT" ? "Supplier นอก" : req.claimDepartment}</span>
+              Claim Department: <span className="font-semibold text-emerald-700">{req.claimDepartment === "SUPPLIER_IN" ? "Supplier (Internal)" : req.claimDepartment === "SUPPLIER_OUT" ? "Supplier (External)" : req.claimDepartment}</span>
             </div>
           )}
 
@@ -3472,7 +3472,7 @@ export default function RequestDetailPage() {
                       showErrorMessage: true,
                       errorStyle: "stop",
                       errorTitle: "Invalid",
-                      error: `กรุณาเลือกจากรายการ: ${CLAIM_DEPTS.join(", ")}`
+                      error: `Please select from the list: ${CLAIM_DEPTS.join(", ")}`
                     }]
                     const wb = XLSX.utils.book_new()
                     XLSX.utils.book_append_sheet(wb, ws, "SCM")
@@ -3500,7 +3500,7 @@ export default function RequestDetailPage() {
                         const soLabel = sub ? `${so}/${sub}` : so
                         const found = pendingScmItems.find((i: any) => i.so === so && (i.sub || "") === sub)
                         const issues: string[] = []
-                        if (!found) { issues.push("ไม่พบ SO นี้ในรายการ"); errorList.push({ so: soLabel, issues }); return }
+                        if (!found) { issues.push("This SO was not found in the list"); errorList.push({ so: soLabel, issues }); return }
                         const slots = [1,2,3].map(n => ({
                           raw: String(row[`CLAIM DEPT ${n}`] || "").trim(),
                           pct: Number(row[`%CLAIM${n}`] || row[`%Claim${n}`] || row[`%${n}`] || 0),
@@ -3510,13 +3510,13 @@ export default function RequestDetailPage() {
                         const filledSlots = slots.filter(s => s.raw)
                         filledSlots.forEach(s => {
                           const code = labelToCode[s.raw] || s.raw
-                          if (!CLAIM_DEPTS.includes(code)) issues.push(`CLAIM DEPT ${s.n}: "${s.raw}" ไม่รู้จัก`)
-                          if (!s.pct) issues.push(`CLAIM DEPT ${s.n} (${s.raw}): ไม่มี %CLAIM${s.n}`)
-                          if (!s.reason) issues.push(`CLAIM DEPT ${s.n} (${s.raw}): ไม่มี REASON ${s.n}`)
+                          if (!CLAIM_DEPTS.includes(code)) issues.push(`CLAIM DEPT ${s.n}: "${s.raw}" is not recognized`)
+                          if (!s.pct) issues.push(`CLAIM DEPT ${s.n} (${s.raw}): missing %CLAIM${s.n}`)
+                          if (!s.reason) issues.push(`CLAIM DEPT ${s.n} (${s.raw}): missing REASON ${s.n}`)
                         })
                         if (filledSlots.length > 0) {
                           const total = filledSlots.reduce((sum, s) => sum + s.pct, 0)
-                          if (total !== 100) issues.push(`% รวมได้ ${total}% — ต้องรวมเป็น 100%`)
+                          if (total !== 100) issues.push(`% totals ${total}% — must total 100%`)
                         }
                         if (issues.length > 0) { errorList.push({ so: soLabel, issues }); return }
                         const parsed = filledSlots.flatMap(s => {
@@ -3536,7 +3536,7 @@ export default function RequestDetailPage() {
                   {/* VP SCM — dropdown from master */}
                   <div>
                     {vpScmUsers.length === 0 ? (
-                      <p className="text-xs text-red-400">ไม่พบ VP SCM ใน Master</p>
+                      <p className="text-xs text-red-400">No VP SCM found in Master</p>
                     ) : vpScmUsers.length === 1 ? (
                       <div className="flex items-center gap-1.5 border border-green-400 bg-green-50 rounded-lg px-3 py-1.5 text-xs min-w-[180px]">
                         <span className="text-green-800 font-medium">{vpScmUsers[0].name}</span>
@@ -3551,7 +3551,7 @@ export default function RequestDetailPage() {
                           setVpScmSelectedName(u?.name || "")
                         }}
                         className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs text-gray-700 focus:ring-1 focus:ring-blue-400 focus:outline-none min-w-[180px] bg-white">
-                        <option value="">-- เลือก VP SCM --</option>
+                        <option value="">-- Select VP SCM --</option>
                         {vpScmUsers.map((u: any) => (
                           <option key={u.id} value={u.email}>{u.name}</option>
                         ))}
@@ -3580,14 +3580,14 @@ export default function RequestDetailPage() {
                           if (updated.status !== "PENDING_SCM") { window.location.href = "/approvals" } else { setReq(updated); setScmForwarding(false) }
                         } else { setScmForwarding(false) }
                       }}
-                      title={!vpScmSelectedEmail ? "กรุณาเลือก VP SCM ก่อน" : ""}
+                      title={!vpScmSelectedEmail ? "Please select VP SCM first" : ""}
                       className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors disabled:cursor-not-allowed
                         ${vpScmSelectedEmail
                           ? "bg-green-600 text-white hover:bg-green-700"
                           : "bg-gray-200 text-gray-400 border border-dashed border-gray-400"}`}>
                       {vpScmSelectedEmail
                         ? `Forward ${readyScmStyles.length} style(s) → VP SCM`
-                        : `⚠ เลือก VP SCM ก่อน (${readyScmStyles.length} style(s) ready)`}
+                        : `⚠ Select VP SCM first (${readyScmStyles.length} style(s) ready)`}
                     </button>
                   )}
                 </div>
@@ -3600,7 +3600,7 @@ export default function RequestDetailPage() {
                     <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                       <div className="flex items-center gap-2">
                         <span className="text-red-500 text-lg">⚠</span>
-                        <p className="font-semibold text-gray-800 text-sm">Import ไม่สำเร็จ — พบข้อผิดพลาด {importErrors.length} รายการ</p>
+                        <p className="font-semibold text-gray-800 text-sm">Import failed — found {importErrors.length} error(s)</p>
                       </div>
                       <button onClick={() => setImportErrors([])} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
                     </div>
@@ -3622,7 +3622,7 @@ export default function RequestDetailPage() {
                     <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
                       <button onClick={() => setImportErrors([])}
                         className="bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
-                        รับทราบ — แก้ไข Excel แล้วลอง Import ใหม่
+                        Got it — fix the Excel and try Import again
                       </button>
                     </div>
                   </div>
@@ -3638,8 +3638,8 @@ export default function RequestDetailPage() {
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                     </svg>
                     <div>
-                      <p className="text-green-700 font-bold text-base">กำลังส่งให้ VP SCM</p>
-                      <p className="text-gray-400 text-xs mt-1">กรุณารอสักครู่ อย่าปิดหรือรีโหลดหน้านี้</p>
+                      <p className="text-green-700 font-bold text-base">Sending to VP SCM</p>
+                      <p className="text-gray-400 text-xs mt-1">Please wait a moment, do not close or reload this page</p>
                     </div>
                   </div>
                 </div>
@@ -3653,8 +3653,8 @@ export default function RequestDetailPage() {
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                     </svg>
                     <div>
-                      <p className="text-blue-700 font-bold text-base">กำลังส่ง</p>
-                      <p className="text-gray-400 text-xs mt-1">กรุณารอสักครู่ อย่าปิดหรือรีโหลดหน้านี้</p>
+                      <p className="text-blue-700 font-bold text-base">Sending</p>
+                      <p className="text-gray-400 text-xs mt-1">Please wait a moment, do not close or reload this page</p>
                     </div>
                   </div>
                 </div>
@@ -3690,7 +3690,7 @@ export default function RequestDetailPage() {
                           onChange={e => setScmRows(p => p.map((r, i) => i === idx ? {...r, pct: e.target.value} : r))}
                           className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs w-14 text-center focus:ring-1 focus:ring-blue-400 focus:outline-none" />
                       </div>
-                      <input type="text" placeholder="Reason (จำเป็น)..." value={row.reason}
+                      <input type="text" placeholder="Reason (required)..." value={row.reason}
                         onChange={e => setScmRows(p => p.map((r, i) => i === idx ? {...r, reason: e.target.value} : r))}
                         className={`rounded-lg px-2 py-1.5 text-xs w-44 focus:ring-1 focus:outline-none border
                           ${row.dept && !row.reason.trim() ? "border-red-400 bg-red-50 focus:ring-red-400" : "border-gray-300 focus:ring-blue-400"}`} />
@@ -3705,7 +3705,7 @@ export default function RequestDetailPage() {
                     <button type="button"
                       onClick={() => setScmRows(p => [...p, {dept:"", pct:"", reason:""}])}
                       className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1 pl-5">
-                      + เพิ่ม dept
+                      + Add dept
                     </button>
                   )}
                 </div>
@@ -3717,7 +3717,7 @@ export default function RequestDetailPage() {
                   if (filled.length === 0) return null
                   return (
                     <p className={`text-[11px] font-semibold pl-5 ${total === 100 ? "text-green-600" : "text-red-500"}`}>
-                      รวม {total}% {total === 100 ? "✓ พร้อม Stamp" : "— ต้องรวมได้ 100%"}
+                      Total {total}% {total === 100 ? "✓ Ready to Stamp" : "— must total 100%"}
                     </p>
                   )
                 })()}
@@ -3743,7 +3743,7 @@ export default function RequestDetailPage() {
                     return (
                       <div className="relative">
                         <input id="scm-so-input" type="text" autoComplete="off"
-                          placeholder={scmSelectedIds.size > 0 ? `${scmSelectedIds.size} selected` : "พิม SO + Enter เพื่อเลือก..."}
+                          placeholder={scmSelectedIds.size > 0 ? `${scmSelectedIds.size} selected` : "Type SO + Enter to select..."}
                           value={scmSoInput} onChange={e => setScmSoInput(e.target.value)}
                           onKeyDown={e => {
                             if (e.key === "Escape") { setScmSoInput(""); return }
@@ -3794,7 +3794,7 @@ export default function RequestDetailPage() {
                     const canStamp = scmSelectedIds.size > 0 && filled.length > 0 && total === 100 && !missingReason
                     return (
                       <button type="button" disabled={!canStamp}
-                        title={total !== 100 ? "% รวมต้องเท่ากับ 100" : missingReason ? "กรุณาใส่ Reason ทุก dept" : scmSelectedIds.size === 0 ? "เลือก SO ก่อน" : ""}
+                        title={total !== 100 ? "% total must equal 100" : missingReason ? "Please enter Reason for every dept" : scmSelectedIds.size === 0 ? "Select SO first" : ""}
                         onClick={() => {
                           const deptsToApply = filled.map(r => ({ dept: r.dept, pct: Number(r.pct), reason: r.reason.trim() }))
                           const combinedReason = filled.map(r => r.reason.trim()).filter(Boolean).join("; ")
@@ -3810,15 +3810,15 @@ export default function RequestDetailPage() {
                   })()}
                   {scmSelectedIds.size > 0 && (
                     <button type="button" onClick={() => setScmSelectedIds(new Set())}
-                      className="text-xs text-gray-400 hover:text-red-500 underline">ยกเลิก</button>
+                      className="text-xs text-gray-400 hover:text-red-500 underline">Cancel</button>
                   )}
                 </div>
-                <p className="text-[10px] text-gray-400">① ใส่ CLAIM DEPT + % + Reason (สูงสุด 3 ชุด, % รวม = 100) → ② พิม SO + Enter → ③ Stamp</p>
+                <p className="text-[10px] text-gray-400">① Enter CLAIM DEPT + % + Reason (up to 3 sets, % total = 100) → ② Type SO + Enter → ③ Stamp</p>
               </div>
 
               {/* Flat table */}
               {pendingScmItems.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">ไม่มีรายการ</p>
+                <p className="text-sm text-gray-400 text-center py-4">No items</p>
               ) : (
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
                   <div className="overflow-x-auto">
@@ -3890,7 +3890,7 @@ export default function RequestDetailPage() {
                                       setSoClaimDepts(p => { const n = { ...p }; delete n[item.id]; return n })
                                       setSoClaimComments(p => { const n = { ...p }; delete n[item.id]; return n })
                                     }}
-                                    className="text-gray-300 hover:text-red-500 text-sm leading-none transition-colors" title="ล้างค่า row นี้">
+                                    className="text-gray-300 hover:text-red-500 text-sm leading-none transition-colors" title="Clear this row">
                                     ✕
                                   </button>
                                 )}
@@ -3915,7 +3915,7 @@ export default function RequestDetailPage() {
                 <a href={req?.bu === "GW" ? "/api/template?bu=GW" : "/api/template?bu=NYG"} download className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">⬇ Download Template</a>
               </div>
               <div className="border-2 border-dashed border-blue-200 rounded-xl p-4 bg-blue-50 text-center space-y-2">
-                <p className="text-xs text-blue-600">อัปโหลด Excel ที่กรอก Invoice No / QTY Actual / Actual Air Freight / Booking Date แล้ว</p>
+                <p className="text-xs text-blue-600">Upload the Excel with Invoice No / QTY Actual / Actual Air Freight / Booking Date filled in</p>
                 <input type="file" accept=".xlsx,.xls" disabled={submitting === "_log_upload"}
                   onChange={async (e) => {
                     const f = e.target.files?.[0]; if (!f) return
@@ -3923,7 +3923,7 @@ export default function RequestDetailPage() {
                     const form = new FormData(); form.append("file", f)
                     const res = await fetch(`/api/requests/${id}/logistics-upload`, { method: "POST", body: form })
                     const data = await res.json()
-                    if (res.ok) { setReq(data.request); alert(`อัปโหลดสำเร็จ: match ${data.matched} SO` + (data.unmatched?.length ? ` · ไม่พบ SO: ${data.unmatched.join(", ")}` : "")) }
+                    if (res.ok) { setReq(data.request); alert(`Upload successful: matched ${data.matched} SO` + (data.unmatched?.length ? ` · SO not found: ${data.unmatched.join(", ")}` : "")) }
                     else alert(data.error || "Upload failed")
                     setSubmitting(null); e.target.value = ""
                   }}
@@ -3960,7 +3960,7 @@ export default function RequestDetailPage() {
           )}
 
           {req.status === "PENDING_LOGISTICS" && !presPassedItems.some((i: any) => i.actualAirFreight != null) && (
-            <p className="text-xs text-red-500">กรุณาสร้าง HAWB และคำนวณ Air Freight ก่อน Confirm</p>
+            <p className="text-xs text-red-500">Please create HAWB and calculate Air Freight before Confirm</p>
           )}
 
           <div className="flex gap-2">
@@ -3985,9 +3985,9 @@ export default function RequestDetailPage() {
       {/* Logistics edit — upload Excel to update data after PENDING_LOGISTICS */}
       {role === "LOGISTICS" && (req.status === "PENDING_CLAIM" || req.status === "PENDING_VP_CLAIM" || req.status === "PENDING_VP_NYK") && (
         <div className="bg-white rounded-xl border p-5 space-y-3">
-          <h2 className="font-semibold text-gray-800 border-b pb-2">LOGISTICS DATA <span className="text-xs font-normal text-gray-400 ml-1">(แก้ไขได้โดย re-upload)</span></h2>
+          <h2 className="font-semibold text-gray-800 border-b pb-2">LOGISTICS DATA <span className="text-xs font-normal text-gray-400 ml-1">(editable by re-upload)</span></h2>
           <div className="border-2 border-dashed border-blue-200 rounded-xl p-4 bg-blue-50 text-center space-y-2">
-            <p className="text-xs text-blue-600">อัปโหลด Excel ใหม่เพื่อแก้ไขข้อมูล Invoice No / Actual Air Freight / Booking Date</p>
+            <p className="text-xs text-blue-600">Upload a new Excel to edit Invoice No / Actual Air Freight / Booking Date</p>
             <input type="file" accept=".xlsx,.xls" disabled={submitting === "_log_edit"}
               onChange={async (e) => {
                 const f = e.target.files?.[0]; if (!f) return
@@ -3995,7 +3995,7 @@ export default function RequestDetailPage() {
                 const form = new FormData(); form.append("file", f)
                 const res = await fetch(`/api/requests/${id}/logistics-upload`, { method: "POST", body: form })
                 const data = await res.json()
-                if (res.ok) { setReq(data.request); alert(`อัปเดตสำเร็จ: ${data.matched} SO`) }
+                if (res.ok) { setReq(data.request); alert(`Update successful: ${data.matched} SO`) }
                 else alert(data.error || "Upload failed")
                 setSubmitting(null); e.target.value = ""
               }}
@@ -4115,7 +4115,7 @@ export default function RequestDetailPage() {
                 <button
                   disabled={deletingAtt === att.id}
                   onClick={async () => {
-                    if (!confirm(`ลบไฟล์ "${att.fileName}"?`)) return
+                    if (!confirm(`Delete file "${att.fileName}"?`)) return
                     setDeletingAtt(att.id)
                     await fetch(`/api/attachments/${att.id}`, { method: "DELETE" })
                     setReq((prev: any) => ({ ...prev, attachments: prev.attachments.filter((a: any) => a.id !== att.id) }))

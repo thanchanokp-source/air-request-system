@@ -30,9 +30,9 @@ const FOLDER_LABELS: Record<FolderType, string> = {
   FINAL: "Final File",
 }
 const FOLDER_DESC: Record<FolderType, string> = {
-  BOOKING: "หลัง President อนุมัติ — Logistics ใช้เพื่อ booking air",
-  LOGISTICS: "หลัง Logistics upload Excel พร้อม Invoice & Freight",
-  FINAL: "Request ที่ COMPLETED แล้ว",
+  BOOKING: "After President approval — used by Logistics to book air",
+  LOGISTICS: "After Logistics uploads the Excel with Invoice & Freight",
+  FINAL: "Requests that are COMPLETED",
 }
 const FOLDER_COLOR: Record<FolderType, string> = {
   BOOKING: "text-blue-700 bg-blue-50",
@@ -173,7 +173,7 @@ export default function FilesPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">ALL FILES</h1>
-        <p className="text-xs text-gray-400 mt-0.5">เอกสารที่ระบบ generate แยกตาม BU และประเภท</p>
+        <p className="text-xs text-gray-400 mt-0.5">System-generated documents grouped by BU and type</p>
       </div>
 
       <div className="flex gap-4 items-start">
@@ -227,7 +227,7 @@ export default function FilesPage() {
           {!loading && filtered.length === 0 && (
             <div className="text-center py-16 text-gray-300">
               <p className="text-4xl mb-2">📂</p>
-              <p className="text-sm">ไม่มีไฟล์ใน folder นี้</p>
+              <p className="text-sm">No files in this folder</p>
             </div>
           )}
 
@@ -277,7 +277,7 @@ export default function FilesPage() {
                               <div className="pl-20 pr-5 pb-3 bg-blue-50 border-t border-blue-100">
                                 {activeFolder === "LOGISTICS" && (req.attachments || []).some((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)) && (
                                   <div className="flex flex-wrap gap-2 mt-2">
-                                    <span className="text-xs text-gray-500 font-medium py-1">ไฟล์ Logistics:</span>
+                                    <span className="text-xs text-gray-500 font-medium py-1">Logistics files:</span>
                                     {(req.attachments || []).filter((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)).map((a: any) => (
                                       <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer"
                                         className="text-xs bg-white border border-orange-200 text-orange-700 px-2 py-1 rounded hover:bg-orange-50 font-medium">

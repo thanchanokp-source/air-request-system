@@ -39,7 +39,7 @@ export async function sendMail(to: string | string[], subject: string, html: str
     <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;border:2px solid #f59e0b;overflow:hidden">
       <tr><td style="background:#f59e0b;padding:12px 20px">
         <p style="margin:0;color:#fff;font-size:12px;font-weight:700;font-family:Arial,sans-serif">
-          📋 MONITORING COPY — ส่งถึง: ${originalTo}
+          📋 MONITORING COPY — Sent to: ${originalTo}
         </p>
       </td></tr>
       <tr><td style="padding:20px;font-family:Arial,sans-serif;font-size:13px;color:#374151">

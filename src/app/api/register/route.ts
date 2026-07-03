@@ -14,29 +14,29 @@ export async function POST(req: NextRequest) {
   const { name, email, password, bu, position } = await req.json()
 
   if (!email || !password || !bu || !position) {
-    return NextResponse.json({ error: "กรุณากรอกข้อมูลให้ครบ" }, { status: 400 })
+    return NextResponse.json({ error: "Please fill in all required fields" }, { status: 400 })
   }
 
   if (!email.toLowerCase().endsWith("@nanyangtextile.com")) {
-    return NextResponse.json({ error: "ต้องใช้ email ของบริษัท (@nanyangtextile.com)" }, { status: 400 })
+    return NextResponse.json({ error: "A company email is required (@nanyangtextile.com)" }, { status: 400 })
   }
 
   const role = ALLOWED_ROLES[position]
   if (!role) {
-    return NextResponse.json({ error: "Position ไม่ถูกต้อง" }, { status: 400 })
+    return NextResponse.json({ error: "Invalid position" }, { status: 400 })
   }
 
   try {
     const exists = await emailExistsInDirectory(email)
     if (!exists) {
-      return NextResponse.json({ error: "ไม่พบ email นี้ในระบบพนักงาน กรุณาติดต่อ Admin" }, { status: 403 })
+      return NextResponse.json({ error: "This email was not found in the employee directory. Please contact Admin" }, { status: 403 })
     }
   } catch {
     // People API unreachable (e.g. external deployment) — skip check, rely on email domain validation
   }
 
   if (password.length < 6) {
-    return NextResponse.json({ error: "Password ต้องมีอย่างน้อย 6 ตัวอักษร" }, { status: 400 })
+    return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 })
   }
 
   const normalEmail = email.toLowerCase()
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   const existing = await (prisma.user as any).findUnique({ where: { email: normalEmail } })
   if (existing) {
     if (existing.isActive) {
-      return NextResponse.json({ error: "Email นี้มีในระบบแล้ว" }, { status: 409 })
+      return NextResponse.json({ error: "This email is already registered" }, { status: 409 })
     }
     await (prisma.user as any).delete({ where: { email: normalEmail } })
   }

@@ -6,32 +6,32 @@ import { useRouter } from "next/navigation"
 // Roles that must be set by Admin (master)
 const MASTER_ROLES_NYG = [
   // Flow: MER → VP MER (finder) → President → SCM User → VP SCM (finder) → Claim → Logistics → Accounting
-  { role: "PRESIDENT",            label: "President",             hint: "Approve ทุก request หลัง VP MER",         needsPriority: false, bu: "NYG" },
-  { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + เลือก VP SCM",         needsPriority: false, bu: "NYG" },
-  { role: "CLAIM_COMMERCIAL",     label: "Claim – Commercial",    hint: "Priority 1 = รับเรื่องก่อน",              needsPriority: true,  bu: "NYG" },
-  { role: "CLAIM_PRODUCTION",     label: "Claim – Production",    hint: "Priority 1 = รับเรื่องก่อน",              needsPriority: true,  bu: "NYG" },
-  { role: "CLAIM_NYG",            label: "Claim – SCM NYG",       hint: "Priority 1 = รับเรื่องก่อน",              needsPriority: true,  bu: "NYG" },
-  { role: "CLAIM_NYK",            label: "Claim – SCM NYK",       hint: "Priority 1 = รับเรื่องก่อน",              needsPriority: true,  bu: "NYG" },
-  { role: "CLAIM_PROCUREMENT",    label: "Claim – Procurement",   hint: "Priority 1 = รับเรื่องก่อน",              needsPriority: true,  bu: "NYG" },
-  { role: "LOGISTICS",            label: "Logistics",             hint: "จัดการ HAWB + Generate PDF",               needsPriority: false, bu: "NYG" },
-  { role: "ACCOUNTING",           label: "Accounting",            hint: "รับ Final File + ปิดเอกสาร",              needsPriority: false, bu: "NYG" },
+  { role: "PRESIDENT",            label: "President",             hint: "Approves all requests after VP MER",         needsPriority: false, bu: "NYG" },
+  { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
+  { role: "CLAIM_COMMERCIAL",     label: "Claim – Commercial",    hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
+  { role: "CLAIM_PRODUCTION",     label: "Claim – Production",    hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
+  { role: "CLAIM_NYG",            label: "Claim – SCM NYG",       hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
+  { role: "CLAIM_NYK",            label: "Claim – SCM NYK",       hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
+  { role: "CLAIM_PROCUREMENT",    label: "Claim – Procurement",   hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
+  { role: "LOGISTICS",            label: "Logistics",             hint: "Manage HAWB + Generate PDF",               needsPriority: false, bu: "NYG" },
+  { role: "ACCOUNTING",           label: "Accounting",            hint: "Receives final file + closes document",              needsPriority: false, bu: "NYG" },
 ]
 
 const MASTER_ROLES_GW = [
   // Flow: MER GW → DPM → GM → President → Logistics → Claim → SCM NYK (CR NO) → Accounting
-  { role: "DPM_GW",              label: "DPM (GW)",                 hint: "อนุมัติลำดับที่ 1 หลัง MER",         needsPriority: false, bu: "GW" },
-  { role: "GM_GW",               label: "GM (GW)",                  hint: "อนุมัติลำดับที่ 2",                  needsPriority: false, bu: "GW" },
-  { role: "PRESIDENT_GW",        label: "President (GW)",            hint: "อนุมัติลำดับที่ 3",                  needsPriority: false, bu: "GW" },
-  { role: "LOGISTICS_GW",        label: "Logistics (GW)",            hint: "Booking + จัดการ Logistics",          needsPriority: false, bu: "GW" },
-  { role: "CLAIM_GW",            label: "Claim-GW",                  hint: "Priority 1 = รับเรื่องก่อน",         needsPriority: true,  bu: "GW" },
-  { role: "SCM_NYK",             label: "Claim-SCM NYK User",        hint: "ใส่ CR NO แล้วส่ง Accounting",       needsPriority: true, bu: "GW" },
-  { role: "SCM_NYK_EVP",        label: "Claim-SCM NYK EVP",         hint: "อนุมัติต่อจาก SCM NYK User",         needsPriority: true, bu: "GW" },
-  { role: "SCM_NYG",             label: "Claim-SCM NYG",             hint: "ลำดับที่ 1 ของ NYG chain",           needsPriority: true, bu: "GW" },
-  { role: "SCM_NYG_VP",          label: "Claim-SCM NYG VP",          hint: "ลำดับที่ 2 ของ NYG chain",           needsPriority: true, bu: "GW" },
-  { role: "SCM_NYG_VP_PROD_G1G3",label: "Claim-SCM NYG VP Prod G1/G3", hint: "โรงงาน G1 / G3",                 needsPriority: true, bu: "GW" },
-  { role: "SCM_NYG_VP_PROD_G2G4",label: "Claim-SCM NYG VP Prod G2/G4", hint: "โรงงาน G2 / G4",                 needsPriority: true, bu: "GW" },
-  { role: "SCM_NYG_EVP",         label: "Claim-SCM NYG EVP",         hint: "ลำดับสุดท้าย NYG chain",            needsPriority: true, bu: "GW" },
-  { role: "ACCOUNTING_GW",       label: "Account (GW)",              hint: "รับ Final File + ปิดเอกสาร",         needsPriority: false, bu: "GW" },
+  { role: "DPM_GW",              label: "DPM (GW)",                 hint: "Approves 1st after MER",         needsPriority: false, bu: "GW" },
+  { role: "GM_GW",               label: "GM (GW)",                  hint: "Approves 2nd",                  needsPriority: false, bu: "GW" },
+  { role: "PRESIDENT_GW",        label: "President (GW)",            hint: "Approves 3rd",                  needsPriority: false, bu: "GW" },
+  { role: "LOGISTICS_GW",        label: "Logistics (GW)",            hint: "Booking + manage Logistics",          needsPriority: false, bu: "GW" },
+  { role: "CLAIM_GW",            label: "Claim-GW",                  hint: "Priority 1 = handles first",         needsPriority: true,  bu: "GW" },
+  { role: "SCM_NYK",             label: "Claim-SCM NYK User",        hint: "Enter CR NO then send to Accounting",       needsPriority: true, bu: "GW" },
+  { role: "SCM_NYK_EVP",        label: "Claim-SCM NYK EVP",         hint: "Approves after SCM NYK User",         needsPriority: true, bu: "GW" },
+  { role: "SCM_NYG",             label: "Claim-SCM NYG",             hint: "1st in NYG chain",           needsPriority: true, bu: "GW" },
+  { role: "SCM_NYG_VP",          label: "Claim-SCM NYG VP",          hint: "2nd in NYG chain",           needsPriority: true, bu: "GW" },
+  { role: "SCM_NYG_VP_PROD_G1G3",label: "Claim-SCM NYG VP Prod G1/G3", hint: "Factory G1 / G3",                 needsPriority: true, bu: "GW" },
+  { role: "SCM_NYG_VP_PROD_G2G4",label: "Claim-SCM NYG VP Prod G2/G4", hint: "Factory G2 / G4",                 needsPriority: true, bu: "GW" },
+  { role: "SCM_NYG_EVP",         label: "Claim-SCM NYG EVP",         hint: "Last in NYG chain",            needsPriority: true, bu: "GW" },
+  { role: "ACCOUNTING_GW",       label: "Account (GW)",              hint: "Receives final file + closes document",         needsPriority: false, bu: "GW" },
 ]
 
 const ALL_MASTER_ROLES = [...MASTER_ROLES_NYG, ...MASTER_ROLES_GW]
@@ -41,13 +41,13 @@ const MASTER_ROLES = MASTER_ROLES_NYG
 
 // Roles via People Finder (no master needed)
 const FINDER_ROLES_NYG = [
-  { role: "VP_MER",       label: "VP MER",             who: "MER User เลือก" },
-  { role: "VP_SCM",       label: "VP SCM",             who: "SCM User เลือก" },
-  { role: "CLAIM_*_P2+",  label: "Claim Priority ≥ 2 (ทุก Dept)", who: "Claim P1 เลือก forward ใน request" },
+  { role: "VP_MER",       label: "VP MER",             who: "Selected by MER User" },
+  { role: "VP_SCM",       label: "VP SCM",             who: "Selected by SCM User" },
+  { role: "CLAIM_*_P2+",  label: "Claim Priority ≥ 2 (All Depts)", who: "Forwarded by Claim P1 in request" },
 ]
 
 const FINDER_ROLES_GW = [
-  { role: "MER_GW", label: "MER (GW)", who: "สมัครบัญชีเอง (Priority 1, ไม่ต้อง setup)" },
+  { role: "MER_GW", label: "MER (GW)", who: "Self-registers (Priority 1, no setup needed)" },
 ]
 
 const ALL_ROLES = [
@@ -73,7 +73,7 @@ const FLOW_ORDER: string[] = [
 
 type ActionType = "Approver" | "User" | "Read"
 const ROLE_ACTION: Record<string, ActionType> = {
-  // Approvers — กดอนุมัติ
+  // Approvers — click to approve
   VP_MER: "Approver", PRESIDENT: "Approver", VP_SCM: "Approver",
   DPM_GW: "Approver", GM_GW: "Approver", PRESIDENT_GW: "Approver",
   CLAIM_COMMERCIAL: "Approver", CLAIM_PRODUCTION: "Approver",
@@ -81,10 +81,10 @@ const ROLE_ACTION: Record<string, ActionType> = {
   CLAIM_GW: "Approver",
   SCM_NYK: "User", SCM_NYK_EVP: "Approver", SCM_NYG: "Approver", SCM_NYG_VP: "Approver",
   SCM_NYG_VP_PROD_G1G3: "Approver", SCM_NYG_VP_PROD_G2G4: "Approver", SCM_NYG_EVP: "Approver",
-  // Users — ใส่ข้อมูล / อัพโหลด
+  // Users — enter data / upload
   MER_USER: "User", MER_GW: "User", SCM_USER: "User",
   LOGISTICS: "User", LOGISTICS_GW: "User",
-  // Read — รับไฟล์ / ดูอย่างเดียว
+  // Read — receive files / view only
   ACCOUNTING: "Read", ACCOUNTING_GW: "Read",
   ADMIN: "Read",
 }
@@ -124,7 +124,7 @@ const ROLE_LABEL: Record<string, string> = {
 const CLAIM_ROLES = ALL_MASTER_ROLES.filter(r => r.needsPriority).map(r => r.role)
 const CLAIM_GW_DEPTS = ["NYK", "GW", "SUPPLIER", "NYG"]
 
-// NYG Claim มีหลายระดับ sequential (priority-based)
+// NYG Claim has multiple sequential levels (priority-based)
 const CLAIM_GW_NYG_POSITIONS = [
   { label: "SCM",    priority: 1 },
   { label: "VP SCM", priority: 2 },
@@ -206,9 +206,9 @@ export default function UsersPage() {
   }
 
   const sendReset = async (id: string, email: string) => {
-    if (!confirm(`ส่ง link ตั้งรหัสผ่านไปที่ ${email}?`)) return
+    if (!confirm(`Send password setup link to ${email}?`)) return
     const res = await fetch(`/api/users/${id}/send-reset`, { method: "POST" })
-    alert(res.ok ? "ส่ง email สำเร็จ" : "ส่งไม่สำเร็จ")
+    alert(res.ok ? "Email sent successfully" : "Failed to send")
   }
 
   const toggleActive = async (u: any) => {
@@ -218,7 +218,7 @@ export default function UsersPage() {
   }
 
   const del = async (id: string, name: string) => {
-    if (!confirm(`ลบ user "${name}"?`)) return
+    if (!confirm(`Delete user "${name}"?`)) return
     await fetch(`/api/users/${id}`, { method: "DELETE" })
     setUsers(prev => prev.filter(u => u.id !== id))
   }
@@ -289,7 +289,7 @@ export default function UsersPage() {
                 <div className="w-12 h-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
                 <div>
                   <p className="font-semibold text-gray-800">Creating user...</p>
-                  <p className="text-xs text-gray-400 mt-1">กรุณารอสักครู่</p>
+                  <p className="text-xs text-gray-400 mt-1">Please wait a moment</p>
                 </div>
               </>
             )}
@@ -327,7 +327,7 @@ export default function UsersPage() {
         <div className="flex items-center gap-3">
           {/* BU Filter */}
           <div className="flex items-center gap-1.5 bg-gray-100 rounded-lg p-1">
-            {([["NYG","NYG"],["GW","GW"],["","ทั้งหมด"]] as const).map(([val, label]) => (
+            {([["NYG","NYG"],["GW","GW"],["","All"]] as const).map(([val, label]) => (
               <button key={val} onClick={() => setBuFilter(val as any)}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${buFilter === val
                   ? val === "NYG" ? "bg-blue-600 text-white shadow"
@@ -360,7 +360,7 @@ export default function UsersPage() {
             {/* Must-setup checklist */}
             <div className="bg-white rounded-xl border overflow-hidden">
               <div className="bg-slate-800 text-white px-4 py-3 text-sm font-semibold">
-                ✅ ต้อง Setup ใน Master
+                ✅ Must Setup in Master
               </div>
               <div className="divide-y">
                 {visibleMasterRoles.map(mr => {
@@ -369,7 +369,7 @@ export default function UsersPage() {
                     return (
                       <div key={mr.role}>
                         <div className="px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                          Claim (GW) — Sequential Approval ทุก Dept
+                          Claim (GW) — Sequential Approval All Depts
                         </div>
                         {CLAIM_GW_DEPTS.map(dept => {
                           const deptUsers = users
@@ -389,7 +389,7 @@ export default function UsersPage() {
                                   </span>
                                   <span className="text-sm text-gray-700 font-semibold">{dept}</span>
                                 </div>
-                                <span className="text-xs text-blue-500 hover:underline">+ เพิ่ม</span>
+                                <span className="text-xs text-blue-500 hover:underline">+ Add</span>
                               </div>
                               {/* Priority rows */}
                               {deptUsers.map(u => (
@@ -401,7 +401,7 @@ export default function UsersPage() {
                                 </div>
                               ))}
                               {deptUsers.length === 0 && (
-                                <p className="text-xs text-red-400 px-4 pb-2 pl-10">ยังไม่มี user</p>
+                                <p className="text-xs text-red-400 px-4 pb-2 pl-10">No users yet</p>
                               )}
                             </div>
                           )
@@ -423,7 +423,7 @@ export default function UsersPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-800">{mr.label}</p>
                         <p className="text-xs text-gray-400">{mr.hint}</p>
-                        {count > 0 && <p className="text-xs text-green-600 mt-0.5">{count} คน active</p>}
+                        {count > 0 && <p className="text-xs text-green-600 mt-0.5">{count} active</p>}
                       </div>
                     </div>
                   )
@@ -434,7 +434,7 @@ export default function UsersPage() {
             {/* People Finder roles info */}
             <div className="bg-white rounded-xl border overflow-hidden">
               <div className="bg-gray-100 px-4 py-3 text-sm font-semibold text-gray-600">
-                🔍 ผ่าน People Finder (ไม่ต้อง setup)
+                🔍 Via People Finder (no setup needed)
               </div>
               <div className="divide-y">
                 {visibleFinderRoles.map(fr => (
@@ -451,7 +451,7 @@ export default function UsersPage() {
 
             {/* MER free */}
             <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
-              <span className="font-semibold">MER User</span> — สมัครบัญชีได้เอง ไม่ต้อง setup
+              <span className="font-semibold">MER User</span> — self-registers, no setup needed
             </div>
           </div>
 
@@ -460,11 +460,11 @@ export default function UsersPage() {
 
             {/* People Finder search */}
             <div className="bg-white rounded-xl border p-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ค้นหาจาก People Directory</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Search from People Directory</p>
               <div className="flex gap-2">
                 <input value={peopleQ} onChange={e => setPeopleQ(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && searchPeople()}
-                  placeholder="พิมพ์ชื่อหรือ email แล้วกด Enter..."
+                  placeholder="Type name or email, then press Enter..."
                   className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <button onClick={searchPeople} disabled={peopleLoading || !peopleQ.trim()}
                   className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
@@ -476,7 +476,7 @@ export default function UsersPage() {
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b">
                       <tr>
-                        {["ชื่อ","Email","Dept"].map(h => <th key={h} className="px-3 py-2 text-left text-xs text-gray-500 font-medium">{h}</th>)}
+                        {["Name","Email","Dept"].map(h => <th key={h} className="px-3 py-2 text-left text-xs text-gray-500 font-medium">{h}</th>)}
                         <th className="px-3 py-2 w-16"></th>
                       </tr>
                     </thead>
@@ -489,7 +489,7 @@ export default function UsersPage() {
                           <td className="px-3 py-2">
                             <button onClick={() => { setForm(prev => ({ ...prev, name: p.name || prev.name, email: p.email || prev.email })); setPeopleResults([]) }}
                               className="text-xs text-blue-600 font-medium hover:underline">
-                              ใช้ →
+                              Use →
                             </button>
                           </td>
                         </tr>
@@ -503,15 +503,15 @@ export default function UsersPage() {
             {/* Create / Edit Form */}
             <div className="bg-white rounded-xl border p-5 space-y-4">
               <div className="flex items-center justify-between border-b pb-3">
-                <h2 className="font-semibold text-gray-800">{editId ? "แก้ไข User" : "เพิ่ม User ใหม่"}</h2>
-                {editId && <button onClick={reset} className="text-xs text-gray-400 hover:text-gray-600">✕ ยกเลิก</button>}
+                <h2 className="font-semibold text-gray-800">{editId ? "Edit User" : "Add New User"}</h2>
+                {editId && <button onClick={reset} className="text-xs text-gray-400 hover:text-gray-600">✕ Cancel</button>}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">ชื่อ</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
                   <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                    placeholder="ชื่อ-นามสกุล"
+                    placeholder="Full name"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
@@ -531,7 +531,7 @@ export default function UsersPage() {
                     <optgroup label="── GW Master">
                       {MASTER_ROLES_GW.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
                     </optgroup>
-                    <optgroup label="── ทั่วไป">
+                    <optgroup label="── General">
                       <option value="MER_USER">MER User (NYG)</option>
                       <option value="MER_GW">MER (GW)</option>
                       <option value="ADMIN">Admin</option>
@@ -552,11 +552,11 @@ export default function UsersPage() {
                 {isMasterRole && (
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Priority <span className="text-gray-400 font-normal">(1 = รับเรื่องก่อน)</span>
+                      Priority <span className="text-gray-400 font-normal">(1 = handles first)</span>
                     </label>
                     <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">-- เลือก Priority --</option>
+                      <option value="">-- Select Priority --</option>
                       {[1,2,3,4,5].map(n => <option key={n} value={n}>Priority {n}</option>)}
                     </select>
                   </div>
@@ -567,7 +567,7 @@ export default function UsersPage() {
                     <label className="block text-xs font-medium text-gray-500 mb-1">Procurement Type *</label>
                     <select value={form.procurementType} onChange={e => setForm(p => ({ ...p, procurementType: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">-- เลือก --</option>
+                      <option value="">-- Select --</option>
                       <option value="PURCHASING">Purchasing</option>
                       <option value="SOURCING">Sourcing</option>
                     </select>
@@ -580,7 +580,7 @@ export default function UsersPage() {
                     <select value={form.claimDepartment}
                       onChange={e => setForm(p => ({ ...p, claimDepartment: e.target.value, nygPosition: "", priority: "" }))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">-- เลือก --</option>
+                      <option value="">-- Select --</option>
                       {CLAIM_GW_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </div>
@@ -590,11 +590,11 @@ export default function UsersPage() {
                 {isGWClaim && form.claimDepartment && (
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Priority <span className="text-gray-400 font-normal">(1 = รับเรื่องก่อน)</span>
+                      Priority <span className="text-gray-400 font-normal">(1 = handles first)</span>
                     </label>
                     <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">-- เลือก Priority --</option>
+                      <option value="">-- Select Priority --</option>
                       {[1,2,3,4,5].map(n => <option key={n} value={n}>Priority {n}</option>)}
                     </select>
                   </div>
@@ -605,7 +605,7 @@ export default function UsersPage() {
                 <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5">
                   <div>
                     <p className="text-xs font-medium text-gray-700">Send password setup email now</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">ปิดไว้ → ค่อยกด "ส่ง Link" ทีหลังได้</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Off → you can click "Send Link" later</p>
                   </div>
                   <button type="button" onClick={() => setForm(p => ({ ...p, sendEmail: !p.sendEmail }))}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.sendEmail ? "bg-blue-600" : "bg-gray-300"}`}>
@@ -625,7 +625,7 @@ export default function UsersPage() {
             {/* Quick list of master roles */}
             <div className="bg-white rounded-xl border overflow-hidden">
               <div className="px-4 py-3 border-b flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-700">Master Users ที่ตั้งไว้แล้ว</p>
+                <p className="text-sm font-semibold text-gray-700">Configured Master Users</p>
               </div>
               <div className="divide-y">
                 {visibleMasterRoles.map(mr => {
@@ -634,10 +634,10 @@ export default function UsersPage() {
                     <div key={mr.role} className="px-4 py-3 flex items-center justify-between">
                       <div>
                         <span className="text-sm text-gray-500">{mr.label}</span>
-                        <span className="ml-2 text-xs text-red-400">ยังไม่มี</span>
+                        <span className="ml-2 text-xs text-red-400">None yet</span>
                       </div>
                       <button onClick={() => setForm(p => ({ ...p, role: mr.role, priority: mr.needsPriority ? "1" : "" }))}
-                        className="text-xs text-blue-600 hover:underline">+ เพิ่ม</button>
+                        className="text-xs text-blue-600 hover:underline">+ Add</button>
                     </div>
                   )
                   return (
@@ -661,7 +661,7 @@ export default function UsersPage() {
                                 <span className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${u.isActive ? "translate-x-4" : "translate-x-0.5"}`} />
                               </button>
                               <button onClick={() => openEdit(u)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                              <button onClick={() => sendReset(u.id, u.email)} className="text-xs text-amber-600 hover:underline">ส่ง Link</button>
+                              <button onClick={() => sendReset(u.id, u.email)} className="text-xs text-amber-600 hover:underline">Send Link</button>
                             </div>
                           </div>
                         ))}
@@ -680,7 +680,7 @@ export default function UsersPage() {
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="px-5 py-3 border-b bg-slate-50 flex items-center gap-3 flex-wrap">
             <span className="font-semibold text-slate-700 text-sm">
-              ผู้ใช้{buFilter ? ` (${buFilter})` : "ทั้งหมด"} — <span className="text-indigo-600">{filtered.length}</span> คน
+              Users{buFilter ? ` (${buFilter})` : " (All)"} — <span className="text-indigo-600">{filtered.length}</span>
             </span>
             <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs">
@@ -695,7 +695,7 @@ export default function UsersPage() {
             <table className="w-full text-sm" style={{fontVariantNumeric:"tabular-nums"}}>
               <thead>
                 <tr className="bg-slate-800">
-                  {["NO.","ชื่อ","Email","BU","Role","Sub Role","Action","Priority","Status","จัดการ"].map(h =>
+                  {["NO.","Name","Email","BU","Role","Sub Role","Action","Priority","Status","Manage"].map(h =>
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   )}
                 </tr>
@@ -704,7 +704,7 @@ export default function UsersPage() {
                 {displayed.map((u, idx) => {
                   const claimDept = u.claimDepartment
                   const p = u.priority
-                  // full display label รวม role + ตำแหน่ง + dept
+                  // full display label combining role + position + dept
                   const fullRoleLabel: string = (() => {
                     const r = u.role
                     if (r === "CLAIM_GW") {
@@ -786,9 +786,9 @@ export default function UsersPage() {
                       <div className="flex gap-2 items-center">
                         <button onClick={() => { openEdit(u); setTab("setup") }} className="text-xs font-medium text-blue-600 hover:text-blue-800">Edit</button>
                         <span className="text-gray-200">|</span>
-                        <button onClick={() => sendReset(u.id, u.email)} className="text-xs font-medium text-amber-600 hover:text-amber-800">ส่ง Link</button>
+                        <button onClick={() => sendReset(u.id, u.email)} className="text-xs font-medium text-amber-600 hover:text-amber-800">Send Link</button>
                         <span className="text-gray-200">|</span>
-                        <button onClick={() => del(u.id, u.name || u.email)} className="text-xs font-medium text-red-400 hover:text-red-600">ลบ</button>
+                        <button onClick={() => del(u.id, u.name || u.email)} className="text-xs font-medium text-red-400 hover:text-red-600">Delete</button>
                       </div>
                     </td>
                   </tr>

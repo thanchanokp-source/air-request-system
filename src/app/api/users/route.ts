@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ id: user.id })
   } catch (e: any) {
-    if (e?.code === "P2002") return NextResponse.json({ error: "Email นี้มีในระบบแล้ว" }, { status: 409 })
+    if (e?.code === "P2002") return NextResponse.json({ error: "This email is already registered" }, { status: 409 })
     throw e
   }
 }

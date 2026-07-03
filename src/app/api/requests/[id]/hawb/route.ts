@@ -41,10 +41,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const items = await prisma.airRequestItem.findMany({
     where: { id: { in: itemIds }, requestId: id, itemStatus: "PRES_PASSED" }
   })
-  if (items.length === 0) return NextResponse.json({ error: "ไม่พบ SO ที่เลือก" }, { status: 400 })
+  if (items.length === 0) return NextResponse.json({ error: "Selected SO not found" }, { status: 400 })
 
   const totalQty = items.reduce((s, i) => s + (i.qtyActualShip ?? i.qtyRequestAir), 0)
-  if (totalQty === 0) return NextResponse.json({ error: "QTY รวมเป็น 0" }, { status: 400 })
+  if (totalQty === 0) return NextResponse.json({ error: "Total QTY is 0" }, { status: 400 })
 
   const costPerPc = totalCharge / totalQty
 

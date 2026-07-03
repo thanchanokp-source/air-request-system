@@ -7,24 +7,24 @@ const APP_URL = process.env.APP_URL || "http://localhost:3000"
 // Format: [ROLE] action — DOC
 const STATUS_SUBJECT: Record<string, string> = {
   // NYG
-  PENDING_VP_MER:      "[VP MER] รอ Approve",
-  PENDING_SCM:         "[SCM User] รอ Assign Claim",
-  PENDING_VP_SCM:      "[VP SCM] รอ Approve",
-  PENDING_PRESIDENT:   "[President] รอ Approve",
-  PENDING_LOGISTICS:   "[Logistics] รอใส่ข้อมูล HAWB",
-  PENDING_CLAIM:       "[Claim] รอ Approve",
-  PENDING_VP_CLAIM:    "[VP Claim] รอ Approve",
-  PENDING_VP_NYK:      "[VP NYK] รอ Approve",
+  PENDING_VP_MER:      "[VP MER] Pending Approval",
+  PENDING_SCM:         "[SCM User] Pending Claim Assignment",
+  PENDING_VP_SCM:      "[VP SCM] Pending Approval",
+  PENDING_PRESIDENT:   "[President] Pending Approval",
+  PENDING_LOGISTICS:   "[Logistics] Pending HAWB Details",
+  PENDING_CLAIM:       "[Claim] Pending Approval",
+  PENDING_VP_CLAIM:    "[VP Claim] Pending Approval",
+  PENDING_VP_NYK:      "[VP NYK] Pending Approval",
   // GW
-  PENDING_VP_MER_GW:   "[DPM – GW] รอ Approve",
-  PENDING_DPM_GW:      "[DPM – GW] รอ Approve",
-  PENDING_GM_GW:       "[GM – GW] รอ Approve",
-  PENDING_PRESIDENT_GW:"[President – GW] รอ Approve",
-  PENDING_LOGISTICS_GW:"[Logistics – GW] รอใส่ข้อมูล",
-  PENDING_CLAIM_GW:    "[Claim – GW] รอ Approve",
+  PENDING_VP_MER_GW:   "[DPM – GW] Pending Approval",
+  PENDING_DPM_GW:      "[DPM – GW] Pending Approval",
+  PENDING_GM_GW:       "[GM – GW] Pending Approval",
+  PENDING_PRESIDENT_GW:"[President – GW] Pending Approval",
+  PENDING_LOGISTICS_GW:"[Logistics – GW] Pending Details",
+  PENDING_CLAIM_GW:    "[Claim – GW] Pending Approval",
   // Final
-  COMPLETED:           "[เสร็จสิ้น] Approve ครบแล้ว",
-  REJECTED:            "[Rejected] เอกสารถูก Reject",
+  COMPLETED:           "[Completed] All Approvals Done",
+  REJECTED:            "[Rejected] Document Rejected",
 }
 
 // Roles that receive notification per status
@@ -64,8 +64,8 @@ function buildHtml(req: any, newStatus: string, link: string, approveUrl?: strin
   const styles = [...new Set((req.items||[]).map((i:any) => i.style).filter(Boolean))].join(", ")
 
   const openBtn = magicLink
-    ? `<a href="${magicLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif">เปิดเอกสารในระบบ →</a>`
-    : `<a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">เปิดเอกสาร →</a>`
+    ? `<a href="${magicLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif">Open Document in System →</a>`
+    : `<a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">Open Document →</a>`
 
   const buttons = approveUrl ? `
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px">
@@ -168,12 +168,12 @@ export async function sendVerificationEmail(email: string, token: string) {
         <h1 style="margin:6px 0 0;color:#fff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
       </td></tr>
       <tr><td style="padding:36px">
-        <p style="color:#1e293b;font-size:15px;font-family:Arial,sans-serif;margin:0 0 8px">ยืนยัน Email ของคุณ</p>
-        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 24px">คลิกปุ่มด้านล่างเพื่อยืนยันตัวตนและเริ่มใช้งานระบบ Air Request</p>
+        <p style="color:#1e293b;font-size:15px;font-family:Arial,sans-serif;margin:0 0 8px">Verify Your Email</p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 24px">Click the button below to verify your identity and start using the Air Request system.</p>
         <div style="text-align:center;margin:28px 0">
-          <a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;font-family:Arial,sans-serif">ยืนยัน Email →</a>
+          <a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;font-family:Arial,sans-serif">Verify Email →</a>
         </div>
-        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin:0">Link มีอายุ 24 ชั่วโมง · ถ้าไม่ได้สมัคร กรุณาเพิกเฉยอีเมลนี้</p>
+        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin:0">Link valid for 24 hours · If you did not register, please ignore this email.</p>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
         <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
@@ -183,7 +183,7 @@ export async function sendVerificationEmail(email: string, token: string) {
 </table>
 </body></html>`
 
-  await sendMail(email, "[Air Request] ยืนยัน Email เพื่อเริ่มใช้งาน", html)
+  await sendMail(email, "[Air Request] Verify Email to Get Started", html)
 }
 
 export async function sendPasswordSetupEmail(email: string, name: string, token: string) {
@@ -198,12 +198,12 @@ export async function sendPasswordSetupEmail(email: string, name: string, token:
         <h1 style="margin:6px 0 0;color:#fff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
       </td></tr>
       <tr><td style="padding:36px">
-        <p style="color:#1e293b;font-size:15px;font-family:Arial,sans-serif;margin:0 0 8px">สวัสดี <strong>${name}</strong></p>
-        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 24px">Admin ได้สร้าง Account ในระบบ Air Request ให้คุณแล้ว<br>กรุณาคลิกปุ่มด้านล่างเพื่อตั้งรหัสผ่านและเริ่มใช้งาน</p>
+        <p style="color:#1e293b;font-size:15px;font-family:Arial,sans-serif;margin:0 0 8px">Hello <strong>${name}</strong></p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 24px">An Admin has created an Account for you in the Air Request system.<br>Please click the button below to set your password and get started.</p>
         <div style="text-align:center;margin:28px 0">
-          <a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;font-family:Arial,sans-serif">ตั้งรหัสผ่าน →</a>
+          <a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;font-family:Arial,sans-serif">Set Password →</a>
         </div>
-        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin:0">Link มีอายุ 48 ชั่วโมง · ถ้าไม่ได้สมัคร กรุณาเพิกเฉยอีเมลนี้</p>
+        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin:0">Link valid for 48 hours · If you did not register, please ignore this email.</p>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
         <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
@@ -212,7 +212,7 @@ export async function sendPasswordSetupEmail(email: string, name: string, token:
   </td></tr>
 </table>
 </body></html>`
-  await sendMail(email, "[Air Request] ตั้งรหัสผ่านเพื่อเริ่มใช้งาน", html)
+  await sendMail(email, "[Air Request] Set Your Password to Get Started", html)
 }
 
 // Map the claim splits present on a doc → recipient groups. CLAIM_GW is one role
@@ -303,7 +303,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       if (lgEmails.length) {
         const t = (req as any).logisticsToken
         const ml = t ? `${APP_URL}/api/magic-login?token=${t}&redirect=/approvals` : undefined
-        await sendMail(lgEmails, `[Logistics – GW] President Approved — กรุณาเตรียม Booking — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
+        await sendMail(lgEmails, `[Logistics – GW] President Approved — Please prepare Booking — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
       }
       // 2) Claim departments (parallel) — per-dept recipients (GW≠SUPPLIER)
       const depts = new Set<string>()
@@ -315,7 +315,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         const em = us.map((u: any) => u.email).filter(Boolean)
         if (!em.length) continue
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
-        await sendMail(em, `[Claim – GW] President Approved — รอ Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
+        await sendMail(em, `[Claim – GW] President Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
       }
       // 3) Accounting (read alert)
       const acUsers = await (prisma.user as any).findMany({ where: { role: "ACCOUNTING", isActive: true }, select: { email: true } })
@@ -336,7 +336,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const link = `${APP_URL}/requests/${req.id}`
       const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
       const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
-      await sendMail([presidentUser.email], `[President] รอ Approve — ${(req as any).documentNo}`, html)
+      await sendMail([presidentUser.email], `[President] Pending Approval — ${(req as any).documentNo}`, html)
       return
     }
 
@@ -354,7 +354,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
       const documentNo = (req as any).documentNo
-      if (lgEmails.length) await sendMail(lgEmails, `[Logistics] President Approved — กรุณาเตรียม Booking — ${documentNo}`, lgHtml)
+      if (lgEmails.length) await sendMail(lgEmails, `[Logistics] President Approved — Please prepare Booking — ${documentNo}`, lgHtml)
       if (acEmails.length) await sendMail(acEmails, `[Accounting] President Approved (Alert 1) — ${documentNo}`, acHtml)
       return
     }
@@ -368,7 +368,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const link = `${APP_URL}/requests/${requestId}`
       const magicLink = scmToken ? `${APP_URL}/api/magic-login?token=${scmToken}&redirect=/approvals` : undefined
       const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
-      await sendMail(scmEmails, `[SCM User] รอ Assign Claim — ${(req as any).documentNo}`, html)
+      await sendMail(scmEmails, `[SCM User] Pending Claim Assignment — ${(req as any).documentNo}`, html)
       return
     }
 
@@ -381,7 +381,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const magicLink = vpScmToken ? `${APP_URL}/api/magic-login?token=${vpScmToken}&redirect=/approvals` : undefined
       const html = buildHtml(req, "PENDING_SCM", link, undefined, undefined, magicLink)
       const documentNo = (req as any).documentNo
-      await sendMail([assignedEmail], `[VP SCM] SCM ส่งเรื่องให้ Approve — ${documentNo}`, html)
+      await sendMail([assignedEmail], `[VP SCM] SCM submitted for Approval — ${documentNo}`, html)
       return
     }
 
@@ -476,7 +476,7 @@ export async function notifyClaimNext(
 
     const magicLink = `${APP_URL}/api/magic-login?token=${token}&redirect=/requests/${requestId}`
     const dept = req.claimDepartment || "Claim"
-    const subject = `[Claim – ${dept}] รอ Approve — ${req.documentNo}`
+    const subject = `[Claim – ${dept}] Pending Approval — ${req.documentNo}`
 
     const html = `
 <!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
@@ -488,8 +488,8 @@ export async function notifyClaimNext(
         <h1 style="margin:6px 0 0;color:#fff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
       </td></tr>
       <tr><td style="padding:32px 36px">
-        <p style="color:#1e293b;font-size:15px;font-family:Arial,sans-serif;margin:0 0 4px">สวัสดีคุณ <strong>${toName}</strong></p>
-        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 20px"><strong>${fromName}</strong> ได้ส่งต่อเอกสารให้คุณ Approve</p>
+        <p style="color:#1e293b;font-size:15px;font-family:Arial,sans-serif;margin:0 0 4px">Hello <strong>${toName}</strong></p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 20px"><strong>${fromName}</strong> has forwarded a document for your Approval.</p>
         <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px">
           <tr><td style="border-bottom:1px solid #f1f5f9;padding:8px 0">
             <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">DOC NO</span><br>
@@ -505,9 +505,9 @@ export async function notifyClaimNext(
           </td></tr>
         </table>
         <div style="text-align:center;margin-top:24px">
-          <a href="${magicLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;font-family:Arial,sans-serif">เปิดเอกสาร →</a>
+          <a href="${magicLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;font-family:Arial,sans-serif">Open Document →</a>
         </div>
-        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin-top:16px">Link มีอายุ 8 ชั่วโมง</p>
+        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin-top:16px">Link valid for 8 hours</p>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
         <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
@@ -545,7 +545,7 @@ export async function notifyClaimFinalToAccounting(requestId: string) {
     const depts = [...new Set((req.items || []).map((i: any) => i.claimDepartment).filter(Boolean))].join(", ")
     const styles = [...new Set((req.items || []).map((i: any) => i.style).filter(Boolean))].join(", ")
 
-    const openBtn = `<a href="${magicLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif">เปิดเอกสารในระบบ →</a>`
+    const openBtn = `<a href="${magicLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif">Open Document in System →</a>`
 
     const html = `
 <!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
@@ -557,8 +557,8 @@ export async function notifyClaimFinalToAccounting(requestId: string) {
         <h1 style="margin:6px 0 0;color:#fff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
       </td></tr>
       <tr><td style="padding:32px 36px">
-        <p style="color:#1e293b;font-size:15px;font-family:Arial,sans-serif;margin:0 0 4px">แผนก <strong>Accounting</strong></p>
-        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 24px">เอกสาร Claim ผ่านการ Approve ครบแล้ว — กรุณาดำเนินการต่อ</p>
+        <p style="color:#1e293b;font-size:15px;font-family:Arial,sans-serif;margin:0 0 4px"><strong>Accounting</strong> Department</p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 24px">The Claim document has been fully Approved — please proceed.</p>
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr><td style="border-bottom:1px solid #f1f5f9;padding:8px 0">
             <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">DOC NO</span><br>

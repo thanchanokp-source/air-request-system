@@ -191,7 +191,7 @@ function DelayBar({ data: topData, rows, groupFn, height=200 }: {
                 </span>
               ))}
             </div>
-          : <span className="text-[10px] text-gray-400">Click แท่งเพื่อ drill down</span>
+          : <span className="text-[10px] text-gray-400">Click a bar to drill down</span>
         }
         {drillKeys.length>0&&<button onClick={()=>setDrillKeys(p=>p.slice(0,-1))} className="text-xs text-blue-500 hover:underline shrink-0">← Back</button>}
       </div>
