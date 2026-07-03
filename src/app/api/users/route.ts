@@ -25,12 +25,15 @@ export async function POST(req: NextRequest) {
   const expiry = new Date(Date.now() + 48 * 60 * 60 * 1000)
 
   const isProcurement = role === "CLAIM_PROCUREMENT" || role === "DVM_PROCUREMENT"
+  // GW roles always belong to BU "GW" (never fall back to NYG).
+  const isGwRole = role.endsWith("_GW") || role.startsWith("SCM_NYK") || role.startsWith("SCM_NYG")
+  const resolvedBu = isGwRole ? "GW" : (bu || "NYG")
 
   try {
     const user = await prisma.user.create({
       data: {
         name, email: email.toLowerCase(), password: null,
-        role, bu: bu || "NYG",
+        role, bu: resolvedBu,
         claimDepartment: (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") ? (claimDepartment || null) : null,
         procurementType: isProcurement ? (procurementType || null) : null,
         priority: priority ?? null,

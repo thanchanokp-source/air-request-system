@@ -9,7 +9,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const { id } = await params
   const { name, email, password, role, bu, isActive, priority, claimDepartment, procurementType } = await req.json()
-  const data: any = { name, email, role, bu: bu || "NYG", isActive, priority: priority ?? null }
+  // GW roles always belong to BU "GW" (never fall back to NYG).
+  const isGwRole = role.endsWith("_GW") || role.startsWith("SCM_NYK") || role.startsWith("SCM_NYG")
+  const data: any = { name, email, role, bu: isGwRole ? "GW" : (bu || "NYG"), isActive, priority: priority ?? null }
   const needsDept = ["CLAIM_GW","SCM_NYK","SCM_NYG"].includes(role)
   data.claimDepartment = needsDept ? (claimDepartment || null) : null
   const isProcurement = role === "CLAIM_PROCUREMENT" || role === "DVM_PROCUREMENT"
