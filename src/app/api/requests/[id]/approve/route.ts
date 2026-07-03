@@ -31,6 +31,8 @@ async function recalcDocStatusGW(id: string): Promise<string> {
   const nonRej = items.filter(i => i.itemStatus !== "REJECTED")
   if (nonRej.length === 0) return "REJECTED"
   const s = new Set(nonRej.map(i => i.itemStatus))
+  // A claim dept sent an SO back to MER to re-select the claim department.
+  if (s.has("CLAIM_REJECT_GW")) return "PENDING_CLAIM_REJECT_GW"
   if (s.has("PENDING") || s.has("VP_MER_PASSED") || s.has("PRES_PASSED") || s.has("LOG_PASSED")) return "PENDING_CLAIM_GW"
   if (s.has("SCM_GW_PENDING")) return "PENDING_SCM_GW"
   if (s.has("ACCOUNTING_PENDING")) return "PENDING_ACCOUNTING"
@@ -770,6 +772,50 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (nextDocStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
       notifyStatusChange(id, nextDocStatus).catch(() => {})
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // GW claim dept rejects → send SO back to MER (GW) to re-select the claim dept.
+  if (action === "claim_back_to_mer_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    if (!comment) return NextResponse.json({ error: "Please provide a reason" }, { status: 400 })
+    const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
+    if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    // Clear this SO's claim approvals so re-assignment starts fresh, flag for MER.
+    await (prisma as any).claimApproval.deleteMany({ where: { itemId } })
+    await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "CLAIM_REJECT_GW", itemComment: comment } as any })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "BACK_TO_SCM", fromStatus: request.status, toStatus: "PENDING_CLAIM_REJECT_GW", comment: `SO: ${itemData.so} — Claim rejected, back to MER: ${comment}` }
+    })
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+    notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
+  // MER (GW) re-selects the claim dept for a rejected SO and resubmits to Claim.
+  if (action === "resubmit_claim_gw" && userRole === "MER_GW") {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    const splits = Array.isArray(body.claimDepts) ? body.claimDepts : null
+    if (!splits || splits.length === 0) return NextResponse.json({ error: "Please select at least one claim department" }, { status: 400 })
+    const totalPctVal = splits.reduce((sum: number, s: any) => sum + (Number(s.pct) || 0), 0)
+    if (Math.round(totalPctVal) !== 100) return NextResponse.json({ error: "Total %CLAIM must equal 100" }, { status: 400 })
+    const newSplits = splits.map((s: any) => ({ dept: String(s.dept), pct: Number(s.pct) || 0, reason: s.reason || null, status: null, crNo: null }))
+    await prisma.airRequestItem.update({
+      where: { id: itemId },
+      data: { claimDepts: newSplits as any, claimDepartment: newSplits[0].dept, itemStatus: "LOG_PASSED" } as any
+    })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: "PENDING_CLAIM_GW", comment: `SO re-assigned claim dept: ${newSplits.map((s: any) => `${s.dept} ${s.pct}%`).join(", ")}` }
+    })
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      if (nextDocStatus === "PENDING_CLAIM_GW") notifyStatusChange(id, "PENDING_CLAIM_GW").catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }

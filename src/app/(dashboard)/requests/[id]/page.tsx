@@ -60,6 +60,7 @@ export default function RequestDetailPage() {
   const [soActualOverride, setSoActualOverride] = useState<Record<string, string>>({})
   const [crNoInput, setCrNoInput] = useState("")
   const [savingCr, setSavingCr] = useState(false)
+  const [reassign, setReassign] = useState<Record<string, { dept: string; pct: string; reason: string }[]>>({})
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selectedStyles, setSelectedStyles] = useState<Set<string>>(new Set())
@@ -2025,6 +2026,63 @@ export default function RequestDetailPage() {
         </div>
       )}
 
+      {/* MER (GW) re-selects claim dept for SOs a claim dept sent back */}
+      {role === "MER_GW" && isGWRequest && req.status === "PENDING_CLAIM_REJECT_GW" && (
+        <div className="bg-white rounded-xl border border-red-200 p-4 space-y-3">
+          <div>
+            <h2 className="font-semibold text-red-700">Claim Rejected — Re-select Claim Department</h2>
+            <p className="text-xs text-gray-500 mt-0.5">A claim department sent these SO(s) back. Adjust the claim department / % (total must = 100) and resubmit.</p>
+          </div>
+          {(req.items || []).filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW").map((item: any) => {
+            const rows = reassign[item.id] || getSplits(item).map((s: any) => ({ dept: s.dept, pct: String(s.pct ?? ""), reason: s.reason || "" }))
+            const setRows = (r: any[]) => setReassign(p => ({ ...p, [item.id]: r }))
+            const total = rows.reduce((a: number, r: any) => a + (Number(r.pct) || 0), 0)
+            const isSub = submitting === item.id
+            return (
+              <div key={item.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-sm font-semibold text-gray-800">{item.so} · {item.style}</span>
+                  {item.itemComment && <span className="text-xs text-red-600">Reason: {item.itemComment}</span>}
+                </div>
+                {rows.map((r: any, idx: number) => (
+                  <div key={idx} className="flex items-center gap-2 flex-wrap">
+                    <select value={r.dept} onChange={e => { const n = [...rows]; n[idx] = { ...r, dept: e.target.value }; setRows(n) }}
+                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm">
+                      <option value="">Select dept...</option>
+                      {["SCM NYK", "SCM NYG", "GW", "SUPPLIER"].map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <input type="number" value={r.pct} onChange={e => { const n = [...rows]; n[idx] = { ...r, pct: e.target.value }; setRows(n) }}
+                      placeholder="%" className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm" />
+                    <input value={r.reason} onChange={e => { const n = [...rows]; n[idx] = { ...r, reason: e.target.value }; setRows(n) }}
+                      placeholder="Reason" className="flex-1 min-w-[120px] border border-gray-300 rounded-lg px-2 py-1 text-sm" />
+                    {rows.length > 1 && <button onClick={() => setRows(rows.filter((_: any, i: number) => i !== idx))} className="text-red-400 hover:text-red-600 text-sm">✕</button>}
+                  </div>
+                ))}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {rows.length < 4 && <button onClick={() => setRows([...rows, { dept: "", pct: "", reason: "" }])} className="text-xs text-blue-600 hover:underline">+ Add split</button>}
+                  <span className={`text-xs font-medium ${total === 100 ? "text-green-600" : "text-red-600"}`}>Total: {total}%</span>
+                  <button
+                    disabled={isSub || total !== 100 || rows.some((r: any) => !r.dept)}
+                    onClick={async () => {
+                      setSubmitting(item.id)
+                      const res = await fetch(`/api/requests/${id}/approve`, {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "resubmit_claim_gw", itemId: item.id, claimDepts: rows.map((r: any) => ({ dept: r.dept, pct: Number(r.pct) || 0, reason: r.reason || null })) })
+                      })
+                      if (res.ok) { setReq(await res.json()); setReassign(p => { const n = { ...p }; delete n[item.id]; return n }) }
+                      else { const e = await res.json(); alert(e.error || "Error") }
+                      setSubmitting(null)
+                    }}
+                    className="ml-auto px-4 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40">
+                    {isSub ? "..." : "Resubmit to Claim"}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {/* DVM CLAIM per-SO approval — priority-based sequential */}
       {isDvmClaim && (!isProcureDvm || procureDecision === "approve") && (
         <div className="space-y-3">
@@ -2210,6 +2268,10 @@ export default function RequestDetailPage() {
                         <button onClick={() => { setBackToScmSo(backToScmSo === item.id ? null : item.id); setBackToScmSoComment("") }} disabled={isSub}
                           className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to SCM</button>
                       )}
+                      {isGwClaimP1Role && (
+                        <button onClick={() => { setRejectingSo(rejectingSo === item.id ? null : item.id); setRejectSoComment("") }} disabled={isSub}
+                          className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to MER</button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2227,7 +2289,7 @@ export default function RequestDetailPage() {
                 )}
                 {rejectingSo === item.id && (
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
-                    <label className="text-xs font-medium text-red-700">Reject reason *</label>
+                    <label className="text-xs font-medium text-red-700">{isGwClaimP1Role ? "Reason for sending back to MER *" : "Reject reason *"}</label>
                     <textarea value={rejectSoComment} onChange={e => setRejectSoComment(e.target.value)} rows={2}
                       placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     <div className="flex gap-2">
@@ -2236,13 +2298,13 @@ export default function RequestDetailPage() {
                           setSubmitting(item.id)
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "reject_so", itemId: item.id, comment: rejectSoComment })
+                            body: JSON.stringify({ action: isGwClaimP1Role ? "claim_back_to_mer_gw" : "reject_so", itemId: item.id, comment: rejectSoComment })
                           })
                           if (res.ok) { setReq(await res.json()) } else { const err = await res.json(); alert(err.error || "Error") }
                           setSubmitting(null); setRejectingSo(null); setRejectSoComment("")
                         }}
                         className="px-4 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-40">
-                        {isSub ? "..." : "Confirm Reject"}
+                        {isSub ? "..." : (isGwClaimP1Role ? "Confirm — Back to MER" : "Confirm Reject")}
                       </button>
                       <button onClick={() => setRejectingSo(null)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                     </div>
