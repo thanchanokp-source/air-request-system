@@ -381,8 +381,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
         await sendMail(em, `[Claim – GW] President Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
       }
-      // 3) Accounting (read alert)
-      const acUsers = await (prisma.user as any).findMany({ where: { role: "ACCOUNTING", isActive: true }, select: { email: true } })
+      // 3) Accounting (read alert) — GW uses ACCOUNTING_GW; cover both role names.
+      const acUsers = await (prisma.user as any).findMany({ where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true }, select: { email: true } })
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
       if (acEmails.length) {
         const t = (req as any).accountingToken
