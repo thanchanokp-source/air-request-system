@@ -14,7 +14,8 @@ const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isN
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
 
-const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "NYG", "PRODUCTION"]
+// NYG claim departments (SCM NYG removed — NYG uses NYK, not NYG, as a claim dept).
+const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
 const CLAIM_DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
 
 export default function RequestDetailPage() {
@@ -125,7 +126,7 @@ export default function RequestDetailPage() {
   }, [soClaimDepts, soClaimComments])
 
   useEffect(() => {
-    const CLAIM_DEPTS_LIST = ["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]
+    const CLAIM_DEPTS_LIST = ["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"]
     Promise.all(CLAIM_DEPTS_LIST.map(dept =>
       fetch(`/api/users/by-role?role=DVM_${dept}`).then(r => r.json()).then(d => ({ dept, users: Array.isArray(d) ? d : [] }))
     )).then(results => {
@@ -305,10 +306,12 @@ export default function RequestDetailPage() {
     : CLAIM_VP_ROLES_LOCAL.includes(role) ? role.replace("VP_", "") : ""
   const claimDeptRole = claimDept
   const isNykClaimRole = role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP"
-  const isGwClaimP1Role = (role === "CLAIM_GW" || isNykClaimRole || role === "SCM_NYG") && isGWRequest
+  // SCM NYK 3-role UI applies in BOTH BU (dept "SCM NYK" in GW, "NYK" in NYG).
+  // CLAIM_GW / SCM_NYG use this UI only in GW.
+  const isGwClaimP1Role = isNykClaimRole || ((role === "CLAIM_GW" || role === "SCM_NYG") && isGWRequest)
   const gwClaimDepts = role === "CLAIM_GW"
     ? (myClaimDept === "GW" ? ["GW"] : myClaimDept === "SUPPLIER" ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"] : ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"])
-    : isNykClaimRole ? ["SCM NYK"] : role === "SCM_NYG" ? ["SCM NYG"] : []
+    : isNykClaimRole ? (isGWRequest ? ["SCM NYK"] : ["NYK"]) : role === "SCM_NYG" ? ["SCM NYG"] : []
   // NYG per-split: my dept's split status (null = still waiting my DVM). undefined = my dept not on this SO.
   const mySplitStatus = (i: any): string | null | undefined => {
     const list: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
@@ -2260,7 +2263,7 @@ export default function RequestDetailPage() {
                     <div className="flex items-center gap-2">
                       <button onClick={async () => {
                           setSubmitting(item.id)
-                          const approveAction = isGwClaimP1Role ? "approve_so_claim_gw" : "approve_so"
+                          const approveAction = isGWRequest ? "approve_so_claim_gw" : "approve_so"
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ action: approveAction, itemId: item.id, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined })
@@ -2280,7 +2283,7 @@ export default function RequestDetailPage() {
                       )}
                       {isGwClaimP1Role && (
                         <button onClick={() => { setRejectingSo(rejectingSo === item.id ? null : item.id); setRejectSoComment("") }} disabled={isSub}
-                          className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to MER</button>
+                          className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{isGWRequest ? "Back to MER" : "Reject"}</button>
                       )}
                     </div>
                   )}
@@ -2299,7 +2302,7 @@ export default function RequestDetailPage() {
                 )}
                 {rejectingSo === item.id && (
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
-                    <label className="text-xs font-medium text-red-700">{isGwClaimP1Role ? "Reason for sending back to MER *" : "Reject reason *"}</label>
+                    <label className="text-xs font-medium text-red-700">{isGwClaimP1Role && isGWRequest ? "Reason for sending back to MER *" : "Reject reason *"}</label>
                     <textarea value={rejectSoComment} onChange={e => setRejectSoComment(e.target.value)} rows={2}
                       placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     <div className="flex gap-2">
@@ -2308,13 +2311,13 @@ export default function RequestDetailPage() {
                           setSubmitting(item.id)
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: isGwClaimP1Role ? "claim_back_to_mer_gw" : "reject_so", itemId: item.id, comment: rejectSoComment })
+                            body: JSON.stringify({ action: (isGwClaimP1Role && isGWRequest) ? "claim_back_to_mer_gw" : "reject_so", itemId: item.id, comment: rejectSoComment })
                           })
                           if (res.ok) { setReq(await res.json()) } else { const err = await res.json(); alert(err.error || "Error") }
                           setSubmitting(null); setRejectingSo(null); setRejectSoComment("")
                         }}
                         className="px-4 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-40">
-                        {isSub ? "..." : (isGwClaimP1Role ? "Confirm — Back to MER" : "Confirm Reject")}
+                        {isSub ? "..." : ((isGwClaimP1Role && isGWRequest) ? "Confirm — Back to MER" : "Confirm Reject")}
                       </button>
                       <button onClick={() => setRejectingSo(null)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                     </div>

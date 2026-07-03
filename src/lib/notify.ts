@@ -245,11 +245,11 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         where: { requestId, itemStatus: { not: "REJECTED" } },
         select: { so: true, invoiceNo: true, hawbNo: true, actualAirFreight: true, claimDepts: true, claimDepartment: true, claimPercentage: true }
       })
-      const nykItems = items.filter((i: any) => getSplits(i).some(s => s.dept === "SCM NYK"))
+      const nykItems = items.filter((i: any) => getSplits(i).some(s => s.dept === "SCM NYK" || s.dept === "NYK"))
       if (nykItems.length === 0) return
       const link = `${APP_URL}/requests/${requestId}`
       const rows = nykItems.map((i: any) => {
-        const nyk = getSplits(i).find(s => s.dept === "SCM NYK")
+        const nyk = getSplits(i).find(s => s.dept === "SCM NYK" || s.dept === "NYK")
         const actual = i.actualAirFreight ?? 0
         const amt = nyk ? Math.round(actual * (Number(nyk.pct) || 0) / 100 * 100) / 100 : 0
         const cell = (v: any, right = false) => `<td style="padding:6px 10px;border-bottom:1px solid #eee${right ? ";text-align:right" : ""}">${v}</td>`

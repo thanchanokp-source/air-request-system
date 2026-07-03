@@ -10,7 +10,6 @@ const MASTER_ROLES_NYG = [
   { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
   { role: "CLAIM_COMMERCIAL",     label: "Claim – Commercial",    hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
   { role: "CLAIM_PRODUCTION",     label: "Claim – Production",    hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
-  { role: "CLAIM_NYG",            label: "Claim – SCM NYG",       hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
   { role: "CLAIM_NYK",            label: "Claim – SCM NYK",       hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
   { role: "CLAIM_PROCUREMENT",    label: "Claim – Procurement",   hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
   { role: "LOGISTICS",            label: "Logistics",             hint: "Manage HAWB + Generate PDF",               needsPriority: false, bu: "NYG" },

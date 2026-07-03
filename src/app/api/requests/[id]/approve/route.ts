@@ -747,15 +747,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // SCM NYK (User) enters the CR NO (one per document). Each NYK split becomes
   // DEPT_APPROVED only when the APPROVER + EVP have both approved that SO too.
   if (action === "finalize_cr_gw" && userRole === "SCM_NYK") {
-    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
+    const isGW = request.bu === "GW"
+    const expectedStatus = isGW ? "PENDING_CLAIM_GW" : "PENDING_CLAIM"
+    if (request.status !== expectedStatus) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
+    const nykDept = isGW ? "SCM NYK" : "NYK"
+    const doneStatus = isGW ? GW_DEPT_APPROVED : "COMPLETED"
     const cr = body.crNo ? String(body.crNo).trim() : ""
     if (!cr) return NextResponse.json({ error: "Please enter CR NO" }, { status: 400 })
     const items = await prisma.airRequestItem.findMany({ where: { requestId: id }, include: { claimApprovals: { include: { user: { select: { role: true } } } } } })
-    // Flow: SCM NYK Approver approves first; only THEN may the CR user (running in
-    // parallel with the EVP) enter the CR NO. Block CR entry until every active
-    // SCM NYK SO has been approved by the Approver.
-    const nykSOs = items.filter(it => getSplits(it).some((s: any) => s.dept === "SCM NYK" && s.status !== "REJECTED"))
+    // SCM NYK Approver must approve first before the CR user (parallel with EVP) can enter CR.
+    const nykSOs = items.filter(it => getSplits(it).some((s: any) => s.dept === nykDept && s.status !== "REJECTED"))
     if (nykSOs.length === 0) return NextResponse.json({ error: "No SCM NYK claim SO awaiting a CR NO" }, { status: 400 })
     const awaitingApprover = nykSOs.filter(it => !((it as any).claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER"))
     if (awaitingApprover.length > 0) return NextResponse.json({ error: `Waiting for the SCM NYK Approver to approve all SOs before entering the CR NO (${awaitingApprover.length} SO remaining)` }, { status: 400 })
@@ -763,19 +764,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let finalizedCount = 0
     for (const it of items) {
       const splits = getSplits(it)
-      if (!splits.some((s: any) => s.dept === "SCM NYK" && s.status !== "REJECTED" && s.status !== GW_DEPT_APPROVED)) continue
+      if (!splits.some((s: any) => s.dept === nykDept && s.status !== "REJECTED" && s.status !== doneStatus)) continue
       const appr: any[] = (it as any).claimApprovals || []
       const hasApprover = appr.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
       const hasEvp = appr.some((a: any) => a.user?.role === "SCM_NYK_EVP")
-      const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: true })
-      const updated = setGwSplitStatus(splits, ["SCM NYK"], splitStatus, cr)
-      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated) } })
+      const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: true }, doneStatus)
+      const updated = setGwSplitStatus(splits, [nykDept], splitStatus, cr)
+      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: isGW ? deriveGwItemStatus(updated) : deriveNygItemStatus(updated) } })
       finalizedCount++
     }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `CR NO: ${cr} — SCM NYK finalized ${finalizedCount} SO` }
     })
-    const nextDocStatus = await recalcDocStatusGW(id)
+    const nextDocStatus = isGW ? await recalcDocStatusGW(id) : await recalcDocStatus(id)
     if (nextDocStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
       notifyStatusChange(id, nextDocStatus).catch(() => {})
@@ -951,6 +952,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
       const newStatus = await recalcDocStatus(id)
       if (newStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
+      return NextResponse.json(await getUpdated())
+    }
+
+    // ── NYG SCM NYK dept uses the same 3-role sub-flow as GW (Approver → EVP + CR) ──
+    if (userRole === "SCM_NYK_APPROVER" || userRole === "SCM_NYK_EVP") {
+      if (!getSplits(itemData).some(s => s.dept === "NYK")) {
+        return NextResponse.json({ error: "This SO has no SCM NYK claim portion" }, { status: 400 })
+      }
+      const nykApprovals = await (prisma as any).claimApproval.findMany({ where: { itemId }, include: { user: { select: { role: true } } } })
+      const approverDone = nykApprovals.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
+      const evpDone = nykApprovals.some((a: any) => a.user?.role === "SCM_NYK_EVP")
+      if (userRole === "SCM_NYK_APPROVER" && approverDone) return NextResponse.json({ error: "This SO has already been approved by the SCM NYK Approver" }, { status: 400 })
+      if (userRole === "SCM_NYK_EVP") {
+        if (!approverDone) return NextResponse.json({ error: "Waiting for the SCM NYK Approver to approve first" }, { status: 400 })
+        if (evpDone) return NextResponse.json({ error: "This SO has already been approved by the SCM NYK EVP" }, { status: 400 })
+      }
+      await (prisma as any).claimApproval.upsert({
+        where: { itemId_userId: { itemId, userId } },
+        create: { itemId, userId, role: userRole },
+        update: { createdAt: new Date() }
+      })
+      const hasApprover = approverDone || userRole === "SCM_NYK_APPROVER"
+      const hasEvp = evpDone || userRole === "SCM_NYK_EVP"
+      const crNo = (request as any).crNo || null
+      const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: !!crNo }, "COMPLETED")
+      const updated = setGwSplitStatus(getSplits(itemData), ["NYK"], splitStatus, crNo || undefined)
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updated as any, itemStatus: deriveNygItemStatus(updated), itemComment: comment || null } })
+      await prisma.approvalLog.create({
+        data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
+      })
+      if (userRole === "SCM_NYK_APPROVER") notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+      const newStatus = await recalcDocStatus(id)
+      if (newStatus !== request.status) {
+        await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
+        notifyStatusChange(id, newStatus).catch(() => {})
+      }
       return NextResponse.json(await getUpdated())
     }
 

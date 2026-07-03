@@ -101,9 +101,10 @@ export const GW_DEPT_ACCEPTED = "DEPT_ACCEPTED"
 // three are done. This intermediate = approver done, waiting on EVP and/or CR.
 export const GW_NYK_APPROVER_PASSED = "APPROVER_PASSED"
 
-// Compute a NYK split's status from the three parallel conditions.
-export function nykSplitStatus(o: { approver: boolean; evp: boolean; cr: boolean }): string {
-  if (o.approver && o.evp && o.cr) return GW_DEPT_APPROVED
+// Compute a NYK split's status from the three parallel conditions. `doneStatus`
+// differs by BU: GW → DEPT_APPROVED (→ Accounting), NYG → COMPLETED.
+export function nykSplitStatus(o: { approver: boolean; evp: boolean; cr: boolean }, doneStatus: string = GW_DEPT_APPROVED): string {
+  if (o.approver && o.evp && o.cr) return doneStatus
   if (o.approver) return GW_NYK_APPROVER_PASSED
   return SPLIT_STATUS.CLAIM_PENDING
 }
@@ -187,8 +188,9 @@ export function deriveNygItemStatus(splits: ClaimSplit[]): string {
   const st = splits.map(s => s.status)
   if (st.every(s => s === NYG_SPLIT.COMPLETED)) return "COMPLETED"
   if (st.every(s => s === NYG_SPLIT.REJECTED)) return "REJECTED"
-  // Any split still waiting on its DVM → whole item stays at the DVM (claim) stage.
-  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING)) return "LOG_PASSED"
+  // Any split still waiting on its DVM (or NYK approver-done but EVP/CR incomplete)
+  // → whole item stays at the claim stage.
+  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_NYK_APPROVER_PASSED)) return "LOG_PASSED"
   // All DVMs done, at least one VP outstanding → VP stage.
   if (st.some(s => s === NYG_SPLIT.CLAIM_PASSED)) return "CLAIM_PASSED"
   return "COMPLETED"
