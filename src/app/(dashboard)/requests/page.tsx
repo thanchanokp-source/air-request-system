@@ -44,7 +44,11 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
   if (itemStatus === "VP_MER_PASSED") return "President"
   if (itemStatus === "PASSED") return "VP SCM"
   if (itemStatus === "VP_PASSED") return "Claim"
-  if (itemStatus === "PRES_PASSED") return "SCM"
+  if (itemStatus === "PRES_PASSED") {
+    if (docStatus === "PENDING_CLAIM_GW") return "LG ∥ Claim" // GW parallel stage
+    if (docStatus === "PENDING_LOGISTICS_GW") return "Logistics"
+    return "SCM" // NYG: President reset → SCM re-assigns claim
+  }
   if (itemStatus === "LOG_PASSED") return "Claim"
   if (itemStatus === "CLAIM_PASSED") return "VP Claim"
   if (itemStatus === "SCM_GW_PENDING") return "SCM (GW)"
@@ -60,6 +64,7 @@ const STEP_COLORS: Record<string, string> = {
   "VP SCM": "bg-amber-100 text-amber-700",
   "President": "bg-purple-100 text-purple-700",
   "Logistics": "bg-blue-100 text-blue-700",
+  "LG ∥ Claim": "bg-indigo-100 text-indigo-700",
   "Claim": "bg-indigo-100 text-indigo-700",
   "VP Claim": "bg-violet-100 text-violet-700",
   "SCM (GW)": "bg-orange-100 text-orange-700",
