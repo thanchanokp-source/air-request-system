@@ -6,6 +6,15 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts"
 import { MultiSelect } from "@/components/ui/multi-select"
+import { getSplits, splitAirCost } from "@/lib/claim"
+
+// Delay reasons come from the claim splits (REASON 1/2/3); fall back to the SO's reasonDelay.
+function rowReasonEntries(r: any): { reason: string; cost: number; qty: number }[] {
+  const withReason = getSplits(r).filter((s: any) => s.reason && String(s.reason).trim())
+  if (withReason.length === 0) return [{ reason: r.reasonDelay || "N/A", cost: r.actualAirFreight || 0, qty: Number(r.qtyRequestAir) || 0 }]
+  const qty = Number(r.qtyRequestAir) || 0
+  return withReason.map((s: any) => ({ reason: String(s.reason).trim(), cost: splitAirCost(r, s), qty: Math.round(qty * (Number(s.pct) || 0) / 100) }))
+}
 
 // ─── Colors (red pastel) ───────────────────────────────────────────────────
 const C_EST  = "#f9c2c2"
@@ -259,7 +268,7 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
   const [mode, setMode] = useState<'count'|'cost'|'qty'>('count')
   const data = useMemo(()=>{
     const m:Record<string,{count:number;cost:number;qty:number}>={}
-    rows.forEach(r=>{ const k=r.reasonDelay||"N/A"; if(!m[k])m[k]={count:0,cost:0,qty:0}; m[k].count++; m[k].cost+=r.actualAirFreight||0; m[k].qty+=Number(r.qtyRequestAir)||0 })
+    rows.forEach(r=>{ rowReasonEntries(r).forEach(e=>{ const k=e.reason||"N/A"; if(!m[k])m[k]={count:0,cost:0,qty:0}; m[k].count++; m[k].cost+=e.cost; m[k].qty+=e.qty }) })
     return Object.entries(m).map(([name,v])=>({name,count:v.count,cost:Math.round(v.cost),qty:Math.round(v.qty)}))
       .sort((a,b)=>mode==='cost'?b.cost-a.cost:mode==='qty'?b.qty-a.qty:b.count-a.count)
   },[rows,mode])
@@ -331,8 +340,8 @@ function DelayDaysPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
       if(isNaN(plan.getTime())||isNaN(orig.getTime())) return
       const days=Math.round((plan.getTime()-orig.getTime())/86400000)
       if(days<=0) return
-      const k=r.reasonDelay||"N/A"; if(!m[k])m[k]={total:0,count:0}
-      m[k].total+=days; m[k].count++
+      const keys=[...new Set(rowReasonEntries(r).map(e=>e.reason||"N/A"))]
+      keys.forEach(k=>{ if(!m[k])m[k]={total:0,count:0}; m[k].total+=days; m[k].count++ })
     })
     return Object.entries(m).map(([name,v])=>({name,avgDays:Math.round(v.total/v.count),count:v.count}))
       .sort((a,b)=>b.avgDays-a.avgDays)
