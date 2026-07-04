@@ -614,8 +614,8 @@ export default function DashboardPage() {
         "COUNTRY":        row.country,
         "PORT":           row.port,
         "FACTORY":        row.factory,
-        "CLAIM DEPT":     row.claimDepartment ?? "",
-        "DELAY REASON":   row.reasonDelay ?? "",
+        "CLAIM DEPT":     (getSplits(row).map((s:any)=>`${s.dept}${s.pct!=null?` ${s.pct}%`:""}`).join(" · ")) || (row.claimDepartment ?? ""),
+        "DELAY REASON":   ([...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))].join(" · ")) || (row.reasonDelay ?? ""),
         "STATUS":         row.request.status,
       }
     })
@@ -818,8 +818,8 @@ export default function DashboardPage() {
                     </td>
                     <td className="px-3 py-1.5">{row.country}</td>
                     <td className="px-3 py-1.5">{row.port}</td>
-                    <td className="px-3 py-1.5">{row.claimDepartment||"-"}</td>
-                    <td className="px-3 py-1.5 max-w-[180px] truncate" title={row.reasonDelay}>{row.reasonDelay||"-"}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const sp=getSplits(row);return sp.length?sp.map((s:any)=>`${s.dept}${s.pct!=null?` ${s.pct}%`:""}`).join(" · "):(row.claimDepartment||"-")})()}</td>
+                    <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const rs=[...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))];const txt=rs.length?rs.join(" · "):(row.reasonDelay||"-");return <span className="truncate block" title={txt}>{txt}</span>})()}</td>
                   </tr>
                 )
               })}
