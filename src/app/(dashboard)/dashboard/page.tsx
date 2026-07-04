@@ -300,7 +300,7 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-2xl font-extrabold text-gray-800 leading-none">{total}</span>
+                <span className="text-2xl font-extrabold text-gray-800 leading-none">{data.length}</span>
                 <span className="text-[10px] font-medium text-gray-400 mt-0.5">Reasons</span>
               </div>
             </div>
