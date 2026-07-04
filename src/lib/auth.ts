@@ -85,11 +85,13 @@ export const authOptions: NextAuthOptions = {
               return null
             }
           }
-          // Try accountingToken
+          // Try accountingToken (BU-aware: GW uses ACCOUNTING_GW)
           const acReq = await (prisma.airRequest as any).findFirst({ where: { accountingToken: token } })
           if (acReq) {
-            const acUser = await (prisma.user as any).findFirst({ where: { role: "ACCOUNTING", isActive: true } })
-            if (acUser) return { id: acUser.id, email: acUser.email, name: acUser.name, role: "ACCOUNTING", bu: acUser.bu || "NYG", claimDepartment: null, priority: null }
+            const isGW = acReq.bu === "GW"
+            const acRoles = isGW ? ["ACCOUNTING_GW", "ACCOUNTING"] : ["ACCOUNTING"]
+            const acUser = await (prisma.user as any).findFirst({ where: { role: { in: acRoles }, isActive: true } })
+            if (acUser) return { id: acUser.id, email: acUser.email, name: acUser.name, role: acUser.role, bu: isGW ? "GW" : (acUser.bu || "NYG"), claimDepartment: null, priority: null }
             return null
           }
           // Try claimNextToken
