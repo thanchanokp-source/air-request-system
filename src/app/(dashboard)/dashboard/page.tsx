@@ -296,12 +296,12 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
                   <Pie data={data.map(d=>({name:d.name,value:d.count}))} dataKey="value" cx="50%" cy="50%" outerRadius={72} innerRadius={42}>
                     {data.map((_,i)=><Cell key={i} fill={gradRed(data.length)[i]}/>)}
                   </Pie>
-                  <Tooltip formatter={(v:any)=>[`${v} SO (${total>0?((v/total)*100).toFixed(1):0}%)`]}/>
+                  <Tooltip formatter={(v:any)=>[`${v} (${total>0?((v/total)*100).toFixed(1):0}%)`]}/>
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <span className="text-2xl font-extrabold text-gray-800 leading-none">{total}</span>
-                <span className="text-[10px] font-medium text-gray-400 mt-0.5">Total SO</span>
+                <span className="text-[10px] font-medium text-gray-400 mt-0.5">Reasons</span>
               </div>
             </div>
             <div className="flex-1 space-y-1.5 min-w-0">
