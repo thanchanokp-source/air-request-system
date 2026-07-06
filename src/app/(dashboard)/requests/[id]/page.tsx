@@ -18,35 +18,59 @@ const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US"
 const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
 const CLAIM_DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
 
+// Avatar colour derived from the name so each person is visually distinct.
+const AVATAR_COLORS = [
+  "bg-blue-100 text-blue-700", "bg-emerald-100 text-emerald-700", "bg-purple-100 text-purple-700",
+  "bg-amber-100 text-amber-700", "bg-rose-100 text-rose-700", "bg-cyan-100 text-cyan-700", "bg-indigo-100 text-indigo-700",
+]
+const avatarColor = (s: string) => AVATAR_COLORS[[...(s || "?")].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length]
+const initialsOf = (s: string) => (s || "?").trim().split(/\s+/).slice(0, 2).map(n => n[0] || "").join("").toUpperCase()
+
 // Inline person search/select (used for SCM NYK Approver → choose CR + EVP).
 function PersonPicker({ label, selected, onSelect, placeholder }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string }) {
   const [q, setQ] = useState(""); const [results, setResults] = useState<any[]>([]); const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false)
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       <span className="text-xs font-semibold text-gray-600 shrink-0 w-32">{label}</span>
       {!selected ? (
-        <div className="relative flex-1 min-w-0 max-w-xs">
-          <input value={q}
-            onChange={async e => { const v = e.target.value; setQ(v); setOpen(true); if (v.length < 2) { setResults([]); return } setLoading(true); try { const r = await fetch(`/api/people?q=${encodeURIComponent(v)}`); const d = await r.json(); setResults(Array.isArray(d) ? d : []) } catch { setResults([]) } finally { setLoading(false) } }}
-            onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 200)}
-            placeholder={placeholder || "Search name or email..."}
-            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
-          {loading && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">...</span>}
-          {open && results.length > 0 && (
-            <div className="absolute top-full left-0 mt-1.5 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 w-80 overflow-hidden">
-              {results.map((p: any, i: number) => { const initials = (p.name || "?").split(" ").slice(0, 2).map((n: string) => n[0] || "").join("").toUpperCase(); return (
-                <div key={i} onMouseDown={() => { onSelect({ name: p.name, email: p.email }); setResults([]); setOpen(false) }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 cursor-pointer">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0">{initials}</div>
-                  <div className="min-w-0"><p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p><p className="text-[11px] text-gray-400 truncate">{p.email}</p></div>
-                </div>) })}
+        <div className="relative flex-1 min-w-0 max-w-sm">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" /></svg>
+            <input value={q}
+              onChange={async e => { const v = e.target.value; setQ(v); setOpen(true); if (v.length < 2) { setResults([]); return } setLoading(true); try { const r = await fetch(`/api/people?q=${encodeURIComponent(v)}`); const d = await r.json(); setResults(Array.isArray(d) ? d : []) } catch { setResults([]) } finally { setLoading(false) } }}
+              onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 200)}
+              placeholder={placeholder || "Search name or email..."}
+              className="w-full border border-gray-300 rounded-xl pl-9 pr-9 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition" />
+            {loading && <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-300 border-t-transparent rounded-full animate-spin" />}
+          </div>
+          {open && q.length >= 2 && (
+            <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl z-50 w-96 max-w-[90vw] overflow-hidden">
+              <div className="max-h-72 overflow-y-auto py-1.5">
+                {results.length > 0 ? results.map((p: any, i: number) => (
+                  <div key={i} onMouseDown={() => { onSelect({ name: p.name, email: p.email }); setResults([]); setOpen(false) }}
+                    className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-blue-50 cursor-pointer transition-colors">
+                    <div className={`w-10 h-10 rounded-full ${avatarColor(p.name)} text-sm font-bold flex items-center justify-center shrink-0 select-none`}>{initialsOf(p.name)}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{p.name || p.email}</p>
+                      <p className="text-xs text-gray-400 truncate">{p.email || "—"}</p>
+                      {(p.dept || p.pos) && <p className="text-[11px] text-gray-400 truncate">{[p.pos, p.dept].filter(Boolean).join(" · ")}{p.bu ? ` · ${p.bu}` : ""}</p>}
+                    </div>
+                  </div>
+                )) : !loading && (
+                  <div className="px-4 py-6 text-center text-sm text-gray-400">No matching person</div>
+                )}
+              </div>
             </div>
           )}
         </div>
       ) : (
-        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
-          <p className="text-xs font-semibold text-blue-800 truncate">{selected.name}</p>
-          <span className="text-[11px] text-blue-400 truncate hidden sm:inline">{selected.email}</span>
-          <button onClick={() => onSelect(null)} className="text-blue-300 hover:text-blue-600 shrink-0 ml-1">✕</button>
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl pl-2 pr-3 py-2 max-w-sm">
+          <div className={`w-9 h-9 rounded-full ${avatarColor(selected.name)} text-xs font-bold flex items-center justify-center shrink-0 select-none`}>{initialsOf(selected.name)}</div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-blue-900 truncate leading-tight">{selected.name}</p>
+            <p className="text-xs text-blue-400 truncate leading-tight">{selected.email}</p>
+          </div>
+          <button onClick={() => onSelect(null)} className="text-blue-300 hover:text-blue-600 shrink-0 text-lg leading-none">×</button>
         </div>
       )}
     </div>
@@ -2258,40 +2282,51 @@ export default function RequestDetailPage() {
               <span className="text-xs text-gray-400">or forward to</span>
               <div className="relative flex items-center gap-2 flex-1 min-w-0">
                 {!claimFwdSelected ? (
-                  <div className="relative flex-1 min-w-0 max-w-xs">
-                    <input value={claimFwdQ}
-                      onChange={async e => {
-                        const q = e.target.value; setClaimFwdQ(q); setClaimFwdOpen(true)
-                        if (q.length < 2) { setClaimFwdResults([]); return }
-                        setClaimFwdLoading(true)
-                        try { const r = await fetch(`/api/people?q=${encodeURIComponent(q)}`); const data = await r.json(); setClaimFwdResults(Array.isArray(data) ? data : []) }
-                        catch { setClaimFwdResults([]) } finally { setClaimFwdLoading(false) }
-                      }}
-                      onFocus={() => setClaimFwdOpen(true)}
-                      onBlur={() => setTimeout(() => setClaimFwdOpen(false), 200)}
-                      placeholder="Search name or email..."
-                      className="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                    {claimFwdLoading && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">...</span>}
-                    {claimFwdOpen && claimFwdResults.length > 0 && (
-                      <div className="absolute top-full left-0 mt-1.5 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 w-80 overflow-hidden">
-                        {claimFwdResults.map((p: any, i: number) => {
-                          const initials = (p.name || "?").split(" ").slice(0, 2).map((n: string) => n[0] || "").join("").toUpperCase()
-                          return (
+                  <div className="relative flex-1 min-w-0 max-w-sm">
+                    <div className="relative">
+                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" /></svg>
+                      <input value={claimFwdQ}
+                        onChange={async e => {
+                          const q = e.target.value; setClaimFwdQ(q); setClaimFwdOpen(true)
+                          if (q.length < 2) { setClaimFwdResults([]); return }
+                          setClaimFwdLoading(true)
+                          try { const r = await fetch(`/api/people?q=${encodeURIComponent(q)}`); const data = await r.json(); setClaimFwdResults(Array.isArray(data) ? data : []) }
+                          catch { setClaimFwdResults([]) } finally { setClaimFwdLoading(false) }
+                        }}
+                        onFocus={() => setClaimFwdOpen(true)}
+                        onBlur={() => setTimeout(() => setClaimFwdOpen(false), 200)}
+                        placeholder="Search name or email..."
+                        className="w-full border border-gray-300 rounded-xl pl-9 pr-9 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition" />
+                      {claimFwdLoading && <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-300 border-t-transparent rounded-full animate-spin" />}
+                    </div>
+                    {claimFwdOpen && claimFwdQ.length >= 2 && (
+                      <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl z-50 w-96 max-w-[90vw] overflow-hidden">
+                        <div className="max-h-72 overflow-y-auto py-1.5">
+                          {claimFwdResults.length > 0 ? claimFwdResults.map((p: any, i: number) => (
                             <div key={i} onMouseDown={() => { setClaimFwdSelected({ name: p.name, email: p.email }); setClaimFwdResults([]); setClaimFwdOpen(false) }}
-                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 cursor-pointer transition-colors">
-                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0 select-none">{initials}</div>
-                              <div className="min-w-0"><p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p><p className="text-[11px] text-gray-400 truncate">{p.email}</p></div>
+                              className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-blue-50 cursor-pointer transition-colors">
+                              <div className={`w-10 h-10 rounded-full ${avatarColor(p.name)} text-sm font-bold flex items-center justify-center shrink-0 select-none`}>{initialsOf(p.name)}</div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-gray-800 truncate">{p.name || p.email}</p>
+                                <p className="text-xs text-gray-400 truncate">{p.email || "—"}</p>
+                                {(p.dept || p.pos) && <p className="text-[11px] text-gray-400 truncate">{[p.pos, p.dept].filter(Boolean).join(" · ")}{p.bu ? ` · ${p.bu}` : ""}</p>}
+                              </div>
                             </div>
-                          )
-                        })}
+                          )) : !claimFwdLoading && (
+                            <div className="px-4 py-6 text-center text-sm text-gray-400">No matching person</div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
-                    <p className="text-xs font-semibold text-blue-800 truncate">{claimFwdSelected.name}</p>
-                    <span className="text-[11px] text-blue-400 truncate hidden sm:inline">{claimFwdSelected.email}</span>
-                    <button onClick={() => setClaimFwdSelected(null)} className="text-blue-300 hover:text-blue-600 shrink-0 ml-1">✕</button>
+                  <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl pl-2 pr-3 py-2 max-w-sm">
+                    <div className={`w-9 h-9 rounded-full ${avatarColor(claimFwdSelected.name)} text-xs font-bold flex items-center justify-center shrink-0 select-none`}>{initialsOf(claimFwdSelected.name)}</div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-blue-900 truncate leading-tight">{claimFwdSelected.name}</p>
+                      <p className="text-xs text-blue-400 truncate leading-tight">{claimFwdSelected.email}</p>
+                    </div>
+                    <button onClick={() => setClaimFwdSelected(null)} className="text-blue-300 hover:text-blue-600 shrink-0 text-lg leading-none">×</button>
                   </div>
                 )}
               </div>
