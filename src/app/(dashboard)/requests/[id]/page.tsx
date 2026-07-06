@@ -332,7 +332,9 @@ export default function RequestDetailPage() {
     i.itemStatus === "CLAIM_PASSED" && mySplitStatus(i) === "CLAIM_PASSED"
   )
   const isClaimApprover = isDvmClaim || isVpClaim
-  const isClaimP1ForForward = ((role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_") || isNykClaimRole || role === "SCM_NYG") && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
+  // Forward-to-next-approver box is only for the legacy NYG DVM/CLAIM flow.
+  // GW / SCM NYK / SCM NYG claim auto-route by master priority (no manual forward).
+  const isClaimP1ForForward = ((role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_")) && req?.status === "PENDING_CLAIM"
   const isClaimNextApprover = role === "CLAIM_NEXT_APPROVER" && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
   const myClaimItems = req?.items?.filter((i: any) => {
     const itemDeptList: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
@@ -2094,7 +2096,7 @@ export default function RequestDetailPage() {
               {isProcureDvm && (
                 <button onClick={() => setProcureDecision(null)} className="text-[11px] text-gray-400 hover:text-gray-600 flex items-center gap-1">← Back</button>
               )}
-              <h2 className="font-semibold text-gray-800">SO APPROVAL — DVM {claimDept} ({myClaimItems.length})</h2>
+              <h2 className="font-semibold text-gray-800">SO APPROVAL — {isGwClaimP1Role ? (gwClaimDepts[0] || "Claim") : `DVM ${claimDept}`} ({myClaimItems.length})</h2>
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
               <span className="text-yellow-600">{myClaimItems.filter((i:any) => i.itemStatus === "LOG_PASSED").length} pending</span>

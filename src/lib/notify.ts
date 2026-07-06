@@ -218,13 +218,13 @@ export async function sendPasswordSetupEmail(email: string, name: string, token:
 // Map the claim splits present on a doc → recipient groups. CLAIM_GW is one role
 // but split into GW vs SUPPLIER people via User.claimDepartment, so a "GW" claim
 // only emails GW-tagged users (not SUPPLIER) and vice-versa.
-function gwClaimGroups(depts: Set<string>, req: any): { role: string; claimDept?: string; token?: string }[] {
-  const groups: { role: string; claimDept?: string; token?: string }[] = []
+function gwClaimGroups(depts: Set<string>, req: any): { role: string; label: string; claimDept?: string; token?: string }[] {
+  const groups: { role: string; label: string; claimDept?: string; token?: string }[] = []
   // NYK entry point is the APPROVER (EVP + CR user are alerted later, after approve).
-  if (depts.has("SCM NYK")) groups.push({ role: "SCM_NYK_APPROVER", token: (req as any).scmNykApproverToken })
-  if (depts.has("SCM NYG")) groups.push({ role: "SCM_NYG", token: (req as any).scmNygToken })
-  if (depts.has("GW")) groups.push({ role: "CLAIM_GW", claimDept: "GW", token: (req as any).claimGwToken })
-  if ([...depts].some(d => ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"].includes(d))) groups.push({ role: "CLAIM_GW", claimDept: "SUPPLIER", token: (req as any).claimGwToken })
+  if (depts.has("SCM NYK")) groups.push({ role: "SCM_NYK_APPROVER", label: "SCM NYK", token: (req as any).scmNykApproverToken })
+  if (depts.has("SCM NYG")) groups.push({ role: "SCM_NYG", label: "SCM NYG", token: (req as any).scmNygToken })
+  if (depts.has("GW")) groups.push({ role: "CLAIM_GW", label: "GW", claimDept: "GW", token: (req as any).claimGwToken })
+  if ([...depts].some(d => ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"].includes(d))) groups.push({ role: "CLAIM_GW", label: "SUPPLIER", claimDept: "SUPPLIER", token: (req as any).claimGwToken })
   return groups
 }
 
@@ -381,7 +381,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         const em = us.map((u: any) => u.email).filter(Boolean)
         if (!em.length) continue
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
-        await sendMail(em, `[Claim – GW] President Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
+        await sendMail(em, `[Claim – ${g.label}] President Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
       }
       // 3) Accounting (read alert) — GW uses ACCOUNTING_GW; cover both role names.
       const acUsers = await (prisma.user as any).findMany({ where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true }, select: { email: true } })
@@ -459,7 +459,6 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const groups = gwClaimGroups(depts, req)
       if (groups.length === 0) return
       const link = `${APP_URL}/requests/${requestId}`
-      const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
       // Each group = a claim dept's people (GW≠SUPPLIER via claimDepartment).
       for (const g of groups) {
         const where: any = { role: g.role, isActive: true }
@@ -469,7 +468,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         if (!recipients.length) continue
         const magicLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
         const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
-        await sendMail(recipients, `${subject} — ${req.documentNo}`, html)
+        await sendMail(recipients, `[Claim – ${g.label}] Pending Approval — ${req.documentNo}`, html)
       }
       return
     }
