@@ -2286,12 +2286,12 @@ export default function RequestDetailPage() {
               <h2 className="font-semibold text-gray-800">SO APPROVAL — {isGwClaimP1Role ? (gwClaimDepts[0] || "Claim") : `DVM ${claimDept}`} ({myClaimItems.length})</h2>
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
-              <span className="text-yellow-600">{myClaimItems.filter((i:any) => i.itemStatus === "LOG_PASSED").length} pending</span>
+              <span className="text-yellow-600">{myClaimItems.filter((i:any) => isGwClaimP1Role ? ["PRES_PASSED","LOG_PASSED"].includes(i.itemStatus) : i.itemStatus === "LOG_PASSED").length} pending</span>
               <span className="text-green-600">{myClaimItems.filter((i:any) => i.itemStatus === "CLAIM_PASSED").length} forwarded to VP</span>
               <span className="text-red-600">{myClaimItems.filter((i:any) => i.itemStatus === "REJECTED").length} rejected</span>
               {(() => {
                 const myTurnItems = myClaimItems.filter((i: any) => {
-                  if (i.itemStatus !== "LOG_PASSED") return false
+                  if (!(isGwClaimP1Role ? ["PRES_PASSED","LOG_PASSED"].includes(i.itemStatus) : i.itemStatus === "LOG_PASSED")) return false
                   const appr: any[] = i.claimApprovals || []
                   if (appr.some((a: any) => a.userId === myUserId)) return false
                   // NYK: SCM_NYK (CR user) never approves; EVP only after the Approver.
@@ -2401,7 +2401,8 @@ export default function RequestDetailPage() {
             const isSub = submitting === item.id
             const itemAttachments = (req.attachments || []).filter((a: any) => a.itemId === item.id)
             const isUploading = uploadingItem === item.id
-            const isPending = item.itemStatus === "LOG_PASSED"
+            // GW claim runs in parallel with LG → items sit at PRES_PASSED (not LOG_PASSED).
+            const isPending = isGwClaimP1Role ? ["PRES_PASSED", "LOG_PASSED"].includes(item.itemStatus) : item.itemStatus === "LOG_PASSED"
             const isPassed = item.itemStatus === "CLAIM_PASSED"
             // Who has approved this item so far
             const itemApprovals: any[] = item.claimApprovals || []
