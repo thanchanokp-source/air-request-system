@@ -497,7 +497,9 @@ export default function RequestDetailPage() {
   const isVpMerGW = (role === "DPM_GW" || role === "VP_MER_GW") && req?.status === "PENDING_VP_MER_GW" && isGWRequest
   const isGmGW = role === "GM_GW" && req?.status === "PENDING_GM_GW" && isGWRequest
   const isPresidentGW = role === "PRESIDENT_GW" && req?.status === "PENDING_PRESIDENT_GW" && isGWRequest
-  const isLogisticsGW = role === "LOGISTICS_GW" && (req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && presPassedItems.length > 0 && isGWRequest
+  // Logistics ∥ Claim run in parallel after President → the doc sits at
+  // PENDING_CLAIM_GW while LG enters HAWB data. Include it so HawbSection renders.
+  const isLogisticsGW = role === "LOGISTICS_GW" && (req?.status === "PENDING_CLAIM_GW" || req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && presPassedItems.length > 0 && isGWRequest
   const userClaimDept = (session?.user as any)?.claimDepartment || null
   const isClaimGW = false // replaced by isDvmClaim (new GW P1 flow via claimForward)
   const myScmDept = role === "SCM_NYK" ? "NYK" : role === "SCM_NYG" ? "NYG" : null
