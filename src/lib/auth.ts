@@ -80,11 +80,32 @@ export const authOptions: NextAuthOptions = {
           for (const [field, gwRole] of [["claimGwToken", "CLAIM_GW"], ["scmNykApproverToken", "SCM_NYK_APPROVER"], ["scmNykEvpToken", "SCM_NYK_EVP"], ["scmNykToken", "SCM_NYK"], ["scmNygToken", "SCM_NYG"]] as const) {
             const cReq = await (prisma.airRequest as any).findFirst({ where: { [field]: token } })
             if (cReq) {
+              // SCM NYK EVP / CR user: the Approver chose a specific person — resolve
+              // to them (grant the role for this session). Else fall back to role.
+              const assignedEmail = gwRole === "SCM_NYK_EVP" ? (cReq as any).assignedScmNykEvp
+                : gwRole === "SCM_NYK" ? (cReq as any).assignedScmNykCr : null
+              if (assignedEmail) {
+                const au = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
+                if (au) return { id: au.id, email: au.email, name: au.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (au as any).claimDepartment ?? null, priority: (au as any).priority ?? null }
+                return { id: `nyk_guest_${token}`, email: assignedEmail, name: assignedEmail, role: gwRole, bu: cReq.bu || "GW", claimDepartment: null, priority: null }
+              }
               // Scope to the document's BU — SCM roles exist in both NYG & GW.
               const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true, bu: cReq.bu } })
               if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (u as any).claimDepartment ?? null, priority: (u as any).priority ?? null }
               return null
             }
+          }
+          // Per-department forward token (ClaimForward) → CLAIM_NEXT_APPROVER
+          // scoped to that department (independent per-dept chains, both BU).
+          const fwdRow = await (prisma as any).claimForward.findFirst({ where: { token } })
+          if (fwdRow) {
+            const fReq = await (prisma.airRequest as any).findUnique({ where: { id: fwdRow.requestId } })
+            const bu = fReq?.bu || "GW"
+            const fUser = await (prisma.user as any).findUnique({ where: { email: fwdRow.nextEmail } })
+            if (fUser && fUser.isActive) {
+              return { id: fUser.id, email: fUser.email, name: fUser.name, role: "CLAIM_NEXT_APPROVER", bu, claimDepartment: fwdRow.dept, priority: null, claimNextToken: token }
+            }
+            return { id: `claim_fwd_guest_${token}`, email: fwdRow.nextEmail, name: fwdRow.nextName || "Claim Approver", role: "CLAIM_NEXT_APPROVER", bu, claimDepartment: fwdRow.dept, priority: null, claimNextToken: token }
           }
           // Try accountingToken (BU-aware: GW uses ACCOUNTING_GW)
           const acReq = await (prisma.airRequest as any).findFirst({ where: { accountingToken: token } })

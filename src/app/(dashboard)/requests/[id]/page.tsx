@@ -18,6 +18,41 @@ const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US"
 const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
 const CLAIM_DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
 
+// Inline person search/select (used for SCM NYK Approver → choose CR + EVP).
+function PersonPicker({ label, selected, onSelect, placeholder }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string }) {
+  const [q, setQ] = useState(""); const [results, setResults] = useState<any[]>([]); const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false)
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-semibold text-gray-600 shrink-0 w-32">{label}</span>
+      {!selected ? (
+        <div className="relative flex-1 min-w-0 max-w-xs">
+          <input value={q}
+            onChange={async e => { const v = e.target.value; setQ(v); setOpen(true); if (v.length < 2) { setResults([]); return } setLoading(true); try { const r = await fetch(`/api/people?q=${encodeURIComponent(v)}`); const d = await r.json(); setResults(Array.isArray(d) ? d : []) } catch { setResults([]) } finally { setLoading(false) } }}
+            onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 200)}
+            placeholder={placeholder || "Search name or email..."}
+            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+          {loading && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">...</span>}
+          {open && results.length > 0 && (
+            <div className="absolute top-full left-0 mt-1.5 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 w-80 overflow-hidden">
+              {results.map((p: any, i: number) => { const initials = (p.name || "?").split(" ").slice(0, 2).map((n: string) => n[0] || "").join("").toUpperCase(); return (
+                <div key={i} onMouseDown={() => { onSelect({ name: p.name, email: p.email }); setResults([]); setOpen(false) }} className="flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 cursor-pointer">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0">{initials}</div>
+                  <div className="min-w-0"><p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p><p className="text-[11px] text-gray-400 truncate">{p.email}</p></div>
+                </div>) })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+          <p className="text-xs font-semibold text-blue-800 truncate">{selected.name}</p>
+          <span className="text-[11px] text-blue-400 truncate hidden sm:inline">{selected.email}</span>
+          <button onClick={() => onSelect(null)} className="text-blue-300 hover:text-blue-600 shrink-0 ml-1">✕</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function RequestDetailPage() {
   const { id } = useParams()
   const { data: session } = useSession()
@@ -109,6 +144,14 @@ export default function RequestDetailPage() {
   const [claimFwdSaving, setClaimFwdSaving] = useState(false)
   const [procureDecision, setProcureDecision] = useState<"approve" | "forward" | null>(null)
   const [claimFwdDone, setClaimFwdDone] = useState<string|null>(null)
+  // SCM NYK Approver picks the CR-entry person + VP/EVP approver (one per doc).
+  const [nykCr, setNykCr] = useState<{name:string,email:string}|null>(null)
+  const [nykEvp, setNykEvp] = useState<{name:string,email:string}|null>(null)
+  useEffect(() => {
+    if (!req) return
+    if ((req as any).assignedScmNykCr) setNykCr(p => p || { name: (req as any).assignedScmNykCr, email: (req as any).assignedScmNykCr })
+    if ((req as any).assignedScmNykEvp) setNykEvp(p => p || { name: (req as any).assignedScmNykEvp, email: (req as any).assignedScmNykEvp })
+  }, [req])
 
   // Auto-save SCM claim dept + comments to DB (debounced 1.5s)
   useEffect(() => {
@@ -338,6 +381,24 @@ export default function RequestDetailPage() {
   // GW / SCM NYK / SCM NYG claim auto-route by master priority (no manual forward).
   const isClaimP1ForForward = ((role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_")) && req?.status === "PENDING_CLAIM"
   const isClaimNextApprover = role === "CLAIM_NEXT_APPROVER" && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
+  // ── GW per-department forward model: each dept finishes OR forwards its own
+  // splits independently. Owner = CLAIM_GW / SCM_NYG (NOT NYK — CR flow). Next =
+  // a forwarded CLAIM_NEXT_APPROVER scoped to a dept via its session dept.
+  const gwFwdCanonicalDept: string | null =
+    role === "CLAIM_NEXT_APPROVER" ? (myClaimDept || null)
+    : role === "CLAIM_GW" ? (myClaimDept === "SUPPLIER" ? "SUPPLIER" : "GW")
+    : role === "SCM_NYG" ? "SCM NYG"
+    : null
+  const gwFwdSplitDepts = gwFwdCanonicalDept === "SUPPLIER"
+    ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+    : gwFwdCanonicalDept ? [gwFwdCanonicalDept] : []
+  const isGwForwardRole = isGWRequest && req?.status === "PENDING_CLAIM_GW" &&
+    ((role === "CLAIM_GW" || role === "SCM_NYG") || role === "CLAIM_NEXT_APPROVER")
+  const gwFwdItems = isGwForwardRole
+    ? (req?.items || []).filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) &&
+        getSplits(i).some((s: any) => gwFwdSplitDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED"))
+    : []
+  const showGwFinishForward = isGwForwardRole && gwFwdSplitDepts.length > 0 && gwFwdItems.length > 0 && !claimFwdDone
   const myClaimItems = req?.items?.filter((i: any) => {
     const itemDeptList: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
       ? i.claimDepts.map((d: any) => d.dept)
@@ -542,18 +603,32 @@ export default function RequestDetailPage() {
 
   const claimForward = async (final: boolean) => {
     setClaimFwdSaving(true)
-    const body = final
-      ? { final: true }
-      : { nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name }
-    const res = await fetch(`/api/requests/${id}/claim-forward`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    })
+    // GW finish → approve route (finalize_claim_dept) so it finalizes only THIS
+    // department's splits and recomputes doc status centrally. NYG finish keeps
+    // the legacy claim-forward path. Forward (both BU) → per-dept claim-forward.
+    let res
+    if (final && isGWRequest) {
+      res = await fetch(`/api/requests/${id}/approve`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "finalize_claim_dept" })
+      })
+    } else {
+      const body = final
+        ? { final: true }
+        : { nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name }
+      res = await fetch(`/api/requests/${id}/claim-forward`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      })
+    }
     if (res.ok) {
       setClaimFwdDone(final ? "final" : `forwarded:${claimFwdSelected?.name}`)
       const r = await fetch(`/api/requests/${id}`)
       if (r.ok) setReq(await r.json())
+    } else {
+      const err = await res.json().catch(() => ({}))
+      alert(err.error || "Action failed")
     }
     setClaimFwdSaving(false)
   }
@@ -1777,8 +1852,8 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* CLAIM_NEXT_APPROVER per-SO approval */}
-      {isClaimNextApprover && !claimFwdDone && (() => {
+      {/* CLAIM_NEXT_APPROVER per-SO approval (NYG legacy; GW uses the per-dept panel) */}
+      {isClaimNextApprover && !isGWRequest && !claimFwdDone && (() => {
         // Use session claimDepartment (sourced from request.claimDepartment at login) to filter correct dept items
         const nextApproverDept = (session?.user as any)?.claimDepartment || (req as any).claimDepartment || null
         const nextItems = (req?.items || []).filter((i: any) =>
@@ -2090,8 +2165,116 @@ export default function RequestDetailPage() {
         </div>
       )}
 
+      {/* GW per-department Finish / Forward panel (independent per dept) */}
+      {showGwFinishForward && (
+        <div className="space-y-3 mb-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-gray-800">CLAIM — {gwFwdCanonicalDept} ({gwFwdItems.length} SO)</h2>
+            <span className="text-xs text-gray-400">Handle your department only</span>
+          </div>
+          {/* Attach supporting files — by DOCUMENT */}
+          <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2 flex-wrap">
+            <span className="text-xs text-gray-600">Attach supporting files (by document)</span>
+            <label className={`cursor-pointer text-xs px-3 py-1.5 rounded-lg border font-medium ${uploadingItem === "_req" ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "border-blue-300 text-blue-600 hover:bg-blue-50"}`}>
+              {uploadingItem === "_req" ? "Uploading..." : "📎 Attach File"}
+              <input type="file" className="hidden" multiple disabled={uploadingItem === "_req"}
+                onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
+            </label>
+          </div>
+          {/* SO list (read-only summary) */}
+          <div className="rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="px-3 py-2 text-left">SO</th><th className="px-3 py-2 text-left">STYLE</th>
+                  <th className="px-3 py-2 text-left">HAWB#</th><th className="px-3 py-2 text-right">ACTUAL AIR</th>
+                  <th className="px-3 py-2 text-right">MY CLAIM</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gwFwdItems.map((item: any) => {
+                  const sp = getSplits(item).find((s: any) => gwFwdSplitDepts.includes(s.dept))
+                  const actual = item.actualAirFreight ?? 0
+                  const amt = sp ? Math.round(actual * (Number(sp.pct) || 0) / 100) : 0
+                  return (
+                    <tr key={item.id} className="border-t border-gray-100">
+                      <td className="px-3 py-2 font-medium">{item.so}</td>
+                      <td className="px-3 py-2">{item.style}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "-"}</td>
+                      <td className="px-3 py-2 text-right">{actual.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-blue-700">{amt.toLocaleString()} <span className="text-gray-400">({sp?.pct ?? 0}%)</span></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          {/* Action bar: Finish or Forward */}
+          <div className="bg-white rounded-xl border border-blue-200 px-4 py-3">
+            <p className="text-xs font-semibold text-blue-700 uppercase tracking-widest mb-2">Choose an action</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={() => claimForward(true)} disabled={claimFwdSaving}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-40">
+                {claimFwdSaving ? "..." : `✓ Finish — Approve ${gwFwdCanonicalDept}`}
+              </button>
+              <span className="text-xs text-gray-400">or forward to</span>
+              <div className="relative flex items-center gap-2 flex-1 min-w-0">
+                {!claimFwdSelected ? (
+                  <div className="relative flex-1 min-w-0 max-w-xs">
+                    <input value={claimFwdQ}
+                      onChange={async e => {
+                        const q = e.target.value; setClaimFwdQ(q); setClaimFwdOpen(true)
+                        if (q.length < 2) { setClaimFwdResults([]); return }
+                        setClaimFwdLoading(true)
+                        try { const r = await fetch(`/api/people?q=${encodeURIComponent(q)}`); const data = await r.json(); setClaimFwdResults(Array.isArray(data) ? data : []) }
+                        catch { setClaimFwdResults([]) } finally { setClaimFwdLoading(false) }
+                      }}
+                      onFocus={() => setClaimFwdOpen(true)}
+                      onBlur={() => setTimeout(() => setClaimFwdOpen(false), 200)}
+                      placeholder="Search name or email..."
+                      className="w-full border border-gray-300 rounded-lg px-3 py-1.5 pr-7 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                    {claimFwdLoading && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">...</span>}
+                    {claimFwdOpen && claimFwdResults.length > 0 && (
+                      <div className="absolute top-full left-0 mt-1.5 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 w-80 overflow-hidden">
+                        {claimFwdResults.map((p: any, i: number) => {
+                          const initials = (p.name || "?").split(" ").slice(0, 2).map((n: string) => n[0] || "").join("").toUpperCase()
+                          return (
+                            <div key={i} onMouseDown={() => { setClaimFwdSelected({ name: p.name, email: p.email }); setClaimFwdResults([]); setClaimFwdOpen(false) }}
+                              className="flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 cursor-pointer transition-colors">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0 select-none">{initials}</div>
+                              <div className="min-w-0"><p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p><p className="text-[11px] text-gray-400 truncate">{p.email}</p></div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+                    <p className="text-xs font-semibold text-blue-800 truncate">{claimFwdSelected.name}</p>
+                    <span className="text-[11px] text-blue-400 truncate hidden sm:inline">{claimFwdSelected.email}</span>
+                    <button onClick={() => setClaimFwdSelected(null)} className="text-blue-300 hover:text-blue-600 shrink-0 ml-1">✕</button>
+                  </div>
+                )}
+              </div>
+              <button onClick={() => claimForward(false)} disabled={!claimFwdSelected || claimFwdSaving}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 shrink-0">
+                {claimFwdSaving ? "Sending..." : "Forward →"}
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-2"><b>Finish</b> = complete your department's claim (→ Accounting when all depts + logistics done). <b>Forward</b> = send to another person to approve first; they can finish or forward again.</p>
+          </div>
+        </div>
+      )}
+      {claimFwdDone && isGWRequest && (
+        <div className={`rounded-xl px-4 py-3 mb-4 text-sm font-medium flex items-center gap-2 ${claimFwdDone === "final" ? "bg-green-50 text-green-700 border border-green-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+          <span className="text-base">{claimFwdDone === "final" ? "✓" : "→"}</span>
+          {claimFwdDone === "final" ? "Your department is approved. The document proceeds once all departments and logistics are done." : `Forwarded to ${claimFwdDone.replace("forwarded:", "")} successfully.`}
+        </div>
+      )}
+
       {/* DVM CLAIM per-SO approval — priority-based sequential */}
-      {isDvmClaim && (!isProcureDvm || procureDecision === "approve") && (
+      {isDvmClaim && !showGwFinishForward && (!isProcureDvm || procureDecision === "approve") && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -2136,6 +2319,17 @@ export default function RequestDetailPage() {
                 <input type="file" className="hidden" multiple disabled={uploadingItem === "_req"}
                   onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
               </label>
+            </div>
+          )}
+
+          {/* SCM NYK Approver picks WHO enters the CR + WHO is the VP/EVP approver.
+              On approve, only these two are alerted (magic link resolves to them). */}
+          {role === "SCM_NYK_APPROVER" && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 space-y-2">
+              <p className="text-[11px] text-amber-800 leading-relaxed">Choose who will handle this SCM NYK claim, then approve. Only these two people are alerted:</p>
+              <PersonPicker label="CR-entry person" selected={nykCr} onSelect={setNykCr} placeholder="Who enters the CR NO..." />
+              <PersonPicker label="VP / EVP approver" selected={nykEvp} onSelect={setNykEvp} placeholder="Who approves (EVP)..." />
+              {(!nykCr || !nykEvp) && <p className="text-[11px] text-amber-600">⚠ Select both before approving.</p>}
             </div>
           )}
 
@@ -2266,11 +2460,12 @@ export default function RequestDetailPage() {
                   {isMyTurn && (
                     <div className="flex items-center gap-2">
                       <button onClick={async () => {
+                          if (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)) { alert("Select the CR-entry person and the VP/EVP approver first."); return }
                           setSubmitting(item.id)
                           const approveAction = isGWRequest ? "approve_so_claim_gw" : "approve_so"
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: approveAction, itemId: item.id, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined })
+                            body: JSON.stringify({ action: approveAction, itemId: item.id, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, evpEmail: nykEvp?.email, crEmail: nykCr?.email })
                           })
                           if (res.ok) {
                             setReq(await res.json())
@@ -2401,6 +2596,7 @@ export default function RequestDetailPage() {
               <button
                 disabled={submitting !== null}
                 onClick={async () => {
+                  if (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)) { alert("Select the CR-entry person and the VP/EVP approver first."); return }
                   const ids = [...dvmSelected]
                   let updated: any = req
                   const approveAction = isGwClaimP1Role ? "approve_so_claim_gw" : "approve_so"
@@ -2408,7 +2604,7 @@ export default function RequestDetailPage() {
                     setSubmitting(itemId)
                     const res = await fetch(`/api/requests/${id}/approve`, {
                       method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: approveAction, itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined })
+                      body: JSON.stringify({ action: approveAction, itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, evpEmail: nykEvp?.email, crEmail: nykCr?.email })
                     })
                     if (res.ok) updated = await res.json()
                     else { const e = await res.json(); alert(e.error || "Error"); break }

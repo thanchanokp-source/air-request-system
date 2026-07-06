@@ -92,6 +92,34 @@ export function gwDeptsForRole(role: string, claimDept?: string | null): string[
   return []
 }
 
+// ── Per-department forward model (both BU) ─────────────────────────
+// Each claim department handles its own SO(s) independently: it can FINISH
+// (finalize its splits) or FORWARD to a chosen person, recursively. Forward
+// state is stored per (request, dept) in the ClaimForward table.
+//
+// Canonical dept = the value we store in ClaimForward.dept and match against a
+// split's `dept`. SUPPLIER expands to its sub-values when finalizing splits.
+export function ownerCanonicalDept(role: string, claimDept?: string | null): string | null {
+  if (role === "CLAIM_GW") return claimDept === "SUPPLIER" ? "SUPPLIER" : "GW"
+  if (role === "SCM_NYG") return "SCM NYG"
+  if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return "SCM NYK"
+  if (role.startsWith("DVM_")) return role.replace("DVM_", "")
+  if (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") return role.replace("CLAIM_", "")
+  return null
+}
+
+// Split dept values covered by a canonical dept (SUPPLIER has sub-tags).
+export function expandClaimDept(dept: string): string[] {
+  if (dept === "SUPPLIER") return ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+  return [dept]
+}
+
+// Does this item have a split for `dept` still awaiting finalization?
+export function itemHasPendingDept(item: any, dept: string): boolean {
+  const depts = expandClaimDept(dept)
+  return getSplits(item).some(s => depts.includes(s.dept) && s.status !== GW_DEPT_APPROVED && s.status !== SPLIT_STATUS.COMPLETED && s.status !== SPLIT_STATUS.REJECTED)
+}
+
 // SCM NYK accepts the claim FIRST (approve, incl. its VP chain) without a CR
 // number, then comes back later to fill CR NO. This intermediate state means
 // "accepted, awaiting CR" — the split is NOT yet final and the SO does not go

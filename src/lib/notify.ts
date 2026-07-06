@@ -228,6 +228,49 @@ function gwClaimGroups(depts: Set<string>, req: any): { role: string; label: str
   return groups
 }
 
+// Magic-link token field for each GW claim role.
+const CLAIM_ROLE_TOKEN: Record<string, string> = {
+  CLAIM_GW: "claimGwToken",
+  SCM_NYG: "scmNygToken",
+  SCM_NYK_APPROVER: "scmNykApproverToken",
+  SCM_NYK_EVP: "scmNykEvpToken",
+  SCM_NYK: "scmNykToken",
+}
+
+// Auto-cascade: after a claim approver at priority `afterPriority` approves,
+// email the NEXT priority level (the immediate next, not everyone above) of the
+// same role/dept so the chain runs to the last priority with NO manual forward.
+export async function notifyClaimNextPriority(
+  requestId: string,
+  role: string,
+  claimDept: string | null | undefined,
+  afterPriority: number,
+  label?: string,
+) {
+  try {
+    const req = await prisma.airRequest.findUnique({ where: { id: requestId } })
+    if (!req) return
+    const where: any = { role, isActive: true, bu: (req as any).bu, priority: { gt: afterPriority } }
+    if (claimDept) where.claimDepartment = claimDept
+    const higher = await (prisma.user as any).findMany({
+      where, select: { email: true, priority: true }, orderBy: { priority: "asc" },
+    })
+    if (!higher.length) return // this was the last priority — chain complete
+    const nextP = higher[0].priority
+    const recipients = higher.filter((u: any) => u.priority === nextP).map((u: any) => u.email).filter(Boolean)
+    if (!recipients.length) return
+    const link = `${APP_URL}/requests/${requestId}`
+    const tokenField = CLAIM_ROLE_TOKEN[role]
+    const token = tokenField ? (req as any)[tokenField] : null
+    const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
+    const html = buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, magicLink)
+    const tag = label || claimDept || "Claim"
+    await sendMail(recipients, `[Claim – ${tag}] Pending Approval (Priority ${nextP}) — ${(req as any).documentNo}`, html)
+  } catch (err) {
+    console.error("[notify] next-priority cascade error:", err)
+  }
+}
+
 export async function notifyStatusChange(requestId: string, newStatus: string) {
   try {
     const rolesToNotify = STATUS_ROLES[newStatus]
@@ -259,9 +302,15 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         <thead><tr style="background:#f1f5f9">
           <th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">INV NO.</th><th style="padding:6px 10px;text-align:left">HAWB#</th><th style="padding:6px 10px;text-align:right">Actual Air (THB)</th><th style="padding:6px 10px;text-align:right">NYK Claim (THB)</th>
         </tr></thead><tbody>${rows}</tbody></table>`
-      const sendNyk = async (role: string, tokenField: string, subject: string, intro: string) => {
-        const users = await (prisma.user as any).findMany({ where: { role, isActive: true, bu: (req as any).bu }, select: { email: true } })
-        const emails = users.map((u: any) => u.email).filter(Boolean)
+      const sendNyk = async (role: string, tokenField: string, subject: string, intro: string, assignedEmail?: string | null) => {
+        // Prefer the specific person the Approver chose; else fall back to role.
+        let emails: string[]
+        if (assignedEmail) {
+          emails = [assignedEmail]
+        } else {
+          const users = await (prisma.user as any).findMany({ where: { role, isActive: true, bu: (req as any).bu }, select: { email: true } })
+          emails = users.map((u: any) => u.email).filter(Boolean)
+        }
         if (!emails.length) return
         const token = (req as any)[tokenField]
         const magic = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : link
@@ -274,8 +323,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         </div>`
         await sendMail(emails, `${subject} — ${(req as any).documentNo}`, html)
       }
-      await sendNyk("SCM_NYK_EVP", "scmNykEvpToken", "[Claim – SCM NYK EVP] Pending Approval", "The SCM NYK Approver has approved. Please review and approve.")
-      await sendNyk("SCM_NYK", "scmNykToken", "[Claim – SCM NYK] Please enter CR NO", "The SCM NYK Approver has approved. Please enter the CR NO for this document.")
+      await sendNyk("SCM_NYK_EVP", "scmNykEvpToken", "[Claim – SCM NYK EVP] Pending Approval", "The SCM NYK Approver has approved. Please review and approve.", (req as any).assignedScmNykEvp)
+      await sendNyk("SCM_NYK", "scmNykToken", "[Claim – SCM NYK] Please enter CR NO", "The SCM NYK Approver has approved. Please enter the CR NO for this document.", (req as any).assignedScmNykCr)
       return
     }
 
@@ -377,8 +426,11 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       for (const g of gwClaimGroups(depts, req)) {
         const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
         if (g.claimDept) where.claimDepartment = g.claimDept
-        const us = await (prisma.user as any).findMany({ where, select: { email: true } })
-        const em = us.map((u: any) => u.email).filter(Boolean)
+        const us = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
+        // Priority chain: alert only priority 1; approvals cascade upward.
+        const usP = us.filter((u: any) => u.priority != null)
+        const firstUs = usP.length ? usP.filter((u: any) => u.priority === usP[0].priority) : us
+        const em = firstUs.map((u: any) => u.email).filter(Boolean)
         if (!em.length) continue
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
         await sendMail(em, `[Claim – ${g.label}] President Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
@@ -463,8 +515,12 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       for (const g of groups) {
         const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
         if (g.claimDept) where.claimDepartment = g.claimDept
-        const users = await (prisma.user as any).findMany({ where, select: { email: true } })
-        const recipients = users.map((u: any) => u.email).filter(Boolean)
+        const users = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
+        // Priority chain: alert only the LOWEST priority first; each approval
+        // auto-cascades to the next priority (notifyClaimNextPriority).
+        const withP = users.filter((u: any) => u.priority != null)
+        const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : users
+        const recipients = firstBatch.map((u: any) => u.email).filter(Boolean)
         if (!recipients.length) continue
         const magicLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
         const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
@@ -529,7 +585,8 @@ export async function notifyClaimNext(
   toEmail: string,
   toName: string,
   fromName: string,
-  token: string
+  token: string,
+  deptOverride?: string | null
 ) {
   const APP_URL = process.env.APP_URL || "http://localhost:3000"
   try {
@@ -540,7 +597,7 @@ export async function notifyClaimNext(
     if (!req) return
 
     const magicLink = `${APP_URL}/api/magic-login?token=${token}&redirect=/requests/${requestId}`
-    const dept = req.claimDepartment || "Claim"
+    const dept = deptOverride || req.claimDepartment || "Claim"
     const subject = `[Claim – ${dept}] Pending Approval — ${req.documentNo}`
 
     const html = `

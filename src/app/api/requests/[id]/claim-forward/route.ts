@@ -6,6 +6,7 @@ import { randomBytes } from "crypto"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { notifyClaimNext, notifyClaimFinalToAccounting } from "@/lib/notify"
+import { ownerCanonicalDept } from "@/lib/claim"
 
 async function generateAndSavePdfs(requestId: string) {
   try {
@@ -42,21 +43,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const role = (session.user as any).role
-  const sessionClaimToken = (session.user as any).claimNextToken || null
+  const userClaimDept = (session.user as any).claimDepartment || null
   const forwarderName = (session.user as any).name || role
   const { id } = await params
   const body = await req.json()
   const { final, nextEmail, nextName } = body
 
-  // Must be Claim P1 (master) or Claim Next Approver (guest via magic link)
+  // Must be a claim owner (master role) or a forwarded Claim Next Approver
   const isClaimP1 = (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_") || role === "SCM_NYK" || role === "SCM_NYG"
   const isClaimNext = role === "CLAIM_NEXT_APPROVER"
-  // Derive forwarder's dept (used when saving forward)
-  const forwarderDept = role.startsWith("DVM_") ? role.replace("DVM_", "")
-    : role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER" ? role.replace("CLAIM_", "")
-    : role === "SCM_NYK" ? "NYK"
-    : role === "SCM_NYG" ? "NYG"
-    : null
   if (!isClaimP1 && !isClaimNext) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
@@ -67,14 +62,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  // P2+ must be the designated approver (check email, not token — token can be stale across sessions)
-  const userEmail = session.user?.email || ""
-  if (isClaimNext && (!userEmail || (request as any).claimNextEmail !== userEmail)) {
-    return NextResponse.json({ error: "You do not have permission to perform this action" }, { status: 403 })
+  if (request.status !== "PENDING_CLAIM" && request.status !== "PENDING_CLAIM_GW") {
+    return NextResponse.json({ error: "The document is not in the Claim stage" }, { status: 400 })
   }
 
-  if (request.status !== "PENDING_CLAIM" && request.status !== "PENDING_CLAIM_GW") {
-    return NextResponse.json({ error: "The document is not in PENDING_CLAIM status" }, { status: 400 })
+  const userEmail = session.user?.email || ""
+
+  // Determine which department this actor owns (per-dept, independent chains).
+  let forwarderDept: string | null
+  if (isClaimNext) {
+    // A forwarded approver owns exactly the dept they were forwarded (by email).
+    const fwd = userEmail
+      ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: userEmail } })
+      : null
+    if (!fwd) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
+    forwarderDept = fwd.dept
+  } else {
+    forwarderDept = ownerCanonicalDept(role, userClaimDept)
+  }
+  if (!forwarderDept) return NextResponse.json({ error: "Cannot determine your claim department" }, { status: 400 })
+
+  // GW finish is handled by the approve route (finalize_claim_dept) so status
+  // recalculation stays in one place. Here we only keep the NYG legacy finish.
+  if (final && request.bu === "GW") {
+    return NextResponse.json({ error: "Use finalize_claim_dept to finish a GW claim department" }, { status: 400 })
   }
 
   if (final) {
@@ -114,23 +125,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json({ ok: true, action: "final" })
   } else {
-    // FORWARD: generate token → save → send email to next approver
+    // FORWARD: per-department. Upsert this dept's forward row (independent of
+    // other departments on the same document) with a fresh token, then notify.
     if (!nextEmail) return NextResponse.json({ error: "nextEmail required" }, { status: 400 })
 
     const token = randomBytes(32).toString("hex")
-    await (prisma.airRequest as any).update({
-      where: { id },
-      data: {
-        claimNextEmail: nextEmail,
-        claimNextToken: token,
-        claimNextName: nextName || null,
-        // Record which dept is being forwarded so CLAIM_NEXT_APPROVER can filter correctly
-        ...(forwarderDept ? { claimDepartment: forwarderDept } : {}),
-      },
+    await (prisma as any).claimForward.upsert({
+      where: { requestId_dept: { requestId: id, dept: forwarderDept } },
+      create: { requestId: id, dept: forwarderDept, nextEmail, nextName: nextName || null, token },
+      update: { nextEmail, nextName: nextName || null, token },
     })
 
-    await notifyClaimNext(id, nextEmail, nextName || nextEmail, forwarderName, token)
+    await notifyClaimNext(id, nextEmail, nextName || nextEmail, forwarderName, token, forwarderDept)
 
-    return NextResponse.json({ ok: true, action: "forwarded", to: nextEmail })
+    return NextResponse.json({ ok: true, action: "forwarded", to: nextEmail, dept: forwarderDept })
   }
 }

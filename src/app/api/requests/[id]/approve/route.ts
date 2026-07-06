@@ -3,8 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
-import { notifyStatusChange } from "@/lib/notify"
-import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus } from "@/lib/claim"
+import { notifyStatusChange, notifyClaimNextPriority } from "@/lib/notify"
+import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT } from "@/lib/claim"
 
 const getClaimDept = (role: string) => {
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
@@ -871,7 +871,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
       })
-      // Approver's approval → alert EVP + CR user (with LG data) to act in parallel.
+      // Approver picks the specific CR-entry person + VP/EVP approver (one per doc).
+      if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
+        await prisma.airRequest.update({ where: { id }, data: { assignedScmNykEvp: body.evpEmail || null, assignedScmNykCr: body.crEmail || null } as any })
+      }
+      // Approver's approval → alert the chosen EVP + CR user (with LG data) in parallel.
       if (userRole === "SCM_NYK_APPROVER") notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
       const nextDocStatus = await recalcDocStatusGW(id)
       if (nextDocStatus !== request.status) {
@@ -937,6 +941,57 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — Approved (Priority ${myPriority ?? "–"})` }
       })
+      // Auto-cascade to the next priority level (no manual forward) — runs the
+      // chain forward until the last priority, which finalizes the split above.
+      if (myPriority !== null) {
+        notifyClaimNextPriority(id, userRole, userClaimDept, myPriority, myDepts[0]).catch(() => {})
+      }
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // ── FINISH (per-dept forward model) ────────────────────────────────
+  // A claim department (owner role or a forwarded CLAIM_NEXT_APPROVER) finalizes
+  // ITS OWN splits across the doc. Other departments are untouched (parallel,
+  // independent). Works for both BU. SCM NYK keeps its own CR flow (excluded).
+  if (action === "finalize_claim_dept" && ["CLAIM_GW", "SCM_NYG", "CLAIM_NEXT_APPROVER"].includes(userRole)) {
+    const isGW = request.bu === "GW"
+    const expected = isGW ? "PENDING_CLAIM_GW" : "PENDING_CLAIM"
+    if (request.status !== expected) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
+
+    // Which department does this actor own?
+    let dept: string | null = null
+    if (userRole === "CLAIM_NEXT_APPROVER") {
+      const email = session.user?.email || ""
+      const fwd = email ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: email } }) : null
+      if (!fwd) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
+      dept = fwd.dept
+    } else {
+      dept = ownerCanonicalDept(userRole, userClaimDept)
+    }
+    if (!dept) return NextResponse.json({ error: "Cannot determine your claim department" }, { status: 400 })
+    const splitDepts = expandClaimDept(dept)
+    const doneStatus = isGW ? GW_DEPT_APPROVED : NYG_SPLIT.COMPLETED
+
+    const items = await prisma.airRequestItem.findMany({ where: { requestId: id } })
+    let count = 0
+    for (const it of items) {
+      if (!itemHasPendingDept(it, dept)) continue
+      const updated = approveGwDeptSplits(getSplits(it), splitDepts, undefined, doneStatus)
+      const itemStatus = isGW ? deriveGwItemStatus(updated, (it as any).actualAirFreight != null) : deriveNygItemStatus(updated)
+      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus, itemComment: comment || (it as any).itemComment } })
+      count++
+    }
+    if (count === 0) return NextResponse.json({ error: "No pending SO for your department" }, { status: 400 })
+    // Clear this dept's forward state — the chain has finished here.
+    await (prisma as any).claimForward.deleteMany({ where: { requestId: id, dept } })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Claim ${dept} finalized ${count} SO` }
+    })
+    const next = isGW ? await recalcDocStatusGW(id) : await recalcDocStatus(id)
+    if (next !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: next } })
+      notifyStatusChange(id, next).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -993,6 +1048,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
       })
+      if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
+        await prisma.airRequest.update({ where: { id }, data: { assignedScmNykEvp: body.evpEmail || null, assignedScmNykCr: body.crEmail || null } as any })
+      }
       if (userRole === "SCM_NYK_APPROVER") notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
       const newStatus = await recalcDocStatus(id)
       if (newStatus !== request.status) {

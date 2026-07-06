@@ -94,6 +94,8 @@ model AirRequest {
   scmNykEvpToken   String?
   scmNygToken      String?
   crNo             String?
+  assignedScmNykEvp String?
+  assignedScmNykCr  String?
   claimNextEmail   String?
   claimNextToken   String?
   claimNextName    String?
@@ -103,6 +105,24 @@ model AirRequest {
   approvalLogs     ApprovalLog[]
   attachments      RequestAttachment[]
   hawbGroups       HawbGroup[]
+  claimForwards    ClaimForward[]
+}
+
+// Per-department forward state. Each claim department handles its own SO(s)
+// independently: it can finish (finalize its splits) or forward to a chosen
+// person (recursively). One active row per (request, dept); the token logs the
+// forwarded person in as CLAIM_NEXT_APPROVER scoped to that dept.
+model ClaimForward {
+  id        String     @id @default(cuid())
+  requestId String
+  dept      String
+  nextEmail String
+  nextName  String?
+  token     String     @unique
+  createdAt DateTime   @default(now())
+  request   AirRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, dept])
 }
 
 model ClaimApproval {
