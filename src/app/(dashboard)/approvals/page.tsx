@@ -60,7 +60,9 @@ export default function ApprovalsPage() {
     if (role === "DPM_GW" || role === "VP_MER_GW") return (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail || r.status === "PENDING_DPM_GW")
     if (role === "GM_GW") return r.status === "PENDING_GM_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "PRESIDENT_GW") return r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
-    if (role === "LOGISTICS_GW") return (r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
+    // Logistics ∥ Claim run in parallel after President → doc sits at
+    // PENDING_CLAIM_GW while LG still needs to enter HAWB data. Include it.
+    if (role === "LOGISTICS_GW") return (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
