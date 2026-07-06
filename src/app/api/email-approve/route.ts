@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
         where: { id: request.id },
         data: { status: "PENDING_PRESIDENT_GW", vpMerToken: null }
       })
-      notifyStatusChange(request.id, "PENDING_PRESIDENT_GW").catch(() => {})
+      await notifyStatusChange(request.id, "PENDING_PRESIDENT_GW").catch(() => {})
     } else {
       await prisma.airRequest.update({
         where: { id: request.id },
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
           }
         }
       })
-      notifyStatusChange(request.id, "PENDING_SCM").catch(() => {})
+      await notifyStatusChange(request.id, "PENDING_SCM").catch(() => {})
     }
     return NextResponse.redirect(`${APP_URL}/requests/${request.id}?msg=approved`)
   }
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
         }
       }
     })
-    notifyStatusChange(request.id, "REJECTED").catch(() => {})
+    await notifyStatusChange(request.id, "REJECTED").catch(() => {})
     return NextResponse.redirect(`${APP_URL}/requests/${request.id}?msg=rejected`)
   }
 

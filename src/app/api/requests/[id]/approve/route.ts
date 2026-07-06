@@ -163,7 +163,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       } else {
         await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PENDING" } })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_GM_GW" } })
-        notifyStatusChange(id, "PENDING_GM_GW").catch(() => {})
+        await notifyStatusChange(id, "PENDING_GM_GW").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
@@ -189,7 +189,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       } else {
         await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PENDING" } })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_PRESIDENT_GW" } })
-        notifyStatusChange(id, "PENDING_PRESIDENT_GW").catch(() => {})
+        await notifyStatusChange(id, "PENDING_PRESIDENT_GW").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // Open Logistics ∥ Claim in parallel. PENDING_LOGISTICS_GW notify still
         // alerts LG + Claim depts + Accounting; the doc sits at the parallel stage.
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_CLAIM_GW" } })
-        notifyStatusChange(id, "PENDING_LOGISTICS_GW").catch(() => {})
+        await notifyStatusChange(id, "PENDING_LOGISTICS_GW").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
@@ -248,11 +248,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (vpMerPassedCount === 0) {
         // All styles rejected
         await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED" } })
-        notifyStatusChange(id, "REJECTED").catch(() => {})
+        await notifyStatusChange(id, "REJECTED").catch(() => {})
       } else {
         // Keep VP_MER_PASSED items — President will approve them per style
         await (prisma.airRequest as any).update({ where: { id }, data: { status: "PENDING_PRESIDENT", presidentToken: crypto.randomUUID() } })
-        notifyStatusChange(id, "PENDING_PRESIDENT").catch(() => {})
+        await notifyStatusChange(id, "PENDING_PRESIDENT").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
@@ -282,7 +282,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const presPassedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
       if (presPassedCount === 0) {
         await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED" } })
-        notifyStatusChange(id, "REJECTED").catch(() => {})
+        await notifyStatusChange(id, "REJECTED").catch(() => {})
       } else {
         // Reset PRES_PASSED → PENDING for SCM to assign claim dept + VP SCM
         await prisma.airRequestItem.updateMany({
@@ -290,8 +290,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { itemStatus: "PENDING" }
         })
         await (prisma.airRequest as any).update({ where: { id }, data: { status: "PENDING_SCM", scmToken: crypto.randomUUID(), vpScmToken: crypto.randomUUID(), logisticsToken: crypto.randomUUID(), accountingToken: crypto.randomUUID() } })
-        notifyStatusChange(id, "PENDING_SCM").catch(() => {})
-        notifyStatusChange(id, "PRESIDENT_APPROVED_NYG").catch(() => {})
+        await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
+        await notifyStatusChange(id, "PRESIDENT_APPROVED_NYG").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
@@ -360,7 +360,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const newStatus = await recalcDocStatus(id)
     if (newStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
-      notifyStatusChange(id, newStatus).catch(() => {})
+      await notifyStatusChange(id, newStatus).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -394,7 +394,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { itemStatus: "PENDING" }
         })
         await prisma.airRequest.update({ where: { id }, data: { status: statusMap.approve } })
-        notifyStatusChange(id, statusMap.approve).catch(() => {})
+        await notifyStatusChange(id, statusMap.approve).catch(() => {})
       }
     }
 
@@ -480,10 +480,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: "PENDING_SCM", toStatus: nextStatus, comment }
     })
-    if (nextStatus !== "PENDING_SCM") notifyStatusChange(id, nextStatus).catch(() => {})
+    if (nextStatus !== "PENDING_SCM") await notifyStatusChange(id, nextStatus).catch(() => {})
     // Notify VP SCM only on first assignment or when changed to a different person
     if (assignedVpScm && (request as any).assignedVpScm !== assignedVpScm) {
-      notifyStatusChange(id, "SCM_ASSIGNED_VP_SCM").catch(() => {})
+      await notifyStatusChange(id, "SCM_ASSIGNED_VP_SCM").catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -534,7 +534,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const vpPassedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "VP_PASSED" } })
       if (vpPassedCount === 0) {
         await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED" } })
-        notifyStatusChange(id, "REJECTED").catch(() => {})
+        await notifyStatusChange(id, "REJECTED").catch(() => {})
       } else {
         // Convert VP_PASSED → LOG_PASSED so Claim page can pick them up (LG data already filled in parallel)
         await prisma.airRequestItem.updateMany({
@@ -542,7 +542,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { itemStatus: "LOG_PASSED" }
         })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_CLAIM" } })
-        notifyStatusChange(id, "PENDING_CLAIM").catch(() => {})
+        await notifyStatusChange(id, "PENDING_CLAIM").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
@@ -584,7 +584,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const nextStatus = await recalcDocStatusGW(id)
     if (nextStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextStatus } })
-      notifyStatusChange(id, nextStatus).catch(() => {})
+      await notifyStatusChange(id, nextStatus).catch(() => {})
     }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: nextStatus, comment }
@@ -612,7 +612,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-      notifyStatusChange(id, nextDocStatus).catch(() => {})
+      await notifyStatusChange(id, nextDocStatus).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -647,7 +647,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const newStatus = await recalcDocStatus(id)
     if (newStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
-      notifyStatusChange(id, newStatus).catch(() => {})
+      await notifyStatusChange(id, newStatus).catch(() => {})
     }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: newStatus, comment }
@@ -725,7 +725,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const newStatus = await recalcDocStatus(id)
     await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
     // Alert SCM (re-select claim dept). PENDING_SCM notify targets the SCM user.
-    if (newStatus === "PENDING_SCM") notifyStatusChange(id, "PENDING_SCM").catch(() => {})
+    if (newStatus === "PENDING_SCM") await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -745,7 +745,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const newStatus = await recalcDocStatus(id)
     if (newStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
-      notifyStatusChange(id, newStatus).catch(() => {})
+      await notifyStatusChange(id, newStatus).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -789,7 +789,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const nextDocStatus = isGW ? await recalcDocStatusGW(id) : await recalcDocStatus(id)
     if (nextDocStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-      notifyStatusChange(id, nextDocStatus).catch(() => {})
+      await notifyStatusChange(id, nextDocStatus).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -810,7 +810,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-    notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
+    await notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -833,7 +833,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-      if (nextDocStatus === "PENDING_CLAIM_GW") notifyStatusChange(id, "PENDING_CLAIM_GW").catch(() => {})
+      if (nextDocStatus === "PENDING_CLAIM_GW") await notifyStatusChange(id, "PENDING_CLAIM_GW").catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -876,11 +876,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         await prisma.airRequest.update({ where: { id }, data: { assignedScmNykEvp: body.evpEmail || null, assignedScmNykCr: body.crEmail || null } as any })
       }
       // Approver's approval → alert the chosen EVP + CR user (with LG data) in parallel.
-      if (userRole === "SCM_NYK_APPROVER") notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+      if (userRole === "SCM_NYK_APPROVER") await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
       const nextDocStatus = await recalcDocStatusGW(id)
       if (nextDocStatus !== request.status) {
         await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-        notifyStatusChange(id, nextDocStatus).catch(() => {})
+        await notifyStatusChange(id, nextDocStatus).catch(() => {})
       }
       return NextResponse.json(await getUpdated())
     }
@@ -935,7 +935,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const nextDocStatus = await recalcDocStatusGW(id)
       if (nextDocStatus !== request.status) {
         await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-        notifyStatusChange(id, nextDocStatus).catch(() => {})
+        await notifyStatusChange(id, nextDocStatus).catch(() => {})
       }
     } else {
       await prisma.approvalLog.create({
@@ -991,7 +991,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const next = isGW ? await recalcDocStatusGW(id) : await recalcDocStatus(id)
     if (next !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: next } })
-      notifyStatusChange(id, next).catch(() => {})
+      await notifyStatusChange(id, next).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -1051,11 +1051,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
         await prisma.airRequest.update({ where: { id }, data: { assignedScmNykEvp: body.evpEmail || null, assignedScmNykCr: body.crEmail || null } as any })
       }
-      if (userRole === "SCM_NYK_APPROVER") notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+      if (userRole === "SCM_NYK_APPROVER") await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
       const newStatus = await recalcDocStatus(id)
       if (newStatus !== request.status) {
         await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
-        notifyStatusChange(id, newStatus).catch(() => {})
+        await notifyStatusChange(id, newStatus).catch(() => {})
       }
       return NextResponse.json(await getUpdated())
     }
@@ -1118,7 +1118,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const newStatus = await recalcDocStatus(id)
       if (newStatus !== request.status) {
         await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
-        notifyStatusChange(id, newStatus).catch(() => {})
+        await notifyStatusChange(id, newStatus).catch(() => {})
       }
     } else {
       await prisma.approvalLog.create({
@@ -1149,7 +1149,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   })
 
   if (upd.status && upd.status !== request.status) {
-    notifyStatusChange(id, upd.status).catch(() => {})
+    await notifyStatusChange(id, upd.status).catch(() => {})
   }
 
   return NextResponse.json(await getUpdated())

@@ -119,7 +119,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const stillPending = nonRej.some(i => i.itemStatus === "LOG_PASSED")
     if (!stillPending) {
       await prisma.airRequest.update({ where: { id }, data: { status: "COMPLETED" } })
-      notifyClaimFinalToAccounting(id).catch(() => {})
+      await notifyClaimFinalToAccounting(id).catch(() => {})
       generateAndSavePdfs(id).catch(() => {})
     }
 
