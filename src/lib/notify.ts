@@ -260,7 +260,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
           <th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">INV NO.</th><th style="padding:6px 10px;text-align:left">HAWB#</th><th style="padding:6px 10px;text-align:right">Actual Air (THB)</th><th style="padding:6px 10px;text-align:right">NYK Claim (THB)</th>
         </tr></thead><tbody>${rows}</tbody></table>`
       const sendNyk = async (role: string, tokenField: string, subject: string, intro: string) => {
-        const users = await (prisma.user as any).findMany({ where: { role, isActive: true }, select: { email: true } })
+        const users = await (prisma.user as any).findMany({ where: { role, isActive: true, bu: (req as any).bu }, select: { email: true } })
         const emails = users.map((u: any) => u.email).filter(Boolean)
         if (!emails.length) return
         const token = (req as any)[tokenField]
@@ -375,7 +375,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const depts = new Set<string>()
       for (const it of req.items) getSplits(it).forEach(s => depts.add(s.dept))
       for (const g of gwClaimGroups(depts, req)) {
-        const where: any = { role: g.role, isActive: true }
+        const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
         if (g.claimDept) where.claimDepartment = g.claimDept
         const us = await (prisma.user as any).findMany({ where, select: { email: true } })
         const em = us.map((u: any) => u.email).filter(Boolean)
@@ -461,7 +461,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const link = `${APP_URL}/requests/${requestId}`
       // Each group = a claim dept's people (GW≠SUPPLIER via claimDepartment).
       for (const g of groups) {
-        const where: any = { role: g.role, isActive: true }
+        const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
         if (g.claimDept) where.claimDepartment = g.claimDept
         const users = await (prisma.user as any).findMany({ where, select: { email: true } })
         const recipients = users.map((u: any) => u.email).filter(Boolean)

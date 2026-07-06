@@ -231,9 +231,11 @@ export default function RequestDetailPage() {
 
   useEffect(() => {
     if (!role) return
-    // GW claim roles use their own role as the priority group.
+    // GW claim roles use their own role as the priority group — scoped to the doc's BU
+    // (SCM_NYK_* / SCM_NYG exist in both NYG & GW, so filter by BU to avoid cross-BU people).
     if (["CLAIM_GW", "SCM_NYK", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(role)) {
-      fetch(`/api/users/by-role?role=${role}`).then(r => r.json()).then(setClaimApproversList)
+      const buParam = req?.bu ? `&bu=${req.bu}` : ""
+      fetch(`/api/users/by-role?role=${role}${buParam}`).then(r => r.json()).then(setClaimApproversList)
       return
     }
     const isDvm = role.startsWith("DVM_") || role.startsWith("CLAIM_")
@@ -243,7 +245,7 @@ export default function RequestDetailPage() {
       const groupRole = isDvm ? `DVM_${dept}` : `VP_${dept}`
       fetch(`/api/users/by-role?role=${groupRole}`).then(r => r.json()).then(setClaimApproversList)
     }
-  }, [role])
+  }, [role, req?.bu])
 
   // Initial popup for CLAIM_NEXT_APPROVER: once per page load
   // PROCUREMENT dept → skip popup, set "send_boss" intent (auto-forward to VP after all approved)

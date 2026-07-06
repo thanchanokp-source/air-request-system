@@ -80,8 +80,9 @@ export const authOptions: NextAuthOptions = {
           for (const [field, gwRole] of [["claimGwToken", "CLAIM_GW"], ["scmNykApproverToken", "SCM_NYK_APPROVER"], ["scmNykEvpToken", "SCM_NYK_EVP"], ["scmNykToken", "SCM_NYK"], ["scmNygToken", "SCM_NYG"]] as const) {
             const cReq = await (prisma.airRequest as any).findFirst({ where: { [field]: token } })
             if (cReq) {
-              const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true } })
-              if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, bu: "GW", claimDepartment: (u as any).claimDepartment ?? null, priority: (u as any).priority ?? null }
+              // Scope to the document's BU — SCM roles exist in both NYG & GW.
+              const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true, bu: cReq.bu } })
+              if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (u as any).claimDepartment ?? null, priority: (u as any).priority ?? null }
               return null
             }
           }

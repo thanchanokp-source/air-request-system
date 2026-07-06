@@ -889,9 +889,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "No claim portion for this department awaiting approval" }, { status: 400 })
     }
 
-    // Priority chain for this role — all lower-priority approvers must go first.
+    // Priority chain for this role (scoped to the doc's BU — SCM roles exist in both).
     const allApprovers = await (prisma.user as any).findMany({
-      where: { role: userRole, isActive: true, priority: { not: null } },
+      where: { role: userRole, isActive: true, priority: { not: null }, bu: request.bu },
       orderBy: [{ priority: "asc" }, { createdAt: "asc" }]
     })
     const currentUser = allApprovers.find((u: any) => u.id === userId)
