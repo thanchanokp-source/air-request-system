@@ -2488,6 +2488,8 @@ export default function RequestDetailPage() {
             // NYK: SCM_NYK (CR user) never approves; SCM_NYK_EVP only after the Approver.
             const approverApprovedThisItem = (item.claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
             const nykBlocked = role === "SCM_NYK" || (role === "SCM_NYK_EVP" && !approverApprovedThisItem)
+            // SCM NYK Approver must pick BOTH the CR-entry person and EVP approver first.
+            const nykSelectionMissing = role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)
             const canApproveNow = isPending && !iHaveApproved && lowerApproved && !nykBlocked
             // Next approver info
             const nextApprover = claimApproversList.find((u: any) =>
@@ -2546,7 +2548,8 @@ export default function RequestDetailPage() {
                             setDvmSelected(prev => { const n = new Set(prev); n.delete(item.id); return n })
                           } else { const err = await res.json(); alert(err.error || "Error") }
                           setSubmitting(null)
-                        }} disabled={isSub}
+                        }} disabled={isSub || nykSelectionMissing}
+                        title={nykSelectionMissing ? "Select the CR-entry person and the VP/EVP approver first" : ""}
                         className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
                         {isSub ? "..." : "Approve"}
                       </button>
@@ -2668,7 +2671,8 @@ export default function RequestDetailPage() {
             <div className="sticky bottom-4 bg-white border border-blue-300 rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 flex-wrap z-10">
               <span className="text-sm font-semibold text-blue-700">{dvmSelected.size} SO selected</span>
               <button
-                disabled={submitting !== null}
+                disabled={submitting !== null || (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp))}
+                title={role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp) ? "Select the CR-entry person and the VP/EVP approver first" : ""}
                 onClick={async () => {
                   if (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)) { alert("Select the CR-entry person and the VP/EVP approver first."); return }
                   const ids = [...dvmSelected]
