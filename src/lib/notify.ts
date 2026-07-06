@@ -332,6 +332,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     if (newStatus === "PENDING_GM_GW") {
       const gmUsers = await (prisma.user as any).findMany({ where: { role: "GM_GW", isActive: true }, select: { email: true } })
       const recipients = gmUsers.map((u: any) => u.email).filter(Boolean)
+      console.log(`[notify] PENDING_GM_GW → GM_GW active recipients: ${recipients.length ? recipients.join(", ") : "NONE (no active GM_GW user)"}`)
       if (!recipients.length) return
       const link = `${APP_URL}/requests/${requestId}`
       const token = (req as any).gmToken
@@ -346,6 +347,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     if (newStatus === "PENDING_PRESIDENT_GW") {
       const users = await (prisma.user as any).findMany({ where: { role: "PRESIDENT_GW", isActive: true }, select: { email: true } })
       const recipients = users.map((u: any) => u.email).filter(Boolean)
+      console.log(`[notify] PENDING_PRESIDENT_GW → PRESIDENT_GW active recipients: ${recipients.length ? recipients.join(", ") : "NONE (no active PRESIDENT_GW user)"}`)
       if (!recipients.length) return
       const link = `${APP_URL}/requests/${requestId}`
       const token = (req as any).presidentToken
