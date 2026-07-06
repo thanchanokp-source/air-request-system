@@ -569,6 +569,24 @@ export default function RequestDetailPage() {
     setSelectedStyles(new Set())
   }
 
+  const rejectSelectedStyles = async () => {
+    const toReject = styleGroups.filter(g => (g.status === "PENDING" || g.status === "PASSED" || (presidentNewFlow && g.status === "VP_MER_PASSED")) && selectedStyles.has(g.style)).map(g => g.style)
+    if (toReject.length === 0) return
+    const reason = window.prompt(`Reason for rejecting ${toReject.length} style(s):`)
+    if (reason == null || !reason.trim()) return
+    for (const style of toReject) {
+      setSubmitting(style)
+      const res = await fetch(`/api/requests/${id}/approve`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject_style", style, comment: reason.trim() })
+      })
+      if (res.ok) setReq(await res.json())
+      else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
+    }
+    setSubmitting(null)
+    setSelectedStyles(new Set())
+  }
+
   const rejectStyle = async (style: string) => {
     setSubmitting(style)
     const res = await fetch(`/api/requests/${id}/approve`, {
@@ -868,10 +886,16 @@ export default function RequestDetailPage() {
                 </label>
               )}
               {selectedStyles.size > 0 && (
+                <>
                 <button onClick={approveSelectedStyles} disabled={!!submitting}
                   className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
                   {submitting ? "..." : `Approve Selected (${selectedStyles.size})`}
                 </button>
+                <button onClick={rejectSelectedStyles} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
+                  {submitting ? "..." : `Reject Selected (${selectedStyles.size})`}
+                </button>
+                </>
               )}
             </div>
           </div>
@@ -1017,10 +1041,16 @@ export default function RequestDetailPage() {
                 </label>
               )}
               {selectedStyles.size > 0 && (
+                <>
                 <button onClick={approveSelectedStyles} disabled={!!submitting}
                   className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
                   {submitting ? "..." : `Approve Selected (${selectedStyles.size})`}
                 </button>
+                <button onClick={rejectSelectedStyles} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
+                  {submitting ? "..." : `Reject Selected (${selectedStyles.size})`}
+                </button>
+                </>
               )}
             </div>
           </div>
@@ -1244,10 +1274,16 @@ export default function RequestDetailPage() {
                 </label>
               )}
               {selectedStyles.size > 0 && (
+                <>
                 <button onClick={approveSelectedStyles} disabled={!!submitting}
                   className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
                   {submitting ? "..." : `Approve Selected (${selectedStyles.size})`}
                 </button>
+                <button onClick={rejectSelectedStyles} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
+                  {submitting ? "..." : `Reject Selected (${selectedStyles.size})`}
+                </button>
+                </>
               )}
             </div>
           </div>
