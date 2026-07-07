@@ -35,8 +35,9 @@ export default function NewRequestPage() {
 
   useEffect(() => {
     // GW first approver may be role DPM_GW or legacy VP_MER_GW — fetch both.
+    // Scope by BU so a NYG VP MER never shows up for a GW document (and vice versa).
     const roles = isGW ? ["DPM_GW", "VP_MER_GW"] : ["VP_MER"]
-    Promise.all(roles.map(r => fetch(`/api/users/by-role?role=${r}`).then(res => res.json()).catch(() => [])))
+    Promise.all(roles.map(r => fetch(`/api/users/by-role?role=${r}&bu=${userBu}`).then(res => res.json()).catch(() => [])))
       .then(results => {
         const seen = new Set<string>()
         const list: any[] = []
@@ -47,7 +48,7 @@ export default function NewRequestPage() {
         setVpMerUsers(list)
         if (list.length === 1) setVpMerSelected({ name: list[0].name, email: list[0].email })
       })
-  }, [isGW])
+  }, [isGW, userBu])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
