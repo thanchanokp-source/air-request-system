@@ -79,6 +79,14 @@ export default function NewRequestPage() {
       return
     }
 
+    // Skip fully-blank rows — templates often carry empty trailing rows (with
+    // formatting / data-validation) so the user doesn't have to delete them.
+    const rows = data.rows.filter((row: any) => Object.values(row).some((v: any) => v != null && String(v).trim() !== ""))
+    if (rows.length === 0) {
+      setError("No data rows found (all rows are empty). Please fill in the template")
+      return
+    }
+
     // ── 3. Per-row validation: completeness + formats. Collect ALL issues. ──
     const getVal = (row: any, key: string) => {
       const k = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase())
@@ -107,7 +115,7 @@ export default function NewRequestPage() {
     ).map(d => d.toUpperCase().replace(/\s+/g, " ").trim())
 
     const errs: string[] = []
-    data.rows.forEach((row: any, idx: number) => {
+    rows.forEach((row: any, idx: number) => {
       const so = getVal(row, "SO") || `Row ${idx + 2}`
       // completeness
       for (const f of perRowRequired) if (isEmpty(getVal(row, f))) errs.push(`SO ${so}: missing "${f}"`)
@@ -148,7 +156,7 @@ export default function NewRequestPage() {
       return
     }
 
-    setPreview(data.rows)
+    setPreview(rows)
   }
 
   async function handleSubmit(e: React.FormEvent) {
