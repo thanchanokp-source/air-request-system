@@ -2245,7 +2245,17 @@ export default function RequestDetailPage() {
                 onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
             </label>
           </div>
-          {/* SO list — expandable (President-style): click ▶ to see the claim split */}
+          {/* Counts + Select All (parity with SCM NYK) */}
+          <div className="flex items-center justify-end gap-4 text-xs font-medium">
+            <span className="text-yellow-600">{gwFwdItems.length} pending</span>
+            {gwFwdItems.length > 0 && (
+              <button onClick={() => setDvmSelected(dvmSelected.size === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}
+                className="text-blue-600 hover:underline">
+                {dvmSelected.size === gwFwdItems.length ? "Deselect All" : `Select All (${gwFwdItems.length})`}
+              </button>
+            )}
+          </div>
+          {/* SO list — checkbox + expandable full detail (same template as SCM NYK) */}
           <div className="space-y-2">
             {gwFwdItems.map((item: any) => {
               const sp = getSplits(item).find((s: any) => gwFwdSplitDepts.includes(s.dept))
@@ -2255,6 +2265,9 @@ export default function RequestDetailPage() {
               return (
                 <div key={item.id} className="rounded-xl border border-gray-200 overflow-hidden bg-white">
                   <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3">
+                    <input type="checkbox" checked={dvmSelected.has(item.id)}
+                      onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                      className="w-4 h-4 rounded border-gray-300 shrink-0 cursor-pointer accent-blue-600" />
                     <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
                     <span className="font-bold text-gray-800">{item.so}</span>
                     <span className="text-xs text-gray-500">{item.style} · qty {item.qtyRequestAir}</span>
@@ -2265,8 +2278,42 @@ export default function RequestDetailPage() {
                     </div>
                   </div>
                   {isExp && (
-                    <div className="border-t border-gray-100 bg-gray-50/50 p-3">
-                      <ClaimSplitTable item={item} highlightDept={gwFwdCanonicalDept} showCrNo={isNykClaimRole} />
+                    <div className="border-t border-gray-100 p-3 space-y-3">
+                      <div className="overflow-x-auto">
+                        <table className="text-xs w-full">
+                          <thead className="bg-gray-50">
+                            <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                              <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr className="hover:bg-gray-50">
+                              <td className="px-3 py-2 font-medium">{item.so}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
+                              <td className="px-3 py-2">{item.customerPO}</td>
+                              <td className="px-3 py-2">{item.description}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                              <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
+                              <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                              <td className="px-3 py-2">{fmtNum(item.grossWeight, 2)}</td>
+                              <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
+                              <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
+                              <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "-"}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
+                              <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
+                              <td className="px-3 py-2">{item.factory}</td>
+                              <td className="px-3 py-2">{item.country}</td>
+                              <td className="px-3 py-2">{item.port}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
+                        <ClaimSplitTable item={item} highlightDept={gwFwdCanonicalDept} showCrNo={isNykClaimRole} />
+                      </div>
                     </div>
                   )}
                 </div>
