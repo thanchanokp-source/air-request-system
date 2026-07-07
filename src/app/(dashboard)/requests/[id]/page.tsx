@@ -168,6 +168,8 @@ export default function RequestDetailPage() {
   const [claimFwdSaving, setClaimFwdSaving] = useState(false)
   const [procureDecision, setProcureDecision] = useState<"approve" | "forward" | null>(null)
   const [claimFwdDone, setClaimFwdDone] = useState<string|null>(null)
+  // Claim approver (NYG/GW/Supplier) action popup: forward to next person, or finish.
+  const [gwModalOpen, setGwModalOpen] = useState(false)
   // SCM NYK Approver picks the CR-entry person + VP/EVP approver (one per doc).
   const [nykCr, setNykCr] = useState<{name:string,email:string}|null>(null)
   const [nykEvp, setNykEvp] = useState<{name:string,email:string}|null>(null)
@@ -797,7 +799,7 @@ export default function RequestDetailPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700">← Back</button>
         <h1 className="text-xl font-bold text-gray-900">{req.documentNo}</h1>
-        {req.crNo && (
+        {req.crNo && isNykClaimRole && (
           <span className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
             CR NO: {req.crNo}
           </span>
@@ -2243,99 +2245,69 @@ export default function RequestDetailPage() {
                 onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
             </label>
           </div>
-          {/* SO list (read-only summary) */}
-          <div className="rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-gray-500">
-                <tr>
-                  <th className="px-3 py-2 text-left">SO</th><th className="px-3 py-2 text-left">STYLE</th>
-                  <th className="px-3 py-2 text-left">HAWB#</th><th className="px-3 py-2 text-right">ACTUAL AIR</th>
-                  <th className="px-3 py-2 text-right">MY CLAIM</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gwFwdItems.map((item: any) => {
-                  const sp = getSplits(item).find((s: any) => gwFwdSplitDepts.includes(s.dept))
-                  const actual = item.actualAirFreight ?? 0
-                  const amt = sp ? Math.round(actual * (Number(sp.pct) || 0) / 100) : 0
-                  return (
-                    <tr key={item.id} className="border-t border-gray-100">
-                      <td className="px-3 py-2 font-medium">{item.so}</td>
-                      <td className="px-3 py-2">{item.style}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "-"}</td>
-                      <td className="px-3 py-2 text-right">{actual.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-blue-700">{amt.toLocaleString()} <span className="text-gray-400">({sp?.pct ?? 0}%)</span></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          {/* SO list — expandable (President-style): click ▶ to see the claim split */}
+          <div className="space-y-2">
+            {gwFwdItems.map((item: any) => {
+              const sp = getSplits(item).find((s: any) => gwFwdSplitDepts.includes(s.dept))
+              const actual = item.actualAirFreight ?? 0
+              const amt = sp ? Math.round(actual * (Number(sp.pct) || 0) / 100) : 0
+              const isExp = expanded.has(item.id)
+              return (
+                <div key={item.id} className="rounded-xl border border-gray-200 overflow-hidden bg-white">
+                  <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3">
+                    <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
+                    <span className="font-bold text-gray-800">{item.so}</span>
+                    <span className="text-xs text-gray-500">{item.style} · qty {item.qtyRequestAir}</span>
+                    <div className="ml-auto flex items-center gap-4 text-xs flex-wrap">
+                      <span className="text-gray-500">HAWB# <b className="text-gray-700">{item.hawbNo || "-"}</b></span>
+                      <span className="text-gray-500">Actual <b className="text-gray-700">{actual.toLocaleString()}</b></span>
+                      <span className="text-blue-700 font-semibold">My claim {amt.toLocaleString()} ({sp?.pct ?? 0}%)</span>
+                    </div>
+                  </div>
+                  {isExp && (
+                    <div className="border-t border-gray-100 bg-gray-50/50 p-3">
+                      <ClaimSplitTable item={item} highlightDept={gwFwdCanonicalDept} showCrNo={isNykClaimRole} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
-          {/* Action bar: Finish or Forward */}
-          <div className="bg-white rounded-xl border border-blue-200 px-4 py-3">
-            <p className="text-xs font-semibold text-blue-700 uppercase tracking-widest mb-2">Choose an action</p>
-            <div className="flex flex-wrap items-center gap-3">
-              <button onClick={() => claimForward(true)} disabled={claimFwdSaving}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-40">
-                {claimFwdSaving ? "..." : `✓ Finish — Approve ${gwFwdCanonicalDept}`}
-              </button>
-              <span className="text-xs text-gray-400">or forward to</span>
-              <div className="relative flex items-center gap-2 flex-1 min-w-0">
-                {!claimFwdSelected ? (
-                  <div className="relative flex-1 min-w-0 max-w-sm">
-                    <div className="relative">
-                      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" /></svg>
-                      <input value={claimFwdQ}
-                        onChange={async e => {
-                          const q = e.target.value; setClaimFwdQ(q); setClaimFwdOpen(true)
-                          if (q.length < 2) { setClaimFwdResults([]); return }
-                          setClaimFwdLoading(true)
-                          try { const r = await fetch(`/api/people?q=${encodeURIComponent(q)}`); const data = await r.json(); setClaimFwdResults(Array.isArray(data) ? data : []) }
-                          catch { setClaimFwdResults([]) } finally { setClaimFwdLoading(false) }
-                        }}
-                        onFocus={() => setClaimFwdOpen(true)}
-                        onBlur={() => setTimeout(() => setClaimFwdOpen(false), 200)}
-                        placeholder="Search name or email..."
-                        className="w-full border border-gray-300 rounded-xl pl-9 pr-9 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition" />
-                      {claimFwdLoading && <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-300 border-t-transparent rounded-full animate-spin" />}
-                    </div>
-                    {claimFwdOpen && claimFwdQ.length >= 2 && (
-                      <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl z-50 w-96 max-w-[90vw] overflow-hidden">
-                        <div className="max-h-72 overflow-y-auto py-1.5">
-                          {claimFwdResults.length > 0 ? claimFwdResults.map((p: any, i: number) => (
-                            <div key={i} onMouseDown={() => { setClaimFwdSelected({ name: p.name, email: p.email }); setClaimFwdResults([]); setClaimFwdOpen(false) }}
-                              className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-blue-50 cursor-pointer transition-colors">
-                              <div className={`w-10 h-10 rounded-full ${avatarColor(p.name)} text-sm font-bold flex items-center justify-center shrink-0 select-none`}>{initialsOf(p.name)}</div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-semibold text-gray-800 truncate">{p.name || p.email}</p>
-                                <p className="text-xs text-gray-400 truncate">{p.email || "—"}</p>
-                                {(p.dept || p.pos) && <p className="text-[11px] text-gray-400 truncate">{[p.pos, p.dept].filter(Boolean).join(" · ")}{p.bu ? ` · ${p.bu}` : ""}</p>}
-                              </div>
-                            </div>
-                          )) : !claimFwdLoading && (
-                            <div className="px-4 py-6 text-center text-sm text-gray-400">No matching person</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl pl-2 pr-3 py-2 max-w-sm">
-                    <div className={`w-9 h-9 rounded-full ${avatarColor(claimFwdSelected.name)} text-xs font-bold flex items-center justify-center shrink-0 select-none`}>{initialsOf(claimFwdSelected.name)}</div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-blue-900 truncate leading-tight">{claimFwdSelected.name}</p>
-                      <p className="text-xs text-blue-400 truncate leading-tight">{claimFwdSelected.email}</p>
-                    </div>
-                    <button onClick={() => setClaimFwdSelected(null)} className="text-blue-300 hover:text-blue-600 shrink-0 text-lg leading-none">×</button>
-                  </div>
-                )}
-              </div>
-              <button onClick={() => claimForward(false)} disabled={!claimFwdSelected || claimFwdSaving}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 shrink-0">
-                {claimFwdSaving ? "Sending..." : "Forward →"}
-              </button>
+          {/* Approve All → opens the action popup (forward to next, or finish) */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={() => { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }} disabled={claimFwdSaving}
+              className="bg-green-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-40">
+              ✓ Approve All ({gwFwdItems.length} SO)
+            </button>
+            <p className="text-[11px] text-gray-400">Approve all SO of your department — then choose to forward to another approver, or finish the process.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Claim action popup — forward to next approver OR finish the process */}
+      {gwModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => !claimFwdSaving && setGwModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <h3 className="text-base font-bold text-gray-800">Approve — {gwFwdCanonicalDept}</h3>
+              <p className="text-xs text-gray-500 mt-1">Approving all {gwFwdItems.length} SO of your department. Forward to another approver first, or finish the process.</p>
             </div>
-            <p className="text-[11px] text-gray-400 mt-2"><b>Finish</b> = complete your department's claim (→ Accounting when all depts + logistics done). <b>Forward</b> = send to another person to approve first; they can finish or forward again.</p>
+            <PersonPicker label="Forward to" selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder="Type a name (leave empty to finish)..." />
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button onClick={() => setGwModalOpen(false)} disabled={claimFwdSaving}
+                className="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40">Cancel</button>
+              {claimFwdSelected ? (
+                <button onClick={async () => { await claimForward(false); setGwModalOpen(false) }} disabled={claimFwdSaving}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+                  {claimFwdSaving ? "..." : `Done → Forward to ${claimFwdSelected.name}`}
+                </button>
+              ) : (
+                <button onClick={async () => { await claimForward(true); setGwModalOpen(false) }} disabled={claimFwdSaving}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-40">
+                  {claimFwdSaving ? "..." : "Done — Finish process"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -2658,7 +2630,7 @@ export default function RequestDetailPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
-                      <ClaimSplitTable item={item} highlightDept={claimDept || null} />
+                      <ClaimSplitTable item={item} highlightDept={claimDept || null} showCrNo={isNykClaimRole} />
                     </div>
                   </div>
                 )}
@@ -2913,7 +2885,7 @@ export default function RequestDetailPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
-                      <ClaimSplitTable item={item} highlightDept={claimDept || null} />
+                      <ClaimSplitTable item={item} highlightDept={claimDept || null} showCrNo={isNykClaimRole} />
                     </div>
                   </div>
                 )}
@@ -3206,7 +3178,7 @@ export default function RequestDetailPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
-                      <ClaimSplitTable item={item} highlightDept={role === "SCM_NYK" ? "NYK" : role === "SCM_NYG" ? "NYG" : null} />
+                      <ClaimSplitTable item={item} highlightDept={role === "SCM_NYK" ? "NYK" : role === "SCM_NYG" ? "NYG" : null} showCrNo={isNykClaimRole} />
                     </div>
                   </div>
                 )}

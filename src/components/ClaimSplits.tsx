@@ -32,7 +32,7 @@ export function ClaimSplitBadges({ item }: { item: any }) {
 }
 
 // Full breakdown table — dept, %, air cost, reason, status.
-export function ClaimSplitTable({ item, highlightDept }: { item: any; highlightDept?: string | null }) {
+export function ClaimSplitTable({ item, highlightDept, showCrNo = false }: { item: any; highlightDept?: string | null; showCrNo?: boolean }) {
   const splits = getSplits(item)
   if (splits.length === 0) return <span className="text-gray-300 text-xs">No claim data</span>
   const sumPct = totalPct(splits)
@@ -42,7 +42,7 @@ export function ClaimSplitTable({ item, highlightDept }: { item: any; highlightD
       <table className="text-xs w-full">
         <thead className="bg-gray-50">
           <tr>
-            {["CLAIM DEPT", "% CLAIM", "AIR COST (THB)", "REASON", "STATUS"].map(h => (
+            {["CLAIM DEPT", "% CLAIM", "AIR COST (THB)", "REASON", ...(showCrNo ? ["CR NO"] : []), "STATUS"].map(h => (
               <th key={h} className="px-3 py-1.5 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -57,6 +57,7 @@ export function ClaimSplitTable({ item, highlightDept }: { item: any; highlightD
                 <td className="px-3 py-1.5">{s.pct}%</td>
                 <td className="px-3 py-1.5 font-semibold text-green-700">{fmt(splitAirCost(item, s))}</td>
                 <td className="px-3 py-1.5 text-gray-500">{s.reason || "-"}</td>
+                {showCrNo && <td className="px-3 py-1.5 font-medium text-blue-700">{s.crNo || "-"}</td>}
                 <td className="px-3 py-1.5">{st ? <span className={`px-2 py-0.5 rounded-full ${st.cls}`}>{st.text}</span> : "-"}</td>
               </tr>
             )
@@ -65,7 +66,7 @@ export function ClaimSplitTable({ item, highlightDept }: { item: any; highlightD
             <td className="px-3 py-1.5">Total</td>
             <td className={`px-3 py-1.5 ${sumPct !== 100 ? "text-red-600" : ""}`}>{sumPct}%</td>
             <td className="px-3 py-1.5 text-green-700">{fmt(sumCost)}</td>
-            <td className="px-3 py-1.5" colSpan={2}>{sumPct !== 100 ? "⚠ Total must = 100%" : ""}</td>
+            <td className="px-3 py-1.5" colSpan={showCrNo ? 3 : 2}>{sumPct !== 100 ? "⚠ Total must = 100%" : ""}</td>
           </tr>
         </tbody>
       </table>
