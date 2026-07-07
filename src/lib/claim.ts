@@ -120,8 +120,9 @@ export function expandClaimDept(dept: string): string[] {
 // free name search, but the position is enforced). The LAST position finishes
 // the process. Single-position depts (GW / SUPPLIER) finish immediately.
 //   SCM NYK keeps its own 3-role sub-flow (not a linear chain) — excluded here.
-export type ClaimPosition = { label: string; factoryBased?: boolean }
+export type ClaimPosition = { label: string; factoryBased?: boolean; branch?: boolean }
 export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
+  // ── GW ──
   "SCM NYG": [
     { label: "SCM NYG" },
     { label: "VP SCM NYG" },
@@ -130,6 +131,28 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
   ],
   "GW": [{ label: "GW" }],
   "SUPPLIER": [{ label: "SUPPLIER" }],
+  // ── NYG ──
+  "COMMERCIAL": [
+    { label: "Claim Commercial" },
+    { label: "VP Commercial" },
+  ],
+  "PRODUCTION": [
+    { label: "Claim Production" },
+    { label: "VP PROD", factoryBased: true },
+    { label: "EVP" },
+  ],
+  "PROCUREMENT": [
+    { label: "Procurement DPM/DVM", branch: true }, // step 0: choose Purchasing / Sourcing
+    { label: "Approver" },                            // step 1: "<branch> Approver"
+    { label: "VP Procurement" },                      // step 2 → done
+  ],
+}
+
+export const PROCUREMENT_BRANCHES = ["Purchasing", "Sourcing"]
+
+// Does the position at `pos` require choosing a branch (Purchasing / Sourcing)?
+export function positionHasBranch(dept: string, pos: number): boolean {
+  return !!chainFor(dept)[pos]?.branch
 }
 
 export function chainFor(dept: string): ClaimPosition[] {
@@ -147,8 +170,8 @@ export function vpProdGroup(factory: string | null | undefined): string | null {
 }
 
 // The label for the NEXT position after `currentPos` (null = chain finished here).
-// For a factory-based position, appends the group derived from `factory`.
-export function nextPositionLabel(dept: string, currentPos: number, factory?: string | null): string | null {
+// factory-based → append G-group; after a branch step → prefix the branch name.
+export function nextPositionLabel(dept: string, currentPos: number, factory?: string | null, branch?: string | null): string | null {
   const chain = chainFor(dept)
   const next = chain[currentPos + 1]
   if (!next) return null
@@ -156,6 +179,8 @@ export function nextPositionLabel(dept: string, currentPos: number, factory?: st
     const g = vpProdGroup(factory)
     return g ? `${next.label} (${g})` : `${next.label} (select factory group)`
   }
+  // The step right after a branch-choice position is the "<branch> Approver".
+  if (chain[currentPos]?.branch && branch) return `${branch} ${next.label}`
   return next.label
 }
 

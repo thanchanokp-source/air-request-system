@@ -121,6 +121,7 @@ model ClaimForward {
   nextName  String?
   token     String     @unique
   position  Int        @default(0)
+  branch    String?
   createdAt DateTime   @default(now())
   request   AirRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 

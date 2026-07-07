@@ -8,7 +8,7 @@ import { ROLE_ACTIONS, STATUS_LABELS, STYLE_APPROVER_STATUSES } from "@/types"
 import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, positionHasBranch, PROCUREMENT_BRANCHES } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -170,6 +170,7 @@ export default function RequestDetailPage() {
   const [claimFwdDone, setClaimFwdDone] = useState<string|null>(null)
   // Claim approver (NYG/GW/Supplier) action popup: forward to next person, or finish.
   const [gwModalOpen, setGwModalOpen] = useState(false)
+  const [gwBranchChoice, setGwBranchChoice] = useState<string | null>(null)
   // SCM NYK Approver picks the CR-entry person + VP/EVP approver (one per doc).
   const [nykCr, setNykCr] = useState<{name:string,email:string}|null>(null)
   const [nykEvp, setNykEvp] = useState<{name:string,email:string}|null>(null)
@@ -410,26 +411,38 @@ export default function RequestDetailPage() {
   // ── GW per-department forward model: each dept finishes OR forwards its own
   // splits independently. Owner = CLAIM_GW / SCM_NYG (NOT NYK — CR flow). Next =
   // a forwarded CLAIM_NEXT_APPROVER scoped to a dept via its session dept.
+  // Forced-position claim chain — works for BOTH BU (GW + NYG). Entry roles:
+  //   GW:  CLAIM_GW (GW/SUPPLIER), SCM_NYG      NYG: CLAIM_COMMERCIAL/PRODUCTION/PROCUREMENT
+  //   plus a forwarded CLAIM_NEXT_APPROVER (scoped to dept + position via ClaimForward).
   const gwFwdCanonicalDept: string | null =
     role === "CLAIM_NEXT_APPROVER" ? (myClaimDept || null)
     : role === "CLAIM_GW" ? (myClaimDept === "SUPPLIER" ? "SUPPLIER" : "GW")
     : role === "SCM_NYG" ? "SCM NYG"
+    : role === "CLAIM_COMMERCIAL" ? "COMMERCIAL"
+    : role === "CLAIM_PRODUCTION" ? "PRODUCTION"
+    : role === "CLAIM_PROCUREMENT" ? "PROCUREMENT"
     : null
   const gwFwdSplitDepts = gwFwdCanonicalDept === "SUPPLIER"
     ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
     : gwFwdCanonicalDept ? [gwFwdCanonicalDept] : []
-  const isGwForwardRole = isGWRequest && req?.status === "PENDING_CLAIM_GW" &&
-    ((role === "CLAIM_GW" || role === "SCM_NYG") || role === "CLAIM_NEXT_APPROVER")
+  const fwdEntryRole = isGWRequest
+    ? (role === "CLAIM_GW" || role === "SCM_NYG")
+    : (role === "CLAIM_COMMERCIAL" || role === "CLAIM_PRODUCTION" || role === "CLAIM_PROCUREMENT")
+  const isGwForwardRole = req?.status === (isGWRequest ? "PENDING_CLAIM_GW" : "PENDING_CLAIM") &&
+    (fwdEntryRole || role === "CLAIM_NEXT_APPROVER")
+  const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED"]
   const gwFwdItems = isGwForwardRole
-    ? (req?.items || []).filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) &&
-        getSplits(i).some((s: any) => gwFwdSplitDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED"))
+    ? (req?.items || []).filter((i: any) => fwdItemStatuses.includes(i.itemStatus) &&
+        getSplits(i).some((s: any) => gwFwdSplitDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "COMPLETED" && s.status !== "REJECTED"))
     : []
   const showGwFinishForward = isGwForwardRole && gwFwdSplitDepts.length > 0 && gwFwdItems.length > 0 && !claimFwdDone
-  // Forced-position chain: current position + what the next required position is.
+  // Current position + next required position (with factory / branch context).
   const myFwdRow = (req?.claimForwards || []).find((f: any) => f.dept === gwFwdCanonicalDept && f.nextEmail === (session?.user as any)?.email)
   const gwCurrentPos = role === "CLAIM_NEXT_APPROVER" ? (myFwdRow?.position ?? 0) : 0
+  const gwBranch: string | null = myFwdRow?.branch || null
   const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos) : true
-  const gwNextPosLabel = gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFwdItems[0]?.factory) : null
+  const gwNeedsBranch = gwFwdCanonicalDept ? positionHasBranch(gwFwdCanonicalDept, gwCurrentPos) : false
+  const gwNextPosLabel = gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFwdItems[0]?.factory, gwNeedsBranch ? gwBranchChoice : gwBranch) : null
   const myClaimItems = req?.items?.filter((i: any) => {
     const itemDeptList: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
       ? i.claimDepts.map((d: any) => d.dept)
@@ -658,19 +671,18 @@ export default function RequestDetailPage() {
     // department's splits and recomputes doc status centrally. NYG finish keeps
     // the legacy claim-forward path. Forward (both BU) → per-dept claim-forward.
     let res
-    if (final && isGWRequest) {
+    if (final) {
+      // Finish (final position) → finalize this dept's splits centrally (both BU).
       res = await fetch(`/api/requests/${id}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "finalize_claim_dept" })
       })
     } else {
-      const body = final
-        ? { final: true }
-        : { nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name }
+      // Forward to the next forced position (person = chosen name; branch for Procurement).
       res = await fetch(`/api/requests/${id}/claim-forward`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name, branch: gwNeedsBranch ? gwBranchChoice : undefined })
       })
     }
     if (res.ok) {
@@ -1746,7 +1758,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* PROCUREMENT decision gate — full-screen modal popup */}
-      {isProcureDvm && !procureDecision && !claimFwdDone && (() => {
+      {isProcureDvm && !procureDecision && !claimFwdDone && !showGwFinishForward && (() => {
         const fmtThb = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 })
         const activeItems = myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED")
         return (
@@ -1815,7 +1827,7 @@ export default function RequestDetailPage() {
       })()}
 
       {/* Claim Forward Section — P1 roles only; CLAIM_NEXT_APPROVER uses inline forward inside per-SO section */}
-      {isClaimP1ForForward && !claimFwdDone && (!isProcureDvm || procureDecision === "forward") && (() => {
+      {isClaimP1ForForward && !claimFwdDone && !showGwFinishForward && (!isProcureDvm || procureDecision === "forward") && (() => {
         const estTotal = myClaimItems.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
         const actTotal = myClaimItems.reduce((s: number, i: any) => {
           if (!claimDept) return s + (i.actualAirFreight || 0)
@@ -1922,7 +1934,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* CLAIM_NEXT_APPROVER per-SO approval (NYG legacy; GW uses the per-dept panel) */}
-      {isClaimNextApprover && !isGWRequest && !claimFwdDone && (() => {
+      {isClaimNextApprover && !isGWRequest && !claimFwdDone && !showGwFinishForward && (() => {
         // Use session claimDepartment (sourced from request.claimDepartment at login) to filter correct dept items
         const nextApproverDept = (session?.user as any)?.claimDepartment || (req as any).claimDepartment || null
         const nextItems = (req?.items || []).filter((i: any) =>
@@ -2352,10 +2364,28 @@ export default function RequestDetailPage() {
                 ✓ This is the final position. Approve to <b>finish the process</b> — the document proceeds when all departments and logistics are done.
               </div>
             ) : (
-              // Forced next position — must pick a person for it (name free, position fixed).
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-blue-800">Please select <span className="text-blue-900 underline">{gwNextPosLabel}</span> for approve <span className="text-red-500">*</span></p>
-                <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} />
+              // Forced next position — must pick a person (name free, position fixed).
+              // Procurement step 0 also forces choosing a branch (Purchasing / Sourcing).
+              <div className="space-y-3">
+                {gwNeedsBranch && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-semibold text-gray-600">Route to <span className="text-red-500">*</span></p>
+                    <div className="flex gap-2">
+                      {PROCUREMENT_BRANCHES.map((b: string) => (
+                        <button key={b} onClick={() => setGwBranchChoice(b)}
+                          className={`px-4 py-1.5 rounded-lg text-sm font-medium border ${gwBranchChoice === b ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                          {b}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(!gwNeedsBranch || gwBranchChoice) && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-blue-800">Please select <span className="text-blue-900 underline">{gwNextPosLabel}</span> for approve <span className="text-red-500">*</span></p>
+                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} />
+                  </div>
+                )}
               </div>
             )}
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
@@ -2367,7 +2397,7 @@ export default function RequestDetailPage() {
                   {claimFwdSaving ? "..." : "Done — Finish process"}
                 </button>
               ) : (
-                <button onClick={async () => { await claimForward(false); setGwModalOpen(false) }} disabled={!claimFwdSelected || claimFwdSaving}
+                <button onClick={async () => { await claimForward(false); setGwModalOpen(false) }} disabled={!claimFwdSelected || (gwNeedsBranch && !gwBranchChoice) || claimFwdSaving}
                   title={!claimFwdSelected ? `Select a person for ${gwNextPosLabel}` : ""}
                   className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
                   {claimFwdSaving ? "..." : "Forward →"}

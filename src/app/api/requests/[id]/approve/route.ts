@@ -954,7 +954,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // A claim department (owner role or a forwarded CLAIM_NEXT_APPROVER) finalizes
   // ITS OWN splits across the doc. Other departments are untouched (parallel,
   // independent). Works for both BU. SCM NYK keeps its own CR flow (excluded).
-  if (action === "finalize_claim_dept" && ["CLAIM_GW", "SCM_NYG", "CLAIM_NEXT_APPROVER"].includes(userRole)) {
+  if (action === "finalize_claim_dept" && ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER"].includes(userRole)) {
     const isGW = request.bu === "GW"
     const expected = isGW ? "PENDING_CLAIM_GW" : "PENDING_CLAIM"
     if (request.status !== expected) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })

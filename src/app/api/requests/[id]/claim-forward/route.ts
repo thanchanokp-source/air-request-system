@@ -47,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const forwarderName = (session.user as any).name || role
   const { id } = await params
   const body = await req.json()
-  const { final, nextEmail, nextName } = body
+  const { final, nextEmail, nextName, branch } = body
 
   // Must be a claim owner (master role) or a forwarded Claim Next Approver
   const isClaimP1 = (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_") || role === "SCM_NYK" || role === "SCM_NYG"
@@ -135,14 +135,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!nextEmail) return NextResponse.json({ error: "nextEmail required" }, { status: 400 })
     const nextPos = currentPos + 1
 
+    // Branch (Procurement Purchasing/Sourcing) is chosen at the branch position;
+    // carry the previously-chosen branch forward on later steps.
+    const branchVal = branch || null
     const token = randomBytes(32).toString("hex")
     await (prisma as any).claimForward.upsert({
       where: { requestId_dept: { requestId: id, dept: forwarderDept } },
-      create: { requestId: id, dept: forwarderDept, nextEmail, nextName: nextName || null, token, position: nextPos },
-      update: { nextEmail, nextName: nextName || null, token, position: nextPos },
+      create: { requestId: id, dept: forwarderDept, nextEmail, nextName: nextName || null, token, position: nextPos, branch: branchVal },
+      update: { nextEmail, nextName: nextName || null, token, position: nextPos, branch: branchVal },
     })
 
-    const posLabel = nextPositionLabel(forwarderDept, currentPos) || forwarderDept
+    const posLabel = nextPositionLabel(forwarderDept, currentPos, undefined, branchVal) || forwarderDept
     await notifyClaimNext(id, nextEmail, nextName || nextEmail, forwarderName, token, `${forwarderDept} — ${posLabel}`)
 
     return NextResponse.json({ ok: true, action: "forwarded", to: nextEmail, dept: forwarderDept, position: nextPos })
