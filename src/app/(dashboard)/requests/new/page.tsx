@@ -258,19 +258,22 @@ export default function NewRequestPage() {
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="font-semibold text-gray-800">Preview ({preview.length} rows)</h2>
+              <p className="text-xs text-gray-400 mt-0.5">All {preview.length} row(s) will be submitted — scroll to view.</p>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[520px]">
               <table className="w-full text-xs">
-                <thead className="bg-gray-50">
+                <thead className="bg-gray-50 sticky top-0 z-10">
                   <tr>
+                    <th className="text-left px-3 py-2 font-bold text-gray-800 whitespace-nowrap bg-gray-50">#</th>
                     {Object.keys(preview[0] || {}).map(k => (
-                      <th key={k} className="text-left px-3 py-2 font-bold text-gray-800 whitespace-nowrap">{k}</th>
+                      <th key={k} className="text-left px-3 py-2 font-bold text-gray-800 whitespace-nowrap bg-gray-50">{k}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {preview.slice(0, 10).map((row, i) => (
+                  {preview.map((row, i) => (
                     <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{i + 1}</td>
                       {Object.values(row).map((v: any, j) => (
                         <td key={j} className="px-3 py-2 text-gray-700 whitespace-nowrap">{v}</td>
                       ))}
