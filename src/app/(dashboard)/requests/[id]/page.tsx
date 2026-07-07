@@ -3913,7 +3913,7 @@ export default function RequestDetailPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Export */}
-                  <button type="button" onClick={() => {
+                  <button type="button" onClick={async () => {
                     const rows = pendingScmItems.map((item: any) => {
                       const d = soClaimDepts[item.id] || []
                       return {
@@ -3925,24 +3925,35 @@ export default function RequestDetailPage() {
                         "CLAIM DEPT 1": d[0]?.dept ? (CLAIM_DEPT_LABEL[d[0].dept] || d[0].dept) : "", "%CLAIM1": d[0]?.pct ?? "", "REASON 1": d[0]?.reason || "",
                         "CLAIM DEPT 2": d[1]?.dept ? (CLAIM_DEPT_LABEL[d[1].dept] || d[1].dept) : "", "%CLAIM2": d[1]?.pct ?? "", "REASON 2": d[1]?.reason || "",
                         "CLAIM DEPT 3": d[2]?.dept ? (CLAIM_DEPT_LABEL[d[2].dept] || d[2].dept) : "", "%CLAIM3": d[2]?.pct ?? "", "REASON 3": d[2]?.reason || ""
-                      }
+                      } as Record<string, any>
                     })
-                    const ws = XLSX.utils.json_to_sheet(rows)
-                    ws["!cols"] = [8,6,12,14,22,10,10,10,12,12,20,14,6,14,6,14,6,24].map(w => ({ wch: w }))
-                    // Dropdown validation for CLAIM DEPT column (L = index 11)
-                    ;(ws as any)["!datavalidations"] = [{
-                      sqref: `L2:L${rows.length + 1}`,
-                      type: "list",
-                      formula1: `"${CLAIM_DEPTS.join(",")}"`,
-                      showDropDown: false,
-                      showErrorMessage: true,
-                      errorStyle: "stop",
-                      errorTitle: "Invalid",
-                      error: `Please select from the list: ${CLAIM_DEPTS.join(", ")}`
-                    }]
-                    const wb = XLSX.utils.book_new()
-                    XLSX.utils.book_append_sheet(wb, ws, "SCM")
-                    XLSX.writeFile(wb, `scm-claim-dept_${req.documentNo}.xlsx`)
+                    // exceljs writes real Excel dropdown (data validation); SheetJS cannot.
+                    const ExcelJSMod: any = await import("exceljs")
+                    const ExcelJS = ExcelJSMod.default || ExcelJSMod
+                    const wb = new ExcelJS.Workbook()
+                    const ws = wb.addWorksheet("SCM")
+                    const headers = ["SO","SUB","STYLE","CUSTOMER PO","DESCRIPTION","QTY ORIG","QTY AIR","FACTORY","COUNTRY","PORT","MER REASON","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
+                    const widths = [8,6,12,14,22,10,10,10,12,12,20,16,7,16,16,7,16,16,7,16]
+                    ws.columns = headers.map((h, i) => ({ header: h, key: h, width: widths[i] }))
+                    ws.getRow(1).font = { bold: true }
+                    rows.forEach((r: Record<string, any>) => ws.addRow(r))
+                    // Dropdown on all 3 CLAIM DEPT columns → L / O / R
+                    const listFormula = `"${CLAIM_DEPTS.join(",")}"`
+                    for (let r = 2; r <= rows.length + 1; r++) {
+                      for (const col of ["L", "O", "R"]) {
+                        ws.getCell(`${col}${r}`).dataValidation = {
+                          type: "list", allowBlank: true, formulae: [listFormula],
+                          showErrorMessage: true, errorStyle: "error", errorTitle: "Invalid claim dept",
+                          error: `Please select from the list: ${CLAIM_DEPTS.join(", ")}`,
+                        }
+                      }
+                    }
+                    const buf = await wb.xlsx.writeBuffer()
+                    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement("a")
+                    a.href = url; a.download = `scm-claim-dept_${req.documentNo}.xlsx`; a.click()
+                    URL.revokeObjectURL(url)
                   }} className="flex items-center gap-1 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50">
                     ↓ Export Excel
                   </button>
