@@ -79,36 +79,73 @@ export default function NewRequestPage() {
       return
     }
 
-    // 3. Check whether WEIGHT(KG) has data in every row
+    // ── 3. Per-row validation: completeness + formats. Collect ALL issues. ──
     const getVal = (row: any, key: string) => {
       const k = Object.keys(row).find(k => k.toLowerCase() === key.toLowerCase())
       return k ? row[k] : null
     }
-    const missingWeight = data.rows.some((row: any) => {
-      const w = getVal(row, "WEIGHT(KG)")
-      return w === null || w === undefined || w === ""
-    })
-    if (missingWeight) {
-      setError("Please fill in the WEIGHT(KG) field")
-      return
+    // Valid date = a real Date/ISO (xlsx returns date cells as Date), or text
+    // dd/mm/yyyy, or text "dd Mmm yy" / "dd Mmm yyyy" (e.g. 18 Dec 25).
+    const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    const isValidDateVal = (v: any) => {
+      const s = String(v).trim()
+      if (!isNaN(new Date(s).getTime())) return true
+      const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/)
+      if (m) { const d = +m[1], mo = +m[2]; return d >= 1 && d <= 31 && mo >= 1 && mo <= 12 }
+      const m2 = s.match(/^(\d{1,2})[\s\-]+([A-Za-z]{3,})[\s\-]+(\d{2,4})$/) // 18 Dec 25
+      if (m2) { const d = +m2[1]; return d >= 1 && d <= 31 && MONTHS.includes(m2[2].slice(0, 3).toLowerCase()) }
+      return false
     }
+    const isEmpty = (v: any) => v == null || String(v).trim() === ""
+    // Fields required in EVERY row (Brand/BU are doc-level → checked via columns only).
+    const perRowRequired = required.filter(f => !["Brand name", "BU"].includes(f))
+    const numFields = ["QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "WEIGHT(KG)"]
+    const dateFields = ["Original Shipment Date", "Plan Shipment Date"]
+    const validDepts = (isGW
+      ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+      : ["COMMERCIAL", "PRODUCTION", "PROCUREMENT", "NYK", "SCM NYK"]
+    ).map(d => d.toUpperCase().replace(/\s+/g, " ").trim())
 
-    // 4. GW: the sum of %CLAIM1/2/3 for each SO that has a claim must = 100
-    if (isGW) {
-      for (let r = 0; r < data.rows.length; r++) {
-        const row = data.rows[r]
-        const depts = [1, 2, 3].map(n => String(getVal(row, `CLAIM DEPT ${n}`) || "").trim())
-        if (!depts.some(d => d)) continue // no claim in this row, skip
-        const sum = [1, 2, 3].reduce((a, n) => {
-          if (!depts[n - 1]) return a
-          return a + (parseFloat(String(getVal(row, `%CLAIM${n}`) ?? "")) || 0)
-        }, 0)
-        if (Math.round(sum) !== 100) {
-          const so = getVal(row, "SO") || `Row ${r + 2}`
-          setError(`SO ${so}: the sum of %CLAIM must = 100 (currently ${sum}%)`)
-          return
-        }
+    const errs: string[] = []
+    data.rows.forEach((row: any, idx: number) => {
+      const so = getVal(row, "SO") || `Row ${idx + 2}`
+      // completeness
+      for (const f of perRowRequired) if (isEmpty(getVal(row, f))) errs.push(`SO ${so}: missing "${f}"`)
+      // numbers
+      for (const f of numFields) {
+        const v = getVal(row, f)
+        if (!isEmpty(v) && isNaN(Number(String(v).replace(/,/g, "")))) errs.push(`SO ${so}: "${f}" must be a number (got "${v}")`)
       }
+      // dates
+      for (const f of dateFields) {
+        const v = getVal(row, f)
+        if (!isEmpty(v) && !isValidDateVal(v)) errs.push(`SO ${so}: "${f}" wrong date format (got "${v}")`)
+      }
+      // claim splits: dept spelling, % numeric, dept/% paired, sum = 100
+      const depts = [1, 2, 3].map(n => String(getVal(row, `CLAIM DEPT ${n}`) || "").trim())
+      if (depts.some(d => d)) {
+        let sum = 0
+        for (const n of [1, 2, 3]) {
+          const d = depts[n - 1]
+          const pctRaw = getVal(row, `%CLAIM${n}`)
+          const pctHas = !isEmpty(pctRaw)
+          if (d) {
+            if (!validDepts.includes(d.toUpperCase().replace(/\s+/g, " ").trim())) errs.push(`SO ${so}: CLAIM DEPT ${n} "${d}" not recognized (check spelling)`)
+            const pct = parseFloat(String(pctRaw ?? ""))
+            if (isNaN(pct)) errs.push(`SO ${so}: %CLAIM${n} must be a number (got "${pctRaw ?? ""}")`)
+            else sum += pct
+          } else if (pctHas) {
+            errs.push(`SO ${so}: %CLAIM${n} has a value but CLAIM DEPT ${n} is empty`)
+          }
+        }
+        if (Math.round(sum) !== 100) errs.push(`SO ${so}: sum of %CLAIM = ${sum}% (must be 100)`)
+      }
+    })
+
+    if (errs.length > 0) {
+      const shown = errs.slice(0, 40)
+      setError(`Found ${errs.length} issue(s) — please fix and re-upload:\n• ${shown.join("\n• ")}${errs.length > 40 ? `\n… and ${errs.length - 40} more` : ""}`)
+      return
     }
 
     setPreview(data.rows)
@@ -245,7 +282,11 @@ export default function NewRequestPage() {
           </div>
         )}
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-64 overflow-y-auto">
+            <p className="text-red-600 text-xs whitespace-pre-line leading-relaxed">{error}</p>
+          </div>
+        )}
 
         <div className="flex gap-3">
           <button
