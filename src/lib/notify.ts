@@ -154,6 +154,13 @@ ${EMAIL_HEAD}
                 </tr>
               </table>
               ${buttons}
+              <!-- Manual login fallback — for users who prefer to log in themselves -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px">
+                <tr><td align="center">
+                  <p style="margin:0 0 4px;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Or log in to the system with your account</p>
+                  <a href="${APP_URL}/login" style="color:#1e3a8a;font-size:12px;font-weight:600;font-family:Arial,sans-serif;text-decoration:underline">${APP_URL}/login</a>
+                </td></tr>
+              </table>
             </td>
           </tr>
           <!-- Footer -->
