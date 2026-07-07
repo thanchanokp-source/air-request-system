@@ -15,7 +15,7 @@ const GW_REQUIRED = [
   "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
   "Original Shipment Date", "Plan Shipment Date",
   "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
-  "Reason delay", "Factory", "Country", "Port", "WEIGHT(KG)",
+  "Factory", "Country", "Port", "WEIGHT(KG)",
   "Brand name", "BU",
 ]
 
