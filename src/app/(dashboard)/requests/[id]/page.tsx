@@ -3935,6 +3935,7 @@ export default function RequestDetailPage() {
                     const headers = ["SO","SUB","STYLE","CUSTOMER PO","DESCRIPTION","QTY ORIG","QTY AIR","FACTORY","COUNTRY","PORT","MER REASON","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
                     const widths = [8,6,12,14,22,10,10,10,12,12,20,16,7,16,16,7,16,16,7,16]
                     ws.columns = headers.map((h, i) => ({ header: h, key: h, width: widths[i] }))
+                    ws.getColumn(11).hidden = true // MER REASON (Reason delay from MER) — hidden, data kept
                     ws.getRow(1).font = { bold: true }
                     rows.forEach((r: Record<string, any>) => ws.addRow(r))
                     // Dropdown on all 3 CLAIM DEPT columns → L / O / R
