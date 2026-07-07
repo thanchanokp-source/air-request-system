@@ -49,6 +49,35 @@ const deptFromRole = (r: string) =>
   r.startsWith("CLAIM_") ? r.replace("CLAIM_","") :
   ["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION"].includes(r) ? r.replace("VP_","") : null
 
+// Bulletproof button — renders identically on Outlook Desktop (VML), Outlook Web,
+// and mobile. line-height (not padding) centers text so no engine breaks it.
+function emailButton(url: string, label: string, bg: string, width = 240): string {
+  return `
+<!--[if mso]>
+<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${url}" style="height:44px;v-text-anchor:middle;width:${width}px;" arcsize="18%" strokecolor="${bg}" fillcolor="${bg}">
+<w:anchorlock/>
+<center style="color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;">${label}</center>
+</v:roundrect>
+<![endif]-->
+<!--[if !mso]><!-- -->
+<a href="${url}" style="background-color:${bg};border-radius:8px;color:#ffffff;display:inline-block;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;line-height:44px;height:44px;text-align:center;text-decoration:none;width:${width}px;-webkit-text-size-adjust:none;mso-hide:all;">${label}</a>
+<!--<![endif]-->`
+}
+
+// Shared <head> — charset, mobile viewport, and MSO fixes (DPI, table spacing).
+const EMAIL_HEAD = `<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
+<style>
+  body,table,td,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}
+  table,td{mso-table-lspace:0pt;mso-table-rspace:0pt}
+  body{margin:0!important;padding:0!important;width:100%!important;background-color:#f1f5f9}
+  @media only screen and (max-width:480px){.email-card{width:100%!important}}
+</style>
+</head>`
+
 function buildHtml(req: any, newStatus: string, link: string, approveUrl?: string, rejectUrl?: string, magicLink?: string) {
   const statusLabel: Record<string,string> = {
     PENDING_VP_MER:"Pending VP MER", PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
@@ -63,46 +92,31 @@ function buildHtml(req: any, newStatus: string, link: string, approveUrl?: strin
   const totalSo = req.items?.length || 0
   const styles = [...new Set((req.items||[]).map((i:any) => i.style).filter(Boolean))].join(", ")
 
-  const openBtn = magicLink
-    ? `<a href="${magicLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif">Open Document in System →</a>`
-    : `<a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">Open Document →</a>`
+  const openBtn = emailButton(magicLink || link, magicLink ? "Open Document in System →" : "Open Document →", "#1e3a8a", 240)
 
   const buttons = approveUrl ? `
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px">
-      <tr>
-        <td align="center">
-          <table cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="padding-bottom:16px" colspan="3" align="center">
-                ${openBtn}
-              </td>
-            </tr>
-            <tr>
-              <td style="padding-right:12px">
-                <a href="${rejectUrl}" style="display:inline-block;background:#ef4444;color:#ffffff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1.5px;font-family:Arial,sans-serif">REJECT</a>
-              </td>
-              <td>
-                <a href="${approveUrl}" style="display:inline-block;background:#22c55e;color:#ffffff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1.5px;font-family:Arial,sans-serif">APPROVE</a>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px">
+      <tr><td align="center" style="padding-bottom:16px">${openBtn}</td></tr>
+      <tr><td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <td style="padding-right:8px">${emailButton(rejectUrl || link, "REJECT", "#ef4444", 120)}</td>
+          <td style="padding-left:8px">${emailButton(approveUrl, "APPROVE", "#22c55e", 120)}</td>
+        </tr></table>
+      </td></tr>
     </table>
   ` : `
-    <div style="text-align:center;margin-top:24px">
-      ${openBtn}
-    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px"><tr><td align="center">${openBtn}</td></tr></table>
   `
 
   return `
 <!DOCTYPE html>
-<html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+${EMAIL_HEAD}
 <body style="margin:0;padding:0;background-color:#f1f5f9">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:40px 0">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:40px 0">
     <tr>
       <td align="center">
-        <table width="400" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+        <table role="presentation" class="email-card" width="440" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;max-width:440px">
           <!-- Header -->
           <tr>
             <td style="background:#1e3a8a;padding:20px;text-align:center">
