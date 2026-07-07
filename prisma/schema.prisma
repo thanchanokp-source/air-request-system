@@ -89,6 +89,7 @@ model AirRequest {
   logisticsToken   String?
   accountingToken  String?
   claimGwToken     String?
+  claimSupplierToken String?
   scmNykToken      String?
   scmNykApproverToken String?
   scmNykEvpToken   String?

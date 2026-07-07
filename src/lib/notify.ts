@@ -224,7 +224,7 @@ function gwClaimGroups(depts: Set<string>, req: any): { role: string; label: str
   if (depts.has("SCM NYK")) groups.push({ role: "SCM_NYK_APPROVER", label: "SCM NYK", token: (req as any).scmNykApproverToken })
   if (depts.has("SCM NYG")) groups.push({ role: "SCM_NYG", label: "SCM NYG", token: (req as any).scmNygToken })
   if (depts.has("GW")) groups.push({ role: "CLAIM_GW", label: "GW", claimDept: "GW", token: (req as any).claimGwToken })
-  if ([...depts].some(d => ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"].includes(d))) groups.push({ role: "CLAIM_GW", label: "SUPPLIER", claimDept: "SUPPLIER", token: (req as any).claimGwToken })
+  if ([...depts].some(d => ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"].includes(d))) groups.push({ role: "CLAIM_GW", label: "SUPPLIER", claimDept: "SUPPLIER", token: (req as any).claimSupplierToken || (req as any).claimGwToken })
   return groups
 }
 

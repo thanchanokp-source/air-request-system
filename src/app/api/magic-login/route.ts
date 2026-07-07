@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
   const byLogistics  = byVpMer || byPresident || byScm || byVpScm ? null : await (prisma.airRequest as any).findFirst({ where: { logisticsToken: token } })
   const byAccounting = byVpMer || byPresident || byScm || byVpScm || byLogistics ? null : await (prisma.airRequest as any).findFirst({ where: { accountingToken: token } })
   const byClaimGw    = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting ? null : await (prisma.airRequest as any).findFirst({ where: { claimGwToken: token } })
-  const byScmNykAppr = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw ? null : await (prisma.airRequest as any).findFirst({ where: { scmNykApproverToken: token } })
+  const byClaimSup   = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw ? null : await (prisma.airRequest as any).findFirst({ where: { claimSupplierToken: token } })
+  const byScmNykAppr = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byClaimSup ? null : await (prisma.airRequest as any).findFirst({ where: { scmNykApproverToken: token } })
   const byScmNykEvp  = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr ? null : await (prisma.airRequest as any).findFirst({ where: { scmNykEvpToken: token } })
   const byScmNyk     = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp ? null : await (prisma.airRequest as any).findFirst({ where: { scmNykToken: token } })
   const byScmNyg     = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk ? null : await (prisma.airRequest as any).findFirst({ where: { scmNygToken: token } })
@@ -29,9 +30,9 @@ export async function GET(req: NextRequest) {
   // Per-department forward token (ClaimForward)
   const byClaimFwd   = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext ? null : await (prisma as any).claimForward.findFirst({ where: { token } })
 
-  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byGm ? "gm" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimGw ? "claimGw" : byScmNykAppr ? "scmNykApprover" : byScmNykEvp ? "scmNykEvp" : byScmNyk ? "scmNyk" : byScmNyg ? "scmNyg" : byClaimNext ? "claimNext" : byClaimFwd ? "claimForward" : "none")
+  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byGm ? "gm" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimGw ? "claimGw" : byClaimSup ? "claimSupplier" : byScmNykAppr ? "scmNykApprover" : byScmNykEvp ? "scmNykEvp" : byScmNyk ? "scmNyk" : byScmNyg ? "scmNyg" : byClaimNext ? "claimNext" : byClaimFwd ? "claimForward" : "none")
 
-  if (!byVpMer && !byGm && !byPresident && !byScm && !byVpScm && !byLogistics && !byAccounting && !byClaimGw && !byScmNykAppr && !byScmNykEvp && !byScmNyk && !byScmNyg && !byClaimNext && !byClaimFwd) {
+  if (!byVpMer && !byGm && !byPresident && !byScm && !byVpScm && !byLogistics && !byAccounting && !byClaimGw && !byClaimSup && !byScmNykAppr && !byScmNykEvp && !byScmNyk && !byScmNyg && !byClaimNext && !byClaimFwd) {
     console.log("[magic-login] token not found")
     return NextResponse.redirect(new URL("/login?error=invalid-token", req.url))
   }

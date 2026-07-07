@@ -76,8 +76,9 @@ export const authOptions: NextAuthOptions = {
             if (logUser) return { id: logUser.id, email: logUser.email, name: logUser.name, role: logRole, bu: isGW ? "GW" : (logUser.bu || "NYG"), claimDepartment: null, priority: null }
             return null
           }
-          // GW claim per-dept tokens
-          for (const [field, gwRole] of [["claimGwToken", "CLAIM_GW"], ["scmNykApproverToken", "SCM_NYK_APPROVER"], ["scmNykEvpToken", "SCM_NYK_EVP"], ["scmNykToken", "SCM_NYK"], ["scmNygToken", "SCM_NYG"]] as const) {
+          // GW claim per-dept tokens. CLAIM_GW is split GW vs SUPPLIER by a
+          // separate token so each logs in scoped to its own claimDepartment.
+          for (const [field, gwRole, scopeDept] of [["claimGwToken", "CLAIM_GW", "GW"], ["claimSupplierToken", "CLAIM_GW", "SUPPLIER"], ["scmNykApproverToken", "SCM_NYK_APPROVER", null], ["scmNykEvpToken", "SCM_NYK_EVP", null], ["scmNykToken", "SCM_NYK", null], ["scmNygToken", "SCM_NYG", null]] as const) {
             const cReq = await (prisma.airRequest as any).findFirst({ where: { [field]: token } })
             if (cReq) {
               // SCM NYK EVP / CR user: the Approver chose a specific person — resolve
@@ -90,8 +91,9 @@ export const authOptions: NextAuthOptions = {
                 return { id: `nyk_guest_${token}`, email: assignedEmail, name: assignedEmail, role: gwRole, bu: cReq.bu || "GW", claimDepartment: null, priority: null }
               }
               // Scope to the document's BU — SCM roles exist in both NYG & GW.
-              const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true, bu: cReq.bu } })
-              if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (u as any).claimDepartment ?? null, priority: (u as any).priority ?? null }
+              // For CLAIM_GW also scope by claimDepartment (GW vs SUPPLIER).
+              const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true, bu: cReq.bu, ...(scopeDept ? { claimDepartment: scopeDept } : {}) } })
+              if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (u as any).claimDepartment ?? scopeDept ?? null, priority: (u as any).priority ?? null }
               return null
             }
           }
