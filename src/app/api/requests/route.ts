@@ -114,6 +114,14 @@ export async function POST(req: NextRequest) {
     for (const p of portList) portRates[p.port.trim().toUpperCase()] = p.ratePerKg
 
     const missingPorts = portNames.filter(p => !(p.toUpperCase() in portRates))
+    // Country per missing port (from the uploaded rows) so LG knows what to add.
+    const portToCountry: Record<string, string> = {}
+    for (const i of items) {
+      const p = String(col(i, "Port") || "").trim()
+      const c = String(col(i, "Country") || "").trim()
+      if (p && !portToCountry[p.toUpperCase()]) portToCountry[p.toUpperCase()] = c
+    }
+    const missingPortInfo = missingPorts.map(p => ({ port: p, country: portToCountry[p.toUpperCase()] || "-" }))
 
     const first = items[0]
     const docNo = await generateDocumentNo()
@@ -199,7 +207,11 @@ export async function POST(req: NextRequest) {
     if (missingPorts.length > 0) {
       try {
         const APP_URL = process.env.APP_URL || "http://localhost:3000"
-        const portListHtml = missingPorts.map(p => `<li style="padding:3px 0;font-family:Arial,sans-serif;">${p}</li>`).join("")
+        const portRowsHtml = missingPortInfo.map(x => `<tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;font-weight:600">${x.port}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px">${x.country}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;color:#b45309">— add rate —</td>
+        </tr>`).join("")
         const html = `
 <!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0">
@@ -210,12 +222,17 @@ export async function POST(req: NextRequest) {
         <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
       </td></tr>
       <tr><td style="padding:28px 32px">
-        <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">Document <strong>${docNo}</strong> has Port(s) without a Freight Rate in Master</p>
-        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 16px">Est. Air Freight for the following Ports will be 0 — please add a Rate in Master &gt; Port:</p>
-        <ul style="margin:0 0 20px;padding-left:20px;color:#1e293b;font-size:13px;">
-          ${portListHtml}
-        </ul>
-        <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 20px">After adding the Rate, open the document and click <strong>Recalculate</strong> to update the totals</p>
+        <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">Document <strong>${docNo}</strong> has Port(s) with no Freight Rate in Master — Est. Air Freight cannot be calculated (shows 0).</p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 12px"><strong>Please add these Ports in Master &gt; Port</strong> (Port · Country · Rate THB/KG):</p>
+        <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 18px">
+          <thead><tr style="background:#fef3c7">
+            <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">PORT</th>
+            <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">COUNTRY</th>
+            <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">RATE (THB/KG)</th>
+          </tr></thead>
+          <tbody>${portRowsHtml}</tbody>
+        </table>
+        <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 20px">After adding the Rate, open the document and click <strong>Recalculate</strong> — the Est. Air Freight will then appear.</p>
         <div style="text-align:center">
           <a href="${APP_URL}/master/port" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Master Port →</a>
         </div>
@@ -228,9 +245,9 @@ export async function POST(req: NextRequest) {
 </table></body></html>`
 
         const subject = `[Port Missing] ${docNo} — Port has no Freight Rate (${missingPorts.join(", ")})`
-        const lgUsers = await (prisma.user as any).findMany({ where: { role: "LOGISTICS", isActive: true }, select: { email: true } })
+        const lgUsers = await (prisma.user as any).findMany({ where: { role: { in: ["LOGISTICS", "LOGISTICS_GW"] }, isActive: true }, select: { email: true } })
         const adminUsers = await (prisma.user as any).findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
-        const recipients = [...lgUsers, ...adminUsers].map((u: any) => u.email).filter(Boolean)
+        const recipients = [...new Set([...lgUsers, ...adminUsers].map((u: any) => u.email).filter(Boolean))]
         if (recipients.length) await sendMail(recipients, subject, html)
       } catch (err) {
         console.error("[notify] missing port email failed:", err)

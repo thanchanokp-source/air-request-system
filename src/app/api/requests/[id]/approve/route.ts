@@ -795,7 +795,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // GW claim dept rejects → send SO back to MER (GW) to re-select the claim dept.
-  if (action === "claim_back_to_mer_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
+  if (action === "claim_back_to_mer_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG", "CLAIM_NEXT_APPROVER"].includes(userRole)) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })

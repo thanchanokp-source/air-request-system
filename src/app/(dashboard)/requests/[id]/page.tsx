@@ -2337,11 +2337,30 @@ export default function RequestDetailPage() {
               )
             })}
           </div>
-          {/* Approve All → opens the action popup (forced next position, or finish) */}
+          {/* Approve All → popup (forced next position, or finish) · Back to MER/SCM → reject */}
           <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }} disabled={claimFwdSaving}
               className="bg-green-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-40">
               ✓ Approve All ({gwFwdItems.length} SO)
+            </button>
+            <button onClick={async () => {
+                const reason = window.prompt(`Reason for sending ${gwFwdItems.length} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
+                if (reason == null || !reason.trim()) return
+                setClaimFwdSaving(true)
+                const backAction = isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so"
+                let updated: any = req
+                for (const it of gwFwdItems) {
+                  const res = await fetch(`/api/requests/${id}/approve`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: backAction, itemId: it.id, comment: reason.trim() })
+                  })
+                  if (res.ok) updated = await res.json()
+                  else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
+                }
+                setReq(updated); setClaimFwdDone(`back`); setClaimFwdSaving(false)
+              }} disabled={claimFwdSaving}
+              className="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-orange-600 disabled:opacity-40">
+              ↩ {isGWRequest ? "Back to MER" : "Back to SCM"}
             </button>
             <p className="text-[11px] text-gray-400">
               {gwIsLastPos ? "Final position — approve to finish the process." : <>Approve, then forward to the next position: <b className="text-gray-600">{gwNextPosLabel}</b></>}
