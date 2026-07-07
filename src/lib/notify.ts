@@ -64,6 +64,9 @@ function emailButton(url: string, label: string, bg: string, width = 240): strin
 <!--<![endif]-->`
 }
 
+// Always-available manual login link (public /login page — never expires, no token).
+const loginLinkBlock = () => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px"><tr><td align="center"><p style="margin:0 0 4px;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Or log in to the system with your account</p><a href="${APP_URL}/login" style="color:#1e3a8a;font-size:12px;font-weight:600;font-family:Arial,sans-serif;text-decoration:underline">${APP_URL}/login</a></td></tr></table>`
+
 // Shared <head> — charset, mobile viewport, and MSO fixes (DPI, table spacing).
 const EMAIL_HEAD = `<head>
 <meta charset="utf-8">
@@ -154,13 +157,7 @@ ${EMAIL_HEAD}
                 </tr>
               </table>
               ${buttons}
-              <!-- Manual login fallback — for users who prefer to log in themselves -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px">
-                <tr><td align="center">
-                  <p style="margin:0 0 4px;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Or log in to the system with your account</p>
-                  <a href="${APP_URL}/login" style="color:#1e3a8a;font-size:12px;font-weight:600;font-family:Arial,sans-serif;text-decoration:underline">${APP_URL}/login</a>
-                </td></tr>
-              </table>
+              ${loginLinkBlock()}
             </td>
           </tr>
           <!-- Footer -->
@@ -194,7 +191,8 @@ export async function sendVerificationEmail(email: string, token: string) {
         <div style="text-align:center;margin:28px 0">
           <a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;font-family:Arial,sans-serif">Verify Email →</a>
         </div>
-        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin:0">Link valid for 24 hours · If you did not register, please ignore this email.</p>
+        ${loginLinkBlock()}
+        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin:16px 0 0">Link valid for 24 hours · If you did not register, please ignore this email.</p>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
         <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
@@ -341,6 +339,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
           <p style="font-size:13px;color:#334155;margin:8px 0">${intro}</p>
           ${lgTable}
           <div style="text-align:center;margin-top:20px"><a href="${magic}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 30px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Open Document →</a></div>
+          ${loginLinkBlock()}
         </div>`
         await sendMail(emails, `${subject} — ${(req as any).documentNo}`, html)
       }
@@ -366,6 +365,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         <p style="font-size:13px;color:#b91c1c;margin:8px 0;font-weight:600">A claim department has rejected the claim. Please re-select the claim department for the following SO(s):</p>
         <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial"><thead><tr style="background:#fef2f2"><th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">Reason</th></tr></thead><tbody>${rows}</tbody></table>
         <div style="text-align:center;margin-top:20px"><a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 30px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Open Document →</a></div>
+        ${loginLinkBlock()}
       </div>`
       await sendMail(recipients, `[MER – GW] Claim Rejected — please re-assign — ${(req as any).documentNo}`, html)
       return
@@ -650,6 +650,7 @@ export async function notifyClaimNext(
         <div style="text-align:center;margin-top:24px">
           <a href="${magicLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;font-family:Arial,sans-serif">Open Document →</a>
         </div>
+        ${loginLinkBlock()}
         <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin-top:16px">Link valid for 8 hours</p>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
@@ -721,6 +722,7 @@ export async function notifyClaimFinalToAccounting(requestId: string) {
           </td></tr>
         </table>
         <div style="text-align:center;margin-top:28px">${openBtn}</div>
+        ${loginLinkBlock()}
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
         <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
