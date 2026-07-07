@@ -80,11 +80,17 @@ export default function NewRequestPage() {
       return
     }
 
-    // Skip fully-blank rows — templates often carry empty trailing rows (with
-    // formatting / data-validation) so the user doesn't have to delete them.
-    const rows = data.rows.filter((row: any) => Object.values(row).some((v: any) => v != null && String(v).trim() !== ""))
+    // Skip non-data rows. A real row is identified by SO or STYLE — templates
+    // often leave stray values (formatting, a lone 0) in otherwise-empty trailing
+    // rows, so "fully blank" isn't enough; require SO or STYLE to treat as data.
+    const cellVal = (row: any, key: string) => {
+      const k = Object.keys(row).find(kk => kk.toLowerCase() === key.toLowerCase())
+      return k ? row[k] : null
+    }
+    const hasKey = (v: any) => v != null && String(v).trim() !== ""
+    const rows = data.rows.filter((row: any) => hasKey(cellVal(row, "SO")) || hasKey(cellVal(row, "STYLE")))
     if (rows.length === 0) {
-      setError("No data rows found (all rows are empty). Please fill in the template")
+      setError("No data rows found — every row is missing both SO and STYLE. Please fill in the template")
       return
     }
 
