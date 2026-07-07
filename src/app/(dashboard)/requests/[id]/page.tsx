@@ -2666,6 +2666,28 @@ export default function RequestDetailPage() {
                 className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
                 {submitting !== null ? "Approving..." : `Approve ${dvmSelected.size} SO(s)`}
               </button>
+              <button
+                disabled={submitting !== null}
+                onClick={async () => {
+                  const reason = window.prompt(`Reason for sending ${dvmSelected.size} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
+                  if (reason == null || !reason.trim()) return
+                  const ids = [...dvmSelected]
+                  let updated: any = req
+                  const backAction = isGwClaimP1Role ? (isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so") : "reject_so"
+                  for (const itemId of ids) {
+                    setSubmitting(itemId)
+                    const res = await fetch(`/api/requests/${id}/approve`, {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: backAction, itemId, comment: reason.trim() })
+                    })
+                    if (res.ok) updated = await res.json()
+                    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
+                  }
+                  setReq(updated); setDvmSelected(new Set()); setSubmitting(null)
+                }}
+                className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50">
+                {isGWRequest ? `Back to MER (${dvmSelected.size})` : `Back to SCM (${dvmSelected.size})`}
+              </button>
               <button onClick={() => setDvmSelected(new Set())}
                 className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">
                 Cancel
