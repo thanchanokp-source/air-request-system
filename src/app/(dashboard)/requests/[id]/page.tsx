@@ -8,7 +8,7 @@ import { ROLE_ACTIONS, STATUS_LABELS, STYLE_APPROVER_STATUSES } from "@/types"
 import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
-import { getSplits, deptSplitStatus } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -425,6 +425,11 @@ export default function RequestDetailPage() {
         getSplits(i).some((s: any) => gwFwdSplitDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED"))
     : []
   const showGwFinishForward = isGwForwardRole && gwFwdSplitDepts.length > 0 && gwFwdItems.length > 0 && !claimFwdDone
+  // Forced-position chain: current position + what the next required position is.
+  const myFwdRow = (req?.claimForwards || []).find((f: any) => f.dept === gwFwdCanonicalDept && f.nextEmail === (session?.user as any)?.email)
+  const gwCurrentPos = role === "CLAIM_NEXT_APPROVER" ? (myFwdRow?.position ?? 0) : 0
+  const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos) : true
+  const gwNextPosLabel = gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFwdItems[0]?.factory) : null
   const myClaimItems = req?.items?.filter((i: any) => {
     const itemDeptList: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
       ? i.claimDepts.map((d: any) => d.dept)
@@ -2320,13 +2325,15 @@ export default function RequestDetailPage() {
               )
             })}
           </div>
-          {/* Approve All → opens the action popup (forward to next, or finish) */}
+          {/* Approve All → opens the action popup (forced next position, or finish) */}
           <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }} disabled={claimFwdSaving}
               className="bg-green-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-40">
               ✓ Approve All ({gwFwdItems.length} SO)
             </button>
-            <p className="text-[11px] text-gray-400">Approve all SO of your department — then choose to forward to another approver, or finish the process.</p>
+            <p className="text-[11px] text-gray-400">
+              {gwIsLastPos ? "Final position — approve to finish the process." : <>Approve, then forward to the next position: <b className="text-gray-600">{gwNextPosLabel}</b></>}
+            </p>
           </div>
         </div>
       )}
@@ -2337,21 +2344,33 @@ export default function RequestDetailPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div>
               <h3 className="text-base font-bold text-gray-800">Approve — {gwFwdCanonicalDept}</h3>
-              <p className="text-xs text-gray-500 mt-1">Approving all {gwFwdItems.length} SO of your department. Forward to another approver first, or finish the process.</p>
+              <p className="text-xs text-gray-500 mt-1">Approving all {gwFwdItems.length} SO of your department.</p>
             </div>
-            <PersonPicker label="Forward to" selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder="Type a name (leave empty to finish)..." />
+            {gwIsLastPos ? (
+              // Final position → finish (no more forwarding).
+              <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2.5 text-sm text-green-800">
+                ✓ This is the final position. Approve to <b>finish the process</b> — the document proceeds when all departments and logistics are done.
+              </div>
+            ) : (
+              // Forced next position — must pick a person for it (name free, position fixed).
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-blue-800">Please select <span className="text-blue-900 underline">{gwNextPosLabel}</span> for approve <span className="text-red-500">*</span></p>
+                <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} />
+              </div>
+            )}
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
               <button onClick={() => setGwModalOpen(false)} disabled={claimFwdSaving}
                 className="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40">Cancel</button>
-              {claimFwdSelected ? (
-                <button onClick={async () => { await claimForward(false); setGwModalOpen(false) }} disabled={claimFwdSaving}
-                  className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
-                  {claimFwdSaving ? "..." : `Done → Forward to ${claimFwdSelected.name}`}
-                </button>
-              ) : (
+              {gwIsLastPos ? (
                 <button onClick={async () => { await claimForward(true); setGwModalOpen(false) }} disabled={claimFwdSaving}
                   className="px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-40">
                   {claimFwdSaving ? "..." : "Done — Finish process"}
+                </button>
+              ) : (
+                <button onClick={async () => { await claimForward(false); setGwModalOpen(false) }} disabled={!claimFwdSelected || claimFwdSaving}
+                  title={!claimFwdSelected ? `Select a person for ${gwNextPosLabel}` : ""}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+                  {claimFwdSaving ? "..." : "Forward →"}
                 </button>
               )}
             </div>

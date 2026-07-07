@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange, notifyClaimNextPriority } from "@/lib/notify"
-import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT } from "@/lib/claim"
+import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition } from "@/lib/claim"
 
 const getClaimDept = (role: string) => {
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
@@ -959,17 +959,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const expected = isGW ? "PENDING_CLAIM_GW" : "PENDING_CLAIM"
     if (request.status !== expected) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
 
-    // Which department does this actor own?
+    // Which department does this actor own + their position in the chain?
     let dept: string | null = null
+    let currentPos = 0
     if (userRole === "CLAIM_NEXT_APPROVER") {
       const email = session.user?.email || ""
       const fwd = email ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: email } }) : null
       if (!fwd) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
       dept = fwd.dept
+      currentPos = fwd.position ?? 0
     } else {
       dept = ownerCanonicalDept(userRole, userClaimDept)
     }
     if (!dept) return NextResponse.json({ error: "Cannot determine your claim department" }, { status: 400 })
+    // Forced chain: only the LAST position may finish. Earlier positions must
+    // forward to the next position first (GW / SUPPLIER are single-position → ok).
+    if (!isLastPosition(dept, currentPos)) {
+      return NextResponse.json({ error: "You must forward to the next position — only the final position can finish the process." }, { status: 400 })
+    }
     const splitDepts = expandClaimDept(dept)
     const doneStatus = isGW ? GW_DEPT_APPROVED : NYG_SPLIT.COMPLETED
 

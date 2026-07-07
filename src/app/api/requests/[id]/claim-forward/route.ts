@@ -6,7 +6,7 @@ import { randomBytes } from "crypto"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { notifyClaimNext, notifyClaimFinalToAccounting } from "@/lib/notify"
-import { ownerCanonicalDept } from "@/lib/claim"
+import { ownerCanonicalDept, isLastPosition, nextPositionLabel } from "@/lib/claim"
 
 async function generateAndSavePdfs(requestId: string) {
   try {
@@ -68,15 +68,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const userEmail = session.user?.email || ""
 
-  // Determine which department this actor owns (per-dept, independent chains).
+  // Determine which department this actor owns + their position in the chain.
+  // Entry owner (SCM_NYG etc.) = position 0; a forwarded approver = stored position.
   let forwarderDept: string | null
+  let currentPos = 0
   if (isClaimNext) {
-    // A forwarded approver owns exactly the dept they were forwarded (by email).
     const fwd = userEmail
       ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: userEmail } })
       : null
     if (!fwd) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
     forwarderDept = fwd.dept
+    currentPos = fwd.position ?? 0
   } else {
     forwarderDept = ownerCanonicalDept(role, userClaimDept)
   }
@@ -125,19 +127,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json({ ok: true, action: "final" })
   } else {
-    // FORWARD: per-department. Upsert this dept's forward row (independent of
-    // other departments on the same document) with a fresh token, then notify.
+    // FORWARD to the NEXT position in the forced chain (person = free choice,
+    // position = enforced). The last position must finish, not forward.
+    if (isLastPosition(forwarderDept, currentPos)) {
+      return NextResponse.json({ error: "This is the final position — finish the process (cannot forward further)." }, { status: 400 })
+    }
     if (!nextEmail) return NextResponse.json({ error: "nextEmail required" }, { status: 400 })
+    const nextPos = currentPos + 1
 
     const token = randomBytes(32).toString("hex")
     await (prisma as any).claimForward.upsert({
       where: { requestId_dept: { requestId: id, dept: forwarderDept } },
-      create: { requestId: id, dept: forwarderDept, nextEmail, nextName: nextName || null, token },
-      update: { nextEmail, nextName: nextName || null, token },
+      create: { requestId: id, dept: forwarderDept, nextEmail, nextName: nextName || null, token, position: nextPos },
+      update: { nextEmail, nextName: nextName || null, token, position: nextPos },
     })
 
-    await notifyClaimNext(id, nextEmail, nextName || nextEmail, forwarderName, token, forwarderDept)
+    const posLabel = nextPositionLabel(forwarderDept, currentPos) || forwarderDept
+    await notifyClaimNext(id, nextEmail, nextName || nextEmail, forwarderName, token, `${forwarderDept} — ${posLabel}`)
 
-    return NextResponse.json({ ok: true, action: "forwarded", to: nextEmail, dept: forwarderDept })
+    return NextResponse.json({ ok: true, action: "forwarded", to: nextEmail, dept: forwarderDept, position: nextPos })
   }
 }

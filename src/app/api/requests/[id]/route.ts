@@ -20,8 +20,9 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         }
       } as any,
       approvalLogs: { include: { user: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
-      attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } }
-    }
+      attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
+      claimForwards: true,
+    } as any
   })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json(request)

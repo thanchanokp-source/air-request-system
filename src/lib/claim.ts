@@ -114,6 +114,56 @@ export function expandClaimDept(dept: string): string[] {
   return [dept]
 }
 
+// ── Forced-position claim chains ───────────────────────────────────
+// Each claim department approves through a FIXED sequence of positions. At each
+// step the current approver must forward to the NEXT position (person chosen by
+// free name search, but the position is enforced). The LAST position finishes
+// the process. Single-position depts (GW / SUPPLIER) finish immediately.
+//   SCM NYK keeps its own 3-role sub-flow (not a linear chain) — excluded here.
+export type ClaimPosition = { label: string; factoryBased?: boolean }
+export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
+  "SCM NYG": [
+    { label: "SCM NYG" },
+    { label: "VP SCM NYG" },
+    { label: "VP PROD", factoryBased: true },
+    { label: "SCM EVP" },
+  ],
+  "GW": [{ label: "GW" }],
+  "SUPPLIER": [{ label: "SUPPLIER" }],
+}
+
+export function chainFor(dept: string): ClaimPosition[] {
+  return CLAIM_CHAINS[dept] || [{ label: dept }]
+}
+
+// VP PROD group from the Factory column value: 1 & 3 → "G1/G3", 2 & 4 → "G2/G4".
+export function vpProdGroup(factory: string | null | undefined): string | null {
+  const s = String(factory || "")
+  const g13 = /[13]/.test(s)
+  const g24 = /[24]/.test(s)
+  if (g13 && !g24) return "G1/G3"
+  if (g24 && !g13) return "G2/G4"
+  return null // unknown or mixed
+}
+
+// The label for the NEXT position after `currentPos` (null = chain finished here).
+// For a factory-based position, appends the group derived from `factory`.
+export function nextPositionLabel(dept: string, currentPos: number, factory?: string | null): string | null {
+  const chain = chainFor(dept)
+  const next = chain[currentPos + 1]
+  if (!next) return null
+  if (next.factoryBased) {
+    const g = vpProdGroup(factory)
+    return g ? `${next.label} (${g})` : `${next.label} (select factory group)`
+  }
+  return next.label
+}
+
+// Is `currentPos` the last position of the dept's chain (→ finish, no forward)?
+export function isLastPosition(dept: string, currentPos: number): boolean {
+  return currentPos >= chainFor(dept).length - 1
+}
+
 // Does this item have a split for `dept` still awaiting finalization?
 export function itemHasPendingDept(item: any, dept: string): boolean {
   const depts = expandClaimDept(dept)
