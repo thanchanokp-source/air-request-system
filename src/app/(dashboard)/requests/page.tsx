@@ -50,7 +50,8 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
     return "SCM" // NYG: President reset → SCM re-assigns claim
   }
   if (itemStatus === "LOG_PASSED") return "Claim"
-  if (itemStatus === "CLAIM_PASSED") return "VP Claim"
+  if (itemStatus === "CLAIM_PASSED") return "Claim"
+  if (itemStatus === "PRESIDENT_PENDING") return "President" // claim + LG done → final President approval
   if (itemStatus === "SCM_GW_PENDING") return "SCM (GW)"
   if (itemStatus === "ACCOUNTING_PENDING") return "Accounting"
   return "-"
@@ -189,20 +190,20 @@ export default function RequestsPage() {
 
   const [claimExpanded, setClaimExpanded] = useState(false)
 
+  // President moved to the END (final approver, after Logistics ∥ Claim).
   const POSITIONS = activeBu === "GW" ? [
     { key: "PENDING_VP_MER_GW", label: "DPM" },
     { key: "PENDING_GM_GW", label: "GM" },
-    { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
     { key: "PENDING_LOGISTICS_GW", label: "LOGISTICS" },
     { key: "PENDING_CLAIM_GW", label: "CLAIM" },
+    { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
   ] : [
     { key: "PENDING_VP_MER", label: "VP MER" },
-    { key: "PENDING_PRESIDENT", label: "PRESIDENT" },
     { key: "PENDING_SCM", label: "SCM" },
     { key: "PENDING_VP_SCM", label: "VP SCM" },
-    { key: "PENDING_CLAIM", label: "CLAIM" },
     { key: "PENDING_LOGISTICS", label: "LOGISTICS" },
-    { key: "PENDING_VP_CLAIM", label: "VP CLAIM" },
+    { key: "PENDING_CLAIM", label: "CLAIM" },
+    { key: "PENDING_PRESIDENT", label: "PRESIDENT" },
   ]
 
   // CLAIM box breakdown = who each pending SO is still waiting on.
@@ -282,14 +283,16 @@ export default function RequestsPage() {
             PRES_PASSED: "PENDING_LOGISTICS_GW",
             LOG_PASSED: "PENDING_CLAIM_GW",
             SCM_GW_PENDING: "PENDING_SCM_GW",
+            PRESIDENT_PENDING: "PENDING_PRESIDENT_GW", // claim + LG done → President (final)
             ACCOUNTING_PENDING: "PENDING_ACCOUNTING",
           } : {
             VP_MER_PASSED: "PENDING_SCM",
             PASSED: "PENDING_VP_SCM",
-            VP_PASSED: "PENDING_PRESIDENT",
+            VP_PASSED: "PENDING_LOGISTICS",
             PRES_PASSED: "PENDING_LOGISTICS",
             LOG_PASSED: "PENDING_CLAIM",
-            CLAIM_PASSED: "PENDING_VP_CLAIM",
+            PRESIDENT_PENDING: "PENDING_PRESIDENT", // claim + LG done → President (final)
+            CLAIM_PASSED: "PENDING_CLAIM",
           }
           const count = allRows.filter(r => {
             const st = r.itemStatus
