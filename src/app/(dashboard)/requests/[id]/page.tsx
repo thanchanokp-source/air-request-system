@@ -133,7 +133,7 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
       <div className="flex flex-col items-center gap-1.5 px-5 py-6 border-t border-gray-100">
         <button disabled={submitting} onClick={onApprove}
           className={`px-8 py-3 ${a.btn} text-white rounded-lg text-sm font-semibold disabled:opacity-50 shadow-sm`}>
-          {submitting ? "Approving..." : "✓ Approve & Send to Accounting"}
+          {submitting ? "Approving..." : "Approve"}
         </button>
         <span className="text-[11px] text-gray-400">Finalizes this document and sends it to Accounting</span>
       </div>
