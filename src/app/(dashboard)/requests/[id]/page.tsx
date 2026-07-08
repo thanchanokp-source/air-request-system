@@ -295,6 +295,8 @@ export default function RequestDetailPage() {
   const [claimFwdSaving, setClaimFwdSaving] = useState(false)
   const [procureDecision, setProcureDecision] = useState<"approve" | "forward" | null>(null)
   const [claimFwdDone, setClaimFwdDone] = useState<string|null>(null)
+  // Claim review: card list (expand each) vs flat table (see all at once).
+  const [claimTableView, setClaimTableView] = useState(false)
   // Claim approver (NYG/GW/Supplier) action popup: forward to next person, or finish.
   const [gwModalOpen, setGwModalOpen] = useState(false)
   const [gwBranchChoice, setGwBranchChoice] = useState<string | null>(null)
@@ -563,6 +565,40 @@ export default function RequestDetailPage() {
         getSplits(i).some((s: any) => gwFwdSplitDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "COMPLETED" && s.status !== "REJECTED"))
     : []
   const showGwFinishForward = isGwForwardRole && gwFwdSplitDepts.length > 0 && gwFwdItems.length > 0 && !claimFwdDone
+  // A claim SO's own split (this dept) + computed claim amount (actual × pct).
+  const claimRow = (item: any) => {
+    const sp = getSplits(item).find((s: any) => gwFwdSplitDepts.includes(s.dept))
+    const actual = Number(item.actualAirFreight) || 0
+    const pct = Number(sp?.pct) || 0
+    return { sp, actual, pct, amt: Math.round(actual * pct / 100) }
+  }
+  const claimTotals = gwFwdItems.reduce((acc: any, it: any) => {
+    const r = claimRow(it)
+    acc.actual += r.actual; acc.amt += r.amt; acc.qty += Number(it.qtyRequestAir) || 0
+    return acc
+  }, { actual: 0, amt: 0, qty: 0 })
+  const exportClaimExcel = () => {
+    const rows = gwFwdItems.map((it: any, i: number) => {
+      const r = claimRow(it)
+      return {
+        "No.": i + 1, "SO": it.so, "STYLE": it.style, "CUSTOMER PO": it.customerPO || "",
+        "QTY AIR": it.qtyRequestAir ?? "", "GROSS (KG)": it.grossWeight ?? "",
+        "HAWB#": it.hawbNo || "", "INVOICE NO": it.invoiceNo || "",
+        "EST. FREIGHT (THB)": it.airFreight ?? "", "ACTUAL (THB)": r.actual,
+        "CLAIM %": r.pct, "CLAIM AMOUNT (THB)": r.amt,
+        "PLAN DATE": fmtDate(it.planShipmentDate), "DELAY REASON": it.reasonDelay || "",
+        "FACTORY": it.factory || "", "COUNTRY": it.country || "", "PORT": it.port || "",
+      }
+    })
+    rows.push({ "No.": "", "SO": "TOTAL", "STYLE": "", "CUSTOMER PO": "", "QTY AIR": claimTotals.qty,
+      "GROSS (KG)": "", "HAWB#": "", "INVOICE NO": "", "EST. FREIGHT (THB)": "",
+      "ACTUAL (THB)": claimTotals.actual, "CLAIM %": "", "CLAIM AMOUNT (THB)": claimTotals.amt,
+      "PLAN DATE": "", "DELAY REASON": "", "FACTORY": "", "COUNTRY": "", "PORT": "" } as any)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Claim")
+    XLSX.writeFile(wb, `${req?.documentNo || "claim"}_${(gwFwdCanonicalDept || "claim").replace(/\s+/g, "")}.xlsx`)
+  }
   // Current position + next required position (with factory / branch context).
   const myFwdRow = (req?.claimForwards || []).find((f: any) => f.dept === gwFwdCanonicalDept && f.nextEmail === (session?.user as any)?.email)
   const gwCurrentPos = role === "CLAIM_NEXT_APPROVER" ? (myFwdRow?.position ?? 0) : 0
@@ -2415,6 +2451,14 @@ export default function RequestDetailPage() {
             {/* Actions (right, small — same as GM) */}
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-xs text-yellow-600 font-medium">{gwFwdItems.length} pending</span>
+              <button onClick={() => setClaimTableView(v => !v)}
+                className="text-xs text-gray-600 border border-gray-300 rounded-lg px-2.5 py-1 hover:bg-gray-50 font-medium">
+                {claimTableView ? "▤ Card view" : "▤ Table view"}
+              </button>
+              <button onClick={exportClaimExcel}
+                className="text-xs text-green-700 border border-green-300 rounded-lg px-2.5 py-1 hover:bg-green-50 font-medium">
+                ⬇ Export Excel
+              </button>
               {gwFwdItems.length > 0 && (
                 <button onClick={() => setDvmSelected(dvmSelected.size === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}
                   className="text-xs text-blue-600 hover:underline">
@@ -2446,6 +2490,21 @@ export default function RequestDetailPage() {
               </button>
             </div>
           </div>
+          {/* Quick summary — see totals without expanding */}
+          <div className="grid grid-cols-3 divide-x divide-gray-100 bg-white border border-gray-200 rounded-xl">
+            <div className="px-4 py-2.5">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">SO</p>
+              <p className="text-lg font-bold text-gray-700 tabular-nums">{gwFwdItems.length}</p>
+            </div>
+            <div className="px-4 py-2.5">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Total Actual (THB)</p>
+              <p className="text-lg font-bold text-gray-700 tabular-nums">{claimTotals.actual.toLocaleString()}</p>
+            </div>
+            <div className="px-4 py-2.5">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">My Claim (THB)</p>
+              <p className="text-lg font-bold text-blue-700 tabular-nums">{claimTotals.amt.toLocaleString()}</p>
+            </div>
+          </div>
           {/* Attach supporting files — by DOCUMENT */}
           <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2 flex-wrap">
             <span className="text-xs text-gray-600">Attach supporting files (by document)</span>
@@ -2463,7 +2522,58 @@ export default function RequestDetailPage() {
               </button>
             )}
           </div>
+          {/* Flat table view — all SO at once, no expand */}
+          {claimTableView && (
+            <div className="border border-gray-200 rounded-xl overflow-x-auto">
+              <table className="text-xs w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-2 py-2 w-8"></th>
+                    {["SO","STYLE","QTY AIR","HAWB#","INVOICE","ACTUAL (THB)","CLAIM %","MY CLAIM (THB)","PLAN DATE","DELAY REASON"].map((h, k) =>
+                      <th key={h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${["QTY AIR","ACTUAL (THB)","CLAIM %","MY CLAIM (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {gwFwdItems.map((item: any) => {
+                    const r = claimRow(item)
+                    return (
+                      <tr key={item.id} className={`hover:bg-gray-50 ${dvmSelected.has(item.id) ? "bg-blue-50/40" : ""}`}>
+                        <td className="px-2 py-1.5 text-center">
+                          <input type="checkbox" checked={dvmSelected.has(item.id)}
+                            onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                            className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-blue-600" />
+                        </td>
+                        <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{item.so}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{item.style}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(item.qtyRequestAir)}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{item.hawbNo || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{item.invoiceNo || "-"}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-green-700 font-semibold">{fmtNum(r.actual)}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">{r.pct}%</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-blue-700 font-semibold">{fmtNum(r.amt)}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                        <td className="px-3 py-1.5 max-w-[160px] truncate" title={item.reasonDelay || ""}>{item.reasonDelay || "-"}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-100 bg-gray-50/60 font-semibold">
+                    <td></td>
+                    <td className="px-3 py-2" colSpan={2}>TOTAL</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmtNum(claimTotals.qty)}</td>
+                    <td colSpan={2}></td>
+                    <td className="px-3 py-2 text-right tabular-nums text-green-700">{fmtNum(claimTotals.actual)}</td>
+                    <td></td>
+                    <td className="px-3 py-2 text-right tabular-nums text-blue-700">{fmtNum(claimTotals.amt)}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
           {/* SO list — checkbox + expandable full detail (same template as SCM NYK) */}
+          {!claimTableView && (
           <div className="space-y-2">
             {gwFwdItems.map((item: any) => {
               const sp = getSplits(item).find((s: any) => gwFwdSplitDepts.includes(s.dept))
@@ -2528,6 +2638,7 @@ export default function RequestDetailPage() {
               )
             })}
           </div>
+          )}
           {/* Helper note (buttons moved to the header row above) */}
           <p className="text-[11px] text-gray-400">
             {gwIsLastPos ? "Final position — approve to finish the process." : <>Approve, then forward to the next position: <b className="text-gray-600">{gwNextPosLabel}</b></>}

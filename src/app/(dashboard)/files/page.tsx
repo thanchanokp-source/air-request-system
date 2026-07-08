@@ -38,10 +38,19 @@ function bookApproval(req: any): { by: string; date: string; role: string } | nu
   return { by: log.user?.name || "-", date: log.createdAt, role: log.fromStatus === "PENDING_GM_GW" ? "GM" : "VP SCM" }
 }
 
-// Booked = Logistics has filled the actual freight for every active item.
+// A single SO is "booked" once Logistics has processed it (booking date /
+// invoice / actual freight filled). Until then it still needs booking.
+function itemBooked(item: any): boolean {
+  return item.bookingDate != null || !!item.invoiceNo || item.actualAirFreight != null
+}
+// Booked = every active SO in the document is booked.
 function isBooked(req: any): boolean {
   const items = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
-  return items.length > 0 && items.every((i: any) => i.actualAirFreight != null)
+  return items.length > 0 && items.every(itemBooked)
+}
+// How many SO still need booking in this document.
+function unbookedCount(req: any): number {
+  return (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && !itemBooked(i)).length
 }
 
 const FOLDER_LABELS: Record<FolderType, string> = {
@@ -73,6 +82,7 @@ export default function FilesPage() {
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
   const [combineMode, setCombineMode] = useState(false)
+  const [unbookedOnly, setUnbookedOnly] = useState(false)
   const [selectedForCombine, setSelectedForCombine] = useState<Set<string>>(new Set())
   const [combineLoading, setCombineLoading] = useState(false)
   const [brandF, setBrandF] = useState<string[]>([])
@@ -111,8 +121,9 @@ export default function FilesPage() {
     if (cpF.length && !items.some((i: any) => cpF.includes(i.customerPO))) return false
     if (invoiceF.length && !items.some((i: any) => invoiceF.includes(i.invoiceNo))) return false
     if (claimF.length && !items.some((i: any) => getSplits(i).some((s: any) => claimF.includes(s.dept)) || claimF.includes(i.claimDepartment))) return false
+    if (activeFolder === "BOOKING" && unbookedOnly && unbookedCount(r) === 0) return false
     return true
-  }), [folderFiltered, brandF, styleF, soF, cpF, invoiceF, claimF])
+  }), [folderFiltered, brandF, styleF, soF, cpF, invoiceF, claimF, activeFolder, unbookedOnly])
 
   const grouped = useMemo(() => {
     const byYear: Record<string, Record<string, any[]>> = {}
@@ -202,6 +213,15 @@ export default function FilesPage() {
     finally { setCombineLoading(false) }
   }
 
+  // Select every not-yet-booked SO across the visible documents (for booking).
+  const selectAllUnbooked = () => {
+    const keys = new Set<string>()
+    filtered.forEach(r => (r.items || []).forEach((i: any) => {
+      if (i.itemStatus !== "REJECTED" && !itemBooked(i)) keys.add(`${r.id}:${i.id}`)
+    }))
+    setSelectedForCombine(keys)
+  }
+
   const toggleCombineItem = (reqId: string, itemId: string) => {
     const key = `${reqId}:${itemId}`
     setSelectedForCombine(prev => {
@@ -258,6 +278,12 @@ export default function FilesPage() {
             </div>
             <div className="ml-auto flex items-center gap-3">
               <span className="text-xs text-gray-400">{filtered.length} document(s)</span>
+              {activeFolder === "BOOKING" && (
+                <button onClick={() => setUnbookedOnly(v => !v)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${unbookedOnly ? "bg-amber-500 text-white border-amber-500" : "bg-white text-amber-700 border-amber-300 hover:bg-amber-50"}`}>
+                  {unbookedOnly ? "● Showing unbooked" : "○ Unbooked only"}
+                </button>
+              )}
               {activeFolder === "BOOKING" && (
                 <button onClick={() => { setCombineMode(m => !m); setSelectedForCombine(new Set()) }}
                   className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${combineMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"}`}>
@@ -372,6 +398,7 @@ export default function FilesPage() {
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Style</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Description</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">QTY Air</th>
+                                        {activeFolder === "BOOKING" && <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Booking</th>}
                                         {activeFolder === "LOGISTICS" && <>
                                           <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Invoice No</th>
                                           <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">QTY Ship</th>
@@ -382,10 +409,11 @@ export default function FilesPage() {
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-blue-100">
-                                      {items.map((item: any) => {
+                                      {(activeFolder === "BOOKING" && unbookedOnly ? items.filter((i: any) => !itemBooked(i)) : items).map((item: any) => {
                                         const key = `${req.id}-${item.id}`
                                         const combineKey = `${req.id}:${item.id}`
                                         const isChecked = selectedForCombine.has(combineKey)
+                                        const booked = itemBooked(item)
                                         return (
                                           <tr key={item.id} className={`hover:bg-blue-100/50 ${isChecked ? "bg-blue-100" : ""}`}>
                                             {combineMode && (
@@ -399,6 +427,13 @@ export default function FilesPage() {
                                             <td className="py-1.5 pr-3 text-gray-600">{item.style}</td>
                                             <td className="py-1.5 pr-3 text-gray-500 max-w-[140px] truncate">{item.description}</td>
                                             <td className="py-1.5 pr-3 text-gray-700 font-semibold">{item.qtyRequestAir}</td>
+                                            {activeFolder === "BOOKING" && (
+                                              <td className="py-1.5 pr-3">
+                                                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${booked ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700"}`}>
+                                                  {booked ? "✓ Booked" : "● To book"}
+                                                </span>
+                                              </td>
+                                            )}
                                             {activeFolder === "LOGISTICS" && <>
                                               <td className="py-1.5 pr-3">{item.invoiceNo || "-"}</td>
                                               <td className="py-1.5 pr-3">{item.qtyActualShip ?? "-"}</td>
@@ -433,12 +468,16 @@ export default function FilesPage() {
       </div>
 
       {/* Floating combine action bar */}
-      {combineMode && selectedForCombine.size > 0 && (
+      {combineMode && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-900 text-white px-6 py-3 rounded-2xl shadow-2xl">
           <span className="text-sm font-medium">{selectedForCombine.size} SO selected</span>
+          <button onClick={selectAllUnbooked}
+            className="text-xs bg-amber-500/90 hover:bg-amber-500 text-white px-3 py-1 rounded-lg font-medium">Select all unbooked</button>
+          {selectedForCombine.size > 0 && (
           <button onClick={() => setSelectedForCombine(new Set())}
             className="text-xs text-gray-400 hover:text-white">Clear</button>
-          <button onClick={generateCombinedPdf} disabled={combineLoading}
+          )}
+          <button onClick={generateCombinedPdf} disabled={combineLoading || selectedForCombine.size === 0}
             className="bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white text-sm font-semibold px-5 py-1.5 rounded-xl transition-colors">
             {combineLoading ? "Generating..." : `⬇ Download Combined PDF`}
           </button>
