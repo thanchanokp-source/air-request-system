@@ -49,7 +49,8 @@ export default function ApprovalsPage() {
              (r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PENDING"))
     }
     if (role === "VP_SCM") return r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PASSED")
-    if (role === "PRESIDENT") return r.status === "PENDING_PRESIDENT" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED" || i.itemStatus === "VP_PASSED")
+    // President (NYG) is now the FINAL approver — items sit at PRESIDENT_PENDING.
+    if (role === "PRESIDENT") return r.status === "PENDING_PRESIDENT" && items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     if (role === "LOGISTICS") return r.bu !== "GW" && (r.status === "PENDING_SCM" || r.status === "PENDING_PRESIDENT")
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
@@ -81,7 +82,7 @@ export default function ApprovalsPage() {
       return items.filter((i: any) => i.itemStatus === "PENDING")
     }
     if (role === "VP_SCM") return items.filter((i: any) => i.itemStatus === "PASSED")
-    if (role === "PRESIDENT") return items.filter((i: any) => i.itemStatus === "VP_MER_PASSED" || i.itemStatus === "VP_PASSED")
+    if (role === "PRESIDENT") return items.filter((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     if (role === "LOGISTICS") return items.filter((i: any) => i.itemStatus !== "REJECTED")
     if (role.startsWith("DVM_") || role.startsWith("CLAIM_")) {
       return items.filter((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)

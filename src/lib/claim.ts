@@ -296,12 +296,13 @@ export function setDeptSplitStatus(splits: ClaimSplit[], dept: string, status: s
 export function deriveNygItemStatus(splits: ClaimSplit[]): string {
   if (splits.length === 0) return "LOG_PASSED"
   const st = splits.map(s => s.status)
-  if (st.every(s => s === NYG_SPLIT.COMPLETED)) return "COMPLETED"
+  // Claim fully approved → President's FINAL approval (President moved to the end).
+  if (st.every(s => s === NYG_SPLIT.COMPLETED)) return "PRESIDENT_PENDING"
   if (st.every(s => s === NYG_SPLIT.REJECTED)) return "REJECTED"
   // Any split still waiting on its DVM (or NYK approver-done but EVP/CR incomplete)
   // → whole item stays at the claim stage.
   if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_NYK_APPROVER_PASSED)) return "LOG_PASSED"
   // All DVMs done, at least one VP outstanding → VP stage.
   if (st.some(s => s === NYG_SPLIT.CLAIM_PASSED)) return "CLAIM_PASSED"
-  return "COMPLETED"
+  return "PRESIDENT_PENDING"
 }

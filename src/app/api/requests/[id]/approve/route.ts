@@ -19,13 +19,14 @@ async function recalcDocStatus(id: string): Promise<string> {
   if (nonRej.length === 0) return "REJECTED"
   const s = new Set(nonRej.map(i => i.itemStatus))
   if (s.has("PENDING") || s.has("VP_MER_PASSED") || s.has("PASSED")) return "PENDING_SCM"
-  if (s.has("VP_PASSED")) return "PENDING_PRESIDENT"
+  if (s.has("VP_PASSED")) return "PENDING_SCM"
   if (s.has("PRES_PASSED")) return "PENDING_LOGISTICS"
   if (s.has("LOG_PASSED")) return "PENDING_CLAIM"
   if (s.has("CLAIM_PASSED")) return "PENDING_VP_CLAIM"
-  // All claim splits done + LG data already entered (LOG_PASSED precedes claim) →
-  // complete file → notify Accounting (terminal, same as GW).
-  return "PENDING_ACCOUNTING"
+  // Claim + Logistics complete → President's FINAL approval, then Accounting.
+  if (s.has("PRESIDENT_PENDING")) return "PENDING_PRESIDENT"
+  if (s.has("ACCOUNTING_PENDING")) return "PENDING_ACCOUNTING"
+  return "COMPLETED"
 }
 
 async function recalcDocStatusGW(id: string): Promise<string> {
@@ -242,50 +243,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED" } })
         await notifyStatusChange(id, "REJECTED").catch(() => {})
       } else {
-        // Keep VP_MER_PASSED items — President will approve them per style
-        await (prisma.airRequest as any).update({ where: { id }, data: { status: "PENDING_PRESIDENT", presidentToken: crypto.randomUUID() } })
-        await notifyStatusChange(id, "PENDING_PRESIDENT").catch(() => {})
+        // President moved to the END — after VP MER, go straight to SCM claim
+        // assignment. Reset items to PENDING so SCM can assign the claim dept.
+        await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PENDING" } })
+        await (prisma.airRequest as any).update({ where: { id }, data: { status: "PENDING_SCM", scmToken: crypto.randomUUID(), vpScmToken: crypto.randomUUID(), logisticsToken: crypto.randomUUID(), accountingToken: crypto.randomUUID(), presidentToken: crypto.randomUUID() } })
+        await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
   }
 
-  // NYG President per-style approve/reject at PENDING_PRESIDENT (items are VP_MER_PASSED)
-  if (request.status === "PENDING_PRESIDENT" && (action === "approve_style" || action === "reject_style") && userRole === "PRESIDENT") {
-    if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
-    if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
-
-    const newItemStatus = action === "approve_style" ? "PRES_PASSED" : "REJECTED"
+  // NYG PRESIDENT — FINAL approval (whole document, no reject). Reached only when
+  // all claim departments are approved AND Logistics data is filled (PRESIDENT_PENDING).
+  if (request.status === "PENDING_PRESIDENT" && action === "president_approve" && userRole === "PRESIDENT") {
     await prisma.airRequestItem.updateMany({
-      where: { requestId: id, style, itemStatus: "VP_MER_PASSED" },
-      data: { itemStatus: newItemStatus, itemComment: comment || null }
+      where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
+      data: { itemStatus: "ACCOUNTING_PENDING" },
     })
     await prisma.approvalLog.create({
-      data: {
-        requestId: id, userId,
-        action: action === "approve_style" ? "APPROVE" : "REJECT",
-        fromStatus: "PENDING_PRESIDENT", toStatus: "PENDING_PRESIDENT",
-        comment: `Style: ${style}${comment ? ` - ${comment}` : ""}`
-      }
+      data: { requestId: id, userId, action: "APPROVE", fromStatus: "PENDING_PRESIDENT", toStatus: "PENDING_ACCOUNTING", comment: "President approved — sent to Accounting" }
     })
-
-    const remaining = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "VP_MER_PASSED" } })
-    if (remaining === 0) {
-      const presPassedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
-      if (presPassedCount === 0) {
-        await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED" } })
-        await notifyStatusChange(id, "REJECTED").catch(() => {})
-      } else {
-        // Reset PRES_PASSED → PENDING for SCM to assign claim dept + VP SCM
-        await prisma.airRequestItem.updateMany({
-          where: { requestId: id, itemStatus: "PRES_PASSED" },
-          data: { itemStatus: "PENDING" }
-        })
-        await (prisma.airRequest as any).update({ where: { id }, data: { status: "PENDING_SCM", scmToken: crypto.randomUUID(), vpScmToken: crypto.randomUUID(), logisticsToken: crypto.randomUUID(), accountingToken: crypto.randomUUID() } })
-        await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
-        await notifyStatusChange(id, "PRESIDENT_APPROVED_NYG").catch(() => {})
-      }
-    }
+    await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_ACCOUNTING" } })
+    await notifyStatusChange(id, "PENDING_ACCOUNTING").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

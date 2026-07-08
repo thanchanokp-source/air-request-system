@@ -469,7 +469,8 @@ export default function RequestDetailPage() {
   const presPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "PRES_PASSED")
   const logPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "LOG_PASSED")
   const claimPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "CLAIM_PASSED")
-  const isPresidentRole = role === "PRESIDENT" && vpPassedItems.length > 0
+  // President (NYG) = FINAL approver: doc at PENDING_PRESIDENT, items PRESIDENT_PENDING.
+  const isPresidentRole = role === "PRESIDENT" && req?.status === "PENDING_PRESIDENT" && (req?.items || []).some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
   const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0 && !isGWRequest
   const isLgParallelAtScm = role === "LOGISTICS" && (req?.status === "PENDING_SCM" || req?.status === "PENDING_PRESIDENT") && !isGWRequest
   // GW Logistics uses the same Air Waybill Entry UI (at its own PENDING_LOGISTICS_GW stage).
@@ -1188,8 +1189,36 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* President: approve/reject VP_PASSED styles (per-style forwarding) */}
+      {/* NYG President — FINAL approval: whole document, one button, no reject.
+          Reached only after all claim depts approved + Logistics data complete. */}
       {isPresidentRole && (
+        <div className="bg-white rounded-xl border border-blue-200 p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold text-gray-800">Final Approval — President</h2>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">NYG</span>
+          </div>
+          <p className="text-sm text-gray-600">All claim departments have approved and Logistics data is complete. Approve to finalize this document and send it to Accounting.</p>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700">
+            <p><b>{req.documentNo}</b> · {req.brandName} · {req.items?.filter((i:any)=>i.itemStatus!=="REJECTED").length} SO</p>
+          </div>
+          <button disabled={submitting === "_pres"}
+            onClick={async () => {
+              setSubmitting("_pres")
+              const res = await fetch(`/api/requests/${id}/approve`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "president_approve" })
+              })
+              if (res.ok) { window.location.href = "/approvals" }
+              else { const e = await res.json().catch(()=>({})); alert(e.error || "Error"); setSubmitting(null) }
+            }}
+            className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+            {submitting === "_pres" ? "Approving..." : "✓ Approve & Send to Accounting"}
+          </button>
+        </div>
+      )}
+
+      {/* (legacy per-style President UI — disabled; President is now the final approver) */}
+      {false && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">STYLE APPROVAL — PRESIDENT</h2>
