@@ -84,7 +84,7 @@ export default function ApprovalsPage() {
     if (role === "VP_SCM") return items.filter((i: any) => i.itemStatus === "PASSED")
     if (role === "PRESIDENT") return items.filter((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     if (role === "LOGISTICS") return items.filter((i: any) => i.itemStatus !== "REJECTED")
-    if (role.startsWith("DVM_") || role.startsWith("CLAIM_")) {
+    if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.filter((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }
     if (CLAIM_VP_ROLES.includes(role)) {
