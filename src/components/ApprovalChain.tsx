@@ -9,18 +9,19 @@ import { getSplits } from "@/lib/claim"
 
 type Node = { key: string; label: string; ord: number }
 
+// New order: DPM → GM → (Logistics ∥ Claim) → President → Accounting.
 const GW_PRE: Node[] = [
   { key: "PENDING_VP_MER_GW", label: "DPM", ord: 0 },
   { key: "PENDING_GM_GW", label: "GM", ord: 1 },
-  { key: "PENDING_PRESIDENT_GW", label: "President", ord: 2 },
 ]
 const GW_ORD: Record<string, number> = {
-  PENDING_VP_MER_GW: 0, PENDING_GM_GW: 1, PENDING_PRESIDENT_GW: 2,
-  PENDING_LOGISTICS_GW: 3, PENDING_CLAIM_GW: 4, PENDING_ACCOUNTING: 5, COMPLETED: 6,
+  PENDING_VP_MER_GW: 0, PENDING_GM_GW: 1,
+  PENDING_CLAIM_GW: 2, PENDING_LOGISTICS_GW: 2, // parallel stage
+  PENDING_PRESIDENT_GW: 3, PENDING_ACCOUNTING: 4, COMPLETED: 5,
 }
-// Per-SO item status → GW chain ordinal (approval stages share the doc stage).
+// Per-SO item status → GW chain ordinal.
 const GW_ITEM_ORD: Record<string, number> = {
-  PRES_PASSED: 3, LOG_PASSED: 4, ACCOUNTING_PENDING: 5, COMPLETED: 6,
+  PRES_PASSED: 2, LOG_PASSED: 2, PRESIDENT_PENDING: 3, ACCOUNTING_PENDING: 4, COMPLETED: 5,
 }
 
 const NYG_STAGES: Node[] = [
@@ -69,21 +70,26 @@ export function ApprovalChain({ status, bu, items, soItem, sm }: { status: strin
     )
   }
 
-  // ── GW: DPM→GM→President, then Logistics ∥ Claim (parallel) ──
-  const cur = completed ? 6 : soItem ? (GW_ITEM_ORD[soItem.itemStatus] ?? (GW_ORD[status] ?? -1)) : (GW_ORD[status] ?? -1)
+  // ── GW: DPM → GM → (Logistics ∥ Claim) → President → Accounting ──
+  const cur = completed ? 5 : soItem ? (GW_ITEM_ORD[soItem.itemStatus] ?? (GW_ORD[status] ?? -1)) : (GW_ORD[status] ?? -1)
   const stateFor = (ord: number): "done" | "active" | "pending" =>
     completed || cur > ord ? "done" : cur === ord ? "active" : "pending"
-  const parallelState: "done" | "active" | "pending" = completed || cur >= 5 ? "done" : cur >= 3 ? "active" : "pending"
+  const parallelReached = completed || cur >= 2 // reached the Logistics∥Claim stage
 
-  // Per-department claim status.
+  // Per-department claim status + overall claim/logistics completion.
   const map: Record<string, { total: number; done: number }> = {}
   for (const it of claimSource) for (const s of getSplits(it)) {
     if (!map[s.dept]) map[s.dept] = { total: 0, done: 0 }
     map[s.dept].total++
     if (s.status === "DEPT_APPROVED" || s.status === "COMPLETED") map[s.dept].done++
   }
-  const claimReached = completed || cur >= 3 // doc/SO has reached the Logistics∥Claim stage
   const claimDepts = Object.entries(map).map(([dept, c]) => ({ dept, done: c.done === c.total }))
+  const allSplits = claimSource.flatMap(it => getSplits(it))
+  const claimDone = allSplits.length > 0 && allSplits.every(s => s.status === "DEPT_APPROVED" || s.status === "COMPLETED")
+  const lgDone = claimSource.length > 0 && claimSource.every((i: any) => i.actualAirFreight != null)
+  // "Claim" turns green when ALL claim depts approved; "Logistics" when data filled.
+  const claimChip: "done" | "active" | "pending" = completed || claimDone ? "done" : parallelReached ? "active" : "pending"
+  const lgChip: "done" | "active" | "pending" = completed || lgDone ? "done" : parallelReached ? "active" : "pending"
 
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto py-1">
@@ -94,14 +100,13 @@ export function ApprovalChain({ status, bu, items, soItem, sm }: { status: strin
         </div>
       ))}
       {/* Logistics ∥ Claim — adjacent (no line) = parallel */}
-      <Chip sm={sm} state={rejected ? "pending" : parallelState} label="Logistics" />
-      <Chip sm={sm} state={rejected ? "pending" : parallelState} label="Claim" />
+      <Chip sm={sm} state={rejected ? "pending" : lgChip} label="Logistics" />
+      <Chip sm={sm} state={rejected ? "pending" : claimChip} label="Claim" />
       {claimDepts.map(d => {
-        // 3 states: done (green ✓), reached-but-pending (amber ●), not-yet-reached (gray ○)
         const cls = d.done ? "bg-green-100 text-green-700 border-green-300"
-          : claimReached ? "bg-amber-50 text-amber-700 border-amber-300"
+          : parallelReached ? "bg-amber-50 text-amber-700 border-amber-300"
           : "bg-gray-50 text-gray-400 border-gray-200"
-        const icon = d.done ? "✓" : claimReached ? "●" : "○"
+        const icon = d.done ? "✓" : parallelReached ? "●" : "○"
         return (
           <span key={d.dept}
             className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${cls}`}>
@@ -109,6 +114,9 @@ export function ApprovalChain({ status, bu, items, soItem, sm }: { status: strin
           </span>
         )
       })}
+      {/* President = final approver (after parallel) */}
+      <Bar done={completed || cur > 3} />
+      <Chip sm={sm} state={rejected ? "pending" : stateFor(3)} label="President" />
       {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected</span>}
       {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
     </div>
