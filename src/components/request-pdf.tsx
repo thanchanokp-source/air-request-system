@@ -57,21 +57,18 @@ const s = StyleSheet.create({
   lh: { flexDirection: "row", alignItems: "center", marginBottom: 2 },
   logo: { width: 52, height: 52, marginRight: 10, objectFit: "contain" },
   lhMid: { flex: 1, alignItems: "center" },
-  coName: { fontSize: 12.5, fontFamily: "SarabunB", color: "#1E3A8A" },
-  coThai: { fontSize: 8, color: "#555", marginTop: 1 },
+  coName: { fontSize: 12.5, fontFamily: "SarabunB", color: "#1E3A8A", textAlign: "center" },
+  coThai: { fontSize: 8, color: "#555", marginTop: 1, textAlign: "center", paddingHorizontal: 6 },
   coAddr: { fontSize: 6.8, color: "#888", marginTop: 3, textAlign: "center" },
   docBox: { width: 118, alignItems: "flex-end" },
   docLabel: { fontSize: 6.8, color: "#888", fontFamily: "SarabunB" },
   docVal: { fontSize: 12, fontFamily: "SarabunB", color: "#111", marginTop: 1 },
   rule: { borderBottomWidth: 1.3, borderBottomColor: "#1E3A8A", marginTop: 4, marginBottom: 8 },
-  // Title bar
-  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
-  titleWrap: { flexDirection: "row", alignItems: "center" },
-  title: { fontSize: 13, fontFamily: "SarabunB", letterSpacing: 1, color: "#111" },
-  scope: { marginLeft: 8, borderWidth: 0.6, borderColor: "#bbb", paddingHorizontal: 4, paddingVertical: 1.5 },
-  scopeTxt: { fontSize: 6.8, color: "#666" },
-  scopeVal: { fontSize: 6.8, fontFamily: "SarabunB", color: "#333" },
-  deptBadge: { fontSize: 8, fontFamily: "SarabunB", color: "#1E3A8A", borderWidth: 1, borderColor: "#1E3A8A", paddingHorizontal: 9, paddingVertical: 2.5, borderRadius: 9 },
+  // Title bar — centered title, BU badge floated right, black underline
+  titleBar: { position: "relative", marginBottom: 6, justifyContent: "center" },
+  title: { fontSize: 14, fontFamily: "SarabunB", letterSpacing: 1.5, color: "#111", textAlign: "center" },
+  deptBadgeAbs: { position: "absolute", right: 0, top: -1, fontSize: 8, fontFamily: "SarabunB", color: "#1E3A8A", borderWidth: 1, borderColor: "#1E3A8A", paddingHorizontal: 9, paddingVertical: 2.5, borderRadius: 9 },
+  blackRule: { borderBottomWidth: 1, borderBottomColor: "#111", marginBottom: 8 },
   // Info grid
   grid: { flexDirection: "row", flexWrap: "wrap" },
   gcell: { width: "33.33%", flexDirection: "row", paddingVertical: 3.5 },
@@ -137,7 +134,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
   const actual = item.actualAirFreight != null ? Number(item.actualAirFreight) : null
   const grandTotal = actual != null ? actual : est
   const dept = isGW ? "GW" : "NYG"
-  const C = { no: 20, so: 58, style: 54, qty: 40, gross: 46, est: 56, act: 56 }
+  const C = { no: 18, so: 50, style: 44, hawb: 50, inv: 52, qty: 36, gross: 42, est: 50, act: 50 }
 
   return (
     <Page size="A4" style={s.page}>
@@ -156,14 +153,12 @@ function ItemPage({ req, item }: { req: any; item: any }) {
       </View>
       <View style={s.rule} />
 
-      {/* Title bar */}
-      <View style={s.titleRow}>
-        <View style={s.titleWrap}>
-          <Text style={s.title}>AIR FREIGHT REQUEST</Text>
-          <View style={s.scope}><Text style={s.scopeTxt}>SCOPE  <Text style={s.scopeVal}>Internal</Text></Text></View>
-        </View>
-        <Text style={s.deptBadge}>{dept}</Text>
+      {/* Title bar — centered title, BU badge on the right */}
+      <View style={s.titleBar}>
+        <Text style={s.title}>AIR FREIGHT REQUEST</Text>
+        <Text style={s.deptBadgeAbs}>{dept}</Text>
       </View>
+      <View style={s.blackRule} />
 
       {/* Info grid */}
       <View style={s.grid}>
@@ -171,7 +166,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           ["Date", fmtDate(req.createdAt)],
           ["Brand", req.brandName || "-"],
           ["BU", req.buName || dept],
-          ["Request By", req.createdBy?.name || "-"],
+          ["Request By (MER)", req.createdBy ? `${req.createdBy.name || "-"}${req.createdBy.email ? "  ·  " + req.createdBy.email : ""}` : "-"],
           ["Factory", item.factory || "-"],
           ["Country / Port", `${item.country || "-"} / ${item.port || "-"}`],
         ] as [string, string][]).map(([l, v]) => (
@@ -194,6 +189,8 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           <Text style={[s.th, { width: C.so }]}>S/O NO.</Text>
           <Text style={[s.th, { width: C.style }]}>STYLE</Text>
           <Text style={[s.th, { flex: 1 }]}>DESCRIPTION</Text>
+          <Text style={[s.th, { width: C.hawb }]}>HAWB#</Text>
+          <Text style={[s.th, { width: C.inv }]}>INVOICE</Text>
           <Text style={[s.th, { width: C.qty }]}>QTY AIR</Text>
           <Text style={[s.th, { width: C.gross }]}>GROSS (KG)</Text>
           <Text style={[s.th, { width: C.est }]}>EST. (THB)</Text>
@@ -204,6 +201,8 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           <Text style={[s.td, { width: C.so }]}>{item.so || "-"}</Text>
           <Text style={[s.td, { width: C.style }]}>{item.style || "-"}</Text>
           <Text style={[s.tdL, { flex: 1 }]}>{item.description || "-"}</Text>
+          <Text style={[s.td, { width: C.hawb }]}>{item.hawbNo || "-"}</Text>
+          <Text style={[s.td, { width: C.inv }]}>{item.invoiceNo || "-"}</Text>
           <Text style={[s.td, { width: C.qty }]}>{fmtNum(item.qtyRequestAir)}</Text>
           <Text style={[s.td, { width: C.gross }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
           <Text style={[s.tdR, { width: C.est }]}>{fmtNum(est)}</Text>
@@ -217,6 +216,12 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           <Text style={[s.tdR, { width: C.act, fontFamily: "SarabunB", color: "#1E3A8A", borderRightWidth: 0 }]}>{actual != null ? fmtNum(actual) : "-"}</Text>
         </View>
       </View>
+      {item.hawbNo && actual != null && (
+        <Text style={s.remark}>
+          <Text style={s.remarkLabel}>HAWB {item.hawbNo} : </Text>
+          this SO&apos;s actual air freight ({fmtNum(actual)} THB) is its allocated share of the HAWB bill total.
+        </Text>
+      )}
 
       {/* Claim + remarks */}
       <Text style={s.remark}><Text style={s.remarkLabel}>Claim to : </Text>{claimText}</Text>
