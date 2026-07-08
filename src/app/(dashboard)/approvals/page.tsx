@@ -68,10 +68,7 @@ export default function ApprovalsPage() {
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
     if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
-      const match = r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
-      // TEMP DEBUG — remove after diagnosing GW/SUPPLIER visibility
-      console.log("[claim-filter]", r.documentNo, "| bu:", r.bu, "| role:", role, "| userClaimDept:", userClaimDept, "| myDepts:", JSON.stringify(myDepts), "| items:", JSON.stringify(items.map((i: any) => ({ so: i.so, st: i.itemStatus, splits: getSplits(i).map((s: any) => ({ d: s.dept, st: s.status })) }))), "| MATCH:", match)
-      return match
+      return r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }
     return false
   })
