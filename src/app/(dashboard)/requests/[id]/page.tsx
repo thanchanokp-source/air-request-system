@@ -14,6 +14,133 @@ const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isN
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
 
+// Executive summary shown to the President at final approval (both BU).
+// Focus: total ACTUAL air freight + a breakdown of how much each department claims,
+// then the SO table, then the single approve button centered below it.
+function PresidentFinalCard({ req, bu, submitting, onApprove }: {
+  req: any; bu: "GW" | "NYG"; submitting: boolean; onApprove: () => void
+}) {
+  const a = bu === "GW"
+    ? { border: "border-emerald-200", btn: "bg-emerald-600 hover:bg-emerald-700", badge: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-500", strong: "text-emerald-700" }
+    : { border: "border-blue-200", btn: "bg-blue-600 hover:bg-blue-700", badge: "bg-blue-100 text-blue-700", bar: "bg-blue-500", strong: "text-blue-700" }
+  const items: any[] = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
+  const totalEst = items.reduce((s, i) => s + (Number(i.airFreight) || 0), 0)
+  const totalAct = items.reduce((s, i) => s + (Number(i.actualAirFreight) || 0), 0)
+  // Aggregate claim amount per department: actual air freight × that dept's percentage.
+  const deptMap: Record<string, number> = {}
+  for (const i of items) {
+    const act = Number(i.actualAirFreight) || 0
+    for (const sp of getSplits(i)) {
+      deptMap[sp.dept] = (deptMap[sp.dept] || 0) + act * (Number(sp.pct) || 0) / 100
+    }
+  }
+  const deptRows = Object.entries(deptMap).map(([dept, amt]) => ({ dept, amt })).sort((x, y) => y.amt - x.amt)
+  const totalClaim = deptRows.reduce((s, d) => s + d.amt, 0)
+  const claimShareOfActual = totalAct > 0 ? Math.round((totalClaim / totalAct) * 100) : 0
+
+  const Stat = ({ label, value, sub, big }: { label: string; value: number; sub?: string; big?: boolean }) => (
+    <div className="px-4 py-3.5">
+      <p className="text-[10px] font-semibold text-gray-400 tracking-wide uppercase">{label}</p>
+      <p className={`tabular-nums font-bold ${big ? `text-2xl ${a.strong}` : "text-lg text-gray-700"}`}>{fmtNum(value)}</p>
+      {sub && <p className="text-[10px] text-gray-400 tabular-nums">{sub}</p>}
+    </div>
+  )
+
+  return (
+    <div className={`bg-white rounded-xl border ${a.border} overflow-hidden`}>
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-gray-800 text-sm">Final Approval — President</h2>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.badge}`}>{bu}</span>
+        </div>
+        <span className="text-xs text-gray-400 tabular-nums">{req.documentNo} · {req.brandName} · {items.length} SO</span>
+      </div>
+
+      {/* Headline figures — ACTUAL is the number the President is here to sign off. */}
+      <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/60">
+        <Stat label="Est. Air Freight" value={totalEst} sub="THB" />
+        <Stat label="Actual Air Freight" value={totalAct} sub="THB" big />
+        <Stat label="Total Claim" value={totalClaim} sub={`THB · ${claimShareOfActual}% of actual`} />
+      </div>
+
+      {/* Who claims how much */}
+      {deptRows.length > 0 && (
+        <div className="px-5 py-4 border-b border-gray-100">
+          <p className="text-[11px] font-semibold text-gray-400 tracking-wide uppercase mb-3">Claim breakdown by department</p>
+          <div className="space-y-2.5">
+            {deptRows.map(d => {
+              const share = totalClaim > 0 ? (d.amt / totalClaim) * 100 : 0
+              return (
+                <div key={d.dept}>
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="font-medium text-gray-700">{d.dept}</span>
+                    <span className="tabular-nums text-gray-800">
+                      <span className="font-semibold">{fmtNum(d.amt)}</span> <span className="text-gray-400 text-xs">THB</span>
+                      <span className="text-gray-400 text-xs ml-2">{Math.round(share)}%</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                    <div className={`h-full ${a.bar} rounded-full`} style={{ width: `${share}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* SO detail */}
+      <div className="overflow-x-auto">
+        <table className="text-xs w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              {["STYLE", "SO", "QTY AIR", "EST. (THB)", "ACTUAL (THB)", "CLAIM"].map(h =>
+                <th key={h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${["QTY AIR", "EST. (THB)", "ACTUAL (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {items.map((item: any) => (
+              <tr key={item.id} className="hover:bg-gray-50">
+                <td className="px-3 py-2 font-medium whitespace-nowrap">{item.style}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{item.so}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{fmtNum(item.qtyRequestAir)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-blue-600">{fmtNum(item.airFreight)}</td>
+                <td className="px-3 py-2 text-right tabular-nums font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
+                <td className="px-3 py-2">
+                  <div className="flex flex-wrap gap-1">
+                    {getSplits(item).map((sp: any, k: number) => (
+                      <span key={k} className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 whitespace-nowrap">
+                        {sp.dept} {sp.pct}%
+                      </span>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-100 bg-gray-50/60 font-semibold">
+              <td className="px-3 py-2 text-gray-600" colSpan={3}>Total</td>
+              <td className="px-3 py-2 text-right tabular-nums text-blue-600">{fmtNum(totalEst)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-green-700">{fmtNum(totalAct)}</td>
+              <td className="px-3 py-2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* Single decision — centered below the table */}
+      <div className="flex flex-col items-center gap-1.5 px-5 py-6 border-t border-gray-100">
+        <button disabled={submitting} onClick={onApprove}
+          className={`px-8 py-3 ${a.btn} text-white rounded-lg text-sm font-semibold disabled:opacity-50 shadow-sm`}>
+          {submitting ? "Approving..." : "✓ Approve & Send to Accounting"}
+        </button>
+        <span className="text-[11px] text-gray-400">Finalizes this document and sends it to Accounting</span>
+      </div>
+    </div>
+  )
+}
+
 // NYG claim departments (SCM NYG removed — NYG uses NYK, not NYG, as a claim dept).
 const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
 const CLAIM_DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
@@ -1192,29 +1319,16 @@ export default function RequestDetailPage() {
       {/* NYG President — FINAL approval: whole document, one button, no reject.
           Reached only after all claim depts approved + Logistics data complete. */}
       {isPresidentRole && (
-        <div className="bg-white rounded-xl border border-blue-200 p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-gray-800">Final Approval — President</h2>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">NYG</span>
-          </div>
-          <p className="text-sm text-gray-600">All claim departments have approved and Logistics data is complete. Approve to finalize this document and send it to Accounting.</p>
-          <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700">
-            <p><b>{req.documentNo}</b> · {req.brandName} · {req.items?.filter((i:any)=>i.itemStatus!=="REJECTED").length} SO</p>
-          </div>
-          <button disabled={submitting === "_pres"}
-            onClick={async () => {
-              setSubmitting("_pres")
-              const res = await fetch(`/api/requests/${id}/approve`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "president_approve" })
-              })
-              if (res.ok) { window.location.href = "/approvals" }
-              else { const e = await res.json().catch(()=>({})); alert(e.error || "Error"); setSubmitting(null) }
-            }}
-            className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-            {submitting === "_pres" ? "Approving..." : "✓ Approve & Send to Accounting"}
-          </button>
-        </div>
+        <PresidentFinalCard req={req} bu="NYG" submitting={submitting === "_pres"}
+          onApprove={async () => {
+            setSubmitting("_pres")
+            const res = await fetch(`/api/requests/${id}/approve`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "president_approve" })
+            })
+            if (res.ok) { window.location.href = "/approvals" }
+            else { const e = await res.json().catch(()=>({})); alert(e.error || "Error"); setSubmitting(null) }
+          }} />
       )}
 
       {/* (legacy per-style President UI — disabled; President is now the final approver) */}
@@ -1323,29 +1437,16 @@ export default function RequestDetailPage() {
       {/* GW President — FINAL approval: whole document, one button, no reject.
           Reached only after all claim depts approved + Logistics data filled. */}
       {isPresidentGW && (
-        <div className="bg-white rounded-xl border border-emerald-200 p-5 space-y-4">
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-gray-800">Final Approval — President</h2>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW</span>
-          </div>
-          <p className="text-sm text-gray-600">All claim departments have approved and Logistics data is complete. Approve to finalize this document and send it to Accounting.</p>
-          <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700">
-            <p><b>{req.documentNo}</b> · {req.brandName} · {req.items?.filter((i:any)=>i.itemStatus!=="REJECTED").length} SO</p>
-          </div>
-          <button disabled={submitting === "_pres"}
-            onClick={async () => {
-              setSubmitting("_pres")
-              const res = await fetch(`/api/requests/${id}/approve`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "president_approve_gw" })
-              })
-              if (res.ok) { window.location.href = "/approvals" }
-              else { const e = await res.json().catch(()=>({})); alert(e.error || "Error"); setSubmitting(null) }
-            }}
-            className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50">
-            {submitting === "_pres" ? "Approving..." : "✓ Approve & Send to Accounting"}
-          </button>
-        </div>
+        <PresidentFinalCard req={req} bu="GW" submitting={submitting === "_pres"}
+          onApprove={async () => {
+            setSubmitting("_pres")
+            const res = await fetch(`/api/requests/${id}/approve`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "president_approve_gw" })
+            })
+            if (res.ok) { window.location.href = "/approvals" }
+            else { const e = await res.json().catch(()=>({})); alert(e.error || "Error"); setSubmitting(null) }
+          }} />
       )}
 
       {(isVpMerGW || isGmGW) && (
