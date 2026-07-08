@@ -2306,9 +2306,44 @@ export default function RequestDetailPage() {
       {/* GW per-department Finish / Forward panel (independent per dept) */}
       {showGwFinishForward && (
         <div className="space-y-3 mb-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800">CLAIM — {gwFwdCanonicalDept} ({gwFwdItems.length} SO)</h2>
-            <span className="text-xs text-gray-400">Handle your department only</span>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-gray-800">CLAIM — {gwFwdCanonicalDept} ({gwFwdItems.length} SO)</h2>
+              <span className="text-xs text-gray-400 hidden sm:inline">· your dept only</span>
+            </div>
+            {/* Actions (right, small — same as GM) */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs text-yellow-600 font-medium">{gwFwdItems.length} pending</span>
+              {gwFwdItems.length > 0 && (
+                <button onClick={() => setDvmSelected(dvmSelected.size === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}
+                  className="text-xs text-blue-600 hover:underline">
+                  {dvmSelected.size === gwFwdItems.length ? "Deselect All" : `Select All (${gwFwdItems.length})`}
+                </button>
+              )}
+              <button onClick={() => { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }} disabled={claimFwdSaving}
+                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40">
+                {claimFwdSaving ? "..." : `✓ Approve All (${gwFwdItems.length})`}
+              </button>
+              <button onClick={async () => {
+                  const reason = window.prompt(`Reason for sending ${gwFwdItems.length} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
+                  if (reason == null || !reason.trim()) return
+                  setClaimFwdSaving(true)
+                  const backAction = isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so"
+                  let updated: any = req
+                  for (const it of gwFwdItems) {
+                    const res = await fetch(`/api/requests/${id}/approve`, {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: backAction, itemId: it.id, comment: reason.trim() })
+                    })
+                    if (res.ok) updated = await res.json()
+                    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
+                  }
+                  setReq(updated); setClaimFwdDone(`back`); setClaimFwdSaving(false)
+                }} disabled={claimFwdSaving}
+                className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-40">
+                ↩ {isGWRequest ? "Back to MER" : "Back to SCM"}
+              </button>
+            </div>
           </div>
           {/* Attach supporting files — by DOCUMENT */}
           <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2 flex-wrap">
@@ -2319,12 +2354,10 @@ export default function RequestDetailPage() {
                 onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
             </label>
           </div>
-          {/* Counts + Select All (parity with SCM NYK) */}
-          <div className="flex items-center justify-end gap-4 text-xs font-medium">
-            <span className="text-yellow-600">{gwFwdItems.length} pending</span>
+          {/* (counts + Select All moved to the header row above) */}
+          <div className="hidden">
             {gwFwdItems.length > 0 && (
-              <button onClick={() => setDvmSelected(dvmSelected.size === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}
-                className="text-blue-600 hover:underline">
+              <button onClick={() => setDvmSelected(dvmSelected.size === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}>
                 {dvmSelected.size === gwFwdItems.length ? "Deselect All" : `Select All (${gwFwdItems.length})`}
               </button>
             )}
@@ -2394,35 +2427,10 @@ export default function RequestDetailPage() {
               )
             })}
           </div>
-          {/* Approve All → popup (forced next position, or finish) · Back to MER/SCM → reject */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <button onClick={() => { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }} disabled={claimFwdSaving}
-              className="bg-green-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-40">
-              ✓ Approve All ({gwFwdItems.length} SO)
-            </button>
-            <button onClick={async () => {
-                const reason = window.prompt(`Reason for sending ${gwFwdItems.length} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
-                if (reason == null || !reason.trim()) return
-                setClaimFwdSaving(true)
-                const backAction = isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so"
-                let updated: any = req
-                for (const it of gwFwdItems) {
-                  const res = await fetch(`/api/requests/${id}/approve`, {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: backAction, itemId: it.id, comment: reason.trim() })
-                  })
-                  if (res.ok) updated = await res.json()
-                  else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
-                }
-                setReq(updated); setClaimFwdDone(`back`); setClaimFwdSaving(false)
-              }} disabled={claimFwdSaving}
-              className="bg-orange-500 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-orange-600 disabled:opacity-40">
-              ↩ {isGWRequest ? "Back to MER" : "Back to SCM"}
-            </button>
-            <p className="text-[11px] text-gray-400">
-              {gwIsLastPos ? "Final position — approve to finish the process." : <>Approve, then forward to the next position: <b className="text-gray-600">{gwNextPosLabel}</b></>}
-            </p>
-          </div>
+          {/* Helper note (buttons moved to the header row above) */}
+          <p className="text-[11px] text-gray-400">
+            {gwIsLastPos ? "Final position — approve to finish the process." : <>Approve, then forward to the next position: <b className="text-gray-600">{gwNextPosLabel}</b></>}
+          </p>
         </div>
       )}
 
