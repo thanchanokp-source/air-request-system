@@ -65,7 +65,12 @@ export async function GET(req: NextRequest) {
       items: true,
       attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
       approvalLogs: {
-        where: { action: "REJECT" },
+        // REJECT logs (for rejection info) + the "ready to book" approval
+        // (VP SCM for NYG / GM for GW) so the Booking File can show who approved.
+        where: { OR: [
+          { action: "REJECT" },
+          { action: "APPROVE", fromStatus: { in: ["PENDING_VP_SCM", "PENDING_GM_GW"] } },
+        ] },
         orderBy: { createdAt: "desc" },
         include: { user: { select: { name: true } } }
       }

@@ -12,18 +12,36 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; return `${String(d.getDate()).padStart(2,"0")}/${MONTHS[d.getMonth()]}/${d.getFullYear()}` }
 const fmtNum = (v: any) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "-"
 
-const PRESIDENT_STATUSES = [
-  "PENDING_SCM","PENDING_VP_SCM",
-  "PENDING_LOGISTICS","PENDING_LOGISTICS_GW","PENDING_CLAIM","PENDING_CLAIM_GW",
-  "PENDING_SCM_GW","PENDING_ACCOUNTING","COMPLETED"
+// A document is "ready to book" once it has passed the approval Logistics needs:
+//  - NYG: VP SCM approved  → PENDING_LOGISTICS / PENDING_CLAIM and beyond
+//  - GW:  GM approved       → PENDING_LOGISTICS_GW / PENDING_CLAIM_GW and beyond
+// (President is now the FINAL approver, so these are all post-VP-SCM/GM.)
+const BOOK_READY_STATUSES = [
+  "PENDING_LOGISTICS", "PENDING_CLAIM", "PENDING_PRESIDENT",
+  "PENDING_LOGISTICS_GW", "PENDING_CLAIM_GW", "PENDING_PRESIDENT_GW",
+  "PENDING_ACCOUNTING", "COMPLETED",
 ]
 
 function qualifies(req: any, type: FolderType): boolean {
   const items: any[] = req.items || []
   if (type === "FINAL") return req.status === "COMPLETED"
   if (type === "LOGISTICS") return items.some((i: any) => i.invoiceNo)
-  if (type === "BOOKING") return PRESIDENT_STATUSES.includes(req.status)
+  if (type === "BOOKING") return BOOK_READY_STATUSES.includes(req.status)
   return false
+}
+
+// Who approved this doc for booking (VP SCM / GM) — from the approval log.
+function bookApproval(req: any): { by: string; date: string; role: string } | null {
+  const log = (req.approvalLogs || []).find((l: any) =>
+    l.action === "APPROVE" && (l.fromStatus === "PENDING_VP_SCM" || l.fromStatus === "PENDING_GM_GW"))
+  if (!log) return null
+  return { by: log.user?.name || "-", date: log.createdAt, role: log.fromStatus === "PENDING_GM_GW" ? "GM" : "VP SCM" }
+}
+
+// Booked = Logistics has filled the actual freight for every active item.
+function isBooked(req: any): boolean {
+  const items = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
+  return items.length > 0 && items.every((i: any) => i.actualAirFreight != null)
 }
 
 const FOLDER_LABELS: Record<FolderType, string> = {
@@ -32,7 +50,7 @@ const FOLDER_LABELS: Record<FolderType, string> = {
   FINAL: "Final File",
 }
 const FOLDER_DESC: Record<FolderType, string> = {
-  BOOKING: "After President approval — used by Logistics to book air",
+  BOOKING: "Approved by VP SCM (NYG) / GM (GW) — ready for Logistics to book air",
   LOGISTICS: "After Logistics uploads the Excel with Invoice & Freight",
   FINAL: "Requests that are COMPLETED",
 }
@@ -312,6 +330,22 @@ export default function FilesPage() {
                               <span className="font-semibold text-blue-700 text-sm">{req.documentNo}</span>
                               <span className="text-xs text-gray-400">{req.brandName}</span>
                               <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${req.bu === "GW" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{req.bu}</span>
+                              {activeFolder === "BOOKING" && (() => {
+                                const ap = bookApproval(req)
+                                const booked = isBooked(req)
+                                return (
+                                  <span className="flex items-center gap-1.5 flex-wrap">
+                                    {ap && (
+                                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium whitespace-nowrap">
+                                        ✓ Approved by {ap.role} · {ap.by} · {fmtDate(ap.date)}
+                                      </span>
+                                    )}
+                                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${booked ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700"}`}>
+                                      {booked ? "✓ Booked" : "● To book"}
+                                    </span>
+                                  </span>
+                                )
+                              })()}
                               <span className="text-xs text-gray-400 ml-auto">{items.length} SO(s) · {fmtDate(req.createdAt)}</span>
                             </button>
 

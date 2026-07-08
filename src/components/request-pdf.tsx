@@ -1,175 +1,258 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer"
+import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/renderer"
+import { getSplits } from "@/lib/claim"
+
+// Thai-capable font (Sarabun) so Thai text (reasons, names, remarks) renders.
+// Registered as two families to keep the existing regular/bold style split.
+Font.register({ family: "Sarabun", src: "/fonts/Sarabun-Regular.ttf" })
+Font.register({ family: "SarabunB", src: "/fonts/Sarabun-Bold.ttf" })
+Font.registerHyphenationCallback((word: string) => [word]) // avoid breaking Thai words
+
+// Company letterhead — edit here if the legal entity / address changes.
+const COMPANY = {
+  name: "Nan Yang Garment Co., Ltd.",
+  thai: "บริษัท นันยางการ์เม้นท์ จำกัด",
+  address: "27 Phetkasem Rd, Nong Khang Phlu, Nong Khaem, Bangkok 10160, Thailand",
+}
 
 const fmtDate = (v: any) => {
   if (!v) return "-"
   const d = new Date(v)
   if (isNaN(d.getTime())) return "-"
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+  return `${String(d.getDate()).padStart(2, "0")} ${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
 }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
 
+// Spell a THB amount in English words (for the "Say total" line, like a formal note).
+function bahtInWords(n: number): string {
+  if (n == null || isNaN(n)) return ""
+  const baht = Math.floor(Math.abs(n))
+  const satang = Math.round((Math.abs(n) - baht) * 100)
+  const ones = ["", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN", "EIGHTEEN", "NINETEEN"]
+  const tens = ["", "", "TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY", "EIGHTY", "NINETY"]
+  const below1000 = (x: number): string => {
+    let str = ""
+    if (x >= 100) { str += ones[Math.floor(x / 100)] + " HUNDRED"; x %= 100; if (x) str += " " }
+    if (x >= 20) { str += tens[Math.floor(x / 10)]; x %= 10; if (x) str += " " + ones[x] }
+    else if (x > 0) str += ones[x]
+    return str
+  }
+  const scales = ["", "THOUSAND", "MILLION", "BILLION"]
+  const groups: number[] = []
+  let num = baht
+  while (num > 0) { groups.push(num % 1000); num = Math.floor(num / 1000) }
+  const parts: string[] = []
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i] === 0) continue
+    parts.push(below1000(groups[i]) + (scales[i] ? " " + scales[i] : ""))
+  }
+  let result = (parts.join(" ") || "ZERO") + " BAHT"
+  if (satang > 0) result += ` AND ${below1000(satang)} SATANG`
+  return result
+}
+
 const s = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 8.5, paddingHorizontal: 40, paddingVertical: 32, color: "#222" },
-  title: { fontSize: 15, fontFamily: "Helvetica-Bold", color: "#1E40AF", textAlign: "center", letterSpacing: 0.5, marginBottom: 10, paddingBottom: 8, borderBottomWidth: 1.5, borderBottomColor: "#1E40AF" },
-  infoRow: { flexDirection: "row", paddingVertical: 3, borderBottomWidth: 0.5, borderBottomColor: "#E5E7EB" },
-  infoLabel: { width: 150, fontFamily: "Helvetica-Bold", fontSize: 8, color: "#555" },
-  infoValue: { flex: 1, fontSize: 8.5 },
-  sectionBar: { backgroundColor: "#DBEAFE", paddingHorizontal: 8, paddingVertical: 4, marginTop: 10, marginBottom: 1, flexDirection: "row", borderLeftWidth: 3, borderLeftColor: "#1D4ED8" },
-  sectionTitle: { fontFamily: "Helvetica-Bold", color: "#1D4ED8", fontSize: 9 },
-  approvalHeaderRow: { flexDirection: "row", backgroundColor: "#F3F4F6", paddingHorizontal: 8, paddingVertical: 4, marginTop: 2 },
-  approvalRow: { flexDirection: "row", paddingHorizontal: 8, paddingVertical: 3.5, borderBottomWidth: 0.5, borderBottomColor: "#E5E7EB" },
-  approvalPos: { width: 130, fontFamily: "Helvetica-Bold", fontSize: 8, color: "#444" },
-  approvalName: { width: 120, fontSize: 8.5 },
-  approvalDate: { flex: 1, fontSize: 8, color: "#666" },
+  page: { fontFamily: "Sarabun", fontSize: 8.5, paddingHorizontal: 34, paddingTop: 26, paddingBottom: 96, color: "#1a1a1a" },
+  // Letterhead
+  lh: { flexDirection: "row", alignItems: "center", marginBottom: 2 },
+  logo: { width: 52, height: 52, marginRight: 10, objectFit: "contain" },
+  lhMid: { flex: 1, alignItems: "center" },
+  coName: { fontSize: 12.5, fontFamily: "SarabunB", color: "#1E3A8A" },
+  coThai: { fontSize: 8, color: "#555", marginTop: 1 },
+  coAddr: { fontSize: 6.8, color: "#888", marginTop: 3, textAlign: "center" },
+  docBox: { width: 118, alignItems: "flex-end" },
+  docLabel: { fontSize: 6.8, color: "#888", fontFamily: "SarabunB" },
+  docVal: { fontSize: 12, fontFamily: "SarabunB", color: "#111", marginTop: 1 },
+  rule: { borderBottomWidth: 1.3, borderBottomColor: "#1E3A8A", marginTop: 4, marginBottom: 8 },
+  // Title bar
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  titleWrap: { flexDirection: "row", alignItems: "center" },
+  title: { fontSize: 13, fontFamily: "SarabunB", letterSpacing: 1, color: "#111" },
+  scope: { marginLeft: 8, borderWidth: 0.6, borderColor: "#bbb", paddingHorizontal: 4, paddingVertical: 1.5 },
+  scopeTxt: { fontSize: 6.8, color: "#666" },
+  scopeVal: { fontSize: 6.8, fontFamily: "SarabunB", color: "#333" },
+  deptBadge: { fontSize: 8, fontFamily: "SarabunB", color: "#1E3A8A", borderWidth: 1, borderColor: "#1E3A8A", paddingHorizontal: 9, paddingVertical: 2.5, borderRadius: 9 },
+  // Info grid
+  grid: { flexDirection: "row", flexWrap: "wrap" },
+  gcell: { width: "33.33%", flexDirection: "row", paddingVertical: 3.5 },
+  gcellFull: { width: "100%", flexDirection: "row", paddingVertical: 3.5, borderTopWidth: 0.5, borderTopColor: "#eee", marginTop: 2 },
+  glabel: { fontSize: 7.5, fontFamily: "SarabunB", color: "#555", marginRight: 4 },
+  gval: { fontSize: 8, color: "#111", flex: 1 },
+  // Section label
+  secLabel: { fontSize: 8, fontFamily: "SarabunB", color: "#1E3A8A", letterSpacing: 0.5, marginTop: 10, marginBottom: 3 },
+  // Details table
+  table: { borderWidth: 0.8, borderColor: "#333" },
+  thead: { flexDirection: "row", backgroundColor: "#1E3A8A" },
+  th: { color: "#fff", fontFamily: "SarabunB", fontSize: 6.8, paddingHorizontal: 3, paddingVertical: 4, textAlign: "center", borderRightWidth: 0.5, borderRightColor: "#4B6CB7" },
+  tr: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#ddd" },
+  td: { fontSize: 7.5, paddingHorizontal: 3, paddingVertical: 4, textAlign: "center", borderRightWidth: 0.5, borderRightColor: "#eee" },
+  tdL: { fontSize: 7.5, paddingHorizontal: 3, paddingVertical: 4, textAlign: "left", borderRightWidth: 0.5, borderRightColor: "#eee" },
+  tdR: { fontSize: 7.5, paddingHorizontal: 3, paddingVertical: 4, textAlign: "right", borderRightWidth: 0.5, borderRightColor: "#eee" },
+  totalRow: { flexDirection: "row", backgroundColor: "#EFF3FB", borderTopWidth: 0.8, borderTopColor: "#333" },
+  // Remarks + total
+  remark: { fontSize: 7.5, marginTop: 6 },
+  remarkLabel: { fontFamily: "SarabunB", color: "#555" },
+  totalBoxWrap: { flexDirection: "row", justifyContent: "flex-end", marginTop: 8 },
+  totalBox: { width: 190, borderWidth: 0.8, borderColor: "#333" },
+  totalBoxRow: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 8, paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: "#ccc" },
+  totalBoxRowLast: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 8, paddingVertical: 4 },
+  totalBoxK: { fontSize: 8, fontFamily: "SarabunB", color: "#555" },
+  totalBoxV: { fontSize: 10, fontFamily: "SarabunB", color: "#1E3A8A" },
+  sayTotal: { fontSize: 7.5, marginTop: 6, fontFamily: "Sarabun", color: "#333" },
+  // Signatures pinned near the bottom
+  sigWrap: { position: "absolute", bottom: 34, left: 34, right: 34, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  sigCol: { width: "19%", alignItems: "center", marginBottom: 6 },
+  sigSpace: { height: 26, width: "100%", justifyContent: "flex-end" },
+  sigImg: { height: 24, marginBottom: 1, objectFit: "contain" },
+  sigLine: { borderBottomWidth: 0.6, borderBottomColor: "#333", width: "100%", marginBottom: 2 },
+  sigName: { fontSize: 7, fontFamily: "SarabunB", textAlign: "center" },
+  sigTitle: { fontSize: 6.3, color: "#555", textAlign: "center", marginTop: 0.5 },
+  sigDate: { fontSize: 6, color: "#888", textAlign: "center", marginTop: 1 },
+  footer: { position: "absolute", bottom: 14, left: 34, right: 34, flexDirection: "row", justifyContent: "space-between", fontSize: 6.3, color: "#aaa" },
 })
 
 function ItemPage({ req, item }: { req: any; item: any }) {
-  // Build approval chain from approvalLogs for style-level approvals
-  const approveLogs = (req.approvalLogs || []).filter((l: any) => l.action === "APPROVE")
-  const styleLogsByPos: Record<string, { name: string; date: string }> = {}
   const isGW = req.bu === "GW"
-  const styleLevelPositions = isGW
-    ? ["DPM GW", "GM GW", "PRESIDENT GW", "LOGISTICS GW"]
-    : ["VP MER", "SCM", "VP SCM", "PRESIDENT", "LOGISTICS"]
-  const roleToPos: Record<string, string> = isGW
-    ? {
-        VP_MER_GW: "DPM GW",
-        DPM_GW: "DPM GW",
-        GM_GW: "GM GW",
-        PRESIDENT_GW: "PRESIDENT GW",
-        LOGISTICS_GW: "LOGISTICS GW",
-      }
-    : {
-        VP_MER: "VP MER",
-        SCM_USER: "SCM",
-        VP_SCM: "VP SCM",
-        PRESIDENT: "PRESIDENT",
-        LOGISTICS: "LOGISTICS",
-      }
-  for (const log of approveLogs) {
-    const pos = roleToPos[log.user?.role]
-    if (pos && !styleLogsByPos[pos]) {
-      styleLogsByPos[pos] = { name: log.user?.name || "-", date: fmtDate(log.createdAt) }
-    }
+  const approveLogs = (req.approvalLogs || []).filter((l: any) => l.action === "APPROVE")
+
+  // Signature slots = requester + each approval position in chain order.
+  // A slot shows the approver's name + date once its approval log exists.
+  const chain: [string, string][] = isGW
+    ? [["PENDING_VP_MER_GW", "DPM"], ["PENDING_GM_GW", "GM"], ["PENDING_PRESIDENT_GW", "President"]]
+    : [["PENDING_VP_MER", "VP Merchandising"], ["PENDING_SCM", "SCM"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
+  const signers: { title: string; name: string; date: any; verb: string }[] = [
+    { title: "Requester", name: req.createdBy?.name || "", date: req.createdAt, verb: "Created" },
+  ]
+  for (const [status, label] of chain) {
+    const log = approveLogs.find((l: any) => l.fromStatus === status)
+    signers.push({ title: label, name: log?.user?.name || "", date: log?.createdAt, verb: log ? "Approved" : "" })
   }
 
-  // DVM approvals for this item (from claimApprovals, role starts with DVM_)
-  const dvmApprovals = (item.claimApprovals || [])
-    .filter((a: any) => a.role?.startsWith("DVM_") || a.role?.startsWith("CLAIM_"))
-    .sort((a: any, b: any) => (a.user?.priority ?? 99) - (b.user?.priority ?? 99))
+  const splits = getSplits(item)
+  const claimText = splits.length
+    ? splits.map((sp: any) => `${sp.dept} ${sp.pct}%`).join(",  ")
+    : ((isGW ? req.claimDepartment : item.claimDepartment) || "-")
 
-  // VP approvals for this item (from claimApprovals, role starts with VP_)
-  const vpApprovals = (item.claimApprovals || [])
-    .filter((a: any) => a.role?.startsWith("VP_") && a.role !== "VP_SCM")
-    .sort((a: any, b: any) => (a.user?.priority ?? 99) - (b.user?.priority ?? 99))
+  const est = Number(item.airFreight) || 0
+  const actual = item.actualAirFreight != null ? Number(item.actualAirFreight) : null
+  const grandTotal = actual != null ? actual : est
+  const dept = isGW ? "GW" : "NYG"
+  const C = { no: 20, so: 58, style: 54, qty: 40, gross: 46, est: 56, act: 56 }
 
   return (
     <Page size="A4" style={s.page}>
-      <Text style={s.title}>AIR REQUEST REPORT</Text>
-
-      {/* Header info */}
-      {[
-        ["REQUEST DATE", fmtDate(req.createdAt)],
-        ["REQUEST BY", req.createdBy?.name || "-"],
-        ["DOCUMENT NO", req.documentNo],
-      ].map(([label, value]) => (
-        <View key={label} style={s.infoRow}>
-          <Text style={s.infoLabel}>{label}</Text>
-          <Text style={s.infoValue}>{value}</Text>
+      {/* Letterhead */}
+      <View style={s.lh}>
+        <Image style={s.logo} src="/LOGO.png" />
+        <View style={s.lhMid}>
+          <Text style={s.coName}>{COMPANY.name}</Text>
+          <Text style={s.coThai}>{COMPANY.thai}</Text>
+          <Text style={s.coAddr}>{COMPANY.address}</Text>
         </View>
-      ))}
-
-      {/* Product Details */}
-      <View style={s.sectionBar}><Text style={s.sectionTitle}>PRODUCT DETAILS</Text></View>
-      {[
-        ["BU", req.buName || "-"],
-        ["BRAND NAME", req.brandName || "-"],
-        ["SO", item.so || "-"],
-        ["CUSTOMER PO", item.customerPO || "-"],
-        ["STYLE", item.style || "-"],
-        ["GMT TYPE", item.gmtType || "-"],
-        ["DESCRIPTION", item.description || "-"],
-        ["FACTORY", item.factory || "-"],
-        ["COUNTRY / PORT", `${item.country || "-"} / ${item.port || "-"}`],
-      ].map(([label, value]) => (
-        <View key={label} style={s.infoRow}>
-          <Text style={s.infoLabel}>{label}</Text>
-          <Text style={s.infoValue}>{value}</Text>
+        <View style={s.docBox}>
+          <Text style={s.docLabel}>Document No.</Text>
+          <Text style={s.docVal}>{req.documentNo}</Text>
         </View>
-      ))}
-
-      {/* Shipment & Quantity */}
-      <View style={s.sectionBar}><Text style={s.sectionTitle}>SHIPMENT & QUANTITY</Text></View>
-      {[
-        ["ORIGINAL SHIP DATE", fmtDate(item.originalShipmentDate)],
-        ["PLAN SHIP DATE", fmtDate(item.planShipmentDate)],
-        ["QTY ORIGINAL", String(item.qtyOriginalShipment ?? "-")],
-        ["QTY REQUEST AIR", String(item.qtyRequestAir ?? "-")],
-        ["GROSS WEIGHT", item.grossWeight != null ? `${fmtNum(item.grossWeight, 2)} kg` : "-"],
-        ["EST. AIR FREIGHT", item.airFreight != null ? `${fmtNum(item.airFreight)} THB` : "-"],
-      ].map(([label, value]) => (
-        <View key={label} style={s.infoRow}>
-          <Text style={s.infoLabel}>{label}</Text>
-          <Text style={s.infoValue}>{value}</Text>
-        </View>
-      ))}
-
-      {/* Logistics */}
-      <View style={s.sectionBar}><Text style={s.sectionTitle}>LOGISTICS</Text></View>
-      {[
-        ["INVOICE NO", item.invoiceNo || "-"],
-        ["BOOKING DATE", fmtDate(item.bookingDate)],
-        ["ACTUAL AIR FREIGHT", item.actualAirFreight != null ? `${fmtNum(item.actualAirFreight)} THB` : "-"],
-      ].map(([label, value]) => (
-        <View key={label} style={s.infoRow}>
-          <Text style={s.infoLabel}>{label}</Text>
-          <Text style={s.infoValue}>{value}</Text>
-        </View>
-      ))}
-
-      {/* Reason & Claim */}
-      <View style={s.sectionBar}><Text style={s.sectionTitle}>REASON & CLAIM</Text></View>
-      {[
-        ["CLAIM DEPARTMENT", (isGW ? req.claimDepartment : item.claimDepartment) || "-"],
-        ["REASON DELAY", item.reasonDelay || "-"],
-      ].map(([label, value]) => (
-        <View key={label} style={s.infoRow}>
-          <Text style={s.infoLabel}>{label}</Text>
-          <Text style={s.infoValue}>{value}</Text>
-        </View>
-      ))}
-
-      {/* Approval Chain */}
-      <View style={s.sectionBar}><Text style={s.sectionTitle}>APPROVAL CHAIN</Text></View>
-      <View style={s.approvalHeaderRow}>
-        <Text style={[s.approvalPos, { color: "#1D4ED8", fontSize: 8, fontFamily: "Helvetica-Bold" }]}>POSITION</Text>
-        <Text style={[s.approvalName, { color: "#1D4ED8", fontSize: 8, fontFamily: "Helvetica-Bold" }]}>APPROVER</Text>
-        <Text style={[s.approvalDate, { color: "#1D4ED8", fontSize: 8, fontFamily: "Helvetica-Bold" }]}>DATE</Text>
       </View>
-      {styleLevelPositions.filter(p => styleLogsByPos[p]).map(pos => (
-        <View key={pos} style={s.approvalRow}>
-          <Text style={s.approvalPos}>{pos}</Text>
-          <Text style={s.approvalName}>{styleLogsByPos[pos].name}</Text>
-          <Text style={s.approvalDate}>{styleLogsByPos[pos].date}</Text>
+      <View style={s.rule} />
+
+      {/* Title bar */}
+      <View style={s.titleRow}>
+        <View style={s.titleWrap}>
+          <Text style={s.title}>AIR FREIGHT REQUEST</Text>
+          <View style={s.scope}><Text style={s.scopeTxt}>SCOPE  <Text style={s.scopeVal}>Internal</Text></Text></View>
         </View>
-      ))}
-      {dvmApprovals.map((a: any, i: number) => (
-        <View key={`dvm-${i}`} style={s.approvalRow}>
-          <Text style={s.approvalPos}>DVM {item.claimDepartment} {a.user?.priority != null ? `(P${a.user.priority})` : ""}</Text>
-          <Text style={s.approvalName}>{a.user?.name || "-"}</Text>
-          <Text style={s.approvalDate}>{fmtDate(a.createdAt)}</Text>
+        <Text style={s.deptBadge}>{dept}</Text>
+      </View>
+
+      {/* Info grid */}
+      <View style={s.grid}>
+        {([
+          ["Date", fmtDate(req.createdAt)],
+          ["Brand", req.brandName || "-"],
+          ["BU", req.buName || dept],
+          ["Request By", req.createdBy?.name || "-"],
+          ["Factory", item.factory || "-"],
+          ["Country / Port", `${item.country || "-"} / ${item.port || "-"}`],
+        ] as [string, string][]).map(([l, v]) => (
+          <View key={l} style={s.gcell}>
+            <Text style={s.glabel}>{l} :</Text>
+            <Text style={s.gval}>{v}</Text>
+          </View>
+        ))}
+        <View style={s.gcellFull}>
+          <Text style={s.glabel}>Reason :</Text>
+          <Text style={s.gval}>{item.reasonDelay || "-"}</Text>
         </View>
-      ))}
-      {vpApprovals.map((a: any, i: number) => (
-        <View key={`vp-${i}`} style={s.approvalRow}>
-          <Text style={s.approvalPos}>VP {item.claimDepartment} {a.user?.priority != null ? `(P${a.user.priority})` : ""}</Text>
-          <Text style={s.approvalName}>{a.user?.name || "-"}</Text>
-          <Text style={s.approvalDate}>{fmtDate(a.createdAt)}</Text>
+      </View>
+
+      {/* Details */}
+      <Text style={s.secLabel}>DETAILS</Text>
+      <View style={s.table}>
+        <View style={s.thead}>
+          <Text style={[s.th, { width: C.no }]}>No.</Text>
+          <Text style={[s.th, { width: C.so }]}>S/O NO.</Text>
+          <Text style={[s.th, { width: C.style }]}>STYLE</Text>
+          <Text style={[s.th, { flex: 1 }]}>DESCRIPTION</Text>
+          <Text style={[s.th, { width: C.qty }]}>QTY AIR</Text>
+          <Text style={[s.th, { width: C.gross }]}>GROSS (KG)</Text>
+          <Text style={[s.th, { width: C.est }]}>EST. (THB)</Text>
+          <Text style={[s.th, { width: C.act, borderRightWidth: 0 }]}>ACTUAL (THB)</Text>
         </View>
-      ))}
-      {styleLevelPositions.every(p => !styleLogsByPos[p]) && dvmApprovals.length === 0 && vpApprovals.length === 0 && (
-        <View style={s.approvalRow}><Text style={[s.approvalPos, { color: "#999" }]}>No approvals recorded</Text></View>
-      )}
+        <View style={s.tr}>
+          <Text style={[s.td, { width: C.no }]}>1</Text>
+          <Text style={[s.td, { width: C.so }]}>{item.so || "-"}</Text>
+          <Text style={[s.td, { width: C.style }]}>{item.style || "-"}</Text>
+          <Text style={[s.tdL, { flex: 1 }]}>{item.description || "-"}</Text>
+          <Text style={[s.td, { width: C.qty }]}>{fmtNum(item.qtyRequestAir)}</Text>
+          <Text style={[s.td, { width: C.gross }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
+          <Text style={[s.tdR, { width: C.est }]}>{fmtNum(est)}</Text>
+          <Text style={[s.tdR, { width: C.act, borderRightWidth: 0 }]}>{actual != null ? fmtNum(actual) : "-"}</Text>
+        </View>
+        <View style={s.totalRow}>
+          <Text style={[s.tdR, { flex: 1, fontFamily: "SarabunB" }]}>TOTAL</Text>
+          <Text style={[s.td, { width: C.qty, fontFamily: "SarabunB" }]}>{fmtNum(item.qtyRequestAir)}</Text>
+          <Text style={[s.td, { width: C.gross, fontFamily: "SarabunB" }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
+          <Text style={[s.tdR, { width: C.est, fontFamily: "SarabunB" }]}>{fmtNum(est)}</Text>
+          <Text style={[s.tdR, { width: C.act, fontFamily: "SarabunB", color: "#1E3A8A", borderRightWidth: 0 }]}>{actual != null ? fmtNum(actual) : "-"}</Text>
+        </View>
+      </View>
+
+      {/* Claim + remarks */}
+      <Text style={s.remark}><Text style={s.remarkLabel}>Claim to : </Text>{claimText}</Text>
+      <Text style={s.remark}><Text style={s.remarkLabel}>Additional Remarks : </Text>{item.reasonDelay || "-"}</Text>
+
+      {/* Total box */}
+      <View style={s.totalBoxWrap}>
+        <View style={s.totalBox}>
+          <View style={s.totalBoxRow}>
+            <Text style={s.totalBoxK}>TOTAL</Text>
+            <Text style={s.totalBoxV}>{fmtNum(grandTotal)}</Text>
+          </View>
+          <View style={s.totalBoxRowLast}>
+            <Text style={s.totalBoxK}>Currency</Text>
+            <Text style={[s.totalBoxV, { color: "#111" }]}>THB</Text>
+          </View>
+        </View>
+      </View>
+      <Text style={s.sayTotal}>Say total : {bahtInWords(grandTotal)}</Text>
+
+      {/* Signatures pinned near the bottom */}
+      <View style={s.sigWrap}>
+        {signers.map((sg, i) => (
+          <View key={i} style={s.sigCol}>
+            <View style={s.sigSpace}><View style={s.sigLine} /></View>
+            <Text style={s.sigName}>( {sg.name || "-"} )</Text>
+            <Text style={s.sigTitle}>{sg.title}</Text>
+            <Text style={s.sigDate}>{sg.verb ? `${sg.verb} ${fmtDate(sg.date)}` : "Pending"}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={s.footer} fixed>
+        <Text>Generated by Air Request System</Text>
+        <Text>{COMPANY.name}</Text>
+      </View>
     </Page>
   )
 }
@@ -192,16 +275,16 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
 
 // ─── HAWB PDF (single HAWB, client-side) ─────────────────────────────────────
 const hw = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 8, paddingHorizontal: 24, paddingVertical: 20, color: "#111" },
-  title: { fontSize: 13, fontFamily: "Helvetica-Bold", color: "#1E3A8A", textAlign: "center", letterSpacing: 0.5, marginBottom: 6 },
+  page: { fontFamily: "Sarabun", fontSize: 8, paddingHorizontal: 24, paddingVertical: 20, color: "#111" },
+  title: { fontSize: 13, fontFamily: "SarabunB", color: "#1E3A8A", textAlign: "center", letterSpacing: 0.5, marginBottom: 6 },
   headerBox: { flexDirection: "row", gap: 0, borderWidth: 1, borderColor: "#CBD5E1", borderRadius: 3, marginBottom: 8, overflow: "hidden" },
   headerCell: { flex: 1, padding: "4 8", borderRightWidth: 1, borderRightColor: "#CBD5E1" },
   headerCellLast: { flex: 1, padding: "4 8" },
-  headerLabel: { fontSize: 6.5, color: "#64748B", fontFamily: "Helvetica-Bold", marginBottom: 1.5 },
-  headerValue: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "#0F172A" },
+  headerLabel: { fontSize: 6.5, color: "#64748B", fontFamily: "SarabunB", marginBottom: 1.5 },
+  headerValue: { fontSize: 9, fontFamily: "SarabunB", color: "#0F172A" },
   table: { borderWidth: 1, borderColor: "#CBD5E1" },
   thead: { flexDirection: "row", backgroundColor: "#1E3A8A" },
-  th: { paddingHorizontal: 4, paddingVertical: 4, color: "#FFF", fontFamily: "Helvetica-Bold", fontSize: 6.5, textAlign: "center", borderRightWidth: 0.5, borderRightColor: "#3B5FC0" },
+  th: { paddingHorizontal: 4, paddingVertical: 4, color: "#FFF", fontFamily: "SarabunB", fontSize: 6.5, textAlign: "center", borderRightWidth: 0.5, borderRightColor: "#3B5FC0" },
   tr: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#E2E8F0" },
   trAlt: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#E2E8F0", backgroundColor: "#F8FAFF" },
   td: { paddingHorizontal: 4, paddingVertical: 3, fontSize: 7.5, textAlign: "center", borderRightWidth: 0.5, borderRightColor: "#E2E8F0" },
@@ -291,13 +374,13 @@ export function HawbPdfDocument({
 
           {/* Total row */}
           <View style={hw.totalRow}>
-            <Text style={[hw.td, { width: HW.no + HW.so + HW.style + HW.po + HW.claim + HW.inv, textAlign: "right", fontFamily: "Helvetica-Bold", borderRightWidth: 0.5, borderRightColor: "#93C5FD" }]}>
+            <Text style={[hw.td, { width: HW.no + HW.so + HW.style + HW.po + HW.claim + HW.inv, textAlign: "right", fontFamily: "SarabunB", borderRightWidth: 0.5, borderRightColor: "#93C5FD" }]}>
               TOTAL ({items.length} SO)
             </Text>
-            <Text style={[hw.td, { width: HW.qty, fontFamily: "Helvetica-Bold" }]}>{fmt0(totalQty)}</Text>
-            <Text style={[hw.td, { width: HW.vwt, fontFamily: "Helvetica-Bold" }]}>{fmt2(totalVwt)}</Text>
+            <Text style={[hw.td, { width: HW.qty, fontFamily: "SarabunB" }]}>{fmt0(totalQty)}</Text>
+            <Text style={[hw.td, { width: HW.vwt, fontFamily: "SarabunB" }]}>{fmt2(totalVwt)}</Text>
             <Text style={[hw.td, { width: HW.avg }]}> </Text>
-            <Text style={[hw.td, { width: HW.amt, fontFamily: "Helvetica-Bold", color: "#1E3A8A", borderRightWidth: 0 }]}>
+            <Text style={[hw.td, { width: HW.amt, fontFamily: "SarabunB", color: "#1E3A8A", borderRightWidth: 0 }]}>
               {totalAmt > 0 ? fmt2(totalAmt) : "—"}
             </Text>
           </View>
@@ -314,19 +397,19 @@ export function HawbPdfDocument({
 
 // ─── Transportation Booking PDF ───────────────────────────────────────────────
 const tb = StyleSheet.create({
-  page: { fontFamily: "Helvetica", fontSize: 7.5, paddingHorizontal: 28, paddingVertical: 24, color: "#111" },
-  title: { fontSize: 14, fontFamily: "Helvetica-Bold", textAlign: "center", letterSpacing: 1, marginBottom: 8 },
+  page: { fontFamily: "Sarabun", fontSize: 7.5, paddingHorizontal: 28, paddingVertical: 24, color: "#111" },
+  title: { fontSize: 14, fontFamily: "SarabunB", textAlign: "center", letterSpacing: 1, marginBottom: 8 },
   headerBox: { borderWidth: 1, borderColor: "#333", marginBottom: 6 },
   headerRow: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#aaa" },
   headerCell: { flex: 1, paddingHorizontal: 6, paddingVertical: 3, borderRightWidth: 0.5, borderRightColor: "#aaa" },
   headerCellLast: { flex: 1, paddingHorizontal: 6, paddingVertical: 3 },
-  headerLabel: { fontSize: 6.5, color: "#666", fontFamily: "Helvetica-Bold", marginBottom: 1 },
-  headerValue: { fontSize: 8, fontFamily: "Helvetica-Bold" },
+  headerLabel: { fontSize: 6.5, color: "#666", fontFamily: "SarabunB", marginBottom: 1 },
+  headerValue: { fontSize: 8, fontFamily: "SarabunB" },
   remarkRow: { flexDirection: "row", paddingHorizontal: 6, paddingVertical: 3 },
   // Table
   table: { borderWidth: 1, borderColor: "#333", marginTop: 6 },
   tableHead: { flexDirection: "row", backgroundColor: "#1E3A8A" },
-  tableHeadCell: { paddingHorizontal: 3, paddingVertical: 4, borderRightWidth: 0.5, borderRightColor: "#3B5FC0", color: "#fff", fontFamily: "Helvetica-Bold", fontSize: 6.5, textAlign: "center" },
+  tableHeadCell: { paddingHorizontal: 3, paddingVertical: 4, borderRightWidth: 0.5, borderRightColor: "#3B5FC0", color: "#fff", fontFamily: "SarabunB", fontSize: 6.5, textAlign: "center" },
   tableRow: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#ddd" },
   tableRowAlt: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#ddd", backgroundColor: "#F8FAFF" },
   tableCell: { paddingHorizontal: 3, paddingVertical: 3, borderRightWidth: 0.5, borderRightColor: "#ddd", fontSize: 7, textAlign: "center" },
@@ -334,13 +417,13 @@ const tb = StyleSheet.create({
   // Summary
   summaryBox: { marginTop: 6, borderWidth: 1, borderColor: "#333", padding: 6 },
   summaryRow: { flexDirection: "row", marginBottom: 2 },
-  summaryLabel: { width: 180, fontSize: 7, fontFamily: "Helvetica-Bold", color: "#444" },
+  summaryLabel: { width: 180, fontSize: 7, fontFamily: "SarabunB", color: "#444" },
   summaryValue: { flex: 1, fontSize: 7.5 },
   // Signatures
   sigBox: { marginTop: 10, flexDirection: "row", gap: 12 },
   sigCol: { flex: 1 },
   sigLine: { borderBottomWidth: 0.75, borderBottomColor: "#333", marginBottom: 2, marginTop: 18 },
-  sigLabel: { fontSize: 6.5, color: "#555", fontFamily: "Helvetica-Bold" },
+  sigLabel: { fontSize: 6.5, color: "#555", fontFamily: "SarabunB" },
 })
 
 // column widths (total ~770 for A4 landscape content area)
@@ -466,12 +549,12 @@ export function TransportationBookingPdf({ pages, generatedDate }: { pages: { re
             {/* Totals row (last page only) */}
             {pageIdx === chunks.length - 1 && (
               <View style={[tb.tableRow, { backgroundColor: "#EFF6FF" }]}>
-                <Text style={[tb.tableCell, { width: COL.no + COL.so + COL.style + COL.desc + COL.factory + COL.country + COL.origDate + COL.planDate, fontFamily: "Helvetica-Bold", textAlign: "right", borderRightWidth: 0.5, borderRightColor: "#ddd" }]}>TOTAL</Text>
-                <Text style={[tb.tableCell, { width: COL.qtyAir, fontFamily: "Helvetica-Bold" }]}>{totalQtyAir.toLocaleString()}</Text>
-                <Text style={[tb.tableCell, { width: COL.qtyActual, fontFamily: "Helvetica-Bold" }]}>{totalQtyActual > 0 ? totalQtyActual.toLocaleString() : "-"}</Text>
+                <Text style={[tb.tableCell, { width: COL.no + COL.so + COL.style + COL.desc + COL.factory + COL.country + COL.origDate + COL.planDate, fontFamily: "SarabunB", textAlign: "right", borderRightWidth: 0.5, borderRightColor: "#ddd" }]}>TOTAL</Text>
+                <Text style={[tb.tableCell, { width: COL.qtyAir, fontFamily: "SarabunB" }]}>{totalQtyAir.toLocaleString()}</Text>
+                <Text style={[tb.tableCell, { width: COL.qtyActual, fontFamily: "SarabunB" }]}>{totalQtyActual > 0 ? totalQtyActual.toLocaleString() : "-"}</Text>
                 <Text style={[tb.tableCell, { width: COL.invoice + COL.bookDate, borderRightWidth: 0.5, borderRightColor: "#ddd" }]}> </Text>
-                <Text style={[tb.tableCell, { width: COL.gross, fontFamily: "Helvetica-Bold" }]}>{totalGross.toFixed(2)}</Text>
-                <Text style={[tb.tableCell, { width: COL.freight, fontFamily: "Helvetica-Bold", borderRightWidth: 0, color: "#1E3A8A" }]}>{totalActual > 0 ? fmtNum(totalActual) : "-"}</Text>
+                <Text style={[tb.tableCell, { width: COL.gross, fontFamily: "SarabunB" }]}>{totalGross.toFixed(2)}</Text>
+                <Text style={[tb.tableCell, { width: COL.freight, fontFamily: "SarabunB", borderRightWidth: 0, color: "#1E3A8A" }]}>{totalActual > 0 ? fmtNum(totalActual) : "-"}</Text>
               </View>
             )}
           </View>
@@ -487,7 +570,7 @@ export function TransportationBookingPdf({ pages, generatedDate }: { pages: { re
                 {totalActual > 0 && (
                   <View style={tb.summaryRow}>
                     <Text style={tb.summaryLabel}>ACTUAL AIRFREIGHT COST</Text>
-                    <Text style={[tb.summaryValue, { fontFamily: "Helvetica-Bold", color: "#1E3A8A" }]}>THB {fmtNum(totalActual)}</Text>
+                    <Text style={[tb.summaryValue, { fontFamily: "SarabunB", color: "#1E3A8A" }]}>THB {fmtNum(totalActual)}</Text>
                   </View>
                 )}
               </View>
