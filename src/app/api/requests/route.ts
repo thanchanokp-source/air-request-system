@@ -56,11 +56,8 @@ const parseDate = (val: any): Date | null => {
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const role = (session.user as any).role
-  const mine = req.nextUrl.searchParams.get("mine") === "true"
-  const claimDept = (mine && role.startsWith("CLAIM_")) ? role.replace("CLAIM_", "") : null
   const where = {}
-  let requests = await prisma.airRequest.findMany({
+  const requests = await prisma.airRequest.findMany({
     where,
     orderBy: { createdAt: "desc" },
     include: {
@@ -74,13 +71,9 @@ export async function GET(req: NextRequest) {
       }
     }
   })
-
-  if (claimDept) {
-    requests = requests.map(r => ({
-      ...r,
-      items: r.items.filter((i: any) => i.claimDepartment === claimDept)
-    })).filter(r => r.items.length > 0)
-  }
+  // NOTE: don't filter items server-side by item.claimDepartment — that is only
+  // the FIRST split, so multi-split docs (e.g. [SCM NYG, GW]) were wrongly dropped
+  // for GW/SUPPLIER users. The client (approvals page) scopes correctly via getSplits.
   return NextResponse.json(requests)
 }
 
