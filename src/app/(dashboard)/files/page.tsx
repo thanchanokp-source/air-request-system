@@ -5,7 +5,7 @@ import React from "react"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits } from "@/lib/claim"
 
-type FolderType = "FINAL" | "LOGISTICS" | "BOOKING"
+type StatusFilter = "ALL" | "TOBOOK" | "BOOKED" | "COMPLETED"
 type BUFilter = "ALL" | "NYG" | "GW"
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
@@ -22,12 +22,25 @@ const BOOK_READY_STATUSES = [
   "PENDING_ACCOUNTING", "COMPLETED",
 ]
 
-function qualifies(req: any, type: FolderType): boolean {
-  const items: any[] = req.items || []
-  if (type === "FINAL") return req.status === "COMPLETED"
-  if (type === "LOGISTICS") return items.some((i: any) => i.invoiceNo)
-  if (type === "BOOKING") return BOOK_READY_STATUSES.includes(req.status)
-  return false
+// A document appears once it is approved for booking (VP SCM / GM).
+function qualifies(req: any): boolean {
+  return BOOK_READY_STATUSES.includes(req.status)
+}
+
+// Pipeline stage of a document (all in one folder, distinguished by a badge).
+function docStage(req: any): "BOOKING" | "LOGISTICS" | "FINAL" {
+  if (req.status === "COMPLETED") return "FINAL"
+  if ((req.items || []).some((i: any) => itemBooked(i))) return "LOGISTICS"
+  return "BOOKING"
+}
+
+// Does this document match the selected status chip?
+function matchesStatus(req: any, f: StatusFilter): boolean {
+  if (f === "ALL") return true
+  if (f === "COMPLETED") return req.status === "COMPLETED"
+  if (f === "TOBOOK") return unbookedCount(req) > 0
+  if (f === "BOOKED") return isBooked(req) && req.status !== "COMPLETED"
+  return true
 }
 
 // Who approved this doc for booking (VP SCM / GM) — from the approval log.
@@ -53,21 +66,17 @@ function unbookedCount(req: any): number {
   return (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && !itemBooked(i)).length
 }
 
-const FOLDER_LABELS: Record<FolderType, string> = {
-  BOOKING: "Booking File",
-  LOGISTICS: "Logistics File",
-  FINAL: "Final File",
+const STAGE_BADGE: Record<string, { label: string; cls: string }> = {
+  BOOKING: { label: "Booking", cls: "bg-blue-100 text-blue-700" },
+  LOGISTICS: { label: "Logistics", cls: "bg-orange-100 text-orange-700" },
+  FINAL: { label: "Completed", cls: "bg-green-100 text-green-700" },
 }
-const FOLDER_DESC: Record<FolderType, string> = {
-  BOOKING: "Approved by VP SCM (NYG) / GM (GW) — ready for Logistics to book air",
-  LOGISTICS: "After Logistics uploads the Excel with Invoice & Freight",
-  FINAL: "Requests that are COMPLETED",
-}
-const FOLDER_COLOR: Record<FolderType, string> = {
-  BOOKING: "text-blue-700 bg-blue-50",
-  LOGISTICS: "text-orange-700 bg-orange-50",
-  FINAL: "text-green-700 bg-green-50",
-}
+const STATUS_CHIPS: { key: StatusFilter; label: string; cls: string }[] = [
+  { key: "ALL", label: "All", cls: "bg-gray-700 text-white" },
+  { key: "TOBOOK", label: "To book", cls: "bg-amber-500 text-white" },
+  { key: "BOOKED", label: "Booked", cls: "bg-blue-600 text-white" },
+  { key: "COMPLETED", label: "Completed", cls: "bg-green-600 text-white" },
+]
 
 export default function FilesPage() {
   const { data: session } = useSession()
@@ -75,7 +84,7 @@ export default function FilesPage() {
 
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeFolder, setActiveFolder] = useState<FolderType>("BOOKING")
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL")
   const [activeBU, setActiveBU] = useState<BUFilter>(userBu === "NYG" ? "NYG" : userBu === "GW" ? "GW" : "ALL")
   const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set())
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
@@ -91,6 +100,11 @@ export default function FilesPage() {
   const [cpF, setCpF] = useState<string[]>([])
   const [claimF, setClaimF] = useState<string[]>([])
   const [invoiceF, setInvoiceF] = useState<string[]>([])
+  const [portF, setPortF] = useState<string[]>([])
+  const [shipF, setShipF] = useState<string[]>([])
+  // LG-friendly SO view: flat list grouped by Port / Ship Date for bulk booking.
+  const [soView, setSoView] = useState(false)
+  const [groupBy, setGroupBy] = useState<"port" | "shipdate" | "none">("port")
 
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => {
@@ -100,8 +114,8 @@ export default function FilesPage() {
   }, [])
 
   const folderFiltered = useMemo(() =>
-    requests.filter(r => (activeBU === "ALL" || r.bu === activeBU) && qualifies(r, activeFolder)),
-    [requests, activeFolder, activeBU])
+    requests.filter(r => (activeBU === "ALL" || r.bu === activeBU) && qualifies(r) && matchesStatus(r, statusFilter)),
+    [requests, statusFilter, activeBU])
 
   const uniq = (arr: any[]) => [...new Set(arr.filter(Boolean))].sort()
   const brandOpts = useMemo(() => uniq(folderFiltered.map(r => r.brandName)), [folderFiltered])
@@ -110,8 +124,10 @@ export default function FilesPage() {
   const cpOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.customerPO))), [folderFiltered])
   const invoiceOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.invoiceNo))), [folderFiltered])
   const claimOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).flatMap((i: any) => getSplits(i).map((s: any) => s.dept)))), [folderFiltered])
+  const portOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.port))), [folderFiltered])
+  const shipOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.planShipmentDate ? fmtDate(i.planShipmentDate) : null))), [folderFiltered])
 
-  const hasFilter = [brandF, styleF, soF, cpF, claimF, invoiceF].some(f => f.length > 0)
+  const hasFilter = [brandF, styleF, soF, cpF, claimF, invoiceF, portF, shipF].some(f => f.length > 0)
 
   const filtered = useMemo(() => folderFiltered.filter(r => {
     const items = r.items || []
@@ -121,9 +137,42 @@ export default function FilesPage() {
     if (cpF.length && !items.some((i: any) => cpF.includes(i.customerPO))) return false
     if (invoiceF.length && !items.some((i: any) => invoiceF.includes(i.invoiceNo))) return false
     if (claimF.length && !items.some((i: any) => getSplits(i).some((s: any) => claimF.includes(s.dept)) || claimF.includes(i.claimDepartment))) return false
-    if (activeFolder === "BOOKING" && unbookedOnly && unbookedCount(r) === 0) return false
+    if (portF.length && !items.some((i: any) => portF.includes(i.port))) return false
+    if (shipF.length && !items.some((i: any) => shipF.includes(fmtDate(i.planShipmentDate)))) return false
+    if (unbookedOnly && unbookedCount(r) === 0) return false
     return true
-  }), [folderFiltered, brandF, styleF, soF, cpF, invoiceF, claimF, activeFolder, unbookedOnly])
+  }), [folderFiltered, brandF, styleF, soF, cpF, invoiceF, claimF, portF, shipF, unbookedOnly])
+
+  // Flat SO rows for the LG "By SO" view — item-level filtering, then group by Port/Ship Date.
+  const soRows = useMemo(() => {
+    const rows: { req: any; item: any }[] = []
+    filtered.forEach(r => (r.items || []).forEach((it: any) => {
+      if (it.itemStatus === "REJECTED") return
+      if (unbookedOnly && itemBooked(it)) return
+      if (styleF.length && !styleF.includes(it.style)) return
+      if (soF.length && !soF.includes(it.so)) return
+      if (cpF.length && !cpF.includes(it.customerPO)) return
+      if (invoiceF.length && !invoiceF.includes(it.invoiceNo)) return
+      if (portF.length && !portF.includes(it.port)) return
+      if (shipF.length && !shipF.includes(fmtDate(it.planShipmentDate))) return
+      rows.push({ req: r, item: it })
+    }))
+    return rows
+  }, [filtered, unbookedOnly, styleF, soF, cpF, invoiceF, portF, shipF])
+
+  const soGroups = useMemo(() => {
+    const m: Record<string, { req: any; item: any }[]> = {}
+    soRows.forEach(row => {
+      const key = groupBy === "port" ? (row.item.port || "— No port —")
+        : groupBy === "shipdate" ? fmtDate(row.item.planShipmentDate)
+        : "All SO"
+      ;(m[key] ||= []).push(row)
+    })
+    // Sort ship-date groups chronologically; others alphabetically.
+    const keys = Object.keys(m).sort((a, b) =>
+      groupBy === "shipdate" ? (new Date(m[a][0].item.planShipmentDate).getTime() || 0) - (new Date(m[b][0].item.planShipmentDate).getTime() || 0) : a.localeCompare(b))
+    return keys.map(k => ({ key: k, rows: m[k] }))
+  }, [soRows, groupBy])
 
   const grouped = useMemo(() => {
     const byYear: Record<string, Record<string, any[]>> = {}
@@ -213,6 +262,15 @@ export default function FilesPage() {
     finally { setCombineLoading(false) }
   }
 
+  // Select/deselect every SO in a group (port / ship-date) at once.
+  const setGroupSelected = (rows: { req: any; item: any }[], on: boolean) => {
+    setSelectedForCombine(prev => {
+      const n = new Set(prev)
+      rows.forEach(({ req, item }) => { const k = `${req.id}:${item.id}`; on ? n.add(k) : n.delete(k) })
+      return n
+    })
+  }
+
   // Select every not-yet-booked SO across the visible documents (for booking).
   const selectAllUnbooked = () => {
     const keys = new Set<string>()
@@ -237,35 +295,42 @@ export default function FilesPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">ALL FILES</h1>
-        <p className="text-xs text-gray-400 mt-0.5">System-generated documents grouped by BU and type</p>
+        <p className="text-xs text-gray-400 mt-0.5">All approved documents in one place — filter by BU and status</p>
       </div>
 
       <div className="flex gap-4 items-start">
-        {/* Left: folder tree */}
-        <div className="w-56 shrink-0 bg-white rounded-xl border border-gray-200 p-3 space-y-1 self-start sticky top-4">
-          <p className="text-xs font-semibold text-gray-500 px-2 mb-2 uppercase tracking-wide">Folders</p>
-
+        {/* Left: filters */}
+        <div className="w-56 shrink-0 bg-white rounded-xl border border-gray-200 p-3 space-y-3 self-start sticky top-4">
           {/* BU filter */}
-          <div className="flex gap-1 px-2 mb-3">
-            {buOptions.map(b => (
-              <button key={b} onClick={() => setActiveBU(b)}
-                className={`text-xs px-2 py-0.5 rounded font-medium transition-colors ${activeBU === b ? "bg-red-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-                {b}
-              </button>
-            ))}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 px-1 mb-1.5 uppercase tracking-wide">Business Unit</p>
+            <div className="flex gap-1 px-1">
+              {buOptions.map(b => (
+                <button key={b} onClick={() => setActiveBU(b)}
+                  className={`text-xs px-2 py-0.5 rounded font-medium transition-colors ${activeBU === b ? "bg-red-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                  {b}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {(["BOOKING","LOGISTICS","FINAL"] as FolderType[]).map(f => {
-            const count = requests.filter(r => (activeBU === "ALL" || r.bu === activeBU) && qualifies(r, f)).length
-            return (
-              <button key={f} onClick={() => setActiveFolder(f)}
-                className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${activeFolder === f ? `${FOLDER_COLOR[f]} font-medium` : "text-gray-700 hover:bg-gray-50"}`}>
-                <span className="text-base">📁</span>
-                <span className="flex-1 truncate">{FOLDER_LABELS[f]}</span>
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeFolder === f ? "bg-white/60" : "bg-gray-100 text-gray-500"}`}>{count}</span>
-              </button>
-            )
-          })}
+          {/* Status filter */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 px-1 mb-1.5 uppercase tracking-wide">Status</p>
+            <div className="space-y-1">
+              {STATUS_CHIPS.map(c => {
+                const count = requests.filter(r => (activeBU === "ALL" || r.bu === activeBU) && qualifies(r) && matchesStatus(r, c.key)).length
+                const active = statusFilter === c.key
+                return (
+                  <button key={c.key} onClick={() => setStatusFilter(c.key)}
+                    className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${active ? `${c.cls} font-medium` : "text-gray-700 hover:bg-gray-50"}`}>
+                    <span className="flex-1 truncate">{c.label}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${active ? "bg-white/25" : "bg-gray-100 text-gray-500"}`}>{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Right: content */}
@@ -273,52 +338,148 @@ export default function FilesPage() {
           {/* Header */}
           <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
             <div>
-              <h2 className="font-semibold text-gray-800">{FOLDER_LABELS[activeFolder]}</h2>
-              <p className="text-xs text-gray-400 mt-0.5">{FOLDER_DESC[activeFolder]}</p>
+              <h2 className="font-semibold text-gray-800">Documents</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Approved for booking (VP SCM / GM) — Booking → Logistics → Completed</p>
             </div>
             <div className="ml-auto flex items-center gap-3">
-              <span className="text-xs text-gray-400">{filtered.length} document(s)</span>
-              {activeFolder === "BOOKING" && (
+              <span className="text-xs text-gray-400">{soView ? `${soRows.length} SO` : `${filtered.length} document(s)`}</span>
+              {/* View toggle: LG picks SO (grouped by port/date); or browse by document */}
+              <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs font-medium">
+                <button onClick={() => setSoView(false)}
+                  className={`px-3 py-1.5 ${!soView ? "bg-gray-700 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>By Document</button>
+                <button onClick={() => setSoView(true)}
+                  className={`px-3 py-1.5 border-l border-gray-300 ${soView ? "bg-gray-700 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>By SO</button>
+              </div>
+              {soView && (
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-gray-400">Group:</span>
+                  {([["port","Port"],["shipdate","Ship Date"],["none","None"]] as [any,string][]).map(([k,lbl]) => (
+                    <button key={k} onClick={() => setGroupBy(k)}
+                      className={`px-2 py-1 rounded font-medium ${groupBy === k ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{lbl}</button>
+                  ))}
+                </div>
+              )}
+              {true && (
                 <button onClick={() => setUnbookedOnly(v => !v)}
                   className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${unbookedOnly ? "bg-amber-500 text-white border-amber-500" : "bg-white text-amber-700 border-amber-300 hover:bg-amber-50"}`}>
                   {unbookedOnly ? "● Showing unbooked" : "○ Unbooked only"}
                 </button>
               )}
-              {activeFolder === "BOOKING" && (
-                <button onClick={() => { setCombineMode(m => !m); setSelectedForCombine(new Set()) }}
-                  className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${combineMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"}`}>
-                  {combineMode ? "✕ Cancel Combine" : "⊞ Combine Mode"}
-                </button>
-              )}
+              <button onClick={() => { setCombineMode(m => !m); setSelectedForCombine(new Set()) }}
+                className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${combineMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"}`}>
+                {combineMode ? "✕ Cancel Combine" : "⊞ Combine Mode"}
+              </button>
             </div>
           </div>
 
           {/* Filters */}
           <div className="px-5 py-3 border-b border-gray-100 flex items-start gap-2 flex-wrap">
             <span className="text-xs font-semibold text-gray-500 mt-2 shrink-0">FILTERS</span>
-            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5 min-w-0">
+            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 min-w-0">
+              <MultiSelect label="Port..." options={portOpts} value={portF} onChange={setPortF} />
+              <MultiSelect label="Ship Date..." options={shipOpts} value={shipF} onChange={setShipF} />
               <MultiSelect label="All Brand" options={brandOpts} value={brandF} onChange={setBrandF} />
-              <MultiSelect label="All Style" options={styleOpts} value={styleF} onChange={setStyleF} />
               <MultiSelect label="SO..." options={soOpts} value={soF} onChange={setSoF} />
+              <MultiSelect label="All Style" options={styleOpts} value={styleF} onChange={setStyleF} />
               <MultiSelect label="Customer PO..." options={cpOpts} value={cpF} onChange={setCpF} />
               <MultiSelect label="Claim Dept" options={claimOpts} value={claimF} onChange={setClaimF} />
               <MultiSelect label="Invoice No..." options={invoiceOpts} value={invoiceF} onChange={setInvoiceF} />
             </div>
             {hasFilter && (
-              <button onClick={() => { setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setClaimF([]); setInvoiceF([]) }}
+              <button onClick={() => { setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setClaimF([]); setInvoiceF([]); setPortF([]); setShipF([]) }}
                 className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 font-medium shrink-0 mt-0.5">Clear</button>
             )}
           </div>
 
           {loading && <div className="text-center py-16 text-gray-400">Loading...</div>}
-          {!loading && filtered.length === 0 && (
+          {!loading && (soView ? soRows.length === 0 : filtered.length === 0) && (
             <div className="text-center py-16 text-gray-300">
               <p className="text-4xl mb-2">📂</p>
-              <p className="text-sm">No files in this folder</p>
+              <p className="text-sm">No documents match</p>
             </div>
           )}
 
-          {/* Year/Month tree */}
+          {/* LG "By SO" view — flat SO list grouped by Port / Ship Date, bulk-selectable */}
+          {soView && soRows.length > 0 && (
+            <div className="divide-y divide-gray-100">
+              {soGroups.map(g => {
+                const allSel = combineMode && g.rows.every(({ req, item }) => selectedForCombine.has(`${req.id}:${item.id}`))
+                const unbooked = g.rows.filter(({ item }) => !itemBooked(item)).length
+                return (
+                  <div key={g.key}>
+                    {/* Group header */}
+                    <div className="flex items-center gap-3 px-5 py-2.5 bg-gray-50 sticky top-0 z-10">
+                      {combineMode && (
+                        <input type="checkbox" checked={allSel}
+                          onChange={e => setGroupSelected(g.rows, e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 accent-blue-600" />
+                      )}
+                      <span className="text-sm font-semibold text-gray-700">
+                        {groupBy === "port" ? "📍 " : groupBy === "shipdate" ? "📅 " : ""}{g.key}
+                      </span>
+                      <span className="text-xs text-gray-400">{g.rows.length} SO{unbooked > 0 && <span className="text-amber-600"> · {unbooked} to book</span>}</span>
+                      {combineMode && (
+                        <button onClick={() => setGroupSelected(g.rows, !allSel)}
+                          className="text-xs text-blue-600 hover:underline ml-auto">{allSel ? "Deselect group" : "Select group"}</button>
+                      )}
+                    </div>
+                    {/* SO rows */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-gray-400">
+                            {combineMode && <th className="py-1.5 pl-5 pr-2 w-6"></th>}
+                            {["SO","Style","Document","Brand","BU","Port","Ship Date","QTY Air","Booking",""].map(h =>
+                              <th key={h} className={`py-1.5 px-3 font-medium whitespace-nowrap ${h === "QTY Air" ? "text-right" : "text-left"} ${!combineMode && h === "SO" ? "pl-5" : ""}`}>{h}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {g.rows.map(({ req, item }) => {
+                            const ck = `${req.id}:${item.id}`
+                            const isChecked = selectedForCombine.has(ck)
+                            const booked = itemBooked(item)
+                            const key = `${req.id}-${item.id}`
+                            return (
+                              <tr key={item.id} className={`hover:bg-blue-50/50 ${isChecked ? "bg-blue-50" : ""}`}>
+                                {combineMode && (
+                                  <td className="py-1.5 pl-5 pr-2">
+                                    <input type="checkbox" checked={isChecked} onChange={() => toggleCombineItem(req.id, item.id)}
+                                      className="w-4 h-4 rounded border-gray-300 accent-blue-600" />
+                                  </td>
+                                )}
+                                <td className={`py-1.5 px-3 font-semibold text-gray-800 whitespace-nowrap ${!combineMode ? "pl-5" : ""}`}>{item.so}</td>
+                                <td className="py-1.5 px-3 whitespace-nowrap">{item.style}</td>
+                                <td className="py-1.5 px-3 text-blue-700 whitespace-nowrap">{req.documentNo}</td>
+                                <td className="py-1.5 px-3 text-gray-500 whitespace-nowrap">{req.brandName}</td>
+                                <td className="py-1.5 px-3"><span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${req.bu === "GW" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{req.bu}</span></td>
+                                <td className="py-1.5 px-3 whitespace-nowrap">{item.port || "-"}</td>
+                                <td className="py-1.5 px-3 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                                <td className="py-1.5 px-3 text-right tabular-nums font-semibold text-gray-700">{fmtNum(item.qtyRequestAir)}</td>
+                                <td className="py-1.5 px-3">
+                                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${booked ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700"}`}>
+                                    {booked ? "✓ Booked" : "● To book"}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 px-3 text-right">
+                                  <button onClick={() => downloadPdf(req, item)} disabled={pdfLoading === key}
+                                    className="text-xs bg-gray-700 text-white px-2 py-0.5 rounded hover:bg-gray-800 disabled:opacity-50 font-medium">
+                                    {pdfLoading === key ? "..." : "↓ PDF"}
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Year/Month tree (By Document) */}
+          {!soView && (
           <div className="divide-y divide-gray-50">
             {years.map(year => (
               <div key={year}>
@@ -356,19 +517,26 @@ export default function FilesPage() {
                               <span className="font-semibold text-blue-700 text-sm">{req.documentNo}</span>
                               <span className="text-xs text-gray-400">{req.brandName}</span>
                               <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${req.bu === "GW" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{req.bu}</span>
-                              {activeFolder === "BOOKING" && (() => {
+                              {(() => {
+                                const stage = docStage(req)
                                 const ap = bookApproval(req)
                                 const booked = isBooked(req)
+                                const nUnbooked = unbookedCount(req)
                                 return (
                                   <span className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${STAGE_BADGE[stage].cls}`}>
+                                      {STAGE_BADGE[stage].label}
+                                    </span>
                                     {ap && (
                                       <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium whitespace-nowrap">
-                                        ✓ Approved by {ap.role} · {ap.by} · {fmtDate(ap.date)}
+                                        ✓ {ap.role} · {ap.by} · {fmtDate(ap.date)}
                                       </span>
                                     )}
-                                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${booked ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700"}`}>
-                                      {booked ? "✓ Booked" : "● To book"}
-                                    </span>
+                                    {stage !== "FINAL" && (
+                                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${booked ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700"}`}>
+                                        {booked ? "✓ Booked" : `● ${nUnbooked} to book`}
+                                      </span>
+                                    )}
                                   </span>
                                 )
                               })()}
@@ -378,7 +546,7 @@ export default function FilesPage() {
                             {/* Items under document */}
                             {(expandedDocs.has(docKey) || hasFilter) && (
                               <div className="pl-20 pr-5 pb-3 bg-blue-50 border-t border-blue-100">
-                                {activeFolder === "LOGISTICS" && (req.attachments || []).some((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)) && (
+                                {(req.attachments || []).some((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)) && (
                                   <div className="flex flex-wrap gap-2 mt-2">
                                     <span className="text-xs text-gray-500 font-medium py-1">Logistics files:</span>
                                     {(req.attachments || []).filter((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)).map((a: any) => (
@@ -398,18 +566,16 @@ export default function FilesPage() {
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Style</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Description</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">QTY Air</th>
-                                        {activeFolder === "BOOKING" && <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Booking</th>}
-                                        {activeFolder === "LOGISTICS" && <>
-                                          <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Invoice No</th>
-                                          <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">QTY Ship</th>
-                                          <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Actual Freight</th>
-                                          <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Booking Date</th>
-                                        </>}
+                                        <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Booking</th>
+                                        <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Invoice No</th>
+                                        <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">QTY Ship</th>
+                                        <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Actual Freight</th>
+                                        <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Booking Date</th>
                                         <th className="text-right py-1 font-medium">PDF</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-blue-100">
-                                      {(activeFolder === "BOOKING" && unbookedOnly ? items.filter((i: any) => !itemBooked(i)) : items).map((item: any) => {
+                                      {(unbookedOnly ? items.filter((i: any) => !itemBooked(i)) : items).map((item: any) => {
                                         const key = `${req.id}-${item.id}`
                                         const combineKey = `${req.id}:${item.id}`
                                         const isChecked = selectedForCombine.has(combineKey)
@@ -427,19 +593,15 @@ export default function FilesPage() {
                                             <td className="py-1.5 pr-3 text-gray-600">{item.style}</td>
                                             <td className="py-1.5 pr-3 text-gray-500 max-w-[140px] truncate">{item.description}</td>
                                             <td className="py-1.5 pr-3 text-gray-700 font-semibold">{item.qtyRequestAir}</td>
-                                            {activeFolder === "BOOKING" && (
-                                              <td className="py-1.5 pr-3">
-                                                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${booked ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700"}`}>
-                                                  {booked ? "✓ Booked" : "● To book"}
-                                                </span>
-                                              </td>
-                                            )}
-                                            {activeFolder === "LOGISTICS" && <>
-                                              <td className="py-1.5 pr-3">{item.invoiceNo || "-"}</td>
-                                              <td className="py-1.5 pr-3">{item.qtyActualShip ?? "-"}</td>
-                                              <td className="py-1.5 pr-3 text-green-700 font-semibold">{fmtNum(item.actualAirFreight)}</td>
-                                              <td className="py-1.5 pr-3 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
-                                            </>}
+                                            <td className="py-1.5 pr-3">
+                                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${booked ? "bg-gray-100 text-gray-500" : "bg-amber-100 text-amber-700"}`}>
+                                                {booked ? "✓ Booked" : "● To book"}
+                                              </span>
+                                            </td>
+                                            <td className="py-1.5 pr-3">{item.invoiceNo || "-"}</td>
+                                            <td className="py-1.5 pr-3">{item.qtyActualShip ?? "-"}</td>
+                                            <td className="py-1.5 pr-3 text-green-700 font-semibold">{fmtNum(item.actualAirFreight)}</td>
+                                            <td className="py-1.5 pr-3 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                                             <td className="py-1.5 text-right">
                                               <button onClick={() => downloadPdf(req, item)}
                                                 disabled={pdfLoading === key}
@@ -464,6 +626,7 @@ export default function FilesPage() {
               </div>
             ))}
           </div>
+          )}
         </div>
       </div>
 

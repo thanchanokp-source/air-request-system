@@ -2523,55 +2523,79 @@ export default function RequestDetailPage() {
             )}
           </div>
           {/* Flat table view — all SO at once, no expand */}
-          {claimTableView && (
+          {claimTableView && (() => {
+            // Full column set — MER-uploaded fields + Logistics fields + claim.
+            const RIGHT = new Set(["QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. (THB)", "ACTUAL (THB)", "CLAIM %", "MY CLAIM (THB)"])
+            const cols: { h: string; get: (it: any) => any }[] = [
+              { h: "SO", get: it => it.so },
+              { h: "SUB", get: it => it.sub || "-" },
+              { h: "STYLE", get: it => it.style },
+              { h: "CUSTOMER PO", get: it => it.customerPO || "-" },
+              { h: "DESCRIPTION", get: it => it.description || "-" },
+              { h: "GMT TYPE", get: it => it.gmtType || "-" },
+              { h: "ORIG. DATE", get: it => fmtDate(it.originalShipmentDate) },
+              { h: "PLAN DATE", get: it => fmtDate(it.planShipmentDate) },
+              { h: "QTY ORIG", get: it => fmtNum(it.qtyOriginalShipment) },
+              { h: "QTY AIR", get: it => fmtNum(it.qtyRequestAir) },
+              { h: "GROSS (KG)", get: it => it.grossWeight != null ? fmtNum(it.grossWeight, 2) : "-" },
+              { h: "EST. (THB)", get: it => fmtNum(it.airFreight) },
+              { h: "FACTORY", get: it => it.factory || "-" },
+              { h: "COUNTRY", get: it => it.country || "-" },
+              { h: "PORT", get: it => it.port || "-" },
+              { h: "DELAY REASON", get: it => it.reasonDelay || "-" },
+              { h: "HAWB#", get: it => it.hawbNo || "-" },
+              { h: "INVOICE", get: it => it.invoiceNo || "-" },
+              { h: "BOOKING DATE", get: it => fmtDate(it.bookingDate) },
+              { h: "ACTUAL (THB)", get: it => fmtNum(it.actualAirFreight) },
+              { h: "CLAIM %", get: it => `${claimRow(it).pct}%` },
+              { h: "MY CLAIM (THB)", get: it => fmtNum(claimRow(it).amt) },
+            ]
+            return (
             <div className="border border-gray-200 rounded-xl overflow-x-auto">
               <table className="text-xs w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-2 py-2 w-8"></th>
-                    {["SO","STYLE","QTY AIR","HAWB#","INVOICE","ACTUAL (THB)","CLAIM %","MY CLAIM (THB)","PLAN DATE","DELAY REASON"].map((h, k) =>
-                      <th key={h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${["QTY AIR","ACTUAL (THB)","CLAIM %","MY CLAIM (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
+                    <th className="px-2 py-2 w-8 sticky left-0 bg-gray-50 z-10"></th>
+                    {cols.map(c => (
+                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "sticky left-8 bg-gray-50 z-10" : ""}`}>{c.h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {gwFwdItems.map((item: any) => {
-                    const r = claimRow(item)
+                    const sel = dvmSelected.has(item.id)
                     return (
-                      <tr key={item.id} className={`hover:bg-gray-50 ${dvmSelected.has(item.id) ? "bg-blue-50/40" : ""}`}>
-                        <td className="px-2 py-1.5 text-center">
-                          <input type="checkbox" checked={dvmSelected.has(item.id)}
+                      <tr key={item.id} className={`hover:bg-gray-50 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
+                        <td className={`px-2 py-1.5 text-center sticky left-0 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
+                          <input type="checkbox" checked={sel}
                             onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
                             className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-blue-600" />
                         </td>
-                        <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{item.so}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">{item.style}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(item.qtyRequestAir)}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">{item.hawbNo || "-"}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">{item.invoiceNo || "-"}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums text-green-700 font-semibold">{fmtNum(r.actual)}</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums">{r.pct}%</td>
-                        <td className="px-3 py-1.5 text-right tabular-nums text-blue-700 font-semibold">{fmtNum(r.amt)}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
-                        <td className="px-3 py-1.5 max-w-[160px] truncate" title={item.reasonDelay || ""}>{item.reasonDelay || "-"}</td>
+                        {cols.map(c => (
+                          <td key={c.h}
+                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700 font-semibold" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""} ${c.h === "DESCRIPTION" ? "max-w-[180px] truncate" : ""}`}
+                            title={c.h === "DESCRIPTION" || c.h === "DELAY REASON" ? String(c.get(item)) : undefined}>
+                            {c.get(item)}
+                          </td>
+                        ))}
                       </tr>
                     )
                   })}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-gray-100 bg-gray-50/60 font-semibold">
-                    <td></td>
-                    <td className="px-3 py-2" colSpan={2}>TOTAL</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtNum(claimTotals.qty)}</td>
-                    <td colSpan={2}></td>
-                    <td className="px-3 py-2 text-right tabular-nums text-green-700">{fmtNum(claimTotals.actual)}</td>
-                    <td></td>
-                    <td className="px-3 py-2 text-right tabular-nums text-blue-700">{fmtNum(claimTotals.amt)}</td>
-                    <td colSpan={2}></td>
+                    <td className="sticky left-0 bg-gray-50/60 z-10"></td>
+                    {cols.map(c => (
+                      <td key={c.h} className={`px-3 py-2 ${RIGHT.has(c.h) ? "text-right tabular-nums" : ""} ${c.h === "ACTUAL (THB)" ? "text-green-700" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700" : ""} ${c.h === "SO" ? "sticky left-8 bg-gray-50/60 z-10" : ""}`}>
+                        {c.h === "SO" ? "TOTAL" : c.h === "QTY AIR" ? fmtNum(claimTotals.qty) : c.h === "ACTUAL (THB)" ? fmtNum(claimTotals.actual) : c.h === "MY CLAIM (THB)" ? fmtNum(claimTotals.amt) : ""}
+                      </td>
+                    ))}
                   </tr>
                 </tfoot>
               </table>
             </div>
-          )}
+            )
+          })()}
           {/* SO list — checkbox + expandable full detail (same template as SCM NYK) */}
           {!claimTableView && (
           <div className="space-y-2">
