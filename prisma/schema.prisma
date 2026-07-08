@@ -24,6 +24,8 @@ model User {
   procurementType  String?
   resetToken       String?   @unique
   resetTokenExpiry DateTime?
+  loginToken       String?   @unique
+  loginTokenExpiry DateTime?
   airRequests     AirRequest[]
   approvals       ApprovalLog[]
   claimApprovals  ClaimApproval[]

@@ -16,6 +16,14 @@ export const authOptions: NextAuthOptions = {
         // Magic link login — token validates identity without password
         if (credentials?.magicToken) {
           const token = credentials.magicToken
+          // Passwordless account login — one-time login link (User.loginToken).
+          const loginUser = await (prisma.user as any).findFirst({ where: { loginToken: token } })
+          if (loginUser) {
+            if (!loginUser.isActive) return null
+            if (loginUser.loginTokenExpiry && new Date(loginUser.loginTokenExpiry) < new Date()) return null
+            await (prisma.user as any).update({ where: { id: loginUser.id }, data: { loginToken: null, loginTokenExpiry: null } })
+            return { id: loginUser.id, email: loginUser.email, name: loginUser.name, role: loginUser.role, bu: (loginUser as any).bu || "NYG", claimDepartment: (loginUser as any).claimDepartment ?? null, priority: (loginUser as any).priority ?? null }
+          }
           // Try vpMerToken first (most common — DPM/VP MER)
           const airReq = await (prisma.airRequest as any).findFirst({ where: { vpMerToken: token } })
           if (airReq) {

@@ -174,6 +174,34 @@ ${EMAIL_HEAD}
 </html>`
 }
 
+// Passwordless login link — user requested to log in; one-time link (30 min).
+export async function sendLoginLinkEmail(email: string, name: string, token: string) {
+  const link = `${APP_URL}/api/magic-login?token=${token}&redirect=/dashboard`
+  const html = `<!DOCTYPE html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+${EMAIL_HEAD}
+<body style="margin:0;padding:0;background-color:#f1f5f9">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:40px 0"><tr><td align="center">
+    <table role="presentation" class="email-card" width="440" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;max-width:440px">
+      <tr><td style="background:#1e3a8a;padding:24px;text-align:center">
+        <p style="margin:0;color:#93c5fd;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif">Nan Yang Textile</p>
+        <h1 style="margin:6px 0 0;color:#fff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
+      </td></tr>
+      <tr><td style="padding:32px 36px">
+        <p style="color:#1e293b;font-size:15px;font-family:Arial,sans-serif;margin:0 0 4px">Hello <strong>${name}</strong></p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 20px">Click below to log in to the Air Request system. No password needed.</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">${emailButton(link, "Log in →", "#1e3a8a", 240)}</td></tr></table>
+        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin:16px 0 0">Link valid for 30 minutes · If you did not request this, please ignore.</p>
+      </td></tr>
+      <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+        <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`
+  await sendMail(email, "Your Air Request login link", html)
+}
+
 export async function sendVerificationEmail(email: string, token: string) {
   const link = `${APP_URL}/verify-email?token=${token}`
   const html = `

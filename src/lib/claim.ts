@@ -265,8 +265,9 @@ export function deriveGwItemStatus(splits: ClaimSplit[], lgDone: boolean = true)
   if (st.some(s => s === SPLIT_STATUS.REJECTED)) return "REJECTED" // reject one portion → SO rejected
   // claim not fully approved yet (incl. NYK approver-done but EVP/CR incomplete)
   if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_DEPT_ACCEPTED || s === GW_NYK_APPROVER_PASSED)) return "PRES_PASSED"
-  // claim fully approved → wait for Logistics data before going to Accounting
-  return lgDone ? "ACCOUNTING_PENDING" : "PRES_PASSED"
+  // claim fully approved + Logistics data filled → President's FINAL approval
+  // (President moved to the end); President then sends it to Accounting.
+  return lgDone ? "PRESIDENT_PENDING" : "PRES_PASSED"
 }
 
 // ── NYG claim flow (per split: DVM → VP, per department) ───────────

@@ -37,6 +37,8 @@ async function recalcDocStatusGW(id: string): Promise<string> {
   if (s.has("CLAIM_REJECT_GW")) return "PENDING_CLAIM_REJECT_GW"
   if (s.has("PENDING") || s.has("VP_MER_PASSED") || s.has("PRES_PASSED") || s.has("LOG_PASSED")) return "PENDING_CLAIM_GW"
   if (s.has("SCM_GW_PENDING")) return "PENDING_SCM_GW"
+  // Claim + Logistics complete → President's final approval, THEN Accounting.
+  if (s.has("PRESIDENT_PENDING")) return "PENDING_PRESIDENT_GW"
   if (s.has("ACCOUNTING_PENDING")) return "PENDING_ACCOUNTING"
   return "COMPLETED"
 }
@@ -187,38 +189,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (passedCount === 0) {
         await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED", rejectionReason: comment || "Rejected by GM GW" } })
       } else {
-        await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PENDING" } })
-        await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_PRESIDENT_GW" } })
-        await notifyStatusChange(id, "PENDING_PRESIDENT_GW").catch(() => {})
+        // President moved to the END: after GM, go straight into the parallel
+        // stage (Logistics ∥ Claim). President approves last, before Accounting.
+        await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PRES_PASSED" } })
+        await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_CLAIM_GW" } })
+        await notifyStatusChange(id, "PENDING_LOGISTICS_GW").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
   }
 
-  // GW PRESIDENT: per-style approve/reject at PENDING_PRESIDENT_GW
-  if (request.status === "PENDING_PRESIDENT_GW" && (action === "approve_style" || action === "reject_style")) {
-    if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
-    if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
-    const newItemStatus = action === "approve_style" ? "PRES_PASSED" : "REJECTED"
+  // GW PRESIDENT — FINAL approval (whole document, no reject). Reached only when
+  // every claim dept is approved AND Logistics data is filled (items PRESIDENT_PENDING).
+  if (request.status === "PENDING_PRESIDENT_GW" && action === "president_approve_gw") {
     await prisma.airRequestItem.updateMany({
-      where: { requestId: id, style, itemStatus: "PENDING" },
-      data: { itemStatus: newItemStatus, itemComment: comment || null }
+      where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
+      data: { itemStatus: "ACCOUNTING_PENDING" },
     })
     await prisma.approvalLog.create({
-      data: { requestId: id, userId, action: action === "approve_style" ? "APPROVE" : "REJECT", fromStatus: "PENDING_PRESIDENT_GW", toStatus: "PENDING_PRESIDENT_GW", comment: `Style: ${style}${comment ? ` - ${comment}` : ""}` }
+      data: { requestId: id, userId, action: "APPROVE", fromStatus: "PENDING_PRESIDENT_GW", toStatus: "PENDING_ACCOUNTING", comment: "President approved — sent to Accounting" }
     })
-    const pendingCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
-    if (pendingCount === 0) {
-      const presPassedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PRES_PASSED" } })
-      if (presPassedCount === 0) {
-        await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED" } })
-      } else {
-        // Open Logistics ∥ Claim in parallel. PENDING_LOGISTICS_GW notify still
-        // alerts LG + Claim depts + Accounting; the doc sits at the parallel stage.
-        await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_CLAIM_GW" } })
-        await notifyStatusChange(id, "PENDING_LOGISTICS_GW").catch(() => {})
-      }
-    }
+    await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_ACCOUNTING" } })
+    await notifyStatusChange(id, "PENDING_ACCOUNTING").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

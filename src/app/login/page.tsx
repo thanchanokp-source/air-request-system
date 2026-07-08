@@ -10,9 +10,21 @@ function LoginForm() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [sendingLink, setSendingLink] = useState(false)
+  const [linkSent, setLinkSent] = useState(false)
   const router = useRouter()
   const params = useSearchParams()
   const registered = params.get("registered")
+
+  async function sendLoginLink() {
+    if (!email) { setError("Please enter your email first"); return }
+    setSendingLink(true); setError("")
+    try {
+      await fetch("/api/auth/request-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) })
+      setLinkSent(true)
+    } catch { setError("Could not send the login link. Please try again") }
+    setSendingLink(false)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -89,6 +101,19 @@ function LoginForm() {
               style={{ background: "linear-gradient(90deg, #1e3a8a, #3b82f6)" }}>
                       {loading ? "Logging in..." : "LOGIN"}
             </button>
+
+            {/* Passwordless — email me a login link (no password / no admin setup) */}
+            <div className="flex items-center gap-2 py-1">
+              <div className="h-px bg-gray-200 flex-1" /><span className="text-[11px] text-gray-400">or</span><div className="h-px bg-gray-200 flex-1" />
+            </div>
+            {linkSent ? (
+              <p className="text-green-600 text-xs text-center bg-green-50 border border-green-200 rounded-xl py-2.5 px-3">✓ Login link sent — please check your email<br /><span className="text-green-500">{email}</span></p>
+            ) : (
+              <button type="button" onClick={sendLoginLink} disabled={sendingLink}
+                className="w-full py-2.5 rounded-xl text-blue-700 font-medium text-sm border border-blue-200 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 transition-colors">
+                {sendingLink ? "Sending..." : "✉ Email me a login link (no password)"}
+              </button>
+            )}
 
             <p className="text-center text-xs text-gray-400 pt-1">
               Don&apos;t have an account?{" "}

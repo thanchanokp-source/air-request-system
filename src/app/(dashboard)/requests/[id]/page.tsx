@@ -1291,12 +1291,40 @@ export default function RequestDetailPage() {
       )}
 
       {/* GW Style Approval — VP_MER_GW (PENDING → VP_MER_PASSED) and PRESIDENT_GW (PENDING → PRES_PASSED) */}
-      {(isVpMerGW || isGmGW || isPresidentGW) && (
+      {/* GW President — FINAL approval: whole document, one button, no reject.
+          Reached only after all claim depts approved + Logistics data filled. */}
+      {isPresidentGW && (
+        <div className="bg-white rounded-xl border border-emerald-200 p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold text-gray-800">Final Approval — President</h2>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW</span>
+          </div>
+          <p className="text-sm text-gray-600">All claim departments have approved and Logistics data is complete. Approve to finalize this document and send it to Accounting.</p>
+          <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700">
+            <p><b>{req.documentNo}</b> · {req.brandName} · {req.items?.filter((i:any)=>i.itemStatus!=="REJECTED").length} SO</p>
+          </div>
+          <button disabled={submitting === "_pres"}
+            onClick={async () => {
+              setSubmitting("_pres")
+              const res = await fetch(`/api/requests/${id}/approve`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "president_approve_gw" })
+              })
+              if (res.ok) { window.location.href = "/approvals" }
+              else { const e = await res.json().catch(()=>({})); alert(e.error || "Error"); setSubmitting(null) }
+            }}
+            className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50">
+            {submitting === "_pres" ? "Approving..." : "✓ Approve & Send to Accounting"}
+          </button>
+        </div>
+      )}
+
+      {(isVpMerGW || isGmGW) && (
         <div className="space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <h2 className="font-semibold text-gray-800">STYLES ({styleGroups.length})</h2>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW · {isVpMerGW ? "DPM" : isGmGW ? "GM" : "President"}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW · {isVpMerGW ? "DPM" : "GM"}</span>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex gap-4 text-xs font-medium">
