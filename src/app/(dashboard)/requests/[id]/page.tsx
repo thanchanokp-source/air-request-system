@@ -2440,14 +2440,8 @@ export default function RequestDetailPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div>
               <h3 className="text-base font-bold text-gray-800">Approve — {gwFwdCanonicalDept}</h3>
-              <p className="text-xs text-gray-500 mt-1">Approving all {gwFwdItems.length} SO of your department.</p>
             </div>
-            {gwIsLastPos ? (
-              // Final position → finish (no more forwarding).
-              <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2.5 text-sm text-green-800">
-                ✓ This is the final position. Approve to <b>finish the process</b> — the document proceeds when all departments and logistics are done.
-              </div>
-            ) : (
+            {!gwIsLastPos && (
               // Forced next position — must pick a person (name free, position fixed).
               // Procurement step 0 also forces choosing a branch (Purchasing / Sourcing).
               <div className="space-y-3">
