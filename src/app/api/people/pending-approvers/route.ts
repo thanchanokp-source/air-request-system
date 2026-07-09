@@ -37,6 +37,13 @@ export async function POST(req: NextRequest) {
     const pa = await (prisma as any).pendingApprover.findUnique({ where: { id: String(id) } })
     if (!pa || pa.status !== "PENDING") return NextResponse.json({ error: "Request not found or already handled" }, { status: 404 })
 
+    // Collapse any duplicate PENDING requests for the same doc + dept + person so
+    // handling one clears the rest.
+    await (prisma as any).pendingApprover.updateMany({
+      where: { requestId: pa.requestId, dept: pa.dept, nextEmail: pa.nextEmail, status: "PENDING", id: { not: pa.id } },
+      data: { status: "SUPERSEDED" },
+    })
+
     const doc = await prisma.airRequest.findUnique({ where: { id: pa.requestId }, select: { documentNo: true } })
 
     if (action === "reject") {
