@@ -169,9 +169,10 @@ const posMatches = (p: any, position?: string) => {
 function PersonPicker({ label, selected, onSelect, placeholder, position, requestId }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string; position?: string; requestId?: string }) {
   const [q, setQ] = useState(""); const [results, setResults] = useState<any[]>([]); const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false)
   const [showAll, setShowAll] = useState(false); const [notifyState, setNotifyState] = useState<"idle" | "sending" | "sent">("idle")
-  const matched = position ? results.filter(p => posMatches(p, position)) : []
-  const filtering = !!position && !showAll && matched.length > 0
-  const shown = filtering ? matched : (position ? [...results].sort((a, b) => Number(posMatches(b, position)) - Number(posMatches(a, position))) : results)
+  // Hard filter: with a required position, ONLY people matching that position are
+  // selectable. "Show all" is an explicit override; missing → ask Admin to add.
+  const matched = position ? results.filter(p => posMatches(p, position)) : results
+  const shown = position && !showAll ? matched : results
   const notifyAdmin = async () => {
     setNotifyState("sending")
     try {
@@ -196,10 +197,12 @@ function PersonPicker({ label, selected, onSelect, placeholder, position, reques
           </div>
           {open && q.length >= 2 && (
             <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl z-50 w-96 max-w-[90vw] overflow-hidden">
-              {filtering && (
+              {position && (
                 <div className="px-3.5 py-1.5 bg-blue-50 border-b border-blue-100 text-[11px] text-blue-700 flex items-center justify-between">
-                  <span>Showing {position} only</span>
-                  <button onMouseDown={e => { e.preventDefault(); setShowAll(true) }} className="underline hover:text-blue-900">show all ({results.length})</button>
+                  <span>{showAll ? "Showing all people" : `Position: ${position} only`}</span>
+                  <button onMouseDown={e => { e.preventDefault(); setShowAll(v => !v) }} className="underline hover:text-blue-900">
+                    {showAll ? `filter to ${position}` : `show all (${results.length})`}
+                  </button>
                 </div>
               )}
               <div className="max-h-72 overflow-y-auto py-1.5">
@@ -210,13 +213,17 @@ function PersonPicker({ label, selected, onSelect, placeholder, position, reques
                     className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-blue-50 cursor-pointer transition-colors">
                     <div className={`w-10 h-10 rounded-full ${avatarColor(p.name)} text-sm font-bold flex items-center justify-center shrink-0 select-none`}>{initialsOf(p.name)}</div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{p.name || p.email}{m && <span className="ml-1.5 text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1 py-0.5 align-middle">✓ position</span>}</p>
+                      <p className="text-sm font-semibold text-gray-800 truncate">{p.name || p.email}{position && m && <span className="ml-1.5 text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1 py-0.5 align-middle">✓ position</span>}{position && showAll && !m && <span className="ml-1.5 text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 align-middle">≠ position</span>}</p>
                       <p className="text-xs text-gray-400 truncate">{p.email || "—"}</p>
                       {(p.dept || p.pos) && <p className="text-[11px] text-gray-400 truncate">{[p.pos, p.dept].filter(Boolean).join(" · ")}{p.bu ? ` · ${p.bu}` : ""}</p>}
                     </div>
                   </div>
                 )}) : !loading && (
-                  <div className="px-4 py-5 text-center text-sm text-gray-400">No matching person</div>
+                  <div className="px-4 py-5 text-center text-sm text-gray-400">
+                    {position && !showAll && results.length > 0
+                      ? <>No one matches <b className="text-gray-600">{position}</b>. Use “show all” above, or notify Admin below.</>
+                      : "No matching person"}
+                  </div>
                 )}
               </div>
               {/* Ask admin to add a missing person for this position */}
