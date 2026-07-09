@@ -22,10 +22,16 @@ export async function POST(req: NextRequest) {
     const displayName = String(name || "").trim() || mail.split("@")[0]
     const buVal = String(bu || "").trim() || "GW"
 
+    const existingU = await (prisma.user as any).findUnique({ where: { email: mail }, select: { priority: true } })
+    let priority: number | null = existingU?.priority ?? null
+    if (priority == null) {
+      const maxP = await (prisma.user as any).aggregate({ where: { role: String(role), bu: buVal }, _max: { priority: true } })
+      priority = ((maxP._max.priority as number) ?? 0) + 1
+    }
     const user = await (prisma.user as any).upsert({
       where: { email: mail },
-      create: { email: mail, name: displayName, role: String(role), bu: buVal, isActive: true },
-      update: { role: String(role), bu: buVal, isActive: true, ...(name ? { name: displayName } : {}) },
+      create: { email: mail, name: displayName, role: String(role), bu: buVal, isActive: true, priority },
+      update: { role: String(role), bu: buVal, isActive: true, priority, ...(name ? { name: displayName } : {}) },
     })
 
     // Let Admin know a person was added self-service (awaited — Vercel drops un-awaited work).

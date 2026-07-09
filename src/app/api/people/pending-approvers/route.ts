@@ -69,12 +69,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, action: "rejected" })
     }
 
-    // 1) Create/activate the user with the exact position role.
+    // 1) Create/activate the user with the exact position role + auto priority
+    // (next after the highest existing priority for that role + BU).
     const displayName = pa.nextName || pa.nextEmail.split("@")[0]
+    const existingU = await (prisma.user as any).findUnique({ where: { email: pa.nextEmail }, select: { priority: true } })
+    let priority: number | null = existingU?.priority ?? null
+    if (priority == null) {
+      const maxP = await (prisma.user as any).aggregate({ where: { role: pa.role, bu: pa.bu }, _max: { priority: true } })
+      priority = ((maxP._max.priority as number) ?? 0) + 1
+    }
     await (prisma.user as any).upsert({
       where: { email: pa.nextEmail },
-      create: { email: pa.nextEmail, name: displayName, role: pa.role, bu: pa.bu, isActive: true },
-      update: { role: pa.role, bu: pa.bu, isActive: true, name: displayName },
+      create: { email: pa.nextEmail, name: displayName, role: pa.role, bu: pa.bu, isActive: true, priority },
+      update: { role: pa.role, bu: pa.bu, isActive: true, name: displayName, priority },
     })
 
     // 2) Execute the held forward: create the ClaimForward row for the SO subset.
