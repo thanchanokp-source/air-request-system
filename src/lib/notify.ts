@@ -765,3 +765,44 @@ export async function notifyClaimFinalToAccounting(requestId: string) {
     console.error("[notify] accounting final error:", err)
   }
 }
+
+// A claim approver could not find a person for the required position — ask ADMIN
+// to add them as a user so they become selectable.
+export async function notifyAdminAddPerson(opts: {
+  position: string; suggestedName?: string; requesterName?: string; documentNo?: string; bu?: string; requestId?: string
+}) {
+  try {
+    const admins = await (prisma.user as any).findMany({
+      where: { role: "ADMIN", isActive: true }, select: { email: true }
+    })
+    const to: string[] = admins.map((a: any) => a.email).filter(Boolean)
+    if (to.length === 0) return
+    const link = opts.requestId ? `${APP_URL}/requests/${opts.requestId}` : `${APP_URL}/users`
+    const row = (k: string, v: string) =>
+      `<tr><td style="padding:6px 0;color:#6b7280;font-size:12px;font-family:Arial,sans-serif;width:130px">${k}</td><td style="padding:6px 0;color:#111827;font-size:13px;font-weight:700;font-family:Arial,sans-serif">${v || "—"}</td></tr>`
+    const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0"><tr><td align="center">
+  <table width="460" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#b91c1c;padding:18px;text-align:center">
+      <h1 style="margin:0;color:#fff;font-size:16px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:1px">ADD APPROVER REQUEST</h1></td></tr>
+    <tr><td style="padding:26px 32px">
+      <p style="color:#374151;font-size:13px;line-height:1.6;font-family:Arial,sans-serif;margin:0 0 16px">A claim approver could not find anyone for a required position. Please add this person as a user so they can be selected.</p>
+      <table width="100%" cellpadding="0" cellspacing="0">
+        ${row("Position needed", opts.position)}
+        ${row("Suggested name", opts.suggestedName || "")}
+        ${row("Business Unit", opts.bu || "")}
+        ${row("Document", opts.documentNo || "")}
+        ${row("Requested by", opts.requesterName || "")}
+      </table>
+      <div style="text-align:center;margin-top:22px">${emailButton(`${APP_URL}/users`, "Manage Users →", "#b91c1c")}</div>
+      ${loginLinkBlock()}
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p></td></tr>
+  </table>
+</td></tr></table></body></html>`
+    await sendMail(to, `[Admin] Add approver for ${opts.position}${opts.documentNo ? " — " + opts.documentNo : ""}`, html)
+  } catch (err) {
+    console.error("[notify] add-person error:", err)
+  }
+}

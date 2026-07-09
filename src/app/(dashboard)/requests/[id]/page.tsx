@@ -153,9 +153,33 @@ const AVATAR_COLORS = [
 const avatarColor = (s: string) => AVATAR_COLORS[[...(s || "?")].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_COLORS.length]
 const initialsOf = (s: string) => (s || "?").trim().split(/\s+/).slice(0, 2).map(n => n[0] || "").join("").toUpperCase()
 
-// Inline person search/select (used for SCM NYK Approver → choose CR + EVP).
-function PersonPicker({ label, selected, onSelect, placeholder }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string }) {
+// Tokens that identify a position (drop generic words so "VP SCM NYG" keys on SCM/NYG).
+const POS_STOP = new Set(["VP", "OF", "THE", "FOR", "AND", "DEPT", "DEPARTMENT", "VICE", "MANAGER", "APPROVE", "APPROVER", "NEXT", "GM", "DPM"])
+const posTokens = (s?: string) => ((s || "").toUpperCase().match(/[A-Z0-9]+/g) || []).filter(t => t.length >= 2 && !POS_STOP.has(t))
+const posMatches = (p: any, position?: string) => {
+  const need = posTokens(position)
+  if (!need.length) return false
+  const hay = posTokens(`${p.pos || ""} ${p.dept || ""} ${p.bu || ""}`)
+  return need.some(t => hay.includes(t))
+}
+
+// Inline person search/select. When `position` is given, results matching that
+// position are shown first with a badge; a footer lets the user ask ADMIN to add
+// a missing person for that position.
+function PersonPicker({ label, selected, onSelect, placeholder, position, requestId }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string; position?: string; requestId?: string }) {
   const [q, setQ] = useState(""); const [results, setResults] = useState<any[]>([]); const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false)
+  const [showAll, setShowAll] = useState(false); const [notifyState, setNotifyState] = useState<"idle" | "sending" | "sent">("idle")
+  const matched = position ? results.filter(p => posMatches(p, position)) : []
+  const filtering = !!position && !showAll && matched.length > 0
+  const shown = filtering ? matched : (position ? [...results].sort((a, b) => Number(posMatches(b, position)) - Number(posMatches(a, position))) : results)
+  const notifyAdmin = async () => {
+    setNotifyState("sending")
+    try {
+      await fetch("/api/notify/add-person", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ position, suggestedName: q, requestId }) })
+      setNotifyState("sent")
+    } catch { setNotifyState("idle"); alert("Failed to notify admin") }
+  }
   return (
     <div className="flex items-center gap-3">
       <span className="text-xs font-semibold text-gray-600 shrink-0 w-32">{label}</span>
@@ -164,7 +188,7 @@ function PersonPicker({ label, selected, onSelect, placeholder }: { label: strin
           <div className="relative">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" /></svg>
             <input value={q}
-              onChange={async e => { const v = e.target.value; setQ(v); setOpen(true); if (v.length < 2) { setResults([]); return } setLoading(true); try { const r = await fetch(`/api/people?q=${encodeURIComponent(v)}`); const d = await r.json(); setResults(Array.isArray(d) ? d : []) } catch { setResults([]) } finally { setLoading(false) } }}
+              onChange={async e => { const v = e.target.value; setQ(v); setOpen(true); setShowAll(false); setNotifyState("idle"); if (v.length < 2) { setResults([]); return } setLoading(true); try { const r = await fetch(`/api/people?q=${encodeURIComponent(v)}`); const d = await r.json(); setResults(Array.isArray(d) ? d : []) } catch { setResults([]) } finally { setLoading(false) } }}
               onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 200)}
               placeholder={placeholder || "Search name or email..."}
               className="w-full border border-gray-300 rounded-xl pl-9 pr-9 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition" />
@@ -172,21 +196,42 @@ function PersonPicker({ label, selected, onSelect, placeholder }: { label: strin
           </div>
           {open && q.length >= 2 && (
             <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl z-50 w-96 max-w-[90vw] overflow-hidden">
+              {filtering && (
+                <div className="px-3.5 py-1.5 bg-blue-50 border-b border-blue-100 text-[11px] text-blue-700 flex items-center justify-between">
+                  <span>Showing {position} only</span>
+                  <button onMouseDown={e => { e.preventDefault(); setShowAll(true) }} className="underline hover:text-blue-900">show all ({results.length})</button>
+                </div>
+              )}
               <div className="max-h-72 overflow-y-auto py-1.5">
-                {results.length > 0 ? results.map((p: any, i: number) => (
+                {shown.length > 0 ? shown.map((p: any, i: number) => {
+                  const m = posMatches(p, position)
+                  return (
                   <div key={i} onMouseDown={() => { onSelect({ name: p.name, email: p.email }); setResults([]); setOpen(false) }}
                     className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-blue-50 cursor-pointer transition-colors">
                     <div className={`w-10 h-10 rounded-full ${avatarColor(p.name)} text-sm font-bold flex items-center justify-center shrink-0 select-none`}>{initialsOf(p.name)}</div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{p.name || p.email}</p>
+                      <p className="text-sm font-semibold text-gray-800 truncate">{p.name || p.email}{m && <span className="ml-1.5 text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1 py-0.5 align-middle">✓ position</span>}</p>
                       <p className="text-xs text-gray-400 truncate">{p.email || "—"}</p>
                       {(p.dept || p.pos) && <p className="text-[11px] text-gray-400 truncate">{[p.pos, p.dept].filter(Boolean).join(" · ")}{p.bu ? ` · ${p.bu}` : ""}</p>}
                     </div>
                   </div>
-                )) : !loading && (
-                  <div className="px-4 py-6 text-center text-sm text-gray-400">No matching person</div>
+                )}) : !loading && (
+                  <div className="px-4 py-5 text-center text-sm text-gray-400">No matching person</div>
                 )}
               </div>
+              {/* Ask admin to add a missing person for this position */}
+              {position && !loading && (
+                <div className="px-3.5 py-2.5 border-t border-gray-100 bg-gray-50">
+                  {notifyState === "sent" ? (
+                    <p className="text-[11px] text-emerald-700 font-medium">✓ Admin notified — they will add this person.</p>
+                  ) : (
+                    <button onMouseDown={e => { e.preventDefault(); notifyAdmin() }} disabled={notifyState === "sending"}
+                      className="text-[11px] text-red-600 hover:text-red-700 font-medium disabled:opacity-50">
+                      {notifyState === "sending" ? "Notifying admin..." : `Can't find ${q ? `"${q}"` : "the person"}? → Ask Admin to add for ${position}`}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2707,7 +2752,7 @@ export default function RequestDetailPage() {
                 {(!gwNeedsBranch || gwBranchChoice) && (
                   <div className="space-y-2">
                     <p className="text-sm font-semibold text-blue-800">Please select <span className="text-blue-900 underline">{gwNextPosLabel}</span> for approve <span className="text-red-500">*</span></p>
-                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} />
+                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} position={gwNextPosLabel || undefined} requestId={String(id)} />
                   </div>
                 )}
               </div>
