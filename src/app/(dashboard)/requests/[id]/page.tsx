@@ -4191,19 +4191,19 @@ export default function RequestDetailPage() {
               })()}
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
+            {/* Table — frozen header, height-capped so the horizontal scrollbar is visible */}
+            <div className="overflow-auto max-h-[60vh] border border-orange-100 rounded-lg">
               <table className="w-full text-xs whitespace-nowrap">
-                <thead className="bg-orange-50/60 border-b border-orange-100">
+                <thead>
                   <tr>
-                    <th className="px-3 py-2">
+                    <th className="px-3 py-2 sticky top-0 z-10 bg-orange-50 border-b border-orange-100">
                       <input type="checkbox"
                         checked={allLgItems.length > 0 && allLgItems.every((i: any) => lgSelectedSoIds.has(i.id) || !!soInvMap[i.id])}
                         onChange={e => setLgSelectedSoIds(e.target.checked ? new Set(allLgItems.map((i: any) => i.id)) : new Set())}
                         className="accent-orange-500" />
                     </th>
                     {["SO No.","Sub","Style","Customer PO","Description","QTY Orig","QTY Air","Weight (KG)","Est. Freight (THB)","Country","Port","Factory","INV NO.","Actual Freight (THB)"].map(h =>
-                      <th key={h} className="px-3 py-2 text-left text-orange-700 font-medium">{h}</th>)}
+                      <th key={h} className="px-3 py-2 text-left text-orange-700 font-medium sticky top-0 z-10 bg-orange-50 border-b border-orange-100">{h}</th>)}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-orange-50">
