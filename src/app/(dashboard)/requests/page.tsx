@@ -242,9 +242,12 @@ export default function RequestsPage() {
     }
   }
 
-  const totalCompleted = allRows.filter(r => r.itemStatus === "COMPLETED").length
+  // President is the final approver — once approved, the SO is at Accounting (a
+  // terminal notify step), so count it as done, not pending.
+  const DONE_ST = (s: string) => s === "COMPLETED" || s === "ACCOUNTING_PENDING"
+  const totalCompleted = allRows.filter(r => DONE_ST(r.itemStatus)).length
   const totalRejected = allRows.filter(r => r.itemStatus === "REJECTED").length
-  const totalPending = allRows.filter(r => r.itemStatus !== "COMPLETED" && r.itemStatus !== "REJECTED").length
+  const totalPending = allRows.filter(r => !DONE_ST(r.itemStatus) && r.itemStatus !== "REJECTED").length
 
   return (
     <div className="space-y-4">
@@ -300,7 +303,6 @@ export default function RequestsPage() {
             LOG_PASSED: "PENDING_CLAIM_GW",
             SCM_GW_PENDING: "PENDING_SCM_GW",
             PRESIDENT_PENDING: "PENDING_PRESIDENT_GW", // claim + LG done → President (final)
-            ACCOUNTING_PENDING: "PENDING_PRESIDENT_GW", // count under President (final stage)
           } : {
             VP_MER_PASSED: "PENDING_SCM",
             PASSED: "PENDING_VP_SCM",
@@ -309,11 +311,11 @@ export default function RequestsPage() {
             LOG_PASSED: "PENDING_CLAIM",
             PRESIDENT_PENDING: "PENDING_PRESIDENT", // claim + LG done → President (final)
             CLAIM_PASSED: "PENDING_CLAIM",
-            ACCOUNTING_PENDING: "PENDING_PRESIDENT", // count under President (final stage)
           }
           const count = allRows.filter(r => {
             const st = r.itemStatus
-            if (st === "REJECTED" || st === "COMPLETED") return false
+            // Done (Completed / President-approved → Accounting) never counts in a pending stage.
+            if (st === "REJECTED" || st === "COMPLETED" || st === "ACCOUNTING_PENDING") return false
             // GW parallel stage (PRES_PASSED): an SO waits on LG and/or Claim, so it
             // is counted under BOTH boxes for whichever side is still outstanding.
             if (activeBu === "GW" && st === "PRES_PASSED" && r.request.status === "PENDING_CLAIM_GW") {
