@@ -4196,14 +4196,14 @@ export default function RequestDetailPage() {
               <table className="w-full text-xs whitespace-nowrap">
                 <thead>
                   <tr>
-                    <th className="px-3 py-2 sticky top-0 z-10 bg-orange-50 border-b border-orange-100">
+                    <th className="px-3 py-2 sticky top-0 left-0 z-20 bg-orange-50 border-b border-orange-100">
                       <input type="checkbox"
                         checked={allLgItems.length > 0 && allLgItems.every((i: any) => lgSelectedSoIds.has(i.id) || !!soInvMap[i.id])}
                         onChange={e => setLgSelectedSoIds(e.target.checked ? new Set(allLgItems.map((i: any) => i.id)) : new Set())}
                         className="accent-orange-500" />
                     </th>
                     {["SO No.","Sub","Style","Customer PO","Description","QTY Orig","QTY Air","Weight (KG)","Est. Freight (THB)","Country","Port","Factory","INV NO.","Actual Freight (THB)"].map(h =>
-                      <th key={h} className="px-3 py-2 text-left text-orange-700 font-medium sticky top-0 z-10 bg-orange-50 border-b border-orange-100">{h}</th>)}
+                      <th key={h} className={`px-3 py-2 text-left text-orange-700 font-medium sticky top-0 bg-orange-50 border-b border-orange-100 ${h === "SO No." ? "left-10 z-20" : "z-10"}`}>{h}</th>)}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-orange-50">
@@ -4228,7 +4228,7 @@ export default function RequestDetailPage() {
                           ${isQuickHighlight ? "bg-orange-100 hover:bg-orange-150" : "hover:bg-orange-50/40"}
                           ${lgQuickInv.trim() ? "cursor-pointer" : ""}
                         `}>
-                        <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                        <td className={`px-3 py-2 sticky left-0 z-10 ${isQuickHighlight ? "bg-orange-100" : "bg-white"}`} onClick={e => e.stopPropagation()}>
                           <input type="checkbox"
                             checked={lgSelectedSoIds.has(item.id) || !!invNo}
                             onChange={e => {
@@ -4246,7 +4246,7 @@ export default function RequestDetailPage() {
                             }}
                             className="accent-orange-500" />
                         </td>
-                        <td className="px-3 py-2 font-semibold text-orange-900">{item.so}</td>
+                        <td className={`px-3 py-2 font-semibold text-orange-900 sticky left-10 z-10 ${isQuickHighlight ? "bg-orange-100" : "bg-white"}`}>{item.so}</td>
                         <td className="px-3 py-2 text-gray-500">{item.sub || "—"}</td>
                         <td className="px-3 py-2 text-gray-600">{item.style}</td>
                         <td className="px-3 py-2 text-gray-500">{item.customerPO || "—"}</td>
