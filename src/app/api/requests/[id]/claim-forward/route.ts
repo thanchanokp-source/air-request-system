@@ -171,9 +171,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Remove the forwarded SO from the actor's own row (forwarded approver only);
     // delete the row if nothing is left with them.
     if (ownerRow) {
+      // Keep the row (empty itemIds) instead of deleting so the forwarder's magic
+      // link still resolves — clicking their old email logs them in to view the doc.
       const remaining = ownedIds.filter((x) => !selIds.includes(x))
-      if (remaining.length === 0) await (prisma as any).claimForward.delete({ where: { id: ownerRow.id } })
-      else await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } })
+      await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } })
     }
 
     const posLabel = nextPositionLabel(forwarderDept, currentPos, undefined, branchVal) || forwarderDept

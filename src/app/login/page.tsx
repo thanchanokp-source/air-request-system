@@ -110,8 +110,22 @@ function LoginForm() {
               <p className="text-green-600 text-xs text-center bg-green-50 border border-green-200 rounded-xl py-2.5 px-3">✓ Login link sent — please check your email<br /><span className="text-green-500">{email}</span></p>
             ) : (
               <button type="button" onClick={sendLoginLink} disabled={sendingLink}
-                className="w-full py-2.5 rounded-xl text-blue-700 font-medium text-sm border border-blue-200 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 transition-colors">
-                {sendingLink ? "Sending..." : "✉ Email me a login link (no password)"}
+                className="group w-full py-3 rounded-xl border border-blue-200 bg-gradient-to-b from-blue-50 to-blue-100/70 hover:from-blue-100 hover:to-blue-100 disabled:opacity-50 transition-colors flex items-center justify-center gap-2.5">
+                {sendingLink ? (
+                  <span className="text-blue-700 font-semibold text-sm">Sending link…</span>
+                ) : (
+                  <>
+                    <span className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <rect x="3" y="5" width="18" height="14" rx="2.5" /><path strokeLinecap="round" strokeLinejoin="round" d="m4 7 8 6 8-6" />
+                      </svg>
+                    </span>
+                    <span className="text-left leading-tight">
+                      <span className="block text-sm font-semibold text-blue-800">Email me a login link</span>
+                      <span className="block text-[11px] text-blue-500">No password · sent to your @nanyangtextile.com</span>
+                    </span>
+                  </>
+                )}
               </button>
             )}
 

@@ -96,10 +96,9 @@ export async function POST(req: NextRequest) {
     // Remove those SO from the requester's own forward row, if they had one.
     if (pa.requestedBy && Array.isArray(pa.itemIds)) {
       const ownerRow = await (prisma as any).claimForward.findFirst({ where: { requestId: pa.requestId, dept: pa.dept, nextEmail: pa.requestedBy } })
-      if (ownerRow) {
-        const remaining = (Array.isArray(ownerRow.itemIds) ? ownerRow.itemIds : []).filter((x: string) => !pa.itemIds.includes(x))
-        if (Array.isArray(ownerRow.itemIds) && remaining.length === 0) await (prisma as any).claimForward.delete({ where: { id: ownerRow.id } }).catch(() => {})
-        else if (Array.isArray(ownerRow.itemIds)) await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } })
+      if (ownerRow && Array.isArray(ownerRow.itemIds)) {
+        const remaining = ownerRow.itemIds.filter((x: string) => !pa.itemIds.includes(x))
+        await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } })
       }
     }
 

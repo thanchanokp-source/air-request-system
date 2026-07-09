@@ -983,11 +983,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       count++
     }
     if (count === 0) return NextResponse.json({ error: "No pending SO for your department" }, { status: 400 })
-    // Clear only the finalized SO from this actor's forward row (leave other subsets).
+    // Clear finalized SO from this actor's row (keep the row + token so their
+    // magic link still works as a view-only login after they're done).
     if (ownerRow) {
       const remaining = ownedIds.filter((x) => !selIds.includes(x))
-      if (remaining.length === 0) await (prisma as any).claimForward.delete({ where: { id: ownerRow.id } }).catch(() => {})
-      else await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } })
+      await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } }).catch(() => {})
     }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Claim ${dept} finalized ${count} SO` }
