@@ -8,7 +8,7 @@ import { ROLE_ACTIONS, STATUS_LABELS, STYLE_APPROVER_STATUSES } from "@/types"
 import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, positionHasBranch, PROCUREMENT_BRANCHES } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -162,15 +162,19 @@ const extractGs = (s?: string) => {
   for (const m of (s || "").toUpperCase().matchAll(/G\s*([1-4])/g)) set.add(m[1])
   return set
 }
-const posMatches = (p: any, position?: string, bu?: string) => {
+const posMatches = (p: any, position?: string, bu?: string, positionRole?: string | null) => {
+  // BU must match when both are known.
+  if (bu && p.bu && String(p.bu).toUpperCase() !== String(bu).toUpperCase()) return false
+  // Precise: when the chain maps this position to an exact User.role, match that
+  // role exactly (this already encodes the VP PROD factory group, e.g. _G1G3).
+  if (positionRole) {
+    return String(p.role || p.pos || "").toUpperCase() === positionRole.toUpperCase()
+  }
+  // Fallback (chains without a mapped role): loose token match.
   const need = posTokens(position)
   if (!need.length) return false
   const hayStr = `${p.pos || ""} ${p.dept || ""} ${p.role || ""} ${p.bu || ""}`
   const hay = posTokens(hayStr)
-  // BU must match when both are known.
-  if (bu && p.bu && String(p.bu).toUpperCase() !== String(bu).toUpperCase()) return false
-  // VP PROD (factory-based): require the person's factory group (from their role,
-  // e.g. SCM_NYG_VP_PROD_G1G3) to overlap the required group (G1/G3 vs G2/G4).
   const needGs = extractGs(position)
   if (needGs.size) {
     const candGs = extractGs(hayStr)
@@ -182,12 +186,12 @@ const posMatches = (p: any, position?: string, bu?: string) => {
 // Inline person search/select. When `position` is given, results matching that
 // position are shown first with a badge; a footer lets the user ask ADMIN to add
 // a missing person for that position.
-function PersonPicker({ label, selected, onSelect, placeholder, position, requestId, bu }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string; position?: string; requestId?: string; bu?: string }) {
+function PersonPicker({ label, selected, onSelect, placeholder, position, positionRole, requestId, bu }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string; position?: string; positionRole?: string | null; requestId?: string; bu?: string }) {
   const [q, setQ] = useState(""); const [results, setResults] = useState<any[]>([]); const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false)
   const [showAll, setShowAll] = useState(false); const [notifyState, setNotifyState] = useState<"idle" | "sending" | "sent">("idle")
-  // Hard filter: with a required position, ONLY people matching that position (role
-  // + BU + factory group) are selectable. "Show all" is an explicit override.
-  const matched = position ? results.filter(p => posMatches(p, position, bu)) : results
+  // Hard filter: with a required position, ONLY people matching that position (exact
+  // role + BU) are selectable. "Show all" is an explicit override.
+  const matched = position ? results.filter(p => posMatches(p, position, bu, positionRole)) : results
   const shown = position && !showAll ? matched : results
   const notifyAdmin = async () => {
     setNotifyState("sending")
@@ -231,7 +235,7 @@ function PersonPicker({ label, selected, onSelect, placeholder, position, reques
               )}
               <div className="max-h-72 overflow-y-auto py-1.5">
                 {shown.length > 0 ? shown.map((p: any, i: number) => {
-                  const m = posMatches(p, position, bu)
+                  const m = posMatches(p, position, bu, positionRole)
                   return (
                   <div key={i} onMouseDown={() => { onSelect({ name: p.name, email: p.email }); setResults([]); setOpen(false) }}
                     className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-blue-50 cursor-pointer transition-colors">
@@ -713,6 +717,11 @@ export default function RequestDetailPage() {
   const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos) : true
   const gwNeedsBranch = gwFwdCanonicalDept ? positionHasBranch(gwFwdCanonicalDept, gwCurrentPos) : false
   const gwNextPosLabel = gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFwdItems[0]?.factory, gwNeedsBranch ? gwBranchChoice : gwBranch) : null
+  // Exact role for the next position (drives precise person filtering). VP PROD uses
+  // the factory of the SELECTED SO so G1/G3 vs G2/G4 resolves correctly.
+  const gwNextPosRole = gwFwdCanonicalDept
+    ? nextPositionRole(gwFwdCanonicalDept, gwCurrentPos, (gwFwdItems.find((i: any) => claimSelIds.includes(i.id)) || gwFwdItems[0])?.factory)
+    : null
   const myClaimItems = req?.items?.filter((i: any) => {
     const itemDeptList: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
       ? i.claimDepts.map((d: any) => d.dept)
@@ -2801,7 +2810,7 @@ export default function RequestDetailPage() {
                 {(!gwNeedsBranch || gwBranchChoice) && (
                   <div className="space-y-2">
                     <p className="text-sm font-semibold text-blue-800">Please select <span className="text-blue-900 underline">{gwNextPosLabel}</span> for approve <span className="text-red-500">*</span></p>
-                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} position={gwNextPosLabel || undefined} requestId={String(id)} bu={req?.bu} />
+                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} position={gwNextPosLabel || undefined} positionRole={gwNextPosRole} requestId={String(id)} bu={req?.bu} />
                   </div>
                 )}
               </div>

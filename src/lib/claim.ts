@@ -120,14 +120,15 @@ export function expandClaimDept(dept: string): string[] {
 // free name search, but the position is enforced). The LAST position finishes
 // the process. Single-position depts (GW / SUPPLIER) finish immediately.
 //   SCM NYK keeps its own 3-role sub-flow (not a linear chain) — excluded here.
-export type ClaimPosition = { label: string; factoryBased?: boolean; branch?: boolean }
+export type ClaimPosition = { label: string; factoryBased?: boolean; branch?: boolean; role?: string }
 export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
-  // ── GW ──
+  // ── GW ── (roles map each position to the exact User.role so the person picker
+  // can filter precisely; VP PROD appends the factory-group suffix _G1G3 / _G2G4.)
   "SCM NYG": [
-    { label: "SCM NYG" },
-    { label: "VP SCM NYG" },
-    { label: "VP PROD", factoryBased: true },
-    { label: "SCM EVP" },
+    { label: "SCM NYG", role: "SCM_NYG" },
+    { label: "VP SCM NYG", role: "SCM_NYG_VP" },
+    { label: "VP PROD", factoryBased: true, role: "SCM_NYG_VP_PROD" },
+    { label: "SCM EVP", role: "SCM_NYG_EVP" },
   ],
   "GW": [{ label: "GW" }],
   "SUPPLIER": [{ label: "SUPPLIER" }],
@@ -182,6 +183,23 @@ export function nextPositionLabel(dept: string, currentPos: number, factory?: st
   // The step right after a branch-choice position is the "<branch> Approver".
   if (chain[currentPos]?.branch && branch) return `${branch} ${next.label}`
   return next.label
+}
+
+// The exact User.role for the NEXT position (for precise person filtering).
+// Factory-based positions append the group suffix (_G1G3 / _G2G4). Returns null
+// when the position has no mapped role or the factory group is unknown → the
+// picker then falls back to loose token matching.
+export function nextPositionRole(dept: string, currentPos: number, factory?: string | null): string | null {
+  const chain = chainFor(dept)
+  const next = chain[currentPos + 1]
+  if (!next || !next.role) return null
+  if (next.factoryBased) {
+    const g = vpProdGroup(factory)
+    if (g === "G1/G3") return `${next.role}_G1G3`
+    if (g === "G2/G4") return `${next.role}_G2G4`
+    return null
+  }
+  return next.role
 }
 
 // Is `currentPos` the last position of the dept's chain (→ finish, no forward)?
