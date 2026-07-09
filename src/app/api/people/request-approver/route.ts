@@ -31,13 +31,14 @@ export async function POST(req: NextRequest) {
 
     const doc = await prisma.airRequest.findUnique({ where: { id: String(requestId) }, select: { documentNo: true } })
     // Alert Admin — they must approve before the new person is notified.
-    notifyAdminAddPerson({
+    // AWAIT so the send completes before the response (Vercel drops un-awaited work).
+    await notifyAdminAddPerson({
       position: `${positionLabel || role} (awaiting your approval)`,
       suggestedName: `${nextName || ""} <${mail}>`.trim(),
       requesterName: (session.user as any)?.name || (session.user as any)?.email,
       requestId: String(requestId), bu: String(bu || "GW"),
       documentNo: doc?.documentNo,
-    } as any).catch(() => {})
+    } as any)
 
     return NextResponse.json({ ok: true })
   } catch (e: any) {

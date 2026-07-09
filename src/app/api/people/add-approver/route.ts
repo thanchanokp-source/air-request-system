@@ -28,13 +28,13 @@ export async function POST(req: NextRequest) {
       update: { role: String(role), bu: buVal, isActive: true, ...(name ? { name: displayName } : {}) },
     })
 
-    // Let Admin know a person was added self-service (for their records).
-    notifyAdminAddPerson({
+    // Let Admin know a person was added self-service (awaited — Vercel drops un-awaited work).
+    await notifyAdminAddPerson({
       position: String(position || role),
       suggestedName: `${displayName} <${mail}>`,
       requesterName: (session.user as any)?.name || (session.user as any)?.email,
       requestId, bu: buVal,
-    }).catch(() => {})
+    })
 
     return NextResponse.json({ ok: true, name: user.name || displayName, email: user.email })
   } catch (e: any) {

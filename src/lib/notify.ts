@@ -776,7 +776,7 @@ export async function notifyAdminAddPerson(opts: {
       where: { role: "ADMIN", isActive: true }, select: { email: true }
     })
     const to: string[] = admins.map((a: any) => a.email).filter(Boolean)
-    if (to.length === 0) return
+    if (to.length === 0) { console.warn("[notify] add-person: no ADMIN user with an email — nobody to notify"); return }
     const link = opts.requestId ? `${APP_URL}/requests/${opts.requestId}` : `${APP_URL}/users`
     const row = (k: string, v: string) =>
       `<tr><td style="padding:6px 0;color:#6b7280;font-size:12px;font-family:Arial,sans-serif;width:130px">${k}</td><td style="padding:6px 0;color:#111827;font-size:13px;font-weight:700;font-family:Arial,sans-serif">${v || "—"}</td></tr>`
