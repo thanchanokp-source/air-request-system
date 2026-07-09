@@ -2650,7 +2650,7 @@ export default function RequestDetailPage() {
             </div>
             {/* Actions (right, small — same as GM) */}
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-xs text-yellow-600 font-medium">{gwFwdItems.length} pending{claimSelIds.length ? ` · ${claimSelIds.length} selected` : ""}</span>
+              <span className="text-xs text-yellow-600 font-medium">{gwFwdItems.length} SO pending{claimSelIds.length ? ` · ${claimSelIds.length} selected` : ""}</span>
               <button onClick={() => setClaimTableView(v => !v)}
                 className="text-xs text-gray-600 border border-gray-300 rounded-lg px-2.5 py-1 hover:bg-gray-50 font-medium">
                 {claimTableView ? "▤ Card view" : "▤ Table view"}
