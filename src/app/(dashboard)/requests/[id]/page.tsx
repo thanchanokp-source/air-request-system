@@ -2704,9 +2704,9 @@ export default function RequestDetailPage() {
                   onKeyDown={e => {
                     if (e.key !== "Enter") return
                     const q = soPick.trim(); if (!q) return
-                    const exact = gwFwdItems.filter((i: any) => String(i.so).toLowerCase() === q.toLowerCase())
-                    const matches = exact.length ? exact : gwFwdItems.filter((i: any) => String(i.so).toLowerCase().includes(q.toLowerCase()))
-                    if (matches.length === 0) { setSoPickMsg(`No SO matching "${q}"`); return }
+                    // Exact SO only — type the full SO number, then Enter to select.
+                    const matches = gwFwdItems.filter((i: any) => String(i.so).toLowerCase() === q.toLowerCase())
+                    if (matches.length === 0) { setSoPickMsg(`No SO "${q}" — type the full SO`); return }
                     setDvmSelected(prev => { const n = new Set(prev); matches.forEach((i: any) => n.add(i.id)); return n })
                     setSoPickMsg(`✓ +${matches.length} added`); setSoPick("")
                   }}
