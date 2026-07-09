@@ -298,30 +298,42 @@ function PersonPicker({ label, selected, onSelect, placeholder, position, positi
               )}
             </div>
           )}
-          {/* Add-person form (persists below the box, outside the blur-closing dropdown) */}
+          {/* Add-person popup — centered over everything so it's clearly visible */}
           {addOpen && (
-            <div className="absolute top-full left-0 mt-2 w-96 max-w-[90vw] bg-white border border-blue-200 rounded-2xl shadow-2xl z-50 p-3.5 space-y-2">
-              {addSent ? (
-                <p className="text-sm text-emerald-700 font-medium py-2">✓ Sent to Admin for approval. The person will be notified once Admin approves.</p>
-              ) : (<>
-                <p className="text-xs font-semibold text-gray-700">Add new <span className="text-blue-700">{position}</span></p>
-                <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Name (optional)"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                <input value={addEmail} onChange={e => setAddEmail(e.target.value)} type="email" placeholder="Email *" autoFocus
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                <p className="text-[10px] text-gray-400">
-                  {onRequestAdd
-                    ? <>Sends a request to <b>Admin</b>. After they approve, this person is added as <b>{positionRole}</b>{bu ? ` (${bu})` : ""} and alerted to approve the selected SO.</>
-                    : <>Added to the master as <b>{positionRole}</b>{bu ? ` (${bu})` : ""} and selected.</>}
-                </p>
-                <div className="flex justify-end gap-2 pt-1">
-                  <button onClick={() => setAddOpen(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
-                  <button onClick={addApprover} disabled={adding || !addEmail.trim()}
-                    className="px-4 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40">
-                    {adding ? "Sending..." : (onRequestAdd ? "Send request to Admin" : "Add & select")}
-                  </button>
-                </div>
-              </>)}
+            <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" onClick={() => !adding && setAddOpen(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 space-y-3" onClick={e => e.stopPropagation()}>
+                {addSent ? (
+                  <div className="text-center py-4 space-y-2">
+                    <div className="w-11 h-11 rounded-full bg-emerald-100 text-emerald-600 text-xl flex items-center justify-center mx-auto">✓</div>
+                    <p className="text-sm text-emerald-700 font-semibold">Sent to Admin for approval</p>
+                    <p className="text-xs text-gray-500">The person will be notified once Admin approves.</p>
+                  </div>
+                ) : (<>
+                  <h3 className="text-base font-bold text-gray-800">Add new <span className="text-blue-700">{position}</span></h3>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-600">Name</label>
+                    <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Full name (optional)"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-600">Email <span className="text-red-500">*</span></label>
+                    <input value={addEmail} onChange={e => setAddEmail(e.target.value)} type="email" placeholder="name@nanyangtextile.com" autoFocus
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  </div>
+                  <p className="text-[11px] text-gray-400 leading-snug">
+                    {onRequestAdd
+                      ? <>Sends a request to <b>Admin</b>. After approval, this person is added as <b>{positionRole}</b>{bu ? ` (${bu})` : ""} and emailed to approve the selected SO.</>
+                      : <>Added to the master as <b>{positionRole}</b>{bu ? ` (${bu})` : ""} and selected.</>}
+                  </p>
+                  <div className="flex justify-end gap-2 pt-1 border-t border-gray-100 mt-1">
+                    <button onClick={() => setAddOpen(false)} className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
+                    <button onClick={addApprover} disabled={adding || !addEmail.trim()}
+                      className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40">
+                      {adding ? "Sending..." : (onRequestAdd ? "Send request to Admin" : "Add & select")}
+                    </button>
+                  </div>
+                </>)}
+              </div>
             </div>
           )}
         </div>
