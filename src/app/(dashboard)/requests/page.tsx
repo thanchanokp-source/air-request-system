@@ -284,7 +284,7 @@ export default function RequestsPage() {
             LOG_PASSED: "PENDING_CLAIM_GW",
             SCM_GW_PENDING: "PENDING_SCM_GW",
             PRESIDENT_PENDING: "PENDING_PRESIDENT_GW", // claim + LG done → President (final)
-            ACCOUNTING_PENDING: "PENDING_ACCOUNTING",
+            ACCOUNTING_PENDING: "PENDING_PRESIDENT_GW", // count under President (final stage)
           } : {
             VP_MER_PASSED: "PENDING_SCM",
             PASSED: "PENDING_VP_SCM",
@@ -293,6 +293,7 @@ export default function RequestsPage() {
             LOG_PASSED: "PENDING_CLAIM",
             PRESIDENT_PENDING: "PENDING_PRESIDENT", // claim + LG done → President (final)
             CLAIM_PASSED: "PENDING_CLAIM",
+            ACCOUNTING_PENDING: "PENDING_PRESIDENT", // count under President (final stage)
           }
           const count = allRows.filter(r => {
             const st = r.itemStatus
