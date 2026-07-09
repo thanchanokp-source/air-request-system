@@ -444,6 +444,8 @@ export default function RequestDetailPage() {
   const [claimFwdDone, setClaimFwdDone] = useState<string|null>(null)
   // Claim review: card list (expand each) vs flat table (see all at once).
   const [claimTableView, setClaimTableView] = useState(false)
+  const [soPick, setSoPick] = useState("")        // quick-select: type SO + Enter
+  const [soPickMsg, setSoPickMsg] = useState("")
   // Claim approver (NYG/GW/Supplier) action popup: forward to next person, or finish.
   const [gwModalOpen, setGwModalOpen] = useState(false)
   const [gwBranchChoice, setGwBranchChoice] = useState<string | null>(null)
@@ -2710,6 +2712,26 @@ export default function RequestDetailPage() {
               <p className="text-lg font-bold text-blue-700 tabular-nums">{claimTotals.amt.toLocaleString()}</p>
               <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.actual.toLocaleString()}</p>
             </div>
+          </div>
+          {/* Quick-select: type an SO number + Enter to tick it */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative">
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" /></svg>
+              <input value={soPick}
+                onChange={e => { setSoPick(e.target.value); setSoPickMsg("") }}
+                onKeyDown={e => {
+                  if (e.key !== "Enter") return
+                  const q = soPick.trim(); if (!q) return
+                  const exact = gwFwdItems.filter((i: any) => String(i.so).toLowerCase() === q.toLowerCase())
+                  const matches = exact.length ? exact : gwFwdItems.filter((i: any) => String(i.so).toLowerCase().includes(q.toLowerCase()))
+                  if (matches.length === 0) { setSoPickMsg(`No SO matching "${q}"`); return }
+                  setDvmSelected(prev => { const n = new Set(prev); matches.forEach((i: any) => n.add(i.id)); return n })
+                  setSoPickMsg(`✓ +${matches.length} SO added (${q})`); setSoPick("")
+                }}
+                placeholder="Type SO + Enter to select"
+                className="w-56 border border-gray-300 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            {soPickMsg && <span className={`text-xs font-medium ${soPickMsg.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>{soPickMsg}</span>}
           </div>
           {/* Attach supporting files — by DOCUMENT */}
           <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2 flex-wrap">
