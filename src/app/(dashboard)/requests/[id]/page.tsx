@@ -632,8 +632,14 @@ export default function RequestDetailPage() {
     acc.actual += r.actual; acc.est += r.est; acc.myEst += r.myEst; acc.amt += r.amt; acc.qty += Number(it.qtyRequestAir) || 0
     return acc
   }, { actual: 0, est: 0, myEst: 0, amt: 0, qty: 0 })
+  // Sort SO by claim amount (actual × %) high→low; fall back to estimate share
+  // while actuals are still zero (before Logistics fills HAWB).
+  const gwFwdItemsSorted = [...gwFwdItems].sort((a: any, b: any) => {
+    const ra = claimRow(a), rb = claimRow(b)
+    return (rb.amt - ra.amt) || (rb.myEst - ra.myEst)
+  })
   const exportClaimExcel = () => {
-    const rows = gwFwdItems.map((it: any, i: number) => {
+    const rows = gwFwdItemsSorted.map((it: any, i: number) => {
       const r = claimRow(it)
       return {
         "No.": i + 1, "SO": it.so, "STYLE": it.style, "CUSTOMER PO": it.customerPO || "",
@@ -1077,8 +1083,10 @@ export default function RequestDetailPage() {
         )}
       </div>
 
-      {/* Freight Cost Summary — visible to all roles */}
+      {/* Freight Cost Summary — visible to all roles EXCEPT the forced-position
+          claim screen (that panel has its own dept-scoped summary strip). */}
       {(() => {
+        if (showGwFinishForward) return null
         const isClaimDeptRole = isDvmClaim || isVpClaim || isClaimNextApprover || isClaimP1ForForward
         const summaryItems = isClaimDeptRole && myClaimItems.length > 0 ? myClaimItems : (req.items || [])
         const allItems = summaryItems
@@ -2502,7 +2510,6 @@ export default function RequestDetailPage() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <h2 className="font-semibold text-gray-800">CLAIM — {gwFwdCanonicalDept} ({gwFwdItems.length} SO)</h2>
-              <span className="text-xs text-gray-400 hidden sm:inline">· your dept only</span>
             </div>
             {/* Actions (right, small — same as GM) */}
             <div className="flex items-center gap-3 flex-wrap">
@@ -2548,14 +2555,14 @@ export default function RequestDetailPage() {
               <p className="text-[10px] text-gray-400">{gwFwdCanonicalDept} only</p>
             </div>
             <div className="px-4 py-2.5">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">My EST (THB)</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Estimate Air Freight (THB)</p>
               <p className="text-lg font-bold text-gray-700 tabular-nums">{claimTotals.myEst.toLocaleString()}</p>
-              <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.est.toLocaleString()} full</p>
+              <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.est.toLocaleString()}</p>
             </div>
             <div className="px-4 py-2.5">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">My Claim / Actual (THB)</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Actual Air Freight (THB)</p>
               <p className="text-lg font-bold text-blue-700 tabular-nums">{claimTotals.amt.toLocaleString()}</p>
-              <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.actual.toLocaleString()} full</p>
+              <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.actual.toLocaleString()}</p>
             </div>
           </div>
           {/* Attach supporting files — by DOCUMENT */}
@@ -2607,7 +2614,7 @@ export default function RequestDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {gwFwdItems.map((item: any) => (
+                  {gwFwdItemsSorted.map((item: any) => (
                       <tr key={item.id} className="hover:bg-gray-50 bg-white">
                         {cols.map(c => (
                           <td key={c.h}
@@ -2635,7 +2642,7 @@ export default function RequestDetailPage() {
           {/* SO list — checkbox + expandable full detail (same template as SCM NYK) */}
           {!claimTableView && (
           <div className="space-y-2">
-            {gwFwdItems.map((item: any) => {
+            {gwFwdItemsSorted.map((item: any) => {
               const sp = getSplits(item).find((s: any) => gwFwdSplitDepts.includes(s.dept))
               const actual = item.actualAirFreight ?? 0
               const pctV = Number(sp?.pct) || 0
@@ -2650,8 +2657,8 @@ export default function RequestDetailPage() {
                     <span className="text-xs text-gray-500">{item.style} · qty {item.qtyRequestAir}</span>
                     <div className="ml-auto flex items-center gap-4 text-xs flex-wrap">
                       <span className="text-gray-500">HAWB# <b className="text-gray-700">{item.hawbNo || "-"}</b></span>
-                      <span className="text-gray-500">My EST <b className="text-gray-700">{myEst.toLocaleString()}</b> ({pctV}%)</span>
-                      <span className="text-blue-700 font-semibold">My claim {amt.toLocaleString()}</span>
+                      <span className="text-gray-500">Estimate <b className="text-gray-700">{myEst.toLocaleString()}</b> ({pctV}%)</span>
+                      <span className="text-blue-700 font-semibold">Actual {amt.toLocaleString()}</span>
                     </div>
                   </div>
                   {isExp && (
