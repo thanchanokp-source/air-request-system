@@ -4132,9 +4132,10 @@ export default function RequestDetailPage() {
                           e.preventDefault()
                           const q = lgQuickSo.trim()
                           if (!q) return
-                          const found = allLgItems.find((i: any) => i.so === q)
-                          if (found) {
-                            setSoInvMap(p => ({ ...p, [(found as any).id]: lgQuickInv.trim() }))
+                          // Assign the INV to EVERY row of this SO (1 SO can have many rows).
+                          const rows = allLgItems.filter((i: any) => i.so === q)
+                          if (rows.length) {
+                            setSoInvMap(p => { const n = { ...p }; rows.forEach((r: any) => { n[r.id] = lgQuickInv.trim() }); return n })
                             setLgQuickSo("")
                           }
                         }}
@@ -4142,25 +4143,31 @@ export default function RequestDetailPage() {
                       />
                       {lgQuickSo.trim() && (
                         <div className="absolute top-full mt-1 left-0 bg-white border border-orange-200 rounded-xl shadow-lg z-20 min-w-64 max-h-48 overflow-y-auto">
-                          {allLgItems.filter((i: any) => i.so.includes(lgQuickSo.trim())).length === 0
-                            ? <p className="text-xs text-gray-400 px-3 py-2">SO not found</p>
-                            : allLgItems.filter((i: any) => i.so.includes(lgQuickSo.trim())).map((i: any) => {
-                              const isAssigned = soInvMap[(i as any).id] === lgQuickInv.trim()
+                          {(() => {
+                            const matching = allLgItems.filter((i: any) => i.so.includes(lgQuickSo.trim()))
+                            const sos = [...new Set(matching.map((i: any) => i.so))]
+                            if (sos.length === 0) return <p className="text-xs text-gray-400 px-3 py-2">SO not found</p>
+                            return sos.map((so: any) => {
+                              const rows = allLgItems.filter((i: any) => i.so === so)
+                              const allAssigned = rows.every((r: any) => soInvMap[(r as any).id] === lgQuickInv.trim())
                               return (
-                                <button key={(i as any).id} type="button"
+                                <button key={so} type="button"
                                   onClick={() => {
-                                    setSoInvMap(p => isAssigned
-                                      ? (() => { const n = { ...p }; delete n[(i as any).id]; return n })()
-                                      : ({ ...p, [(i as any).id]: lgQuickInv.trim() }))
+                                    setSoInvMap(p => {
+                                      const n = { ...p }
+                                      rows.forEach((r: any) => { if (allAssigned) delete n[(r as any).id]; else n[(r as any).id] = lgQuickInv.trim() })
+                                      return n
+                                    })
                                     setLgQuickSo("")
                                     document.getElementById("lg-quick-so")?.focus()
                                   }}
-                                  className={`flex items-center justify-between w-full text-left px-3 py-2 text-xs hover:bg-orange-50 border-b border-orange-50 last:border-0 ${isAssigned ? "bg-orange-50" : ""}`}>
-                                  <span><span className="font-semibold">{i.so}</span><span className="text-gray-400 ml-2">{i.style}</span></span>
-                                  {isAssigned && <span className="text-orange-600 font-bold">✓</span>}
+                                  className={`flex items-center justify-between w-full text-left px-3 py-2 text-xs hover:bg-orange-50 border-b border-orange-50 last:border-0 ${allAssigned ? "bg-orange-50" : ""}`}>
+                                  <span><span className="font-semibold">{so}</span><span className="text-gray-400 ml-2">{rows[0]?.style}</span><span className="text-orange-400 ml-2">· {rows.length} row{rows.length > 1 ? "s" : ""}</span></span>
+                                  {allAssigned && <span className="text-orange-600 font-bold">✓</span>}
                                 </button>
                               )
-                            })}
+                            })
+                          })()}
                         </div>
                       )}
                     </div>
