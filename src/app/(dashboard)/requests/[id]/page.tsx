@@ -3097,6 +3097,27 @@ export default function RequestDetailPage() {
             </div>
           )}
 
+          {/* Quick-select: type the full SO + Enter to tick it */}
+          {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" /></svg>
+                <input value={soPick}
+                  onChange={e => { setSoPick(e.target.value); setSoPickMsg("") }}
+                  onKeyDown={e => {
+                    if (e.key !== "Enter") return
+                    const q = soPick.trim(); if (!q) return
+                    const matches = myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED" && String(i.so).toLowerCase() === q.toLowerCase())
+                    if (matches.length === 0) { setSoPickMsg(`No SO "${q}" — type the full SO`); return }
+                    setDvmSelected(prev => { const n = new Set(prev); matches.forEach((i: any) => n.add(i.id)); return n })
+                    setSoPickMsg(`✓ +${matches.length} added`); setSoPick("")
+                  }}
+                  placeholder="Type SO + Enter to select"
+                  className="w-56 border border-gray-300 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              {soPickMsg && <span className={`text-xs font-medium ${soPickMsg.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>{soPickMsg}</span>}
+            </div>
+          )}
           {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").map((item: any) => {
             const isSub = submitting === item.id
             const itemAttachments = (req.attachments || []).filter((a: any) => a.itemId === item.id)
