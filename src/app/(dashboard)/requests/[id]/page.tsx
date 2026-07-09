@@ -853,9 +853,10 @@ export default function RequestDetailPage() {
       })
     }
     if (res.ok) {
-      setClaimFwdDone(final ? "final" : `forwarded:${claimFwdSelected?.name}`)
-      const r = await fetch(`/api/requests/${id}`)
-      if (r.ok) setReq(await r.json())
+      // After approve/forward, go straight back to the Air Requests list
+      // (no lingering half-state panel on this page).
+      window.location.href = "/requests"
+      return
     } else {
       const err = await res.json().catch(() => ({}))
       alert(err.error || "Action failed")
@@ -2110,7 +2111,7 @@ export default function RequestDetailPage() {
         </div>
         )
       })()}
-      {claimFwdDone && (
+      {claimFwdDone && !isGWRequest && (
         <div className={`rounded-xl px-4 py-3 mb-4 text-sm font-medium flex items-center gap-2 ${claimFwdDone === "final" ? "bg-green-50 text-green-700 border border-green-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
           <span className="text-base">{claimFwdDone === "final" ? "✓" : "→"}</span>
           {claimFwdDone === "final" ? "Approved — document is moving forward. Accounting has been notified." : `Forwarded to ${claimFwdDone.replace("forwarded:","")} successfully.`}
