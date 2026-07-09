@@ -2515,12 +2515,6 @@ export default function RequestDetailPage() {
                 className="text-xs text-green-700 border border-green-300 rounded-lg px-2.5 py-1 hover:bg-green-50 font-medium">
                 ⬇ Export Excel
               </button>
-              {gwFwdItems.length > 0 && (
-                <button onClick={() => setDvmSelected(dvmSelected.size === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}
-                  className="text-xs text-blue-600 hover:underline">
-                  {dvmSelected.size === gwFwdItems.length ? "Deselect All" : `Select All (${gwFwdItems.length})`}
-                </button>
-              )}
               <button onClick={() => { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }} disabled={claimFwdSaving}
                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40">
                 {claimFwdSaving ? "..." : `✓ Approve All (${gwFwdItems.length})`}
@@ -2573,14 +2567,6 @@ export default function RequestDetailPage() {
                 onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
             </label>
           </div>
-          {/* (counts + Select All moved to the header row above) */}
-          <div className="hidden">
-            {gwFwdItems.length > 0 && (
-              <button onClick={() => setDvmSelected(dvmSelected.size === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}>
-                {dvmSelected.size === gwFwdItems.length ? "Deselect All" : `Select All (${gwFwdItems.length})`}
-              </button>
-            )}
-          </div>
           {/* Flat table view — all SO at once, no expand */}
           {claimTableView && (() => {
             // Full column set — MER-uploaded fields + Logistics fields + claim.
@@ -2615,38 +2601,28 @@ export default function RequestDetailPage() {
               <table className="text-xs w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-2 py-2 w-8 sticky left-0 bg-gray-50 z-10"></th>
                     {cols.map(c => (
-                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "sticky left-8 bg-gray-50 z-10" : ""}`}>{c.h}</th>
+                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "sticky left-0 bg-gray-50 z-10" : ""}`}>{c.h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {gwFwdItems.map((item: any) => {
-                    const sel = dvmSelected.has(item.id)
-                    return (
-                      <tr key={item.id} className={`hover:bg-gray-50 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
-                        <td className={`px-2 py-1.5 text-center sticky left-0 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
-                          <input type="checkbox" checked={sel}
-                            onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
-                            className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-blue-600" />
-                        </td>
+                  {gwFwdItems.map((item: any) => (
+                      <tr key={item.id} className="hover:bg-gray-50 bg-white">
                         {cols.map(c => (
                           <td key={c.h}
-                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700 font-semibold" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""} ${c.h === "DESCRIPTION" ? "max-w-[180px] truncate" : ""}`}
+                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700 font-semibold" : ""} ${c.h === "SO" ? "font-semibold text-gray-800 sticky left-0 z-10 bg-white" : ""} ${c.h === "DESCRIPTION" ? "max-w-[180px] truncate" : ""}`}
                             title={c.h === "DESCRIPTION" || c.h === "DELAY REASON" ? String(c.get(item)) : undefined}>
                             {c.get(item)}
                           </td>
                         ))}
                       </tr>
-                    )
-                  })}
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-gray-100 bg-gray-50/60 font-semibold">
-                    <td className="sticky left-0 bg-gray-50/60 z-10"></td>
                     {cols.map(c => (
-                      <td key={c.h} className={`px-3 py-2 ${RIGHT.has(c.h) ? "text-right tabular-nums" : ""} ${c.h === "ACTUAL (THB)" ? "text-green-700" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700" : ""} ${c.h === "SO" ? "sticky left-8 bg-gray-50/60 z-10" : ""}`}>
+                      <td key={c.h} className={`px-3 py-2 ${RIGHT.has(c.h) ? "text-right tabular-nums" : ""} ${c.h === "ACTUAL (THB)" ? "text-green-700" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700" : ""} ${c.h === "SO" ? "sticky left-0 bg-gray-50/60 z-10" : ""}`}>
                         {c.h === "SO" ? "TOTAL" : c.h === "QTY AIR" ? fmtNum(claimTotals.qty) : c.h === "EST. (THB)" ? fmtNum(claimTotals.est) : c.h === "ACTUAL (THB)" ? fmtNum(claimTotals.actual) : c.h === "MY EST (THB)" ? fmtNum(claimTotals.myEst) : c.h === "MY CLAIM (THB)" ? fmtNum(claimTotals.amt) : ""}
                       </td>
                     ))}
@@ -2669,9 +2645,6 @@ export default function RequestDetailPage() {
               return (
                 <div key={item.id} className="rounded-xl border border-gray-200 overflow-hidden bg-white">
                   <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3">
-                    <input type="checkbox" checked={dvmSelected.has(item.id)}
-                      onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
-                      className="w-4 h-4 rounded border-gray-300 shrink-0 cursor-pointer accent-blue-600" />
                     <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
                     <span className="font-bold text-gray-800">{item.so}</span>
                     <span className="text-xs text-gray-500">{item.style} · qty {item.qtyRequestAir}</span>
@@ -2791,7 +2764,10 @@ export default function RequestDetailPage() {
       )}
 
       {/* DVM CLAIM per-SO approval — priority-based sequential */}
-      {isDvmClaim && !showGwFinishForward && (!isProcureDvm || procureDecision === "approve") && (
+      {/* Unified claim UI: every non-NYK dept uses the forced-position panel above.
+          This DVM-style panel is reserved for SCM NYK (its 3-role CR/EVP sub-flow)
+          and any truly-legacy DVM_* role — never for a forced-position entry role. */}
+      {isDvmClaim && !showGwFinishForward && (isNykClaimRole || (!fwdEntryRole && role !== "CLAIM_NEXT_APPROVER")) && (!isProcureDvm || procureDecision === "approve") && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
