@@ -124,10 +124,12 @@ model ClaimForward {
   token     String     @unique
   position  Int        @default(0)
   branch    String?
+  itemIds   Json?      // SO ids this forward covers (null = whole dept, legacy). Enables
+                       // forwarding different SO subsets of one dept to different people.
   createdAt DateTime   @default(now())
   request   AirRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
-  @@unique([requestId, dept])
+  @@index([requestId, dept])
 }
 
 model ClaimApproval {

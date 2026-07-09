@@ -933,12 +933,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Which department does this actor own + their position in the chain?
     let dept: string | null = null
     let currentPos = 0
+    let ownerRow: any = null
     if (userRole === "CLAIM_NEXT_APPROVER") {
       const email = session.user?.email || ""
-      const fwd = email ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: email } }) : null
-      if (!fwd) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
-      dept = fwd.dept
-      currentPos = fwd.position ?? 0
+      const tok = (session.user as any).claimNextToken || null
+      ownerRow = tok
+        ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, token: tok } })
+        : (email ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: email } }) : null)
+      if (!ownerRow) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
+      dept = ownerRow.dept
+      currentPos = ownerRow.position ?? 0
     } else {
       dept = ownerCanonicalDept(userRole, userClaimDept)
     }
@@ -952,17 +956,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const doneStatus = isGW ? GW_DEPT_APPROVED : NYG_SPLIT.COMPLETED
 
     const items = await prisma.airRequestItem.findMany({ where: { requestId: id } })
+    // SO ids this actor owns (their forward row's items, or — for the entry owner —
+    // dept-pending SO not already forwarded to a later position).
+    const deptPendingIds: string[] = items.filter((it: any) => itemHasPendingDept(it, dept!)).map((it: any) => it.id)
+    let ownedIds: string[]
+    if (ownerRow) {
+      ownedIds = Array.isArray(ownerRow.itemIds) && ownerRow.itemIds.length
+        ? (ownerRow.itemIds as string[]).filter((x) => deptPendingIds.includes(x))
+        : deptPendingIds
+    } else {
+      const rows = await (prisma as any).claimForward.findMany({ where: { requestId: id, dept } })
+      const covered = new Set<string>(rows.flatMap((r: any) => (Array.isArray(r.itemIds) ? r.itemIds : [])))
+      ownedIds = deptPendingIds.filter((x) => !covered.has(x))
+    }
+    const selIds: string[] = (Array.isArray(itemIds) && itemIds.length)
+      ? (itemIds as string[]).filter((x) => ownedIds.includes(x))
+      : ownedIds
+    if (selIds.length === 0) return NextResponse.json({ error: "No pending SO for your department" }, { status: 400 })
+
     let count = 0
     for (const it of items) {
-      if (!itemHasPendingDept(it, dept)) continue
+      if (!selIds.includes(it.id) || !itemHasPendingDept(it, dept)) continue
       const updated = approveGwDeptSplits(getSplits(it), splitDepts, undefined, doneStatus)
       const itemStatus = isGW ? deriveGwItemStatus(updated, (it as any).actualAirFreight != null) : deriveNygItemStatus(updated)
       await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus, itemComment: comment || (it as any).itemComment } })
       count++
     }
     if (count === 0) return NextResponse.json({ error: "No pending SO for your department" }, { status: 400 })
-    // Clear this dept's forward state — the chain has finished here.
-    await (prisma as any).claimForward.deleteMany({ where: { requestId: id, dept } })
+    // Clear only the finalized SO from this actor's forward row (leave other subsets).
+    if (ownerRow) {
+      const remaining = ownedIds.filter((x) => !selIds.includes(x))
+      if (remaining.length === 0) await (prisma as any).claimForward.delete({ where: { id: ownerRow.id } }).catch(() => {})
+      else await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } })
+    }
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Claim ${dept} finalized ${count} SO` }
     })

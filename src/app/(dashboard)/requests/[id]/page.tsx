@@ -612,10 +612,29 @@ export default function RequestDetailPage() {
   const isGwForwardRole = req?.status === (isGWRequest ? "PENDING_CLAIM_GW" : "PENDING_CLAIM") &&
     (fwdEntryRole || role === "CLAIM_NEXT_APPROVER")
   const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED"]
-  const gwFwdItems = isGwForwardRole
+  // My forward row (CLAIM_NEXT_APPROVER = the row I logged in with, by token).
+  const myClaimToken = (session?.user as any)?.claimNextToken || null
+  const myClaimFwdRow = role === "CLAIM_NEXT_APPROVER"
+    ? (req?.claimForwards || []).find((f: any) => myClaimToken ? f.token === myClaimToken : (f.dept === gwFwdCanonicalDept && f.nextEmail === (session?.user as any)?.email))
+    : null
+  // Base = SO at the claim stage with a still-pending split for my dept.
+  const gwFwdBase = isGwForwardRole
     ? (req?.items || []).filter((i: any) => fwdItemStatuses.includes(i.itemStatus) &&
         getSplits(i).some((s: any) => gwFwdSplitDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "COMPLETED" && s.status !== "REJECTED"))
     : []
+  // Scope to the SO THIS actor owns (per-SO forward): a forwarded approver sees only
+  // their row's SO; the entry owner sees SO not yet forwarded to a later position.
+  const gwFwdItems = (() => {
+    if (!isGwForwardRole) return []
+    if (role === "CLAIM_NEXT_APPROVER") {
+      const ids = Array.isArray(myClaimFwdRow?.itemIds) ? myClaimFwdRow.itemIds : null
+      return ids ? gwFwdBase.filter((i: any) => ids.includes(i.id)) : gwFwdBase
+    }
+    const covered = new Set<string>((req?.claimForwards || [])
+      .filter((f: any) => f.dept === gwFwdCanonicalDept)
+      .flatMap((f: any) => (Array.isArray(f.itemIds) ? f.itemIds : [])))
+    return gwFwdBase.filter((i: any) => !covered.has(i.id))
+  })()
   const showGwFinishForward = isGwForwardRole && gwFwdSplitDepts.length > 0 && gwFwdItems.length > 0 && !claimFwdDone
   // A claim SO's own split (this dept). All money is scoped to THIS dept's share:
   //   myEst   = SO est.  freight × claim%
@@ -638,6 +657,9 @@ export default function RequestDetailPage() {
     const ra = claimRow(a), rb = claimRow(b)
     return (rb.amt - ra.amt) || (rb.myEst - ra.myEst)
   })
+  // Ticked SO within my scope (per-SO forward). Empty selection = act on all my SO.
+  const claimSelIds = [...dvmSelected].filter((idv: string) => gwFwdItems.some((i: any) => i.id === idv))
+  const claimActIds: string[] = claimSelIds.length ? claimSelIds : gwFwdItems.map((i: any) => i.id)
   const exportClaimExcel = () => {
     const rows = gwFwdItemsSorted.map((it: any, i: number) => {
       const r = claimRow(it)
@@ -661,7 +683,7 @@ export default function RequestDetailPage() {
     XLSX.writeFile(wb, `${req?.documentNo || "claim"}_${(gwFwdCanonicalDept || "claim").replace(/\s+/g, "")}.xlsx`)
   }
   // Current position + next required position (with factory / branch context).
-  const myFwdRow = (req?.claimForwards || []).find((f: any) => f.dept === gwFwdCanonicalDept && f.nextEmail === (session?.user as any)?.email)
+  const myFwdRow = myClaimFwdRow
   const gwCurrentPos = role === "CLAIM_NEXT_APPROVER" ? (myFwdRow?.position ?? 0) : 0
   const gwBranch: string | null = myFwdRow?.branch || null
   const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos) : true
@@ -890,24 +912,23 @@ export default function RequestDetailPage() {
     } finally { setUploadingItem(null) }
   }
 
-  const claimForward = async (final: boolean) => {
+  const claimForward = async (final: boolean, ids?: string[]) => {
     setClaimFwdSaving(true)
-    // GW finish → approve route (finalize_claim_dept) so it finalizes only THIS
-    // department's splits and recomputes doc status centrally. NYG finish keeps
-    // the legacy claim-forward path. Forward (both BU) → per-dept claim-forward.
+    // Finalize/forward only the selected SO (per-SO forward). When nothing is
+    // ticked, `ids` is undefined → the backend acts on all SO this actor owns.
     let res
     if (final) {
-      // Finish (final position) → finalize this dept's splits centrally (both BU).
+      // Finish (final position) → finalize this dept's selected splits centrally.
       res = await fetch(`/api/requests/${id}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "finalize_claim_dept" })
+        body: JSON.stringify({ action: "finalize_claim_dept", itemIds: ids })
       })
     } else {
-      // Forward to the next forced position (person = chosen name; branch for Procurement).
+      // Forward the selected SO subset to the next forced position (person free, position fixed).
       res = await fetch(`/api/requests/${id}/claim-forward`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name, branch: gwNeedsBranch ? gwBranchChoice : undefined })
+        body: JSON.stringify({ nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name, branch: gwNeedsBranch ? gwBranchChoice : undefined, itemIds: ids })
       })
     }
     if (res.ok) {
@@ -2513,7 +2534,7 @@ export default function RequestDetailPage() {
             </div>
             {/* Actions (right, small — same as GM) */}
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-xs text-yellow-600 font-medium">{gwFwdItems.length} pending</span>
+              <span className="text-xs text-yellow-600 font-medium">{gwFwdItems.length} pending{claimSelIds.length ? ` · ${claimSelIds.length} selected` : ""}</span>
               <button onClick={() => setClaimTableView(v => !v)}
                 className="text-xs text-gray-600 border border-gray-300 rounded-lg px-2.5 py-1 hover:bg-gray-50 font-medium">
                 {claimTableView ? "▤ Card view" : "▤ Table view"}
@@ -2522,20 +2543,27 @@ export default function RequestDetailPage() {
                 className="text-xs text-green-700 border border-green-300 rounded-lg px-2.5 py-1 hover:bg-green-50 font-medium">
                 ⬇ Export Excel
               </button>
+              {gwFwdItems.length > 0 && (
+                <button onClick={() => setDvmSelected(claimSelIds.length === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}
+                  className="text-xs text-blue-600 hover:underline">
+                  {claimSelIds.length === gwFwdItems.length ? "Clear" : `Select All (${gwFwdItems.length})`}
+                </button>
+              )}
               <button onClick={() => { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }} disabled={claimFwdSaving}
                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40">
-                {claimFwdSaving ? "..." : `✓ Approve All (${gwFwdItems.length})`}
+                {claimFwdSaving ? "..." : (claimSelIds.length ? `✓ Approve Selected (${claimSelIds.length})` : `✓ Approve All (${gwFwdItems.length})`)}
               </button>
               <button onClick={async () => {
-                  const reason = window.prompt(`Reason for sending ${gwFwdItems.length} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
+                  const backIds = claimActIds
+                  const reason = window.prompt(`Reason for sending ${backIds.length} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
                   if (reason == null || !reason.trim()) return
                   setClaimFwdSaving(true)
                   const backAction = isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so"
                   let updated: any = req
-                  for (const it of gwFwdItems) {
+                  for (const iid of backIds) {
                     const res = await fetch(`/api/requests/${id}/approve`, {
                       method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: backAction, itemId: it.id, comment: reason.trim() })
+                      body: JSON.stringify({ action: backAction, itemId: iid, comment: reason.trim() })
                     })
                     if (res.ok) updated = await res.json()
                     else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
@@ -2543,7 +2571,7 @@ export default function RequestDetailPage() {
                   setReq(updated); setClaimFwdDone(`back`); setClaimFwdSaving(false)
                 }} disabled={claimFwdSaving}
                 className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-40">
-                ↩ {isGWRequest ? "Back to MER" : "Back to SCM"}
+                ↩ {isGWRequest ? "Back to MER" : "Back to SCM"}{claimSelIds.length ? ` (${claimSelIds.length})` : ""}
               </button>
             </div>
           </div>
@@ -2608,28 +2636,35 @@ export default function RequestDetailPage() {
               <table className="text-xs w-full">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-2 py-2 w-8 sticky left-0 bg-gray-50 z-10"></th>
                     {cols.map(c => (
-                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "sticky left-0 bg-gray-50 z-10" : ""}`}>{c.h}</th>
+                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "sticky left-8 bg-gray-50 z-10" : ""}`}>{c.h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {gwFwdItemsSorted.map((item: any) => (
-                      <tr key={item.id} className="hover:bg-gray-50 bg-white">
+                  {gwFwdItemsSorted.map((item: any) => { const sel = dvmSelected.has(item.id); return (
+                      <tr key={item.id} className={`hover:bg-gray-50 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
+                        <td className={`px-2 py-1.5 text-center sticky left-0 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
+                          <input type="checkbox" checked={sel}
+                            onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                            className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-blue-600" />
+                        </td>
                         {cols.map(c => (
                           <td key={c.h}
-                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700 font-semibold" : ""} ${c.h === "SO" ? "font-semibold text-gray-800 sticky left-0 z-10 bg-white" : ""} ${c.h === "DESCRIPTION" ? "max-w-[180px] truncate" : ""}`}
+                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700 font-semibold" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""} ${c.h === "DESCRIPTION" ? "max-w-[180px] truncate" : ""}`}
                             title={c.h === "DESCRIPTION" || c.h === "DELAY REASON" ? String(c.get(item)) : undefined}>
                             {c.get(item)}
                           </td>
                         ))}
                       </tr>
-                  ))}
+                  )})}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-gray-100 bg-gray-50/60 font-semibold">
+                    <td className="sticky left-0 bg-gray-50/60 z-10"></td>
                     {cols.map(c => (
-                      <td key={c.h} className={`px-3 py-2 ${RIGHT.has(c.h) ? "text-right tabular-nums" : ""} ${c.h === "ACTUAL (THB)" ? "text-green-700" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700" : ""} ${c.h === "SO" ? "sticky left-0 bg-gray-50/60 z-10" : ""}`}>
+                      <td key={c.h} className={`px-3 py-2 ${RIGHT.has(c.h) ? "text-right tabular-nums" : ""} ${c.h === "ACTUAL (THB)" ? "text-green-700" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700" : ""} ${c.h === "SO" ? "sticky left-8 bg-gray-50/60 z-10" : ""}`}>
                         {c.h === "SO" ? "TOTAL" : c.h === "QTY AIR" ? fmtNum(claimTotals.qty) : c.h === "EST. (THB)" ? fmtNum(claimTotals.est) : c.h === "ACTUAL (THB)" ? fmtNum(claimTotals.actual) : c.h === "MY EST (THB)" ? fmtNum(claimTotals.myEst) : c.h === "MY CLAIM (THB)" ? fmtNum(claimTotals.amt) : ""}
                       </td>
                     ))}
@@ -2650,8 +2685,11 @@ export default function RequestDetailPage() {
               const myEst = Math.round((Number(item.airFreight) || 0) * pctV / 100)
               const isExp = expanded.has(item.id)
               return (
-                <div key={item.id} className="rounded-xl border border-gray-200 overflow-hidden bg-white">
+                <div key={item.id} className={`rounded-xl border overflow-hidden ${dvmSelected.has(item.id) ? "border-blue-300 bg-blue-50/40" : "border-gray-200 bg-white"}`}>
                   <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3">
+                    <input type="checkbox" checked={dvmSelected.has(item.id)}
+                      onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                      className="w-4 h-4 rounded border-gray-300 shrink-0 cursor-pointer accent-blue-600" />
                     <button onClick={() => toggleExpand(item.id)} className="text-gray-400 hover:text-gray-700 w-5 text-center shrink-0">{isExp ? "▼" : "▶"}</button>
                     <span className="font-bold text-gray-800">{item.so}</span>
                     <span className="text-xs text-gray-500">{item.style} · qty {item.qtyRequestAir}</span>
@@ -2717,7 +2755,7 @@ export default function RequestDetailPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => !claimFwdSaving && setGwModalOpen(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div>
-              <h3 className="text-base font-bold text-gray-800">Approve — {gwFwdCanonicalDept}</h3>
+              <h3 className="text-base font-bold text-gray-800">Approve — {gwFwdCanonicalDept} <span className="font-normal text-gray-400 text-sm">({claimActIds.length} SO)</span></h3>
             </div>
             {!gwIsLastPos && (
               // Forced next position — must pick a person (name free, position fixed).
@@ -2748,15 +2786,15 @@ export default function RequestDetailPage() {
               <button onClick={() => setGwModalOpen(false)} disabled={claimFwdSaving}
                 className="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-40">Cancel</button>
               {gwIsLastPos ? (
-                <button onClick={async () => { await claimForward(true); setGwModalOpen(false) }} disabled={claimFwdSaving}
+                <button onClick={async () => { await claimForward(true, claimActIds); setGwModalOpen(false) }} disabled={claimFwdSaving}
                   className="px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-40">
-                  {claimFwdSaving ? "..." : "Done — Finish process"}
+                  {claimFwdSaving ? "..." : `Done — Finish process${claimSelIds.length ? ` (${claimSelIds.length})` : ""}`}
                 </button>
               ) : (
-                <button onClick={async () => { await claimForward(false); setGwModalOpen(false) }} disabled={!claimFwdSelected || (gwNeedsBranch && !gwBranchChoice) || claimFwdSaving}
+                <button onClick={async () => { await claimForward(false, claimActIds); setGwModalOpen(false) }} disabled={!claimFwdSelected || (gwNeedsBranch && !gwBranchChoice) || claimFwdSaving}
                   title={!claimFwdSelected ? `Select a person for ${gwNextPosLabel}` : ""}
                   className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
-                  {claimFwdSaving ? "..." : "Forward →"}
+                  {claimFwdSaving ? "..." : `Forward →${claimSelIds.length ? ` (${claimSelIds.length})` : ""}`}
                 </button>
               )}
             </div>

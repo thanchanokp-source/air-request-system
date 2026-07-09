@@ -6,7 +6,7 @@ import { randomBytes } from "crypto"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { notifyClaimNext, notifyClaimFinalToAccounting } from "@/lib/notify"
-import { ownerCanonicalDept, isLastPosition, nextPositionLabel } from "@/lib/claim"
+import { ownerCanonicalDept, isLastPosition, nextPositionLabel, itemHasPendingDept } from "@/lib/claim"
 
 async function generateAndSavePdfs(requestId: string) {
   try {
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const forwarderName = (session.user as any).name || role
   const { id } = await params
   const body = await req.json()
-  const { final, nextEmail, nextName, branch } = body
+  const { final, nextEmail, nextName, branch, itemIds } = body
 
   // Must be a claim owner (master role) or a forwarded Claim Next Approver
   const isClaimP1 = (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_") || role === "SCM_NYK" || role === "SCM_NYG"
@@ -67,22 +67,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const userEmail = session.user?.email || ""
+  const claimNextToken = (session.user as any).claimNextToken || null
 
-  // Determine which department this actor owns + their position in the chain.
-  // Entry owner (SCM_NYG etc.) = position 0; a forwarded approver = stored position.
+  // Determine dept + position for this actor. A forwarded approver is scoped to
+  // the specific ClaimForward row they logged in with (by token); the entry owner
+  // (SCM_NYG etc.) is position 0 and owns SO not yet forwarded.
   let forwarderDept: string | null
   let currentPos = 0
+  let ownerRow: any = null
   if (isClaimNext) {
-    const fwd = userEmail
-      ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: userEmail } })
-      : null
-    if (!fwd) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
-    forwarderDept = fwd.dept
-    currentPos = fwd.position ?? 0
+    ownerRow = claimNextToken
+      ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, token: claimNextToken } })
+      : await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: userEmail } })
+    if (!ownerRow) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
+    forwarderDept = ownerRow.dept
+    currentPos = ownerRow.position ?? 0
   } else {
     forwarderDept = ownerCanonicalDept(role, userClaimDept)
   }
   if (!forwarderDept) return NextResponse.json({ error: "Cannot determine your claim department" }, { status: 400 })
+
+  // The SO ids this actor currently owns (available to forward). A forwarded
+  // approver owns their row's itemIds; the entry owner owns dept-pending SO that
+  // have NOT already been forwarded to a later position.
+  const deptPendingIds: string[] = request.items
+    .filter((it: any) => itemHasPendingDept(it, forwarderDept!))
+    .map((it: any) => it.id)
+  let ownedIds: string[]
+  if (ownerRow) {
+    ownedIds = Array.isArray(ownerRow.itemIds) && ownerRow.itemIds.length
+      ? (ownerRow.itemIds as string[]).filter((x) => deptPendingIds.includes(x))
+      : deptPendingIds // legacy null = whole dept
+  } else {
+    const rows = await (prisma as any).claimForward.findMany({ where: { requestId: id, dept: forwarderDept } })
+    const covered = new Set<string>(rows.flatMap((r: any) => (Array.isArray(r.itemIds) ? r.itemIds : [])))
+    ownedIds = deptPendingIds.filter((x) => !covered.has(x))
+  }
 
   // GW finish is handled by the approve route (finalize_claim_dept) so status
   // recalculation stays in one place. Here we only keep the NYG legacy finish.
@@ -133,21 +153,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "This is the final position — finish the process (cannot forward further)." }, { status: 400 })
     }
     if (!nextEmail) return NextResponse.json({ error: "nextEmail required" }, { status: 400 })
-    const nextPos = currentPos + 1
 
-    // Branch (Procurement Purchasing/Sourcing) is chosen at the branch position;
-    // carry the previously-chosen branch forward on later steps.
-    const branchVal = branch || null
+    // SO to forward: the selected subset (within owned) or all owned SO.
+    const selIds = (Array.isArray(itemIds) && itemIds.length)
+      ? (itemIds as string[]).filter((x) => ownedIds.includes(x))
+      : ownedIds
+    if (selIds.length === 0) return NextResponse.json({ error: "No SO to forward" }, { status: 400 })
+
+    const nextPos = currentPos + 1
+    // Branch (Procurement Purchasing/Sourcing) chosen at the branch step; carried forward.
+    const branchVal = branch || ownerRow?.branch || null
     const token = randomBytes(32).toString("hex")
-    await (prisma as any).claimForward.upsert({
-      where: { requestId_dept: { requestId: id, dept: forwarderDept } },
-      create: { requestId: id, dept: forwarderDept, nextEmail, nextName: nextName || null, token, position: nextPos, branch: branchVal },
-      update: { nextEmail, nextName: nextName || null, token, position: nextPos, branch: branchVal },
+    // New forward row scoped to just this subset → its own next person + token.
+    await (prisma as any).claimForward.create({
+      data: { requestId: id, dept: forwarderDept, nextEmail, nextName: nextName || null, token, position: nextPos, branch: branchVal, itemIds: selIds },
     })
+    // Remove the forwarded SO from the actor's own row (forwarded approver only);
+    // delete the row if nothing is left with them.
+    if (ownerRow) {
+      const remaining = ownedIds.filter((x) => !selIds.includes(x))
+      if (remaining.length === 0) await (prisma as any).claimForward.delete({ where: { id: ownerRow.id } })
+      else await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } })
+    }
 
     const posLabel = nextPositionLabel(forwarderDept, currentPos, undefined, branchVal) || forwarderDept
-    await notifyClaimNext(id, nextEmail, nextName || nextEmail, forwarderName, token, `${forwarderDept} — ${posLabel}`)
+    await notifyClaimNext(id, nextEmail, nextName || nextEmail, forwarderName, token, `${forwarderDept} — ${posLabel} (${selIds.length} SO)`)
 
-    return NextResponse.json({ ok: true, action: "forwarded", to: nextEmail, dept: forwarderDept, position: nextPos })
+    return NextResponse.json({ ok: true, action: "forwarded", to: nextEmail, dept: forwarderDept, position: nextPos, count: selIds.length })
   }
 }
