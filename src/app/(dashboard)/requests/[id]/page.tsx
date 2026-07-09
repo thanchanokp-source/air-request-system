@@ -2646,7 +2646,7 @@ export default function RequestDetailPage() {
         <div className="space-y-3 mb-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-gray-800">CLAIM — {gwFwdCanonicalDept} ({gwFwdItems.length} SO)</h2>
+              <h2 className="font-semibold text-gray-800">CLAIM — {gwFwdCanonicalDept}</h2>
             </div>
             {/* Actions (right, small — same as GM) */}
             <div className="flex items-center gap-3 flex-wrap">
@@ -2692,12 +2692,7 @@ export default function RequestDetailPage() {
             </div>
           </div>
           {/* Quick summary — see totals without expanding */}
-          <div className="grid grid-cols-3 divide-x divide-gray-100 bg-white border border-gray-200 rounded-xl">
-            <div className="px-4 py-2.5">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">SO</p>
-              <p className="text-lg font-bold text-gray-700 tabular-nums">{gwFwdItems.length}</p>
-              <p className="text-[10px] text-gray-400">{gwFwdCanonicalDept} only</p>
-            </div>
+          <div className="grid grid-cols-2 divide-x divide-gray-100 bg-white border border-gray-200 rounded-xl">
             <div className="px-4 py-2.5">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Estimate Air Freight (THB)</p>
               <p className="text-lg font-bold text-gray-700 tabular-nums">{claimTotals.myEst.toLocaleString()}</p>
