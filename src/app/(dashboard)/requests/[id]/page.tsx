@@ -3009,6 +3009,46 @@ export default function RequestDetailPage() {
                   </button>
                 )
               })()}
+              {/* Batch actions in the header (next to Select All) — same as other approve pages */}
+              {dvmSelected.size > 0 && (
+                <>
+                  <button
+                    disabled={submitting !== null || (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp))}
+                    title={role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp) ? "Select the CR-entry person and the VP/EVP approver first" : ""}
+                    onClick={async () => {
+                      if (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)) { alert("Select the CR-entry person and the VP/EVP approver first."); return }
+                      const ids = [...dvmSelected]; let updated: any = req
+                      const approveAction = isGwClaimP1Role ? "approve_so_claim_gw" : "approve_so"
+                      for (const itemId of ids) {
+                        setSubmitting(itemId)
+                        const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: approveAction, itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, evpEmail: nykEvp?.email, crEmail: nykCr?.email }) })
+                        if (res.ok) updated = await res.json(); else { const e = await res.json(); alert(e.error || "Error"); break }
+                      }
+                      setReq(updated); setDvmSelected(new Set()); setSubmitting(null)
+                    }}
+                    className="px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50">
+                    {submitting !== null ? "..." : `✓ Approve (${dvmSelected.size})`}
+                  </button>
+                  <button disabled={submitting !== null}
+                    onClick={async () => {
+                      const reason = window.prompt(`Reason for sending ${dvmSelected.size} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
+                      if (reason == null || !reason.trim()) return
+                      const ids = [...dvmSelected]; let updated: any = req
+                      const backAction = isGwClaimP1Role ? (isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so") : "reject_so"
+                      for (const itemId of ids) {
+                        setSubmitting(itemId)
+                        const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: backAction, itemId, comment: reason.trim() }) })
+                        if (res.ok) updated = await res.json(); else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
+                      }
+                      setReq(updated); setDvmSelected(new Set()); setSubmitting(null)
+                    }}
+                    className="px-3 py-1.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50">
+                    {isGWRequest ? `↩ Back to MER (${dvmSelected.size})` : `↩ Back to SCM (${dvmSelected.size})`}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -3315,63 +3355,6 @@ export default function RequestDetailPage() {
               </div>
             )
           })}
-
-          {/* Batch action bar — floating pill (same format as other approve pages) */}
-          {dvmSelected.size > 0 && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-900 text-white px-6 py-3 rounded-2xl shadow-2xl">
-              <span className="text-sm font-medium">{dvmSelected.size} SO selected</span>
-              <button
-                disabled={submitting !== null || (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp))}
-                title={role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp) ? "Select the CR-entry person and the VP/EVP approver first" : ""}
-                onClick={async () => {
-                  if (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)) { alert("Select the CR-entry person and the VP/EVP approver first."); return }
-                  const ids = [...dvmSelected]
-                  let updated: any = req
-                  const approveAction = isGwClaimP1Role ? "approve_so_claim_gw" : "approve_so"
-                  for (const itemId of ids) {
-                    setSubmitting(itemId)
-                    const res = await fetch(`/api/requests/${id}/approve`, {
-                      method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: approveAction, itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, evpEmail: nykEvp?.email, crEmail: nykCr?.email })
-                    })
-                    if (res.ok) updated = await res.json()
-                    else { const e = await res.json(); alert(e.error || "Error"); break }
-                  }
-                  setReq(updated)
-                  setDvmSelected(new Set())
-                  setSubmitting(null)
-                }}
-                className="bg-green-500 hover:bg-green-400 text-white text-sm font-semibold px-5 py-1.5 rounded-xl disabled:opacity-50 transition-colors">
-                {submitting !== null ? "Approving..." : `Approve ${dvmSelected.size} SO(s)`}
-              </button>
-              <button
-                disabled={submitting !== null}
-                onClick={async () => {
-                  const reason = window.prompt(`Reason for sending ${dvmSelected.size} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
-                  if (reason == null || !reason.trim()) return
-                  const ids = [...dvmSelected]
-                  let updated: any = req
-                  const backAction = isGwClaimP1Role ? (isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so") : "reject_so"
-                  for (const itemId of ids) {
-                    setSubmitting(itemId)
-                    const res = await fetch(`/api/requests/${id}/approve`, {
-                      method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: backAction, itemId, comment: reason.trim() })
-                    })
-                    if (res.ok) updated = await res.json()
-                    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
-                  }
-                  setReq(updated); setDvmSelected(new Set()); setSubmitting(null)
-                }}
-                className="bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold px-5 py-1.5 rounded-xl disabled:opacity-50 transition-colors">
-                {isGWRequest ? `Back to MER (${dvmSelected.size})` : `Back to SCM (${dvmSelected.size})`}
-              </button>
-              <button onClick={() => setDvmSelected(new Set())}
-                className="text-xs text-gray-400 hover:text-white">
-                Cancel
-              </button>
-            </div>
-          )}
         </div>
       )}
 
