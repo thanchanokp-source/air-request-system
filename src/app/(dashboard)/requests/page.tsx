@@ -277,7 +277,7 @@ export default function RequestsPage() {
         <span className="text-xs font-semibold text-blue-500 uppercase tracking-wider">Pending by Stage</span>
         <div className="flex-1 border-t border-blue-100"></div>
       </div>
-      <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3" style={{ gridTemplateColumns: `repeat(${POSITIONS.length}, minmax(0,1fr))` }}>
         {POSITIONS.map(({ key, label }) => {
           const ITEM_TO_STEP: Record<string, string> = activeBu === "GW" ? {
             PRES_PASSED: "PENDING_LOGISTICS_GW",
@@ -316,9 +316,9 @@ export default function RequestsPage() {
           }).length
           const isClaim = key === "PENDING_CLAIM" || key === "PENDING_CLAIM_GW"
           return (
-            <div key={key} className={`border rounded-xl p-2 sm:p-3 border-blue-200 bg-blue-50 ${isClaim ? "cursor-pointer" : ""}`}
+            <div key={key} className={`border rounded-xl p-3 sm:p-4 border-blue-200 bg-blue-50 ${isClaim ? "cursor-pointer" : ""}`}
               onClick={() => isClaim && setClaimExpanded(p => !p)}>
-              <div className="text-xl sm:text-2xl font-bold text-blue-600">{count}</div>
+              <div className="text-2xl sm:text-3xl font-bold text-blue-600">{count}</div>
               <div className="text-[10px] sm:text-xs font-semibold mt-0.5 flex items-center gap-1 text-blue-700">
                 {label} {isClaim && <span className="text-xs">{claimExpanded ? "▲" : "▼"}</span>}
               </div>
