@@ -3316,10 +3316,10 @@ export default function RequestDetailPage() {
             )
           })}
 
-          {/* Batch approve panel */}
+          {/* Batch action bar — floating pill (same format as other approve pages) */}
           {dvmSelected.size > 0 && (
-            <div className="sticky bottom-4 bg-white border border-blue-300 rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 flex-wrap z-10">
-              <span className="text-sm font-semibold text-blue-700">{dvmSelected.size} SO selected</span>
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-900 text-white px-6 py-3 rounded-2xl shadow-2xl">
+              <span className="text-sm font-medium">{dvmSelected.size} SO selected</span>
               <button
                 disabled={submitting !== null || (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp))}
                 title={role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp) ? "Select the CR-entry person and the VP/EVP approver first" : ""}
@@ -3341,7 +3341,7 @@ export default function RequestDetailPage() {
                   setDvmSelected(new Set())
                   setSubmitting(null)
                 }}
-                className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                className="bg-green-500 hover:bg-green-400 text-white text-sm font-semibold px-5 py-1.5 rounded-xl disabled:opacity-50 transition-colors">
                 {submitting !== null ? "Approving..." : `Approve ${dvmSelected.size} SO(s)`}
               </button>
               <button
@@ -3363,11 +3363,11 @@ export default function RequestDetailPage() {
                   }
                   setReq(updated); setDvmSelected(new Set()); setSubmitting(null)
                 }}
-                className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50">
+                className="bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold px-5 py-1.5 rounded-xl disabled:opacity-50 transition-colors">
                 {isGWRequest ? `Back to MER (${dvmSelected.size})` : `Back to SCM (${dvmSelected.size})`}
               </button>
               <button onClick={() => setDvmSelected(new Set())}
-                className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">
+                className="text-xs text-gray-400 hover:text-white">
                 Cancel
               </button>
             </div>
