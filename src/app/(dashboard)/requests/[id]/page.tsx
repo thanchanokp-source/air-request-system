@@ -2691,8 +2691,15 @@ export default function RequestDetailPage() {
               </button>
             </div>
           </div>
-          {/* Quick summary — see totals without expanding */}
-          <div className="grid grid-cols-2 divide-x divide-gray-100 bg-white border border-gray-200 rounded-xl">
+          {/* Quick summary — see totals + tap SO to select all */}
+          <div className="grid grid-cols-3 divide-x divide-gray-100 bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <button type="button"
+              onClick={() => setDvmSelected(claimSelIds.length === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}
+              className={`px-4 py-2.5 text-left transition-colors ${claimSelIds.length === gwFwdItems.length && gwFwdItems.length > 0 ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">SO · tap to select all</p>
+              <p className="text-lg font-bold text-gray-700 tabular-nums">{gwFwdItems.length}</p>
+              <p className="text-[10px] tabular-nums text-blue-600 font-medium">{claimSelIds.length ? `${claimSelIds.length} selected` : "none selected"}</p>
+            </button>
             <div className="px-4 py-2.5">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Estimate Air Freight (THB)</p>
               <p className="text-lg font-bold text-gray-700 tabular-nums">{claimTotals.myEst.toLocaleString()}</p>
