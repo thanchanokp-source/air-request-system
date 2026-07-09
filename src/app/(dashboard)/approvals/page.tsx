@@ -65,7 +65,10 @@ export default function ApprovalsPage() {
     if (role === "PRESIDENT_GW") return r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     // Logistics ∥ Claim run in parallel after President → doc sits at
     // PENDING_CLAIM_GW while LG still needs to enter HAWB data. Include it.
-    if (role === "LOGISTICS_GW") return (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED")
+    // Show only while LG still has SO to fill (actualAirFreight not entered yet).
+    // Once LG has entered actuals for all SO, the doc drops from their queue even
+    // if Claim is still running in parallel.
+    if (role === "LOGISTICS_GW") return (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED" && i.actualAirFreight == null)
     if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
@@ -92,7 +95,7 @@ export default function ApprovalsPage() {
     }
     if (role === "DPM_GW" || role === "VP_MER_GW" || role === "GM_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "PRESIDENT_GW") return items.filter((i: any) => i.itemStatus === "PRESIDENT_PENDING")
-    if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
+    if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED" && i.actualAirFreight == null)
     if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
