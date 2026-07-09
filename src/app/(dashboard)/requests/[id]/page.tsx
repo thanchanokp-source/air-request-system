@@ -565,18 +565,21 @@ export default function RequestDetailPage() {
         getSplits(i).some((s: any) => gwFwdSplitDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "COMPLETED" && s.status !== "REJECTED"))
     : []
   const showGwFinishForward = isGwForwardRole && gwFwdSplitDepts.length > 0 && gwFwdItems.length > 0 && !claimFwdDone
-  // A claim SO's own split (this dept) + computed claim amount (actual × pct).
+  // A claim SO's own split (this dept). All money is scoped to THIS dept's share:
+  //   myEst   = SO est.  freight × claim%
+  //   myClaim = SO actual freight × claim%
   const claimRow = (item: any) => {
     const sp = getSplits(item).find((s: any) => gwFwdSplitDepts.includes(s.dept))
     const actual = Number(item.actualAirFreight) || 0
+    const est = Number(item.airFreight) || 0
     const pct = Number(sp?.pct) || 0
-    return { sp, actual, pct, amt: Math.round(actual * pct / 100) }
+    return { sp, actual, est, pct, myEst: Math.round(est * pct / 100), amt: Math.round(actual * pct / 100) }
   }
   const claimTotals = gwFwdItems.reduce((acc: any, it: any) => {
     const r = claimRow(it)
-    acc.actual += r.actual; acc.amt += r.amt; acc.qty += Number(it.qtyRequestAir) || 0
+    acc.actual += r.actual; acc.est += r.est; acc.myEst += r.myEst; acc.amt += r.amt; acc.qty += Number(it.qtyRequestAir) || 0
     return acc
-  }, { actual: 0, amt: 0, qty: 0 })
+  }, { actual: 0, est: 0, myEst: 0, amt: 0, qty: 0 })
   const exportClaimExcel = () => {
     const rows = gwFwdItems.map((it: any, i: number) => {
       const r = claimRow(it)
@@ -585,14 +588,14 @@ export default function RequestDetailPage() {
         "QTY AIR": it.qtyRequestAir ?? "", "GROSS (KG)": it.grossWeight ?? "",
         "HAWB#": it.hawbNo || "", "INVOICE NO": it.invoiceNo || "",
         "EST. FREIGHT (THB)": it.airFreight ?? "", "ACTUAL (THB)": r.actual,
-        "CLAIM %": r.pct, "CLAIM AMOUNT (THB)": r.amt,
+        "CLAIM %": r.pct, "MY EST (THB)": r.myEst, "MY CLAIM (THB)": r.amt,
         "PLAN DATE": fmtDate(it.planShipmentDate), "DELAY REASON": it.reasonDelay || "",
         "FACTORY": it.factory || "", "COUNTRY": it.country || "", "PORT": it.port || "",
       }
     })
     rows.push({ "No.": "", "SO": "TOTAL", "STYLE": "", "CUSTOMER PO": "", "QTY AIR": claimTotals.qty,
-      "GROSS (KG)": "", "HAWB#": "", "INVOICE NO": "", "EST. FREIGHT (THB)": "",
-      "ACTUAL (THB)": claimTotals.actual, "CLAIM %": "", "CLAIM AMOUNT (THB)": claimTotals.amt,
+      "GROSS (KG)": "", "HAWB#": "", "INVOICE NO": "", "EST. FREIGHT (THB)": claimTotals.est,
+      "ACTUAL (THB)": claimTotals.actual, "CLAIM %": "", "MY EST (THB)": claimTotals.myEst, "MY CLAIM (THB)": claimTotals.amt,
       "PLAN DATE": "", "DELAY REASON": "", "FACTORY": "", "COUNTRY": "", "PORT": "" } as any)
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -2495,14 +2498,17 @@ export default function RequestDetailPage() {
             <div className="px-4 py-2.5">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">SO</p>
               <p className="text-lg font-bold text-gray-700 tabular-nums">{gwFwdItems.length}</p>
+              <p className="text-[10px] text-gray-400">{gwFwdCanonicalDept} only</p>
             </div>
             <div className="px-4 py-2.5">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Total Actual (THB)</p>
-              <p className="text-lg font-bold text-gray-700 tabular-nums">{claimTotals.actual.toLocaleString()}</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">My EST (THB)</p>
+              <p className="text-lg font-bold text-gray-700 tabular-nums">{claimTotals.myEst.toLocaleString()}</p>
+              <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.est.toLocaleString()} full</p>
             </div>
             <div className="px-4 py-2.5">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">My Claim (THB)</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">My Claim / Actual (THB)</p>
               <p className="text-lg font-bold text-blue-700 tabular-nums">{claimTotals.amt.toLocaleString()}</p>
+              <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.actual.toLocaleString()} full</p>
             </div>
           </div>
           {/* Attach supporting files — by DOCUMENT */}
@@ -2525,7 +2531,7 @@ export default function RequestDetailPage() {
           {/* Flat table view — all SO at once, no expand */}
           {claimTableView && (() => {
             // Full column set — MER-uploaded fields + Logistics fields + claim.
-            const RIGHT = new Set(["QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. (THB)", "ACTUAL (THB)", "CLAIM %", "MY CLAIM (THB)"])
+            const RIGHT = new Set(["QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. (THB)", "ACTUAL (THB)", "CLAIM %", "MY EST (THB)", "MY CLAIM (THB)"])
             const cols: { h: string; get: (it: any) => any }[] = [
               { h: "SO", get: it => it.so },
               { h: "SUB", get: it => it.sub || "-" },
@@ -2548,6 +2554,7 @@ export default function RequestDetailPage() {
               { h: "BOOKING DATE", get: it => fmtDate(it.bookingDate) },
               { h: "ACTUAL (THB)", get: it => fmtNum(it.actualAirFreight) },
               { h: "CLAIM %", get: it => `${claimRow(it).pct}%` },
+              { h: "MY EST (THB)", get: it => fmtNum(claimRow(it).myEst) },
               { h: "MY CLAIM (THB)", get: it => fmtNum(claimRow(it).amt) },
             ]
             return (
@@ -2587,7 +2594,7 @@ export default function RequestDetailPage() {
                     <td className="sticky left-0 bg-gray-50/60 z-10"></td>
                     {cols.map(c => (
                       <td key={c.h} className={`px-3 py-2 ${RIGHT.has(c.h) ? "text-right tabular-nums" : ""} ${c.h === "ACTUAL (THB)" ? "text-green-700" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700" : ""} ${c.h === "SO" ? "sticky left-8 bg-gray-50/60 z-10" : ""}`}>
-                        {c.h === "SO" ? "TOTAL" : c.h === "QTY AIR" ? fmtNum(claimTotals.qty) : c.h === "ACTUAL (THB)" ? fmtNum(claimTotals.actual) : c.h === "MY CLAIM (THB)" ? fmtNum(claimTotals.amt) : ""}
+                        {c.h === "SO" ? "TOTAL" : c.h === "QTY AIR" ? fmtNum(claimTotals.qty) : c.h === "EST. (THB)" ? fmtNum(claimTotals.est) : c.h === "ACTUAL (THB)" ? fmtNum(claimTotals.actual) : c.h === "MY EST (THB)" ? fmtNum(claimTotals.myEst) : c.h === "MY CLAIM (THB)" ? fmtNum(claimTotals.amt) : ""}
                       </td>
                     ))}
                   </tr>
@@ -2602,7 +2609,9 @@ export default function RequestDetailPage() {
             {gwFwdItems.map((item: any) => {
               const sp = getSplits(item).find((s: any) => gwFwdSplitDepts.includes(s.dept))
               const actual = item.actualAirFreight ?? 0
-              const amt = sp ? Math.round(actual * (Number(sp.pct) || 0) / 100) : 0
+              const pctV = Number(sp?.pct) || 0
+              const amt = Math.round(actual * pctV / 100)
+              const myEst = Math.round((Number(item.airFreight) || 0) * pctV / 100)
               const isExp = expanded.has(item.id)
               return (
                 <div key={item.id} className="rounded-xl border border-gray-200 overflow-hidden bg-white">
@@ -2615,8 +2624,8 @@ export default function RequestDetailPage() {
                     <span className="text-xs text-gray-500">{item.style} · qty {item.qtyRequestAir}</span>
                     <div className="ml-auto flex items-center gap-4 text-xs flex-wrap">
                       <span className="text-gray-500">HAWB# <b className="text-gray-700">{item.hawbNo || "-"}</b></span>
-                      <span className="text-gray-500">Actual <b className="text-gray-700">{actual.toLocaleString()}</b></span>
-                      <span className="text-blue-700 font-semibold">My claim {amt.toLocaleString()} ({sp?.pct ?? 0}%)</span>
+                      <span className="text-gray-500">My EST <b className="text-gray-700">{myEst.toLocaleString()}</b> ({pctV}%)</span>
+                      <span className="text-blue-700 font-semibold">My claim {amt.toLocaleString()}</span>
                     </div>
                   </div>
                   {isExp && (

@@ -215,6 +215,31 @@ export default function FilesPage() {
     finally { setPdfLoading(null) }
   }
 
+  // Download the whole document — one formal page per SO.
+  const downloadDocPdf = async (req: any) => {
+    const dkey = `doc-${req.id}`
+    setPdfLoading(dkey)
+    try {
+      const fullReq = await fetch(`/api/requests/${req.id}`).then(r => r.json())
+      const items = (fullReq.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
+      if (items.length === 0) return
+      const [{ pdf }, { CombinedPdfDocument }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/request-pdf"),
+      ])
+      const pages = items.map((item: any) => ({ req: fullReq, item }))
+      const element = React.createElement(CombinedPdfDocument as any, { pages })
+      const blob = await (pdf(element as any) as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${fullReq.documentNo}.pdf`
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch { alert("PDF generation failed") }
+    finally { setPdfLoading(null) }
+  }
+
   const generateCombinedPdf = async () => {
     if (selectedForCombine.size === 0) return
     setCombineLoading(true)
@@ -541,6 +566,11 @@ export default function FilesPage() {
                                 )
                               })()}
                               <span className="text-xs text-gray-400 ml-auto">{items.length} SO(s) · {fmtDate(req.createdAt)}</span>
+                              <span role="button" tabIndex={0}
+                                onClick={e => { e.stopPropagation(); downloadDocPdf(req) }}
+                                className="text-xs bg-gray-700 text-white px-2.5 py-1 rounded hover:bg-gray-800 font-medium cursor-pointer whitespace-nowrap">
+                                {pdfLoading === `doc-${req.id}` ? "..." : "↓ PDF (all SO)"}
+                              </span>
                             </button>
 
                             {/* Items under document */}
