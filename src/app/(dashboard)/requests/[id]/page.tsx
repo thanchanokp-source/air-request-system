@@ -2695,13 +2695,28 @@ export default function RequestDetailPage() {
           </div>
           {/* Quick summary — see totals + tap SO to select all */}
           <div className="grid grid-cols-3 divide-x divide-gray-100 bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <button type="button"
-              onClick={() => setDvmSelected(claimSelIds.length === gwFwdItems.length ? new Set() : new Set(gwFwdItems.map((i: any) => i.id)))}
-              className={`px-4 py-2.5 text-left transition-colors ${claimSelIds.length === gwFwdItems.length && gwFwdItems.length > 0 ? "bg-blue-50" : "hover:bg-gray-50"}`}>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">SO · tap to select all</p>
-              <p className="text-lg font-bold text-gray-700 tabular-nums">{gwFwdItems.length}</p>
-              <p className="text-[10px] tabular-nums text-blue-600 font-medium">{claimSelIds.length ? `${claimSelIds.length} selected` : "none selected"}</p>
-            </button>
+            <div className="px-4 py-2.5">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Select SO to approve</p>
+              <div className="relative mt-1">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" /></svg>
+                <input value={soPick}
+                  onChange={e => { setSoPick(e.target.value); setSoPickMsg("") }}
+                  onKeyDown={e => {
+                    if (e.key !== "Enter") return
+                    const q = soPick.trim(); if (!q) return
+                    const exact = gwFwdItems.filter((i: any) => String(i.so).toLowerCase() === q.toLowerCase())
+                    const matches = exact.length ? exact : gwFwdItems.filter((i: any) => String(i.so).toLowerCase().includes(q.toLowerCase()))
+                    if (matches.length === 0) { setSoPickMsg(`No SO matching "${q}"`); return }
+                    setDvmSelected(prev => { const n = new Set(prev); matches.forEach((i: any) => n.add(i.id)); return n })
+                    setSoPickMsg(`✓ +${matches.length} added`); setSoPick("")
+                  }}
+                  placeholder="Type SO + Enter"
+                  className="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <p className={`text-[10px] mt-0.5 font-medium ${soPickMsg.startsWith("✓") ? "text-green-600" : soPickMsg ? "text-red-500" : "text-gray-400"}`}>
+                {soPickMsg || (claimSelIds.length ? `${claimSelIds.length} selected` : " ")}
+              </p>
+            </div>
             <div className="px-4 py-2.5">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Estimate Air Freight (THB)</p>
               <p className="text-lg font-bold text-gray-700 tabular-nums">{claimTotals.myEst.toLocaleString()}</p>
@@ -2712,26 +2727,6 @@ export default function RequestDetailPage() {
               <p className="text-lg font-bold text-blue-700 tabular-nums">{claimTotals.amt.toLocaleString()}</p>
               <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.actual.toLocaleString()}</p>
             </div>
-          </div>
-          {/* Quick-select: type an SO number + Enter to tick it */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative">
-              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="7" /><path strokeLinecap="round" d="m21 21-4.3-4.3" /></svg>
-              <input value={soPick}
-                onChange={e => { setSoPick(e.target.value); setSoPickMsg("") }}
-                onKeyDown={e => {
-                  if (e.key !== "Enter") return
-                  const q = soPick.trim(); if (!q) return
-                  const exact = gwFwdItems.filter((i: any) => String(i.so).toLowerCase() === q.toLowerCase())
-                  const matches = exact.length ? exact : gwFwdItems.filter((i: any) => String(i.so).toLowerCase().includes(q.toLowerCase()))
-                  if (matches.length === 0) { setSoPickMsg(`No SO matching "${q}"`); return }
-                  setDvmSelected(prev => { const n = new Set(prev); matches.forEach((i: any) => n.add(i.id)); return n })
-                  setSoPickMsg(`✓ +${matches.length} SO added (${q})`); setSoPick("")
-                }}
-                placeholder="Type SO + Enter to select"
-                className="w-56 border border-gray-300 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
-            </div>
-            {soPickMsg && <span className={`text-xs font-medium ${soPickMsg.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>{soPickMsg}</span>}
           </div>
           {/* Attach supporting files — by DOCUMENT */}
           <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 gap-2 flex-wrap">
