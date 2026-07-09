@@ -115,6 +115,29 @@ model AirRequest {
 // independently: it can finish (finalize its splits) or forward to a chosen
 // person (recursively). One active row per (request, dept); the token logs the
 // forwarded person in as CLAIM_NEXT_APPROVER scoped to that dept.
+// A claim approver's request to add a NEW person for the next position. Held here
+// until an Admin approves; only then is the user created, the SO forwarded, and the
+// new person alerted. Captures the full forward context so it can run on approval.
+model PendingApprover {
+  id            String   @id @default(cuid())
+  requestId     String
+  dept          String
+  role          String
+  positionLabel String
+  fromPos       Int      @default(0)
+  nextEmail     String
+  nextName      String?
+  bu            String   @default("GW")
+  branch        String?
+  itemIds       Json?
+  requestedBy   String?
+  requestedName String?
+  status        String   @default("PENDING") // PENDING | APPROVED | REJECTED
+  createdAt     DateTime @default(now())
+
+  @@index([status])
+}
+
 model ClaimForward {
   id        String     @id @default(cuid())
   requestId String

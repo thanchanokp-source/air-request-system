@@ -186,9 +186,33 @@ const posMatches = (p: any, position?: string, bu?: string, positionRole?: strin
 // Inline person search/select. When `position` is given, results matching that
 // position are shown first with a badge; a footer lets the user ask ADMIN to add
 // a missing person for that position.
-function PersonPicker({ label, selected, onSelect, placeholder, position, positionRole, requestId, bu }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string; position?: string; positionRole?: string | null; requestId?: string; bu?: string }) {
+function PersonPicker({ label, selected, onSelect, placeholder, position, positionRole, requestId, bu, onRequestAdd }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string; position?: string; positionRole?: string | null; requestId?: string; bu?: string; onRequestAdd?: (email: string, name: string) => Promise<{ ok: boolean; error?: string }> }) {
   const [q, setQ] = useState(""); const [results, setResults] = useState<any[]>([]); const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false)
   const [showAll, setShowAll] = useState(false); const [notifyState, setNotifyState] = useState<"idle" | "sending" | "sent">("idle")
+  const [addOpen, setAddOpen] = useState(false); const [addEmail, setAddEmail] = useState(""); const [addName, setAddName] = useState(""); const [adding, setAdding] = useState(false)
+  // Add a new person. If onRequestAdd is provided, submit a request that Admin must
+  // approve (the new person is alerted only after approval). Otherwise create directly.
+  const [addSent, setAddSent] = useState(false)
+  const addApprover = async () => {
+    const mail = addEmail.trim().toLowerCase()
+    if (!mail) return
+    setAdding(true)
+    try {
+      if (onRequestAdd) {
+        const r = await onRequestAdd(mail, addName.trim())
+        if (r?.ok) { setAddSent(true); setTimeout(() => { setAddOpen(false); setOpen(false) }, 1500) }
+        else alert(r?.error || "Failed to send request")
+      } else {
+        const r = await fetch("/api/people/add-approver", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: mail, name: addName.trim(), role: positionRole, bu, position, requestId }),
+        })
+        const d = await r.json()
+        if (r.ok) { onSelect({ name: d.name || addName.trim() || mail, email: d.email || mail }); setAddOpen(false); setOpen(false) }
+        else alert(d.error || "Failed to add")
+      }
+    } catch { alert("Failed") } finally { setAdding(false) }
+  }
   // Hard filter: with a required position, ONLY people matching that position (exact
   // role + BU) are selectable. "Show all" is an explicit override.
   const matched = position ? results.filter(p => posMatches(p, position, bu, positionRole)) : results
@@ -254,19 +278,50 @@ function PersonPicker({ label, selected, onSelect, placeholder, position, positi
                   </div>
                 )}
               </div>
-              {/* Ask admin to add a missing person for this position */}
+              {/* Missing person → add them (auto-create with the role) or notify admin */}
               {position && !loading && (
                 <div className="px-3.5 py-2.5 border-t border-gray-100 bg-gray-50">
-                  {notifyState === "sent" ? (
+                  {positionRole ? (
+                    <button onMouseDown={e => { e.preventDefault(); setAddEmail(q.includes("@") ? q : ""); setAddName(""); setAddOpen(true); setOpen(false) }}
+                      className="text-[11px] text-blue-600 hover:text-blue-700 font-medium">
+                      Can&apos;t find the person? → <b>+ Add {position}</b>
+                    </button>
+                  ) : notifyState === "sent" ? (
                     <p className="text-[11px] text-emerald-700 font-medium">✓ Admin notified — they will add this person.</p>
                   ) : (
                     <button onMouseDown={e => { e.preventDefault(); notifyAdmin() }} disabled={notifyState === "sending"}
                       className="text-[11px] text-red-600 hover:text-red-700 font-medium disabled:opacity-50">
-                      {notifyState === "sending" ? "Notifying admin..." : `Can't find ${q ? `"${q}"` : "the person"}? → Ask Admin to add for ${position}`}
+                      {notifyState === "sending" ? "Notifying admin..." : `Can't find the person? → Ask Admin to add for ${position}`}
                     </button>
                   )}
                 </div>
               )}
+            </div>
+          )}
+          {/* Add-person form (persists below the box, outside the blur-closing dropdown) */}
+          {addOpen && (
+            <div className="absolute top-full left-0 mt-2 w-96 max-w-[90vw] bg-white border border-blue-200 rounded-2xl shadow-2xl z-50 p-3.5 space-y-2">
+              {addSent ? (
+                <p className="text-sm text-emerald-700 font-medium py-2">✓ Sent to Admin for approval. The person will be notified once Admin approves.</p>
+              ) : (<>
+                <p className="text-xs font-semibold text-gray-700">Add new <span className="text-blue-700">{position}</span></p>
+                <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Name (optional)"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                <input value={addEmail} onChange={e => setAddEmail(e.target.value)} type="email" placeholder="Email *" autoFocus
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                <p className="text-[10px] text-gray-400">
+                  {onRequestAdd
+                    ? <>Sends a request to <b>Admin</b>. After they approve, this person is added as <b>{positionRole}</b>{bu ? ` (${bu})` : ""} and alerted to approve the selected SO.</>
+                    : <>Added to the master as <b>{positionRole}</b>{bu ? ` (${bu})` : ""} and selected.</>}
+                </p>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button onClick={() => setAddOpen(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
+                  <button onClick={addApprover} disabled={adding || !addEmail.trim()}
+                    className="px-4 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40">
+                    {adding ? "Sending..." : (onRequestAdd ? "Send request to Admin" : "Add & select")}
+                  </button>
+                </div>
+              </>)}
             </div>
           )}
         </div>
@@ -943,6 +998,22 @@ export default function RequestDetailPage() {
         setReq((prev: any) => ({ ...prev, attachments: [...(prev.attachments || []), att] }))
       } else { alert("Upload failed") }
     } finally { setUploadingItem(null) }
+  }
+
+  // Request Admin to add a NEW person for the next position (no forward until approved).
+  const requestNewApprover = async (email: string, name: string) => {
+    try {
+      const res = await fetch("/api/people/request-approver", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: id, dept: gwFwdCanonicalDept, role: gwNextPosRole, positionLabel: gwNextPosLabel,
+          fromPos: gwCurrentPos, nextEmail: email, nextName: name, bu: req?.bu,
+          branch: gwNeedsBranch ? gwBranchChoice : gwBranch, itemIds: claimActIds,
+        }),
+      })
+      const d = await res.json().catch(() => ({}))
+      return { ok: res.ok, error: d?.error }
+    } catch { return { ok: false, error: "Network error" } }
   }
 
   const claimForward = async (final: boolean, ids?: string[]) => {
@@ -2810,7 +2881,7 @@ export default function RequestDetailPage() {
                 {(!gwNeedsBranch || gwBranchChoice) && (
                   <div className="space-y-2">
                     <p className="text-sm font-semibold text-blue-800">Please select <span className="text-blue-900 underline">{gwNextPosLabel}</span> for approve <span className="text-red-500">*</span></p>
-                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} position={gwNextPosLabel || undefined} positionRole={gwNextPosRole} requestId={String(id)} bu={req?.bu} />
+                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} position={gwNextPosLabel || undefined} positionRole={gwNextPosRole} requestId={String(id)} bu={req?.bu} onRequestAdd={requestNewApprover} />
                   </div>
                 )}
               </div>

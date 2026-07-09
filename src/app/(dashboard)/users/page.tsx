@@ -162,12 +162,30 @@ export default function UsersPage() {
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const dragIdx = useRef<number | null>(null)
 
+  const [pending, setPending] = useState<any[]>([])
+  const [pendingBusy, setPendingBusy] = useState<string | null>(null)
+  const loadPending = async () => {
+    try { const r = await fetch("/api/people/pending-approvers"); if (r.ok) setPending(await r.json()) } catch {}
+  }
+  const handlePending = async (pid: string, action: "approve" | "reject") => {
+    let reason: string | null = null
+    if (action === "reject") {
+      reason = window.prompt("Reason for rejecting (optional — the requester will be notified):") || ""
+    }
+    setPendingBusy(pid)
+    try {
+      const r = await fetch("/api/people/pending-approvers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: pid, action, reason }) })
+      if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.error || "Failed") }
+      await loadPending(); if (action === "approve") load()
+    } finally { setPendingBusy(null) }
+  }
+
   const load = async () => {
     const r = await fetch("/api/users")
     if (r.ok) setUsers(await r.json())
     setLoading(false)
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); loadPending() }, [])
 
   const reset = () => { setEditId(null); setForm({ ...emptyForm }); setError("") }
 
@@ -324,6 +342,31 @@ export default function UsersPage() {
               </>
             )}
           </div>
+        </div>
+      )}
+      {/* Pending new-approver requests — Admin must approve before the person is added + alerted */}
+      {pending.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-2.5">
+          <p className="text-sm font-bold text-amber-800">⏳ Pending approver requests ({pending.length})</p>
+          {pending.map((p: any) => (
+            <div key={p.id} className="flex flex-wrap items-center gap-3 bg-white border border-amber-200 rounded-lg px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-800">{p.nextName || p.nextEmail} <span className="text-xs font-normal text-gray-400">{p.nextEmail}</span></p>
+                <p className="text-[11px] text-gray-500">
+                  Add as <b className="text-gray-700">{p.positionLabel}</b> ({p.role} · {p.bu}) · Doc {p.documentNo}
+                  {Array.isArray(p.itemIds) ? ` · ${p.itemIds.length} SO` : ""} · by {p.requestedName || p.requestedBy || "-"}
+                </p>
+              </div>
+              <button onClick={() => handlePending(p.id, "approve")} disabled={pendingBusy === p.id}
+                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40">
+                {pendingBusy === p.id ? "..." : "✓ Approve & notify"}
+              </button>
+              <button onClick={() => handlePending(p.id, "reject")} disabled={pendingBusy === p.id}
+                className="px-3 py-1.5 bg-white border border-red-300 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 disabled:opacity-40">
+                Reject
+              </button>
+            </div>
+          ))}
         </div>
       )}
       <div className="flex items-center justify-between gap-4">
