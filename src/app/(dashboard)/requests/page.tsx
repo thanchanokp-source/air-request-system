@@ -57,6 +57,22 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
   return "-"
 }
 
+// Aggregate status for a group of SO (a whole document or one style) so you can
+// see at a glance where it stands: Done / Pending / Rejected / Back to. (Both BU.)
+function soAggBadge(rows: any[]): { label: string; cls: string } | null {
+  if (!rows || rows.length === 0) return null
+  const st = rows.map(r => r.itemStatus)
+  if (st.some(s => s === "REJECTED")) return { label: "Rejected", cls: "bg-red-100 text-red-700 border-red-200" }
+  if (st.some(s => s === "CLAIM_REJECT_GW")) return { label: "Back to MER", cls: "bg-orange-100 text-orange-700 border-orange-200" }
+  if (st.every(s => s === "COMPLETED" || s === "ACCOUNTING_PENDING")) return { label: "Done", cls: "bg-green-100 text-green-700 border-green-200" }
+  return { label: "Pending", cls: "bg-yellow-100 text-yellow-700 border-yellow-200" }
+}
+const AggBadge = ({ rows }: { rows: any[] }) => {
+  const b = soAggBadge(rows)
+  if (!b) return null
+  return <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold whitespace-nowrap shrink-0 ${b.cls}`}>{b.label}</span>
+}
+
 const STEP_COLORS: Record<string, string> = {
   "DPM GW": "bg-yellow-100 text-yellow-700",
   "GM GW": "bg-orange-100 text-orange-700",
@@ -377,6 +393,7 @@ export default function RequestsPage() {
                 <span className="text-gray-400 text-xs w-4 shrink-0">{isDocExp ? "▼" : "▶"}</span>
                 <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
                   className="font-bold text-blue-700 hover:underline text-sm shrink-0">{dg.request.documentNo}</Link>
+                <AggBadge rows={dg.styles.flatMap((s: any) => s.rows)} />
                 <span className="text-xs text-gray-500 truncate">{dg.request.brandName} · {dg.request.buName}</span>
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
                   <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
@@ -404,6 +421,7 @@ export default function RequestsPage() {
                         <div className="flex items-center gap-3 px-6 py-2.5 cursor-pointer hover:bg-blue-50/30 select-none" onClick={() => toggleStyle(styleKey)}>
                           <span className="text-gray-300 text-xs w-4">{isStyleExp ? "▼" : "▶"}</span>
                           <span className="font-semibold text-gray-700 text-sm">{sg.style}</span>
+                          <AggBadge rows={sg.rows} />
                           <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{sg.rows.length} SO(s)</span>
                         </div>
                         {isStyleExp && (
