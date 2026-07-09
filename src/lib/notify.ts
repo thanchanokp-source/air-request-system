@@ -676,10 +676,9 @@ export async function notifyClaimNext(
           </td></tr>
         </table>
         <div style="text-align:center;margin-top:24px">
-          <a href="${magicLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:14px 36px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;font-family:Arial,sans-serif">Open Document →</a>
+          ${emailButton(magicLink, "Open Document →", "#1e3a8a")}
         </div>
         ${loginLinkBlock()}
-        <p style="color:#94a3b8;font-size:11px;font-family:Arial,sans-serif;text-align:center;margin-top:16px">Link valid for 8 hours</p>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
         <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
