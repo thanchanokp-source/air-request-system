@@ -446,6 +446,8 @@ export default function RequestDetailPage() {
   const [claimTableView, setClaimTableView] = useState(false)
   const [soPick, setSoPick] = useState("")        // quick-select: type SO + Enter
   const [soPickMsg, setSoPickMsg] = useState("")
+  const [backModalOpen, setBackModalOpen] = useState(false) // Back to MER/SCM reason modal
+  const [backReason, setBackReason] = useState("")
   // Claim approver (NYG/GW/Supplier) action popup: forward to next person, or finish.
   const [gwModalOpen, setGwModalOpen] = useState(false)
   const [gwBranchChoice, setGwBranchChoice] = useState<string | null>(null)
@@ -2671,23 +2673,7 @@ export default function RequestDetailPage() {
                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40">
                 {claimFwdSaving ? "..." : (claimSelIds.length ? `✓ Approve Selected (${claimSelIds.length})` : `✓ Approve All (${gwFwdItems.length})`)}
               </button>
-              <button onClick={async () => {
-                  const backIds = claimActIds
-                  const reason = window.prompt(`Reason for sending ${backIds.length} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
-                  if (reason == null || !reason.trim()) return
-                  setClaimFwdSaving(true)
-                  const backAction = isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so"
-                  let updated: any = req
-                  for (const iid of backIds) {
-                    const res = await fetch(`/api/requests/${id}/approve`, {
-                      method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: backAction, itemId: iid, comment: reason.trim() })
-                    })
-                    if (res.ok) updated = await res.json()
-                    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
-                  }
-                  setReq(updated); setClaimFwdDone(`back`); setClaimFwdSaving(false)
-                }} disabled={claimFwdSaving}
+              <button onClick={() => { setBackReason(""); setBackModalOpen(true) }} disabled={claimFwdSaving}
                 className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-40">
                 ↩ {isGWRequest ? "Back to MER" : "Back to SCM"}{claimSelIds.length ? ` (${claimSelIds.length})` : ""}
               </button>
@@ -2931,6 +2917,50 @@ export default function RequestDetailPage() {
                   {claimFwdSaving ? "..." : `Forward →${claimSelIds.length ? ` (${claimSelIds.length})` : ""}`}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Back to MER / SCM — reason modal (replaces window.prompt) */}
+      {backModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={() => !claimFwdSaving && setBackModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-lg">↩</div>
+              <div>
+                <h3 className="text-base font-bold text-gray-800">Send back to {isGWRequest ? "MER" : "SCM"}</h3>
+                <p className="text-xs text-gray-400">{claimActIds.length} SO · will re-assign the claim department</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-600">Reason <span className="text-red-500">*</span></label>
+              <textarea value={backReason} onChange={e => setBackReason(e.target.value)} rows={3} autoFocus
+                placeholder="Why are these SO sent back?"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none" />
+            </div>
+            <div className="flex justify-end gap-2 pt-1 border-t border-gray-100">
+              <button onClick={() => setBackModalOpen(false)} disabled={claimFwdSaving}
+                className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-40">Cancel</button>
+              <button disabled={!backReason.trim() || claimFwdSaving}
+                onClick={async () => {
+                  const reason = backReason.trim(); if (!reason) return
+                  setClaimFwdSaving(true)
+                  const backAction = isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so"
+                  let ok = true
+                  for (const iid of claimActIds) {
+                    const res = await fetch(`/api/requests/${id}/approve`, {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: backAction, itemId: iid, comment: reason }),
+                    })
+                    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); ok = false; break }
+                  }
+                  if (ok) window.location.href = "/requests"
+                  else setClaimFwdSaving(false)
+                }}
+                className="px-4 py-2 text-sm font-semibold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-40">
+                {claimFwdSaving ? "Sending..." : `Send back (${claimActIds.length})`}
+              </button>
             </div>
           </div>
         </div>
