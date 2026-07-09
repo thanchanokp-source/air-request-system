@@ -809,6 +809,77 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
+  // Batch version of approve_so_claim_gw — approve MANY SO in ONE request so it
+  // doesn't fire an email + doc-status recalc per SO (that made 30+ SO very slow).
+  // DB writes per item, then a single recalc + single notify at the end.
+  if (action === "batch_approve_claim_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
+    if (!Array.isArray(itemIds) || itemIds.length === 0) return NextResponse.json({ error: "itemIds required" }, { status: 400 })
+    const crNo = (request as any).crNo || null
+
+    // NYK Approver assigns the CR-entry person + EVP once for the whole document.
+    if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
+      await prisma.airRequest.update({ where: { id }, data: { assignedScmNykEvp: body.evpEmail || null, assignedScmNykCr: body.crEmail || null } as any })
+    }
+
+    const myDepts = gwDeptsForRole(userRole, userClaimDept)
+    // Priority chain (CLAIM_GW / SCM_NYG) — resolve once for all items.
+    const allApprovers = (userRole === "CLAIM_GW" || userRole === "SCM_NYG")
+      ? await (prisma.user as any).findMany({ where: { role: userRole, isActive: true, priority: { not: null }, bu: request.bu }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }] })
+      : []
+    const myPriority = allApprovers.find((u: any) => u.id === userId)?.priority ?? null
+
+    const items = await prisma.airRequestItem.findMany({ where: { requestId: id, id: { in: itemIds as string[] } } })
+    let count = 0
+    for (const it of items) {
+      if (!["PRES_PASSED", "LOG_PASSED"].includes(it.itemStatus)) continue
+      const lgDone = (it as any).actualAirFreight != null
+
+      if (userRole === "SCM_NYK_APPROVER" || userRole === "SCM_NYK_EVP") {
+        const appr = await (prisma as any).claimApproval.findMany({ where: { itemId: it.id }, include: { user: { select: { role: true } } } })
+        const approverDone = appr.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
+        const evpDone = appr.some((a: any) => a.user?.role === "SCM_NYK_EVP")
+        if (userRole === "SCM_NYK_APPROVER" && approverDone) continue
+        if (userRole === "SCM_NYK_EVP" && (!approverDone || evpDone)) continue
+        await (prisma as any).claimApproval.upsert({ where: { itemId_userId: { itemId: it.id, userId } }, create: { itemId: it.id, userId, role: userRole }, update: { createdAt: new Date() } })
+        const splitStatus = nykSplitStatus({ approver: approverDone || userRole === "SCM_NYK_APPROVER", evp: evpDone || userRole === "SCM_NYK_EVP", cr: !!crNo })
+        const updated = setGwSplitStatus(getSplits(it), ["SCM NYK"], splitStatus, crNo || undefined)
+        await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated, lgDone) } })
+        count++
+      } else {
+        if (!hasApprovableGwSplit(it, myDepts)) continue
+        // Respect priority order: skip if a lower-priority approver hasn't approved this SO.
+        if (myPriority !== null) {
+          const lower = allApprovers.filter((u: any) => u.priority !== null && u.priority < myPriority)
+          if (lower.length) {
+            const done = await (prisma as any).claimApproval.findMany({ where: { itemId: it.id, userId: { in: lower.map((u: any) => u.id) } } })
+            if (done.length < lower.length) continue
+          }
+        }
+        await (prisma as any).claimApproval.upsert({ where: { itemId_userId: { itemId: it.id, userId } }, create: { itemId: it.id, userId, role: userRole }, update: { createdAt: new Date() } })
+        const allDone = await (prisma as any).claimApproval.findMany({ where: { itemId: it.id, user: { role: userRole } } })
+        const approvedIds = new Set(allDone.map((a: any) => a.userId))
+        const chainComplete = allApprovers.length === 0 || allApprovers.every((u: any) => approvedIds.has(u.id))
+        if (chainComplete) {
+          const updated = approveGwDeptSplits(getSplits(it), myDepts)
+          await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated, lgDone) } })
+        }
+        count++
+      }
+    }
+    if (count === 0) return NextResponse.json({ error: "No SO to approve (already handled or not your turn)" }, { status: 400 })
+
+    await prisma.approvalLog.create({ data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Batch approve ${count} SO — ${userRole}` } })
+    if (userRole === "SCM_NYK_APPROVER") await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      await notifyStatusChange(id, nextDocStatus).catch(() => {})
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
   if (action === "approve_so_claim_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })

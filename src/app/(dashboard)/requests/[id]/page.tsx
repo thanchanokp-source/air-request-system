@@ -53,14 +53,12 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
           <h2 className="font-semibold text-gray-800 text-sm">Final Approval — President</h2>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.badge}`}>{bu}</span>
         </div>
-        <span className="text-xs text-gray-400 tabular-nums">{req.documentNo} · {req.brandName} · {items.length} SO</span>
       </div>
 
       {/* Headline figures — ACTUAL is the number the President is here to sign off. */}
-      <div className="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/60">
+      <div className="grid grid-cols-2 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/60">
         <Stat label="Est. Air Freight" value={totalEst} sub="THB" />
         <Stat label="Actual Air Freight" value={totalAct} sub="THB" big />
-        <Stat label="Total Claim" value={totalClaim} sub={`THB · ${claimShareOfActual}% of actual`} />
       </div>
 
       {/* Who claims how much */}
@@ -1227,7 +1225,8 @@ export default function RequestDetailPage() {
       {/* Freight Cost Summary — visible to all roles EXCEPT the forced-position
           claim screen (that panel has its own dept-scoped summary strip). */}
       {(() => {
-        if (showGwFinishForward) return null
+        // President has its own summary card; the claim panel has its own strip.
+        if (showGwFinishForward || isPresidentGW || isPresidentRole) return null
         const isClaimDeptRole = isDvmClaim || isVpClaim || isClaimNextApprover || isClaimP1ForForward
         const summaryItems = isClaimDeptRole && myClaimItems.length > 0 ? myClaimItems : (req.items || [])
         const allItems = summaryItems
@@ -3017,15 +3016,25 @@ export default function RequestDetailPage() {
                     title={role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp) ? "Select the CR-entry person and the VP/EVP approver first" : ""}
                     onClick={async () => {
                       if (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)) { alert("Select the CR-entry person and the VP/EVP approver first."); return }
-                      const ids = [...dvmSelected]; let updated: any = req
-                      const approveAction = isGwClaimP1Role ? "approve_so_claim_gw" : "approve_so"
-                      for (const itemId of ids) {
-                        setSubmitting(itemId)
+                      const ids = [...dvmSelected]
+                      setSubmitting("_batch")
+                      if (isGwClaimP1Role) {
+                        // GW: one batch request → server approves all + notifies once (fast).
                         const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ action: approveAction, itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, evpEmail: nykEvp?.email, crEmail: nykCr?.email }) })
-                        if (res.ok) updated = await res.json(); else { const e = await res.json(); alert(e.error || "Error"); break }
+                          body: JSON.stringify({ action: "batch_approve_claim_gw", itemIds: ids, evpEmail: nykEvp?.email, crEmail: nykCr?.email }) })
+                        if (res.ok) { window.location.href = "/requests"; return }
+                        const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null)
+                      } else {
+                        // NYG DVM: per-SO approve.
+                        let ok = true
+                        for (const itemId of ids) {
+                          const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "approve_so", itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined }) })
+                          if (!res.ok) { const e = await res.json(); alert(e.error || "Error"); ok = false; break }
+                        }
+                        if (ok) { window.location.href = "/requests"; return }
+                        setDvmSelected(new Set()); setSubmitting(null)
                       }
-                      setReq(updated); setDvmSelected(new Set()); setSubmitting(null)
                     }}
                     className="px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50">
                     {submitting !== null ? "..." : `✓ Approve (${dvmSelected.size})`}
@@ -3034,15 +3043,17 @@ export default function RequestDetailPage() {
                     onClick={async () => {
                       const reason = window.prompt(`Reason for sending ${dvmSelected.size} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
                       if (reason == null || !reason.trim()) return
-                      const ids = [...dvmSelected]; let updated: any = req
+                      const ids = [...dvmSelected]
+                      setSubmitting("_batch")
                       const backAction = isGwClaimP1Role ? (isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so") : "reject_so"
+                      let ok = true
                       for (const itemId of ids) {
-                        setSubmitting(itemId)
                         const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ action: backAction, itemId, comment: reason.trim() }) })
-                        if (res.ok) updated = await res.json(); else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
+                        if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); ok = false; break }
                       }
-                      setReq(updated); setDvmSelected(new Set()); setSubmitting(null)
+                      if (ok) { window.location.href = "/requests"; return }
+                      setDvmSelected(new Set()); setSubmitting(null)
                     }}
                     className="px-3 py-1.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50">
                     {isGWRequest ? `↩ Back to MER (${dvmSelected.size})` : `↩ Back to SCM (${dvmSelected.size})`}
@@ -3233,10 +3244,8 @@ export default function RequestDetailPage() {
                             method: "POST", headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ action: approveAction, itemId: item.id, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, evpEmail: nykEvp?.email, crEmail: nykCr?.email })
                           })
-                          if (res.ok) {
-                            setReq(await res.json())
-                            setDvmSelected(prev => { const n = new Set(prev); n.delete(item.id); return n })
-                          } else { const err = await res.json(); alert(err.error || "Error") }
+                          if (res.ok) { window.location.href = "/requests"; return }
+                          else { const err = await res.json(); alert(err.error || "Error") }
                           setSubmitting(null)
                         }} disabled={isSub || nykSelectionMissing}
                         title={nykSelectionMissing ? "Select the CR-entry person and the VP/EVP approver first" : ""}
@@ -3279,7 +3288,7 @@ export default function RequestDetailPage() {
                             method: "POST", headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ action: isGwClaimP1Role ? (isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so") : "reject_so", itemId: item.id, comment: rejectSoComment })
                           })
-                          if (res.ok) { setReq(await res.json()) } else { const err = await res.json(); alert(err.error || "Error") }
+                          if (res.ok) { window.location.href = "/requests"; return } else { const err = await res.json(); alert(err.error || "Error") }
                           setSubmitting(null); setRejectingSo(null); setRejectSoComment("")
                         }}
                         className="px-4 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-40">
