@@ -2748,17 +2748,26 @@ export default function RequestDetailPage() {
               { h: "MY CLAIM (THB)", get: it => fmtNum(claimRow(it).amt) },
             ]
             return (
-            <div className="border border-gray-200 rounded-xl overflow-x-auto">
+            <div className="border border-gray-200 rounded-xl overflow-auto max-h-[70vh]">
               <table className="text-xs w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-2 py-2 w-8 sticky left-0 bg-gray-50 z-10"></th>
+                    <th className="px-2 py-2 w-8 sticky left-0 top-0 bg-gray-50 z-30"></th>
                     {cols.map(c => (
-                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "sticky left-8 bg-gray-50 z-10" : ""}`}>{c.h}</th>
+                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
+                  {/* TOTAL on top */}
+                  <tr className="border-b-2 border-gray-200 bg-gray-100 font-semibold">
+                    <td className="sticky left-0 bg-gray-100 z-10"></td>
+                    {cols.map(c => (
+                      <td key={c.h} className={`px-3 py-2 ${RIGHT.has(c.h) ? "text-right tabular-nums" : ""} ${c.h === "ACTUAL (THB)" ? "text-green-700" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700" : ""} ${c.h === "SO" ? "sticky left-8 bg-gray-100 z-10 text-gray-700" : ""}`}>
+                        {c.h === "SO" ? "TOTAL" : c.h === "QTY AIR" ? fmtNum(claimTotals.qty) : c.h === "EST. (THB)" ? fmtNum(claimTotals.est) : c.h === "ACTUAL (THB)" ? fmtNum(claimTotals.actual) : c.h === "MY EST (THB)" ? fmtNum(claimTotals.myEst) : c.h === "MY CLAIM (THB)" ? fmtNum(claimTotals.amt) : ""}
+                      </td>
+                    ))}
+                  </tr>
                   {gwFwdItemsSorted.map((item: any) => { const sel = dvmSelected.has(item.id); return (
                       <tr key={item.id} className={`hover:bg-gray-50 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
                         <td className={`px-2 py-1.5 text-center sticky left-0 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
@@ -2776,16 +2785,6 @@ export default function RequestDetailPage() {
                       </tr>
                   )})}
                 </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-gray-100 bg-gray-50/60 font-semibold">
-                    <td className="sticky left-0 bg-gray-50/60 z-10"></td>
-                    {cols.map(c => (
-                      <td key={c.h} className={`px-3 py-2 ${RIGHT.has(c.h) ? "text-right tabular-nums" : ""} ${c.h === "ACTUAL (THB)" ? "text-green-700" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700" : ""} ${c.h === "SO" ? "sticky left-8 bg-gray-50/60 z-10" : ""}`}>
-                        {c.h === "SO" ? "TOTAL" : c.h === "QTY AIR" ? fmtNum(claimTotals.qty) : c.h === "EST. (THB)" ? fmtNum(claimTotals.est) : c.h === "ACTUAL (THB)" ? fmtNum(claimTotals.actual) : c.h === "MY EST (THB)" ? fmtNum(claimTotals.myEst) : c.h === "MY CLAIM (THB)" ? fmtNum(claimTotals.amt) : ""}
-                      </td>
-                    ))}
-                  </tr>
-                </tfoot>
               </table>
             </div>
             )
