@@ -38,6 +38,9 @@ const STATUS_LABELS: Record<string,string> = {
   PENDING_PRESIDENT:"President", PENDING_LOGISTICS:"Logistics",
   PENDING_CLAIM:"Claim", PENDING_VP_CLAIM:"VP Claim", COMPLETED:"Completed", REJECTED:"Rejected"
 }
+// Brand of an SO row — per-item brand (a doc can hold many brands), fallback to
+// the document-level brand for older uploads.
+const soBrand = (r: any) => r?.brand || r?.request?.brandName || r?.brandName || "N/A"
 const CLAIM_DEPTS = ["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]
 const MONTH_OPTS = [
   {value:"01",label:"Jan"},{value:"02",label:"Feb"},{value:"03",label:"Mar"},{value:"04",label:"Apr"},
@@ -371,7 +374,7 @@ function LogisticsCostBar({ rows }: { rows:any[] }) {
   const data = useMemo(()=>{
     const m:Record<string,{cost:number;qty:number;soCount:number}>={}
     rows.forEach(r=>{
-      const k=r.request?.brandName||"N/A"
+      const k=soBrand(r)
       if(!m[k])m[k]={cost:0,qty:0,soCount:0}
       m[k].cost+=r.actualAirFreight||0
       m[k].qty+=Number(r.qtyRequestAir)||0
@@ -466,11 +469,11 @@ export default function DashboardPage() {
     return (!yearFilter  || yr===yearFilter) &&
            (!monthFilter.length || monthFilter.includes(mo)) &&
            (!statusFilter || (
-             statusFilter==="PENDING"   ? (row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED") :
-             statusFilter==="COMPLETED" ? row.itemStatus === "COMPLETED" :
+             statusFilter==="PENDING"   ? (row.itemStatus !== "COMPLETED" && row.itemStatus !== "ACCOUNTING_PENDING" && row.itemStatus !== "REJECTED") :
+             statusFilter==="COMPLETED" ? (row.itemStatus === "COMPLETED" || row.itemStatus === "ACCOUNTING_PENDING") :
              statusFilter==="REJECTED"  ? row.itemStatus === "REJECTED" : true
            )) &&
-           (!brandFilter  || r.brandName===brandFilter) &&
+           (!brandFilter  || soBrand(r)===brandFilter) &&
            (!soF.length   || soF.includes(row.so)) &&
            (!cpF.length   || cpF.includes(row.customerPO)) &&
            (!portFilter   || row.port===portFilter) &&
@@ -486,7 +489,7 @@ export default function DashboardPage() {
   const totalAct   = filtered.reduce((s,r)=>s+(r.actualAirFreight||0),0)
   const airRatePct = totalQOrig>0 ? totalQAir/totalQOrig*100 : 0
   const varPct     = totalEst>0 && totalAct>0 ? (totalAct-totalEst)/totalEst*100 : null
-  const compDone   = filtered.filter(r=>r.itemStatus==="COMPLETED").length
+  const compDone   = filtered.filter(r=>r.itemStatus==="COMPLETED"||r.itemStatus==="ACCOUNTING_PENDING").length
   const compPct    = totalSO>0 ? compDone/totalSO*100 : 0
 
   // ─── Builders ───────────────────────────────────────────────────────────
@@ -537,9 +540,9 @@ export default function DashboardPage() {
     return Object.entries(m).sort(([,a],[,b])=>a.ym.localeCompare(b.ym)).map(([name,v])=>({name,orig:Math.round(v.orig),air:Math.round(v.air),airRate:v.orig>0?Math.round(v.air/v.orig*100):0}))
   },[filtered])
 
-  const brandCost  = useMemo(()=>buildCost(filtered,r=>r.request.brandName),[filtered])
-  const brandQty   = useMemo(()=>buildQty(filtered,r=>r.request.brandName),[filtered])
-  const brandDelay = useMemo(()=>buildDelay(filtered,r=>r.request.brandName),[filtered])
+  const brandCost  = useMemo(()=>buildCost(filtered,r=>soBrand(r)),[filtered])
+  const brandQty   = useMemo(()=>buildQty(filtered,r=>soBrand(r)),[filtered])
+  const brandDelay = useMemo(()=>buildDelay(filtered,r=>soBrand(r)),[filtered])
 
   const cRows = (r:any) => drillCountry ? r.country===drillCountry : true
   const cKey  = (r:any) => drillCountry ? r.port : r.country
@@ -583,7 +586,7 @@ export default function DashboardPage() {
 
   // Filter options
   const years    = useMemo(()=>[...new Set(allSOs.map(r=>r.originalShipmentDate?String(new Date(r.originalShipmentDate).getFullYear()):"").filter(Boolean))].sort().reverse(),[allSOs])
-  const brands   = [...new Set(requests.map((r:any)=>r.brandName).filter(Boolean))].sort()
+  const brands   = [...new Set(allSOs.map((r:any)=>soBrand(r)).filter((b:string)=>b&&b!=="N/A"))].sort()
   const sos      = [...new Set(allSOs.map(r=>r.so).filter(Boolean))].sort()
   const cps      = [...new Set(allSOs.map(r=>r.customerPO).filter(Boolean))].sort()
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
@@ -601,7 +604,7 @@ export default function DashboardPage() {
         "DOC NO":         row.request.documentNo,
         "SO":             row.so,
         "STYLE":          row.style,
-        "BRAND":          row.request.brandName,
+        "BRAND":          soBrand(row),
         "BU":             row.request.buName,
         "ORIG. DATE":     fmtDate(row.originalShipmentDate),
         "PLAN DATE":      fmtDate(row.planShipmentDate),
@@ -735,7 +738,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <CostBar  data={brandCost}  height={H}/>
         <QtyBar   data={brandQty}   height={H}/>
-        <DelayBar data={brandDelay} rows={filtered} groupFn={(r:any)=>r.request?.brandName||"N/A"} height={H}/>
+        <DelayBar data={brandDelay} rows={filtered} groupFn={(r:any)=>soBrand(r)} height={H}/>
       </div>
 
       {/* ── Row 3: By Country → Port ─────────────────────────────────────── */}
@@ -801,7 +804,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 font-medium whitespace-nowrap">{row.request.documentNo}</td>
                     <td className="px-3 py-1.5 font-medium">{row.so}</td>
                     <td className="px-3 py-1.5">{row.style}</td>
-                    <td className="px-3 py-1.5">{row.request.brandName}</td>
+                    <td className="px-3 py-1.5">{soBrand(row)}</td>
                     <td className="px-3 py-1.5">{row.request.buName}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                     <td className="px-3 py-1.5">{row.qtyOriginalShipment}</td>
