@@ -462,6 +462,20 @@ export function TransportationBookingPdf({ pages, generatedDate }: { pages: { re
     <Document title="Transportation Booking">
       {chunks.map((chunk, pageIdx) => (
         <Page key={pageIdx} size="A4" orientation="landscape" style={tb.page}>
+          {/* Letterhead — same identity as the by-SO document */}
+          <View style={s.lh}>
+            <Image style={s.logo} src="/LOGO.png" />
+            <View style={s.lhMid}>
+              <Text style={s.coName}>{COMPANY.name}</Text>
+              <Text style={s.coThai}>{COMPANY.thai}</Text>
+              <Text style={s.coAddr}>{COMPANY.address}</Text>
+            </View>
+            <View style={s.docBox}>
+              <Text style={s.docLabel}>Document No.</Text>
+              <Text style={s.docVal}>{docNos || "-"}</Text>
+            </View>
+          </View>
+          <View style={s.blackRule} />
           {/* Title */}
           <Text style={tb.title}>TRANSPORTATION BOOKING</Text>
 
@@ -578,6 +592,9 @@ export function TransportationBookingPdf({ pages, generatedDate }: { pages: { re
                     <Text style={[tb.summaryValue, { fontFamily: "SarabunB", color: "#1E3A8A" }]}>THB {fmtNum(totalActual)}</Text>
                   </View>
                 )}
+                <Text style={{ fontSize: 7, fontFamily: "Sarabun", color: "#333", marginTop: 3 }}>
+                  Say total : {bahtInWords(totalActual > 0 ? totalActual : totalEst)}
+                </Text>
               </View>
 
               <View style={tb.sigBox}>
