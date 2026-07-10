@@ -361,14 +361,24 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         if (!emails.length) return
         const token = (req as any)[tokenField]
         const magic = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : link
-        const html = `<div style="font-family:Arial;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
-          <p style="font-size:11px;letter-spacing:2px;color:#94a3b8;text-transform:uppercase;margin:0">Nan Yang Textile · Air Request</p>
-          <h2 style="font-size:18px;margin:6px 0 2px">${(req as any).documentNo}</h2>
-          <p style="font-size:13px;color:#334155;margin:8px 0">${intro}</p>
-          ${lgTable}
-          <div style="text-align:center;margin-top:20px"><a href="${magic}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 30px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Open Document →</a></div>
-          ${loginLinkBlock()}
-        </div>`
+        const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0"><tr><td align="center">
+  <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#1e3a8a;padding:20px;text-align:center">
+      <p style="margin:0;color:#93c5fd;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif;text-transform:uppercase">Nan Yang Textile</p>
+      <h1 style="margin:6px 0 0;color:#fff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
+    </td></tr>
+    <tr><td style="padding:28px 32px">
+      <p style="color:#1e3a8a;font-size:15px;font-weight:700;font-family:Arial,sans-serif;margin:0 0 4px">${(req as any).documentNo}</p>
+      <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 14px">${intro}</p>
+      ${lgTable}
+      <div style="text-align:center;margin-top:22px">${emailButton(magic, "Open Document →", "#1e3a8a")}</div>
+      ${loginLinkBlock()}
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p></td></tr>
+  </table>
+</td></tr></table></body></html>`
         await sendMail(emails, `${subject} — ${(req as any).documentNo}`, html)
       }
       await sendNyk("SCM_NYK_EVP", "scmNykEvpToken", "[Claim – SCM NYK EVP] Pending Approval", "The SCM NYK Approver has approved. Please review and approve.", (req as any).assignedScmNykEvp)
@@ -484,8 +494,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
         await sendMail(em, `[Claim – ${g.label}] President Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
       }
-      // 3) Accounting (read alert) — GW uses ACCOUNTING_GW; cover both role names.
-      const acUsers = await (prisma.user as any).findMany({ where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true }, select: { email: true } })
+      // 3) Accounting (read alert) — this BU only (GW → ACCOUNTING_GW).
+      const acUsers = await (prisma.user as any).findMany({ where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: (req as any).bu }, select: { email: true } })
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
       if (acEmails.length) {
         const t = (req as any).accountingToken
@@ -600,7 +610,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     const activeDepts = new Set(req.items.map((i:any) => i.claimDepartment).filter(Boolean))
 
     const users = await prisma.user.findMany({
-      where: { role: { in: rolesToNotify }, isActive: true },
+      // Scope to THIS document's BU — never email the other BU's role-holders.
+      where: { role: { in: rolesToNotify }, isActive: true, bu: (req as any).bu },
       select: { email: true, role: true }
     })
 
@@ -703,7 +714,7 @@ export async function notifyClaimFinalToAccounting(requestId: string) {
     if (!req) return
 
     const accountingUsers = await (prisma.user as any).findMany({
-      where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true },
+      where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: (req as any).bu },
       select: { email: true }
     })
     const recipients: string[] = accountingUsers.map((u: any) => u.email).filter(Boolean)
