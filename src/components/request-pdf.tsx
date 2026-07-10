@@ -10,7 +10,7 @@ Font.registerHyphenationCallback((word: string) => [word]) // avoid breaking Tha
 // Company letterhead — edit here if the legal entity / address changes.
 const COMPANY = {
   name: "Nan Yang Garment Co., Ltd.",
-  thai: "บริษัท นันยางการ์เม้นท์ จำกัด",
+  thai: "บริษัท นันยางการ์เม้นท์ จำกัด ", // trailing space prevents the last glyph being clipped
   address: "27 Phetkasem Rd, Nong Khang Phlu, Nong Khaem, Bangkok 10160, Thailand",
 }
 
@@ -134,7 +134,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
   const actual = item.actualAirFreight != null ? Number(item.actualAirFreight) : null
   const grandTotal = actual != null ? actual : est
   const dept = isGW ? "GW" : "NYG"
-  const C = { no: 18, so: 50, style: 44, hawb: 50, inv: 52, qty: 36, gross: 42, est: 50, act: 50 }
+  const C = { no: 16, so: 48, style: 42, sub: 28, hawb: 46, inv: 48, qty: 34, gross: 40, est: 48, act: 48 }
 
   return (
     <Page size="A4" style={s.page}>
@@ -166,7 +166,10 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           ["Date", fmtDate(req.createdAt)],
           ["Brand", req.brandName || "-"],
           ["BU", req.buName || dept],
-          ["Request By (MER)", req.createdBy ? `${req.createdBy.name || "-"}${req.createdBy.email ? "  ·  " + req.createdBy.email : ""}` : "-"],
+          ["Request By (MER)", (() => {
+            const base = String(req.createdBy?.name || req.createdBy?.email || "").split("@")[0]
+            return base ? base.split(".")[0] : "-"
+          })()],
           ["Factory", item.factory || "-"],
           ["Country / Port", `${item.country || "-"} / ${item.port || "-"}`],
         ] as [string, string][]).map(([l, v]) => (
@@ -188,6 +191,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           <Text style={[s.th, { width: C.no }]}>No.</Text>
           <Text style={[s.th, { width: C.so }]}>S/O NO.</Text>
           <Text style={[s.th, { width: C.style }]}>STYLE</Text>
+          <Text style={[s.th, { width: C.sub }]}>SUB</Text>
           <Text style={[s.th, { flex: 1 }]}>DESCRIPTION</Text>
           <Text style={[s.th, { width: C.hawb }]}>HAWB#</Text>
           <Text style={[s.th, { width: C.inv }]}>INVOICE</Text>
@@ -200,6 +204,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           <Text style={[s.td, { width: C.no }]}>1</Text>
           <Text style={[s.td, { width: C.so }]}>{item.so || "-"}</Text>
           <Text style={[s.td, { width: C.style }]}>{item.style || "-"}</Text>
+          <Text style={[s.td, { width: C.sub }]}>{item.sub || "-"}</Text>
           <Text style={[s.tdL, { flex: 1 }]}>{item.description || "-"}</Text>
           <Text style={[s.td, { width: C.hawb }]}>{item.hawbNo || "-"}</Text>
           <Text style={[s.td, { width: C.inv }]}>{item.invoiceNo || "-"}</Text>
@@ -227,20 +232,15 @@ function ItemPage({ req, item }: { req: any; item: any }) {
       <Text style={s.remark}><Text style={s.remarkLabel}>Claim to : </Text>{claimText}</Text>
       <Text style={s.remark}><Text style={s.remarkLabel}>Additional Remarks : </Text>{item.reasonDelay || "-"}</Text>
 
-      {/* Total box */}
+      {/* Total box — amount with THB inline */}
       <View style={s.totalBoxWrap}>
         <View style={s.totalBox}>
-          <View style={s.totalBoxRow}>
-            <Text style={s.totalBoxK}>TOTAL</Text>
-            <Text style={s.totalBoxV}>{fmtNum(grandTotal)}</Text>
-          </View>
           <View style={s.totalBoxRowLast}>
-            <Text style={s.totalBoxK}>Currency</Text>
-            <Text style={[s.totalBoxV, { color: "#111" }]}>THB</Text>
+            <Text style={s.totalBoxK}>TOTAL</Text>
+            <Text style={s.totalBoxV}>{fmtNum(grandTotal)} <Text style={{ fontSize: 8, color: "#111" }}>THB</Text></Text>
           </View>
         </View>
       </View>
-      <Text style={s.sayTotal}>Say total : {bahtInWords(grandTotal)}</Text>
 
       {/* Signatures pinned near the bottom */}
       <View style={s.sigWrap}>

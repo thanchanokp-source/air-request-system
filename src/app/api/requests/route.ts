@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
         </table>
         <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 20px">After adding the Rate, open the document and click <strong>Recalculate</strong> — the Est. Air Freight will then appear.</p>
         <div style="text-align:center">
-          <a href="${APP_URL}/master/port" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Master Port →</a>
+          <a href="__LINK__" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Master Port →</a>
         </div>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
@@ -244,10 +244,19 @@ export async function POST(req: NextRequest) {
 </table></body></html>`
 
         const subject = `[Port Missing] ${docNo} — Port has no Freight Rate (${missingPorts.join(", ")})`
-        const lgUsers = await (prisma.user as any).findMany({ where: { role: { in: ["LOGISTICS", "LOGISTICS_GW"] }, isActive: true }, select: { email: true } })
-        const adminUsers = await (prisma.user as any).findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
-        const recipients = [...new Set([...lgUsers, ...adminUsers].map((u: any) => u.email).filter(Boolean))]
-        if (recipients.length) await sendMail(recipients, subject, html)
+        // Notify this BU's Logistics + Admin. Send a PERSONALISED magic link per
+        // recipient so clicking logs THEM in (not whoever's browser session it is).
+        const lgRoles = isGW ? ["LOGISTICS_GW"] : ["LOGISTICS"]
+        const recips = await (prisma.user as any).findMany({
+          where: { role: { in: [...lgRoles, "ADMIN"] }, isActive: true }, select: { id: true, email: true },
+        })
+        for (const u of recips) {
+          if (!u.email) continue
+          const token = crypto.randomUUID()
+          await (prisma.user as any).update({ where: { id: u.id }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000) } })
+          const link = `${APP_URL}/api/magic-login?token=${token}&redirect=/master/port`
+          await sendMail(u.email, subject, html.replace("__LINK__", link))
+        }
       } catch (err) {
         console.error("[notify] missing port email failed:", err)
       }
