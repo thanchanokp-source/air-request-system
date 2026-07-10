@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import * as XLSX from "xlsx"
 
 const NYG_REQUIRED = [
   "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
@@ -32,6 +33,18 @@ export default function NewRequestPage() {
 
   const [vpMerSelected, setVpMerSelected] = useState<{ name: string; email: string } | null>(null)
   const [vpMerUsers, setVpMerUsers] = useState<any[]>([])
+
+  // Master Description reference — the DESCRIPTION column in the Excel must match one of these.
+  const [masterDesc, setMasterDesc] = useState<any[]>([])
+  const [showMaster, setShowMaster] = useState(false)
+  useEffect(() => { fetch("/api/master/description").then(r => r.json()).then(d => setMasterDesc(Array.isArray(d) ? d : [])).catch(() => {}) }, [])
+  const downloadMasterExcel = () => {
+    const rows = masterDesc.map((m: any) => ({ "DESCRIPTION": m.name, "WT CHARGE/PC (KG)": m.weightPerUnit }))
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ "DESCRIPTION": "", "WT CHARGE/PC (KG)": "" }])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Master Description")
+    XLSX.writeFile(wb, "Master_Description.xlsx")
+  }
 
   useEffect(() => {
     // GW first approver may be role DPM_GW or legacy VP_MER_GW — fetch both.
@@ -267,6 +280,49 @@ export default function NewRequestPage() {
             onChange={handleFileChange}
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
           />
+        </div>
+
+        {/* Master Description reference — DESCRIPTION in the Excel must match one of these */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h2 className="font-semibold text-gray-800">Master Description</h2>
+              <p className="text-xs text-gray-400 mt-0.5">The DESCRIPTION in your Excel must match one of these names (WT CHARGE/PC is used to compute Gross Weight)</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button type="button" onClick={downloadMasterExcel}
+                className="flex items-center gap-1.5 text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
+                ⬇ Excel
+              </button>
+              <button type="button" onClick={() => setShowMaster(v => !v)}
+                className="text-xs border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-50 font-medium">
+                {showMaster ? "Hide" : "Show"} ({masterDesc.length})
+              </button>
+            </div>
+          </div>
+          {showMaster && (
+            <div className="border border-gray-200 rounded-lg overflow-auto max-h-72">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium text-gray-500">DESCRIPTION</th>
+                    <th className="text-right px-3 py-2 font-medium text-gray-500">WT CHARGE/PC (KG)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {masterDesc.map((m: any) => (
+                    <tr key={m.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-1.5 text-gray-800 font-medium">{m.name}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-gray-700">{m.weightPerUnit}</td>
+                    </tr>
+                  ))}
+                  {masterDesc.length === 0 && (
+                    <tr><td colSpan={2} className="text-center py-6 text-gray-400">No master descriptions yet</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {preview.length > 0 && (
