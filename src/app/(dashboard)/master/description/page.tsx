@@ -1,7 +1,11 @@
 "use client"
 import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
 
 export default function MasterDescriptionPage() {
+  const { data: session } = useSession()
+  const role = (session?.user as any)?.role
+  const canEdit = role === "ADMIN" || role === "LOGISTICS"  // MER = read-only
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)
@@ -53,12 +57,16 @@ export default function MasterDescriptionPage() {
           <h1 className="text-2xl font-bold text-gray-900">MASTER DESCRIPTION</h1>
           <p className="text-xs text-gray-400 mt-0.5">WT CHARGE/PC (KG) — used to calculate Gross Weight</p>
         </div>
-        <button onClick={() => setAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
-          + ADD
-        </button>
+        {canEdit ? (
+          <button onClick={() => setAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
+            + ADD
+          </button>
+        ) : (
+          <span className="text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full font-medium">👁 Read only</span>
+        )}
       </div>
 
-      {adding && (
+      {canEdit && adding && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
           <h3 className="font-semibold text-sm text-blue-800">NEW DESCRIPTION</h3>
           <div className="grid grid-cols-2 gap-3">
@@ -91,15 +99,15 @@ export default function MasterDescriptionPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {["DESCRIPTION","WT CHARGE/PC (KG)","ACTIONS"].map(h =>
+              {["DESCRIPTION","WT CHARGE/PC (KG)",...(canEdit ? ["ACTIONS"] : [])].map(h =>
                 <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {loading && <tr><td colSpan={3} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+            {loading && <tr><td colSpan={canEdit ? 3 : 2} className="text-center py-10 text-gray-400">Loading...</td></tr>}
             {!loading && items.map(item => (
               <tr key={item.id} className="hover:bg-gray-50">
-                {editId === item.id ? (
+                {canEdit && editId === item.id ? (
                   <>
                     <td className="px-4 py-2">
                       <input value={editData.name} onChange={e => setEditData(d => ({...d, name: e.target.value}))}
@@ -118,16 +126,18 @@ export default function MasterDescriptionPage() {
                   <>
                     <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
                     <td className="px-4 py-3 text-gray-700">{item.weightPerUnit}</td>
-                    <td className="px-4 py-3 flex gap-2">
-                      <button onClick={() => startEdit(item)} className="text-xs text-blue-600 hover:underline">EDIT</button>
-                      <button onClick={() => deleteItem(item.id)} className="text-xs text-red-500 hover:underline">DELETE</button>
-                    </td>
+                    {canEdit && (
+                      <td className="px-4 py-3 flex gap-2">
+                        <button onClick={() => startEdit(item)} className="text-xs text-blue-600 hover:underline">EDIT</button>
+                        <button onClick={() => deleteItem(item.id)} className="text-xs text-red-500 hover:underline">DELETE</button>
+                      </td>
+                    )}
                   </>
                 )}
               </tr>
             ))}
             {!loading && items.length === 0 && (
-              <tr><td colSpan={3} className="text-center py-10 text-gray-400">No descriptions — click + ADD to start</td></tr>
+              <tr><td colSpan={canEdit ? 3 : 2} className="text-center py-10 text-gray-400">No descriptions{canEdit ? " — click + ADD to start" : ""}</td></tr>
             )}
           </tbody>
         </table>
