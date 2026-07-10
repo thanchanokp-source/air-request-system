@@ -396,7 +396,11 @@ export default function RequestsPage() {
                 <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
                   className="font-bold text-blue-700 hover:underline text-sm shrink-0">{dg.request.documentNo}</Link>
                 <AggBadge rows={dg.styles.flatMap((s: any) => s.rows)} />
-                <span className="text-xs text-gray-500 truncate">{dg.request.brandName} · {dg.request.buName}</span>
+                {(() => {
+                  const brands = [...new Set(dg.styles.flatMap((s: any) => s.rows).map((r: any) => r.brand).filter(Boolean))]
+                  const label = brands.length ? brands.join(", ") : dg.request.brandName
+                  return <span className="text-xs text-gray-500 truncate" title={label}>{label} · {dg.request.buName}</span>
+                })()}
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
                   <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
                 )}

@@ -183,6 +183,7 @@ model AirRequestItem {
   hawbGroupId          String?
   style                String
   so                   String
+  brand                String?
   sub                  String?
   customerPO           String?
   description          String?

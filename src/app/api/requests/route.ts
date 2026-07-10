@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
             return {
               style: String(col(item, "STYLE") || ""),
               so: String(col(item, "SO") || ""),
+              brand: String(col(item, "Brand name") || col(item, "BRAND") || "") || null,
               sub: String(col(item, "SUB") || "") || null,
               customerPO: String(col(item, "CUSTOMER PO") || ""),
               description: String(col(item, "DESCRIPTION") || ""),
