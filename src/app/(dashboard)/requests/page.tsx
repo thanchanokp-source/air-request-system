@@ -200,7 +200,7 @@ export default function RequestsPage() {
     ["SO",""],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
     ["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],
-    ["FACTORY",""],["COUNTRY",""],["PORT",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],["REASON","min-w-[130px]"],
+    ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],
     ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"]
   ] as [string,string][]
 
@@ -373,7 +373,6 @@ export default function RequestsPage() {
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF} />
           <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF} />
-          <MultiSelect label="All Port" options={ports} value={portF} onChange={setPortF} />
           <MultiSelect label="All Country" options={countries} value={countryF} onChange={setCountryF} />
           <MultiSelect label="Claim Dept" options={activeBu === "GW" ? ["SCM NYK","SCM NYG","GW","SUPPLIER"] : ["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"]} value={claimF} onChange={setClaimF} />
           <MultiSelect label="Invoice No..." options={invoices} value={invoiceF} onChange={setInvoiceF} />
@@ -453,14 +452,12 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(row.actualAirFreight)}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.factory}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.country}</td>
-                                    <td className="px-3 py-2 whitespace-nowrap">{row.port}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">
                                       {getSplits(row).length > 0
                                         ? getSplits(row).map((s: any) => `${s.dept}${s.pct != null ? ` ${s.pct}%` : ""}`).join(" · ")
                                         : "-"}
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.invoiceNo || "-"}</td>
-                                    <td className="px-3 py-2 max-w-[150px] truncate" title={row.reasonDelay}>{row.reasonDelay || "-"}</td>
                                     <td className="px-3 py-2"><SoBadge s={row.itemStatus} docStatus={row.request.status} /></td>
                                     <td className="px-3 py-2"><CurrentStepBadge docStatus={row.request.status} itemStatus={row.itemStatus} /></td>
                                   </tr>

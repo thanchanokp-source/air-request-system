@@ -145,6 +145,9 @@ function ItemPage({ req, item }: { req: any; item: any }) {
   const claimText = splits.length
     ? splits.map((sp: any) => `${sp.dept} ${sp.pct}%`).join(",  ")
     : ((isGW ? req.claimDepartment : item.claimDepartment) || "-")
+  // Reason now comes from the claim splits (REASON 1/2/3); fall back to the legacy
+  // reasonDelay for documents uploaded before that column was removed.
+  const reasonText = (splits.map((sp: any) => sp.reason).filter(Boolean).join("; ")) || item.reasonDelay || "-"
 
   const est = Number(item.airFreight) || 0
   const actual = item.actualAirFreight != null ? Number(item.actualAirFreight) : null
@@ -187,7 +190,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
             return base ? base.split(".")[0] : "-"
           })()],
           ["Factory", item.factory || "-"],
-          ["Country / Port", `${item.country || "-"} / ${item.port || "-"}`],
+          ["Country", item.country || "-"],
         ] as [string, string][]).map(([l, v]) => (
           <View key={l} style={s.gcell}>
             <Text style={s.glabel}>{l} :</Text>
@@ -196,7 +199,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
         ))}
         <View style={s.gcellFull}>
           <Text style={s.glabel}>Reason :</Text>
-          <Text style={s.gval}>{item.reasonDelay || "-"}</Text>
+          <Text style={s.gval}>{reasonText}</Text>
         </View>
       </View>
 
@@ -246,7 +249,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
 
       {/* Claim + remarks */}
       <Text style={s.remark}><Text style={s.remarkLabel}>Claim to : </Text>{claimText}</Text>
-      <Text style={s.remark}><Text style={s.remarkLabel}>Additional Remarks : </Text>{item.reasonDelay || "-"}</Text>
+      <Text style={s.remark}><Text style={s.remarkLabel}>Additional Remarks : </Text>{reasonText}</Text>
 
       {/* Total box — amount with THB inline */}
       <View style={s.totalBoxWrap}>

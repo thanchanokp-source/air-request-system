@@ -161,7 +161,6 @@ export default function ApprovalsPage() {
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF} />
           <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF} />
-          <MultiSelect label="All Port" options={ports} value={portF} onChange={setPortF} />
           <MultiSelect label="All Country" options={countries} value={countryF} onChange={setCountryF} />
           <MultiSelect label="Claim Dept" options={claimDeptOptions} value={claimF} onChange={setClaimF} />
           <MultiSelect label="Invoice No..." options={invoices} value={invoiceF} onChange={setInvoiceF} />
@@ -208,7 +207,7 @@ export default function ApprovalsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b">
-                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["MY CLAIM (THB)"] : []),"REASON","FACTORY","COUNTRY","PORT","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
+                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["MY CLAIM (THB)"] : []),"FACTORY","COUNTRY","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
@@ -228,10 +227,8 @@ export default function ApprovalsPage() {
                         <td className="px-3 py-1.5 text-blue-700">{fmtNum(item.airFreight)}</td>
                         <td className="px-3 py-1.5 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
                         {isClaimRole && <td className="px-3 py-1.5 font-bold text-red-700 whitespace-nowrap">{fmtNum(myClaimForItem(item))} ฿</td>}
-                        <td className="px-3 py-1.5 whitespace-nowrap">{item.reasonDelay}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.factory}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.country}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">{item.port}</td>
                         <td className="px-3 py-1.5"><ClaimSplitBadges item={item} /></td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.invoiceNo || "-"}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.hawbNo || "-"}</td>

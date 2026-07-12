@@ -104,7 +104,7 @@ export default function FilesPage() {
   const [shipF, setShipF] = useState<string[]>([])
   // LG-friendly SO view: flat list grouped by Port / Ship Date for bulk booking.
   const [soView, setSoView] = useState(false)
-  const [groupBy, setGroupBy] = useState<"port" | "shipdate" | "none">("port")
+  const [groupBy, setGroupBy] = useState<"port" | "shipdate" | "none">("shipdate")
 
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => {
@@ -379,7 +379,7 @@ export default function FilesPage() {
               {soView && (
                 <div className="flex items-center gap-1 text-xs">
                   <span className="text-gray-400">Group:</span>
-                  {([["port","Port"],["shipdate","Ship Date"],["none","None"]] as [any,string][]).map(([k,lbl]) => (
+                  {([["shipdate","Ship Date"],["none","None"]] as [any,string][]).map(([k,lbl]) => (
                     <button key={k} onClick={() => setGroupBy(k)}
                       className={`px-2 py-1 rounded font-medium ${groupBy === k ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{lbl}</button>
                   ))}
@@ -402,7 +402,6 @@ export default function FilesPage() {
           <div className="px-5 py-3 border-b border-gray-100 flex items-start gap-2 flex-wrap">
             <span className="text-xs font-semibold text-gray-500 mt-2 shrink-0">FILTERS</span>
             <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 min-w-0">
-              <MultiSelect label="Port..." options={portOpts} value={portF} onChange={setPortF} />
               <MultiSelect label="Ship Date..." options={shipOpts} value={shipF} onChange={setShipF} />
               <MultiSelect label="All Brand" options={brandOpts} value={brandF} onChange={setBrandF} />
               <MultiSelect label="SO..." options={soOpts} value={soF} onChange={setSoF} />
@@ -455,7 +454,7 @@ export default function FilesPage() {
                         <thead>
                           <tr className="text-gray-400">
                             {combineMode && <th className="py-1.5 pl-5 pr-2 w-6"></th>}
-                            {["SO","Style","Document","Brand","BU","Port","Ship Date","QTY Air","Booking",""].map(h =>
+                            {["SO","Style","Document","Brand","BU","Ship Date","QTY Air","Booking",""].map(h =>
                               <th key={h} className={`py-1.5 px-3 font-medium whitespace-nowrap ${h === "QTY Air" ? "text-right" : "text-left"} ${!combineMode && h === "SO" ? "pl-5" : ""}`}>{h}</th>)}
                           </tr>
                         </thead>
@@ -478,7 +477,6 @@ export default function FilesPage() {
                                 <td className="py-1.5 px-3 text-blue-700 whitespace-nowrap">{req.documentNo}</td>
                                 <td className="py-1.5 px-3 text-gray-500 whitespace-nowrap">{req.brandName}</td>
                                 <td className="py-1.5 px-3"><span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${req.bu === "GW" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{req.bu}</span></td>
-                                <td className="py-1.5 px-3 whitespace-nowrap">{item.port || "-"}</td>
                                 <td className="py-1.5 px-3 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                                 <td className="py-1.5 px-3 text-right tabular-nums font-semibold text-gray-700">{fmtNum(item.qtyRequestAir)}</td>
                                 <td className="py-1.5 px-3">

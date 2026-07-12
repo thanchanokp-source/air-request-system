@@ -544,8 +544,8 @@ export default function DashboardPage() {
   const brandQty   = useMemo(()=>buildQty(filtered,r=>soBrand(r)),[filtered])
   const brandDelay = useMemo(()=>buildDelay(filtered,r=>soBrand(r)),[filtered])
 
-  const cRows = (r:any) => drillCountry ? r.country===drillCountry : true
-  const cKey  = (r:any) => drillCountry ? r.port : r.country
+  const cRows = (_r:any) => true
+  const cKey  = (r:any) => r.country
   const countryCost  = useMemo(()=>buildCost(filtered.filter(cRows),cKey),[filtered,drillCountry])
   const countryQty   = useMemo(()=>buildQty(filtered.filter(cRows),cKey),[filtered,drillCountry])
   const countryDelay = useMemo(()=>buildDelay(filtered.filter(cRows),cKey),[filtered,drillCountry])
@@ -615,10 +615,9 @@ export default function DashboardPage() {
         "ACTUAL (THB)":   row.actualAirFreight ?? 0,
         "VAR%":           vp != null ? Number(vp.toFixed(1)) : "",
         "COUNTRY":        row.country,
-        "PORT":           row.port,
         "FACTORY":        row.factory,
         "CLAIM DEPT":     (getSplits(row).map((s:any)=>`${s.dept}${s.pct!=null?` ${s.pct}%`:""}`).join(" · ")) || (row.claimDepartment ?? ""),
-        "DELAY REASON":   ([...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))].join(" · ")) || (row.reasonDelay ?? ""),
+        "REASON":         ([...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))].join(" · ")),
         "STATUS":         row.request.status,
       }
     })
@@ -700,10 +699,6 @@ export default function DashboardPage() {
           </select>
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF}/>
           <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF}/>
-          <select value={portFilter} onChange={e=>setPortFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
-            <option value="">All Port</option>
-            {ports.map((p:any)=><option key={p} value={p}>{p}</option>)}
-          </select>
           <select value={countryFilter} onChange={e=>setCountryFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
             <option value="">All Country</option>
             {countries.map((c:any)=><option key={c} value={c}>{c}</option>)}
@@ -741,13 +736,10 @@ export default function DashboardPage() {
         <DelayBar data={brandDelay} rows={filtered} groupFn={(r:any)=>soBrand(r)} height={H}/>
       </div>
 
-      {/* ── Row 3: By Country → Port ─────────────────────────────────────── */}
-      <SectionRow label={drillCountry ? `By Port — ${drillCountry}` : "By Country → Port"}/>
+      {/* ── Row 3: By Country ────────────────────────────────────────────── */}
+      <SectionRow label="By Country"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <CostBar data={countryCost} height={H}
-          drillLabel={drillCountry||undefined}
-          onBarClick={!drillCountry?(name)=>setDrillCountry(name):undefined}
-          onBack={drillCountry?()=>setDrillCountry(null):undefined}/>
+        <CostBar data={countryCost} height={H}/>
         <QtyBar   data={countryQty}   height={H}/>
         <DelayBar data={countryDelay} rows={filtered.filter(cRows)} groupFn={cKey} height={H}/>
       </div>
@@ -790,12 +782,12 @@ export default function DashboardPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","BRAND","BU","ORIG. DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","VAR%","COUNTRY","PORT","CLAIM DEPT","DELAY REASON"].map(h=>
+              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","BRAND","BU","ORIG. DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","VAR%","COUNTRY","CLAIM DEPT","REASON"].map(h=>
                 <th key={h} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && <tr><td colSpan={16} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+              {loading && <tr><td colSpan={15} className="text-center py-10 text-gray-400">Loading...</td></tr>}
               {!loading && filtered.map((row,i)=>{
                 const ar = row.qtyOriginalShipment>0 ? row.qtyRequestAir/row.qtyOriginalShipment*100 : 0
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
@@ -820,13 +812,12 @@ export default function DashboardPage() {
                       {vp!=null&&<span className={`font-medium ${vp>10?"text-red-600":vp<-10?"text-green-600":"text-gray-500"}`}>{fmtPct(vp)}</span>}
                     </td>
                     <td className="px-3 py-1.5">{row.country}</td>
-                    <td className="px-3 py-1.5">{row.port}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const sp=getSplits(row);return sp.length?sp.map((s:any)=>`${s.dept}${s.pct!=null?` ${s.pct}%`:""}`).join(" · "):(row.claimDepartment||"-")})()}</td>
-                    <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const rs=[...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))];const txt=rs.length?rs.join(" · "):(row.reasonDelay||"-");return <span className="truncate block" title={txt}>{txt}</span>})()}</td>
+                    <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const rs=[...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))];const txt=rs.length?rs.join(" · "):"-";return <span className="truncate block" title={txt}>{txt}</span>})()}</td>
                   </tr>
                 )
               })}
-              {!loading&&filtered.length===0&&<tr><td colSpan={16} className="text-center py-10 text-gray-400">No data</td></tr>}
+              {!loading&&filtered.length===0&&<tr><td colSpan={15} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
           </table>
         </div>

@@ -773,14 +773,14 @@ export default function RequestDetailPage() {
         "HAWB#": it.hawbNo || "", "INVOICE NO": it.invoiceNo || "",
         "EST. FREIGHT (THB)": it.airFreight ?? "", "ACTUAL (THB)": r.actual,
         "CLAIM %": r.pct, "MY EST (THB)": r.myEst, "MY CLAIM (THB)": r.amt,
-        "PLAN DATE": fmtDate(it.planShipmentDate), "DELAY REASON": it.reasonDelay || "",
-        "FACTORY": it.factory || "", "COUNTRY": it.country || "", "PORT": it.port || "",
+        "PLAN DATE": fmtDate(it.planShipmentDate),
+        "FACTORY": it.factory || "", "COUNTRY": it.country || "",
       }
     })
     rows.push({ "No.": "", "SO": "TOTAL", "STYLE": "", "CUSTOMER PO": "", "QTY AIR": claimTotals.qty,
       "GROSS (KG)": "", "HAWB#": "", "INVOICE NO": "", "EST. FREIGHT (THB)": claimTotals.est,
       "ACTUAL (THB)": claimTotals.actual, "CLAIM %": "", "MY EST (THB)": claimTotals.myEst, "MY CLAIM (THB)": claimTotals.amt,
-      "PLAN DATE": "", "DELAY REASON": "", "FACTORY": "", "COUNTRY": "", "PORT": "" } as any)
+      "PLAN DATE": "", "FACTORY": "", "COUNTRY": "" } as any)
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Claim")
@@ -1413,7 +1413,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -1430,10 +1430,8 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2">{fmtNum(item.grossWeight, 2)}</td>
                             <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
                             <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
-                            <td className="px-3 py-2">{item.reasonDelay}</td>
                             <td className="px-3 py-2">{item.factory}</td>
                             <td className="px-3 py-2">{item.country}</td>
-                            <td className="px-3 py-2">{item.port}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1550,7 +1548,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50"><tr>
-                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY REASON","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
+                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-gray-50">
@@ -1560,7 +1558,6 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                             <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
-                            <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "-"}</td>
                             <td className="px-3 py-2">{item.airFreight != null ? Number(item.airFreight).toLocaleString() : "-"}</td>
@@ -1668,7 +1665,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50"><tr>
-                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY REASON","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
+                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-gray-50">
@@ -1678,7 +1675,6 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                             <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
-                            <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "-"}</td>
                             <td className="px-3 py-2">{item.airFreight != null ? Number(item.airFreight).toLocaleString() : "-"}</td>
@@ -1796,7 +1792,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","CLAIM DEPT","REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","CLAIM DEPT","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -1813,10 +1809,8 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2">{fmtNum(item.grossWeight, 2)}</td>
                             <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
                             <td className="px-3 py-2">{req.claimDepartment ?? "-"}</td>
-                            <td className="px-3 py-2">{item.reasonDelay}</td>
                             <td className="px-3 py-2">{item.factory}</td>
                             <td className="px-3 py-2">{item.country}</td>
-                            <td className="px-3 py-2">{item.port}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1851,7 +1845,7 @@ export default function RequestDetailPage() {
                   "PLAN DATE": item.planShipmentDate ? new Date(item.planShipmentDate).toLocaleDateString("en-GB") : "",
                   "QTY ORIG": item.qtyOriginalShipment, "QTY AIR": item.qtyRequestAir,
                   "GROSS WEIGHT (KG)": item.grossWeight ?? "", "EST. AIR FREIGHT (THB)": item.airFreight ?? "",
-                  "FACTORY": item.factory || "", "COUNTRY": item.country || "", "PORT": item.port || "",
+                  "FACTORY": item.factory || "", "COUNTRY": item.country || "",
                   "CLAIM DEPT": (soClaimDepts[item.id] || []).map((d: any) => `${d.dept}:${d.pct}%`).join(", "), "SCM DELAY REASON": soClaimComments[item.id] || ""
                 }))
                 const ws = XLSX.utils.json_to_sheet(rows)
@@ -1941,7 +1935,7 @@ export default function RequestDetailPage() {
                 <table className="w-full text-xs whitespace-nowrap">
                   <thead className="bg-blue-50/60 border-b border-blue-100">
                     <tr>
-                      {["SO","SUB","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","FACTORY","COUNTRY","PORT","CLAIM DEPT","SCM DELAY REASON"].map(h =>
+                      {["SO","SUB","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","FACTORY","COUNTRY","CLAIM DEPT","SCM DELAY REASON"].map(h =>
                         <th key={h} className="px-3 py-2 text-left text-blue-700 font-medium">{h}</th>)}
                     </tr>
                   </thead>
@@ -1961,7 +1955,6 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 text-blue-700">{item.airFreight != null ? Number(item.airFreight).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "—"}</td>
                           <td className="px-3 py-2 text-gray-500">{item.factory || "—"}</td>
                           <td className="px-3 py-2 text-gray-500">{item.country || "—"}</td>
-                          <td className="px-3 py-2 text-gray-500">{item.port || "—"}</td>
                           <td className="px-3 py-2 min-w-[200px]" onClick={e => e.stopPropagation()}>
                             <div className="flex flex-col gap-1">
                               {dept.map((d: any) => (
@@ -2193,7 +2186,7 @@ export default function RequestDetailPage() {
               <div className="border border-gray-100 rounded-xl overflow-x-auto">
                 <table className="w-full text-xs whitespace-nowrap">
                   <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>{["SO","STYLE","DESCRIPTION","PLAN DATE","QTY ORIG","QTY AIR","GROSS WT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                    <tr>{["SO","STYLE","DESCRIPTION","PLAN DATE","QTY ORIG","QTY AIR","GROSS WT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","FACTORY","COUNTRY"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-400 font-medium">{h}</th>)}
                     </tr>
                   </thead>
@@ -2211,10 +2204,8 @@ export default function RequestDetailPage() {
                         <td className="px-3 py-2 text-green-700 font-semibold">{item.actualAirFreight != null ? fmtThb(item.actualAirFreight) : ""}</td>
                         <td className="px-3 py-2 text-gray-600">{item.invoiceNo || ""}</td>
                         <td className="px-3 py-2 text-gray-600">{item.hawbNo || ""}</td>
-                        <td className="px-3 py-2 text-amber-700 max-w-[160px] truncate" title={item.reasonDelay || item.itemComment || ""}>{item.reasonDelay || item.itemComment || "-"}</td>
                         <td className="px-3 py-2 text-gray-600">{item.factory || "-"}</td>
                         <td className="px-3 py-2 text-gray-600">{item.country || "-"}</td>
-                        <td className="px-3 py-2 text-gray-600">{item.port || "-"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -2223,7 +2214,7 @@ export default function RequestDetailPage() {
                       <td colSpan={7} className="px-3 py-2 text-right text-xs font-semibold text-gray-500">PROCUREMENT SUBTOTAL</td>
                       <td className="px-3 py-2 text-blue-700 font-bold text-xs">{fmtThb(activeItems.reduce((s: number, i: any) => s + (i.airFreight || 0), 0))}</td>
                       <td className="px-3 py-2 text-green-700 font-bold text-xs">{activeItems.some((i: any) => i.actualAirFreight != null) ? fmtThb(activeItems.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)) : ""}</td>
-                      <td colSpan={6} />
+                      <td colSpan={4} />
                     </tr>
                   </tfoot>
                 </table>
@@ -2545,7 +2536,7 @@ export default function RequestDetailPage() {
                     <div className="border-t border-gray-100 overflow-x-auto">
                       <table className="text-xs w-full">
                         <thead className="bg-gray-50">
-                          <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","CLAIM DEPT","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                          <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","CLAIM DEPT","FACTORY","COUNTRY"].map(h =>
                             <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                           </tr>
                         </thead>
@@ -2565,10 +2556,8 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 whitespace-nowrap">{item.invoiceNo || "—"}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "—"}</td>
                             <td className="px-3 py-2">{item.claimDepartment || "—"}</td>
-                            <td className="px-3 py-2">{item.reasonDelay || "—"}</td>
                             <td className="px-3 py-2">{item.factory || "—"}</td>
                             <td className="px-3 py-2">{item.country || "—"}</td>
-                            <td className="px-3 py-2">{item.port || "—"}</td>
                           </tr>
                         </tbody>
                       </table>
@@ -2766,8 +2755,6 @@ export default function RequestDetailPage() {
               { h: "EST. (THB)", get: it => fmtNum(it.airFreight) },
               { h: "FACTORY", get: it => it.factory || "-" },
               { h: "COUNTRY", get: it => it.country || "-" },
-              { h: "PORT", get: it => it.port || "-" },
-              { h: "DELAY REASON", get: it => it.reasonDelay || "-" },
               { h: "HAWB#", get: it => it.hawbNo || "-" },
               { h: "INVOICE", get: it => it.invoiceNo || "-" },
               { h: "BOOKING DATE", get: it => fmtDate(it.bookingDate) },
@@ -2848,7 +2835,7 @@ export default function RequestDetailPage() {
                       <div className="overflow-x-auto">
                         <table className="text-xs w-full">
                           <thead className="bg-gray-50">
-                            <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                            <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                               <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                             </tr>
                           </thead>
@@ -2868,10 +2855,8 @@ export default function RequestDetailPage() {
                               <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
                               <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "-"}</td>
                               <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
-                              <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                               <td className="px-3 py-2">{item.factory}</td>
                               <td className="px-3 py-2">{item.country}</td>
-                              <td className="px-3 py-2">{item.port}</td>
                             </tr>
                           </tbody>
                         </table>
@@ -3354,7 +3339,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -3374,10 +3359,8 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "-"}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
-                          <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                           <td className="px-3 py-2">{item.factory}</td>
                           <td className="px-3 py-2">{item.country}</td>
-                          <td className="px-3 py-2">{item.port}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -3575,7 +3558,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","DELAY REASON","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -3595,10 +3578,8 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "-"}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
-                          <td className="px-3 py-2">{item.reasonDelay || "-"}</td>
                           <td className="px-3 py-2">{item.factory}</td>
                           <td className="px-3 py-2">{item.country}</td>
-                          <td className="px-3 py-2">{item.port}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -3767,7 +3748,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","FACTORY","COUNTRY","PORT"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -3788,7 +3769,6 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                           <td className="px-3 py-2">{item.factory}</td>
                           <td className="px-3 py-2">{item.country}</td>
-                          <td className="px-3 py-2">{item.port}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -3881,7 +3861,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                       <table className="text-xs w-full">
                         <thead className="bg-gray-50">
-                          <tr>{["SO","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","INVOICE NO","BOOKING DATE","COUNTRY","PORT"].map(h =>
+                          <tr>{["SO","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","INVOICE NO","BOOKING DATE","COUNTRY"].map(h =>
                             <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                           </tr>
                         </thead>
@@ -3895,7 +3875,6 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                             <td className="px-3 py-2">{item.country}</td>
-                            <td className="px-3 py-2">{item.port}</td>
                           </tr>
                         </tbody>
                       </table>
@@ -3943,7 +3922,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                       <table className="text-xs w-full">
                         <thead className="bg-gray-50">
-                          <tr>{["SO","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","INV NO","BOOKING DATE","COUNTRY","PORT"].map(h =>
+                          <tr>{["SO","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","INV NO","BOOKING DATE","COUNTRY"].map(h =>
                             <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                           </tr>
                         </thead>
@@ -3957,7 +3936,6 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2">{item.invoiceNo || "-"}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                             <td className="px-3 py-2">{item.country}</td>
-                            <td className="px-3 py-2">{item.port}</td>
                           </tr>
                         </tbody>
                       </table>
@@ -4254,7 +4232,7 @@ export default function RequestDetailPage() {
                         onChange={e => setLgSelectedSoIds(e.target.checked ? new Set(allLgItems.map((i: any) => i.id)) : new Set())}
                         className="accent-orange-500" />
                     </th>
-                    {["SO No.","Sub","Style","Customer PO","Description","QTY Orig","QTY Air","Weight (KG)","Est. Freight (THB)","Country","Port","Factory","INV NO.","Actual Freight (THB)"].map(h =>
+                    {["SO No.","Sub","Style","Customer PO","Description","QTY Orig","QTY Air","Weight (KG)","Est. Freight (THB)","Country","Factory","INV NO.","Actual Freight (THB)"].map(h =>
                       <th key={h} className={`px-3 py-2 text-left text-orange-700 font-medium sticky top-0 bg-orange-50 border-b border-orange-100 ${h === "SO No." ? "left-10 z-20" : "z-10"}`}>{h}</th>)}
                   </tr>
                 </thead>
@@ -4308,7 +4286,6 @@ export default function RequestDetailPage() {
                         <td className="px-3 py-2 text-blue-700">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "—"}</td>
                         <td className="px-3 py-2 text-blue-700">{item.airFreight != null ? Number(item.airFreight).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "—"}</td>
                         <td className="px-3 py-2 text-gray-500">{item.country || "—"}</td>
-                        <td className="px-3 py-2 text-gray-500">{item.port || "—"}</td>
                         <td className="px-3 py-2 text-gray-500">{item.factory || "—"}</td>
                         <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
@@ -4922,7 +4899,7 @@ export default function RequestDetailPage() {
                               checked={pendingScmItems.length > 0 && pendingScmItems.every((i: any) => scmSelectedIds.has(i.id))}
                               onChange={e => setScmSelectedIds(e.target.checked ? new Set(pendingScmItems.map((i: any) => i.id)) : new Set())} />
                           </th>
-                          {["SO","SUB","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","FACTORY","COUNTRY","PORT","MER REASON",
+                          {["SO","SUB","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","FACTORY","COUNTRY",
                             "CLAIM DEPT 1","%CLAIM1","REASON 1",
                             "CLAIM DEPT 2","%CLAIM2","REASON 2",
                             "CLAIM DEPT 3","%CLAIM3","REASON 3",""].map(h =>
@@ -4949,8 +4926,6 @@ export default function RequestDetailPage() {
                               <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
                               <td className="px-3 py-2 text-gray-500">{item.factory || "—"}</td>
                               <td className="px-3 py-2 text-gray-500">{item.country || "—"}</td>
-                              <td className="px-3 py-2 text-gray-500">{item.port || "—"}</td>
-                              <td className="px-3 py-2 text-orange-600">{item.reasonDelay || "—"}</td>
                               {[0,1,2].map(n => {
                                 const d = dept[n]
                                 const cellColor = d ? (isItemReady ? "text-green-800" : deptTotal !== 100 ? "text-amber-700" : "text-gray-700") : "text-gray-300"
@@ -5127,14 +5102,14 @@ export default function RequestDetailPage() {
           <div className="overflow-x-auto">
             <table className="text-xs w-full">
               <thead className="bg-gray-50 border-b">
-                <tr>{([["STYLE","min-w-[110px]"],["SO","min-w-[90px]"],["CUSTOMER PO","min-w-[110px]"],["DESCRIPTION","min-w-[160px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],["QTY ORIG","min-w-[75px]"],["QTY AIR","min-w-[70px]"],["GROSS WEIGHT (KG)","min-w-[110px]"],["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],["CLAIM DEPT","min-w-[110px]"],["REASON","min-w-[120px]"],["FACTORY","min-w-[70px]"],["COUNTRY","min-w-[110px]"],["PORT","min-w-[110px]"],["STATUS","min-w-[110px]"]] as [string,string][]).map(([h,w]) =>
+                <tr>{([["STYLE","min-w-[110px]"],["SO","min-w-[90px]"],["CUSTOMER PO","min-w-[110px]"],["DESCRIPTION","min-w-[160px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],["QTY ORIG","min-w-[75px]"],["QTY AIR","min-w-[70px]"],["GROSS WEIGHT (KG)","min-w-[110px]"],["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],["CLAIM DEPT","min-w-[110px]"],["FACTORY","min-w-[70px]"],["COUNTRY","min-w-[110px]"],["STATUS","min-w-[110px]"]] as [string,string][]).map(([h,w]) =>
                   <th key={h} className={`px-2 py-2 text-left text-gray-600 whitespace-nowrap ${w}`}>{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y text-gray-800">
                 {req.items?.map((item: any) => (
                   <tr key={item.id} className={`hover:bg-gray-50 ${item.itemStatus === "REJECTED" ? "opacity-40" : ""}`}>
-                    {["style","so","customerPO","description","originalShipmentDate","planShipmentDate","qtyOriginalShipment","qtyRequestAir","grossWeight","airFreight","actualAirFreight","claimDepartment","reasonDelay","factory","country","port"].map(f => (
+                    {["style","so","customerPO","description","originalShipmentDate","planShipmentDate","qtyOriginalShipment","qtyRequestAir","grossWeight","airFreight","actualAirFreight","claimDepartment","factory","country"].map(f => (
                       <td key={f} className="px-2 py-1.5 whitespace-nowrap">
                         {f.includes("Date") ? fmtDate(item[f])
                           : f === "grossWeight" ? fmtNum(item[f], 2)
