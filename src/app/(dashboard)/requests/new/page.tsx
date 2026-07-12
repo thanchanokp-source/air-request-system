@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import * as XLSX from "xlsx"
 
+// Port is no longer used — freight rate is keyed by Brand + Country.
 const NYG_REQUIRED = [
   "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
   "Original Shipment Date", "Plan Shipment Date",
   "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
-  "Factory", "Country", "Port", "WEIGHT(KG)",
+  "Factory", "Country", "WEIGHT(KG)",
   "Brand name", "BU",
 ]
 
@@ -16,7 +17,7 @@ const GW_REQUIRED = [
   "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
   "Original Shipment Date", "Plan Shipment Date",
   "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
-  "Factory", "Country", "Port", "WEIGHT(KG)",
+  "Factory", "Country", "WEIGHT(KG)",
   "Brand name", "BU",
 ]
 
