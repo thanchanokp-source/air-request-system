@@ -1,8 +1,12 @@
 "use client"
 import { useEffect, useState, useMemo, useRef } from "react"
+import { useSession } from "next-auth/react"
 import * as XLSX from "xlsx"
 
 export default function MasterRatePage() {
+  const { data: session } = useSession()
+  const role = (session?.user as any)?.role
+  const canEdit = ["ADMIN", "LOGISTICS", "LOGISTICS_GW"].includes(role)   // MER = read-only
   const [rates, setRates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState("")
@@ -81,14 +85,18 @@ export default function MasterRatePage() {
           <h1 className="text-2xl font-bold text-gray-900">MASTER RATE</h1>
           <p className="text-xs text-gray-400 mt-0.5">Air freight rate by Brand + Country (THB/KG) — Est. Air Freight = Gross Weight × Rate</p>
         </div>
-        <div className="flex items-center gap-2">
-          <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onImport} className="hidden" />
-          <button onClick={() => fileRef.current?.click()} disabled={importing}
-            className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-100 disabled:opacity-50">
-            {importing ? "Importing…" : "⬆ Import Excel"}
-          </button>
-          <button onClick={() => setAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">+ ADD</button>
-        </div>
+        {canEdit ? (
+          <div className="flex items-center gap-2">
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onImport} className="hidden" />
+            <button onClick={() => fileRef.current?.click()} disabled={importing}
+              className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-100 disabled:opacity-50">
+              {importing ? "Importing…" : "⬆ Import Excel"}
+            </button>
+            <button onClick={() => setAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">+ ADD</button>
+          </div>
+        ) : (
+          <span className="text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full font-medium">👁 Read only</span>
+        )}
       </div>
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search brand or country…"
@@ -119,15 +127,15 @@ export default function MasterRatePage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {["CUSTOMER / BRAND","COUNTRY","RATE/KG (THB)","ACTIONS"].map(h =>
+              {["CUSTOMER / BRAND","COUNTRY","RATE/KG (THB)",...(canEdit ? ["ACTIONS"] : [])].map(h =>
                 <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {loading && <tr><td colSpan={4} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+            {loading && <tr><td colSpan={canEdit ? 4 : 3} className="text-center py-10 text-gray-400">Loading...</td></tr>}
             {!loading && filtered.map(p => (
               <tr key={p.id} className="hover:bg-gray-50">
-                {editId === p.id ? (
+                {canEdit && editId === p.id ? (
                   <>
                     <td className="px-4 py-2"><input value={editData.brand} onChange={e => setEditData(d => ({...d,brand:e.target.value}))} className="border rounded px-2 py-1 text-sm w-full" /></td>
                     <td className="px-4 py-2"><input value={editData.country} onChange={e => setEditData(d => ({...d,country:e.target.value}))} className="border rounded px-2 py-1 text-sm w-full" /></td>
@@ -142,16 +150,18 @@ export default function MasterRatePage() {
                     <td className="px-4 py-3 font-medium text-gray-900">{p.brand}</td>
                     <td className="px-4 py-3 text-gray-700">{p.country}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700">{p.ratePerKg.toLocaleString()}</td>
-                    <td className="px-4 py-3 flex gap-2">
-                      <button onClick={() => startEdit(p)} className="text-xs text-blue-600 hover:underline">EDIT</button>
-                      <button onClick={() => deleteRate(p.id)} className="text-xs text-red-500 hover:underline">DELETE</button>
-                    </td>
+                    {canEdit && (
+                      <td className="px-4 py-3 flex gap-2">
+                        <button onClick={() => startEdit(p)} className="text-xs text-blue-600 hover:underline">EDIT</button>
+                        <button onClick={() => deleteRate(p.id)} className="text-xs text-red-500 hover:underline">DELETE</button>
+                      </td>
+                    )}
                   </>
                 )}
               </tr>
             ))}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={4} className="text-center py-10 text-gray-400">{rates.length ? "No match" : "No rates — Import Excel or click + ADD"}</td></tr>
+              <tr><td colSpan={canEdit ? 4 : 3} className="text-center py-10 text-gray-400">{rates.length ? "No match" : (canEdit ? "No rates — Import Excel or click + ADD" : "No rates yet")}</td></tr>
             )}
           </tbody>
         </table>
