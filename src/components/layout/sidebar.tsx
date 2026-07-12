@@ -8,7 +8,7 @@ const nav = [
   { href: "/approvals", label: "APPROVALS" },
   { href: "/files", label: "ALL FILES" },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
-  { href: "/master/port", label: "MASTER PORT", roles: ["ADMIN", "LOGISTICS"] },
+  { href: "/master/port", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "MER_USER", "MER_GW"] },
   { href: "/master/description", label: "MASTER DESCRIPTION", roles: ["ADMIN", "LOGISTICS", "MER_USER"] }
 ]
 

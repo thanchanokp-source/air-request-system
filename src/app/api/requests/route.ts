@@ -104,22 +104,20 @@ export async function POST(req: NextRequest) {
       return item[k]
     }
 
-    const portNames = [...new Set(items.map((i: any) => String(col(i, "Port") || "").trim()).filter(Boolean))] as string[]
+    // Freight rate is keyed by BRAND + COUNTRY (MER selects the country; the port
+    // is not used). The same country can have different rates per brand.
+    const rateKey = (brand: string, country: string) => `${brand.trim().toUpperCase()}|${country.trim().toUpperCase()}`
+    const combos = [...new Map(items
+      .map((i: any) => ({ brand: String(col(i, "Brand name") || col(i, "BRAND") || "").trim(), country: String(col(i, "Country") || "").trim() }))
+      .filter((x: any) => x.brand && x.country)
+      .map((x: any) => [rateKey(x.brand, x.country), x])).values()] as { brand: string; country: string }[]
 
-    // Case-insensitive: normalize both sides to uppercase
-    const portList = await prisma.masterPort.findMany({ where: { isActive: true } })
-    const portRates: Record<string, number> = {}
-    for (const p of portList) portRates[p.port.trim().toUpperCase()] = p.ratePerKg
+    const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
+    const freightRates: Record<string, number> = {}
+    for (const r of rateList) freightRates[rateKey(r.brand, r.country)] = r.ratePerKg
 
-    const missingPorts = portNames.filter(p => !(p.toUpperCase() in portRates))
-    // Country per missing port (from the uploaded rows) so LG knows what to add.
-    const portToCountry: Record<string, string> = {}
-    for (const i of items) {
-      const p = String(col(i, "Port") || "").trim()
-      const c = String(col(i, "Country") || "").trim()
-      if (p && !portToCountry[p.toUpperCase()]) portToCountry[p.toUpperCase()] = c
-    }
-    const missingPortInfo = missingPorts.map(p => ({ port: p, country: portToCountry[p.toUpperCase()] || "-" }))
+    const missingRates = combos.filter(x => !(rateKey(x.brand, x.country) in freightRates))
+    const missingCountryInfo = missingRates
 
     const first = items[0]
     const docNo = await generateDocumentNo()
@@ -148,9 +146,11 @@ export async function POST(req: NextRequest) {
         } : {}),
         items: {
           create: items.map((item: any) => {
-            const port = String(col(item, "Port") || "").trim()
+            const port = String(col(item, "Port") || "").trim()   // kept for reference/display only
+            const country = String(col(item, "Country") || "").trim()
+            const itemBrand = String(col(item, "Brand name") || col(item, "BRAND") || "").trim()
             const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
-            const rate = portRates[port.toUpperCase()] || 0
+            const rate = freightRates[rateKey(itemBrand, country)] || 0
             const gw = parseFloat(String(col(item, "WEIGHT(KG)") || "0")) || 0
             // GW: read up to 3 claim splits from Excel (CLAIM DEPT 1/2/3 + %CLAIM + REASON)
             // airCost is computed at display time from actualAirFreight so it stays accurate.
@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
             return {
               style: String(col(item, "STYLE") || ""),
               so: String(col(item, "SO") || ""),
-              brand: String(col(item, "Brand name") || col(item, "BRAND") || "") || null,
+              brand: itemBrand || null,
               sub: String(col(item, "SUB") || "") || null,
               customerPO: String(col(item, "CUSTOMER PO") || ""),
               description: String(col(item, "DESCRIPTION") || ""),
@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
               qtyRequestAir: qty,
               reasonDelay: String(col(item, "Reason delay") || ""),
               factory: String(col(item, "Factory") || ""),
-              country: String(col(item, "Country") || ""),
+              country,
               port,
               grossWeight: gw,
               airFreight: gw * rate,
@@ -203,11 +203,11 @@ export async function POST(req: NextRequest) {
       console.error("[notify] send failed:", err)
     }
 
-    if (missingPorts.length > 0) {
+    if (missingRates.length > 0) {
       try {
         const APP_URL = process.env.APP_URL || "http://localhost:3000"
-        const portRowsHtml = missingPortInfo.map(x => `<tr>
-          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;font-weight:600">${x.port}</td>
+        const portRowsHtml = missingCountryInfo.map(x => `<tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;font-weight:600">${x.brand}</td>
           <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px">${x.country}</td>
           <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;color:#b45309">— add rate —</td>
         </tr>`).join("")
@@ -217,15 +217,15 @@ export async function POST(req: NextRequest) {
   <tr><td align="center">
     <table width="460" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
       <tr><td style="background:#b45309;padding:20px;text-align:center">
-        <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif">⚠ PORT RATE MISSING</p>
+        <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif">⚠ FREIGHT RATE MISSING</p>
         <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
       </td></tr>
       <tr><td style="padding:28px 32px">
-        <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">Document <strong>${docNo}</strong> has Port(s) with no Freight Rate in Master — Est. Air Freight cannot be calculated (shows 0).</p>
-        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 12px"><strong>Please add these Ports in Master &gt; Port</strong> (Port · Country · Rate THB/KG):</p>
+        <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">Document <strong>${docNo}</strong> has Brand/Country pair(s) with no Freight Rate in Master — Est. Air Freight cannot be calculated (shows 0).</p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 12px"><strong>Please add these in Master &gt; Rate</strong> (Brand · Country · Rate THB/KG):</p>
         <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 18px">
           <thead><tr style="background:#fef3c7">
-            <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">PORT</th>
+            <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">BRAND</th>
             <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">COUNTRY</th>
             <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">RATE (THB/KG)</th>
           </tr></thead>
@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
         </table>
         <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 20px">After adding the Rate, open the document and click <strong>Recalculate</strong> — the Est. Air Freight will then appear.</p>
         <div style="text-align:center">
-          <a href="__LINK__" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Master Port →</a>
+          <a href="__LINK__" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Master Rate →</a>
         </div>
       </td></tr>
       <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
@@ -243,7 +243,7 @@ export async function POST(req: NextRequest) {
   </td></tr>
 </table></body></html>`
 
-        const subject = `[Port Missing] ${docNo} — Port has no Freight Rate (${missingPorts.join(", ")})`
+        const subject = `[Freight Rate Missing] ${docNo} — no rate for (${missingRates.map(x => `${x.brand}/${x.country}`).join(", ")})`
         // Notify this BU's Logistics + Admin. Send a PERSONALISED magic link per
         // recipient so clicking logs THEM in (not whoever's browser session it is).
         const lgRoles = isGW ? ["LOGISTICS_GW"] : ["LOGISTICS"]
@@ -258,11 +258,11 @@ export async function POST(req: NextRequest) {
           await sendMail(u.email, subject, html.replace("__LINK__", link))
         }
       } catch (err) {
-        console.error("[notify] missing port email failed:", err)
+        console.error("[notify] missing freight-rate email failed:", err)
       }
     }
 
-    return NextResponse.json({ id: request.id, missingPorts })
+    return NextResponse.json({ id: request.id, missingRates })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

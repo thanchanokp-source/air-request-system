@@ -9,18 +9,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const role = (session.user as any).role
   if (!["ADMIN", "LOGISTICS", "LOGISTICS_GW"].includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   const { id } = await params
-  const { country, port, ratePerKg } = await req.json()
+  const { brand, country, ratePerKg } = await req.json()
   try {
     const rate = Number(ratePerKg) || 0
-    const item = await prisma.masterPort.update({
+    const item = await (prisma as any).masterFreightRate.update({
       where: { id },
-      data: { country, port, ratePerKg: rate }
+      data: { brand: String(brand).trim(), country: String(country).trim(), ratePerKg: rate }
     })
-    // Auto-recalc open documents using this port so Est. Air Freight updates now.
+    // Auto-recalc open documents matching this brand+country so Est. Air Freight updates now.
     let recalculated = 0
     if (rate > 0) {
       const affected = await (prisma.airRequestItem as any).findMany({
-        where: { port: { equals: port, mode: "insensitive" }, request: { status: { notIn: ["COMPLETED", "REJECTED"] } } },
+        where: {
+          brand: { equals: item.brand, mode: "insensitive" },
+          country: { equals: item.country, mode: "insensitive" },
+          request: { status: { notIn: ["COMPLETED", "REJECTED"] } },
+        },
         select: { id: true, grossWeight: true },
       })
       for (const it of affected) {
@@ -41,7 +45,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   if (role !== "ADMIN" && role !== "LOGISTICS") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   const { id } = await params
   try {
-    await prisma.masterPort.delete({ where: { id } })
+    await (prisma as any).masterFreightRate.delete({ where: { id } })
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

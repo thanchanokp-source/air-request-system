@@ -202,8 +202,8 @@ export default function NewRequestPage() {
     }
     setLoading(false)
     if (data.id) {
-      if (data.missingPorts?.length > 0) {
-        alert(`⚠️ The following Ports are not in Master — Est. Air Freight will be 0:\n\n${data.missingPorts.join(", ")}\n\nPlease add the Rate in Master > Port, then use Recalculate`)
+      if (data.missingRates?.length > 0) {
+        alert(`⚠️ The following Brand/Country pairs are not in Master — Est. Air Freight will be 0:\n\n${data.missingRates.map((x: any) => `${x.brand} / ${x.country}`).join("\n")}\n\nPlease add the Rate in Master > Rate, then use Recalculate`)
       }
       router.push(`/requests/${data.id}`)
     } else {
