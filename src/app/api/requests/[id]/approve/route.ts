@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange, notifyClaimNextPriority } from "@/lib/notify"
+import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition } from "@/lib/claim"
 
 const getClaimDept = (role: string) => {
@@ -57,6 +58,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const request = await prisma.airRequest.findUnique({ where: { id }, include: { items: true } })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
+
+  // Capture the approver's signature snapshot for any APPROVE-type action (not
+  // data entry, and not Logistics — Logistics is not a signatory). Centralised so
+  // every approve handler below records the stamp automatically.
+  const isLogisticsEntry = userRole === "LOGISTICS" || userRole === "LOGISTICS_GW"
+  if (isSignatureData(body.signatureData)
+      && SIG_APPROVE_ACTIONS.has(action) && !(action === "approve" && isLogisticsEntry)) {
+    await captureApprovalSignature({
+      requestId: id, userId, userRole,
+      name: (session.user as any).name || (session.user as any).email || "Approver",
+      email: (session.user as any).email || null,
+      signatureData: body.signatureData,
+      crNo: (request as any).crNo || body.crNo || null,
+      branch: (request as any).bu || null,
+    })
+  }
 
   const statusMap = NEXT_STATUS[request.status]
 

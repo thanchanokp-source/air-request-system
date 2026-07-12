@@ -8,6 +8,7 @@ import { ROLE_ACTIONS, STATUS_LABELS, STYLE_APPROVER_STATUSES } from "@/types"
 import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
+import SignatureModal from "@/components/signature-modal"
 import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -356,6 +357,12 @@ export default function RequestDetailPage() {
   const [req, setReq] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<string | null>(null)
+  // Signature gate — every APPROVE opens this popup; resolves with the signature
+  // data URI (or null if cancelled). The approve fetch then includes signatureData.
+  const [sigOpen, setSigOpen] = useState(false)
+  const sigResolver = useRef<((s: string | null) => void) | null>(null)
+  const askSignature = () => new Promise<string | null>(res => { sigResolver.current = res; setSigOpen(true) })
+  const resolveSig = (s: string | null) => { setSigOpen(false); const r = sigResolver.current; sigResolver.current = null; r?.(s) }
   const [comment, setComment] = useState("")
   const [itemActuals, setItemActuals] = useState<Record<string, string>>({})
   const [itemLogistics, setItemLogistics] = useState<Record<string, { invoiceNo: string, bookingDate: string }>>({})
@@ -939,10 +946,11 @@ export default function RequestDetailPage() {
   }
 
   const approveStyle = async (style: string) => {
+    const sig = await askSignature(); if (!sig) return
     setSubmitting(style)
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "approve_style", style, comment: "" })
+      body: JSON.stringify({ action: "approve_style", style, comment: "", signatureData: sig })
     })
     if (res.ok) setReq(await res.json())
     setSubmitting(null)
@@ -950,11 +958,13 @@ export default function RequestDetailPage() {
 
   const approveSelectedStyles = async () => {
     const toApprove = styleGroups.filter(g => (g.status === "PENDING" || g.status === "PASSED" || (presidentNewFlow && g.status === "VP_MER_PASSED")) && selectedStyles.has(g.style)).map(g => g.style)
+    if (toApprove.length === 0) return
+    const sig = await askSignature(); if (!sig) return
     for (const style of toApprove) {
       setSubmitting(style)
       const res = await fetch(`/api/requests/${id}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "approve_style", style, comment: "" })
+        body: JSON.stringify({ action: "approve_style", style, comment: "", signatureData: sig })
       })
       if (res.ok) setReq(await res.json())
     }
@@ -1031,6 +1041,7 @@ export default function RequestDetailPage() {
   }
 
   const claimForward = async (final: boolean, ids?: string[]) => {
+    const sig = await askSignature(); if (!sig) return
     setClaimFwdSaving(true)
     // Finalize/forward only the selected SO (per-SO forward). When nothing is
     // ticked, `ids` is undefined → the backend acts on all SO this actor owns.
@@ -1039,14 +1050,14 @@ export default function RequestDetailPage() {
       // Finish (final position) → finalize this dept's selected splits centrally.
       res = await fetch(`/api/requests/${id}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "finalize_claim_dept", itemIds: ids })
+        body: JSON.stringify({ action: "finalize_claim_dept", itemIds: ids, signatureData: sig })
       })
     } else {
       // Forward the selected SO subset to the next forced position (person free, position fixed).
       res = await fetch(`/api/requests/${id}/claim-forward`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name, branch: gwNeedsBranch ? gwBranchChoice : undefined, itemIds: ids })
+        body: JSON.stringify({ nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name, branch: gwNeedsBranch ? gwBranchChoice : undefined, itemIds: ids, signatureData: sig })
       })
     }
     if (res.ok) {
@@ -1062,10 +1073,11 @@ export default function RequestDetailPage() {
   }
 
   const claimForwardTo = async (email: string, name: string) => {
+    const sig = await askSignature(); if (!sig) return
     setClaimFwdSaving(true)
     const res = await fetch(`/api/requests/${id}/claim-forward`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ final: false, nextEmail: email, nextName: name })
+      body: JSON.stringify({ final: false, nextEmail: email, nextName: name, signatureData: sig })
     })
     if (res.ok) {
       setClaimFwdDone(`forwarded:${name}`)
@@ -1079,8 +1091,14 @@ export default function RequestDetailPage() {
   }
 
   const act = async (action: string) => {
+    // Signature required on approvals — but NOT Logistics (data entry, not a signatory).
+    let sig: string | null = null
+    if (action === "approve" && req.status !== "PENDING_LOGISTICS") {
+      sig = await askSignature(); if (!sig) return
+    }
     setSubmitting("_")
     const body: any = { action, comment }
+    if (sig) body.signatureData = sig
     if (req.status === "PENDING_SCM") {
       body.soClaimData = Object.fromEntries(
         pendingScmItems.filter((i: any) => {
@@ -1112,10 +1130,11 @@ export default function RequestDetailPage() {
   }
 
   const approveSo = async (soItemId: string) => {
+    const sig = await askSignature(); if (!sig) return
     setSubmitting(soItemId)
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "approve_so", itemId: soItemId })
+      body: JSON.stringify({ action: "approve_so", itemId: soItemId, signatureData: sig })
     })
     if (res.ok) setReq(await res.json())
     setSubmitting(null)
@@ -1167,6 +1186,7 @@ export default function RequestDetailPage() {
 
   return (
     <div className="space-y-5">
+      <SignatureModal open={sigOpen} onConfirm={(sig) => resolveSig(sig)} onCancel={() => resolveSig(null)} />
       {submitting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[260px]">
@@ -1561,10 +1581,11 @@ export default function RequestDetailPage() {
       {isPresidentRole && (
         <PresidentFinalCard req={req} bu="NYG" submitting={submitting === "_pres"}
           onApprove={async () => {
+            const sig = await askSignature(); if (!sig) return
             setSubmitting("_pres")
             const res = await fetch(`/api/requests/${id}/approve`, {
               method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "president_approve" })
+              body: JSON.stringify({ action: "president_approve", signatureData: sig })
             })
             if (res.ok) { window.location.href = "/approvals" }
             else { const e = await res.json().catch(()=>({})); alert(e.error || "Error"); setSubmitting(null) }
@@ -1679,10 +1700,11 @@ export default function RequestDetailPage() {
       {isPresidentGW && (
         <PresidentFinalCard req={req} bu="GW" submitting={submitting === "_pres"}
           onApprove={async () => {
+            const sig = await askSignature(); if (!sig) return
             setSubmitting("_pres")
             const res = await fetch(`/api/requests/${id}/approve`, {
               method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "president_approve_gw" })
+              body: JSON.stringify({ action: "president_approve_gw", signatureData: sig })
             })
             if (res.ok) { window.location.href = "/approvals" }
             else { const e = await res.json().catch(()=>({})); alert(e.error || "Error"); setSubmitting(null) }
@@ -1884,6 +1906,7 @@ export default function RequestDetailPage() {
                 return (
                   <button type="button" disabled={submitting === "_fwd_vpm"}
                     onClick={async () => {
+                      const sig = await askSignature(); if (!sig) return
                       setSubmitting("_fwd_vpm")
                       const depts: Record<string, {dept: string, pct: number}[]> = {}
                       const comments: Record<string, string> = {}
@@ -1893,7 +1916,7 @@ export default function RequestDetailPage() {
                       })
                       const res = await fetch(`/api/requests/${id}/approve`, {
                         method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "approve", soClaimData: depts, soClaimComments: comments, comment: "" })
+                        body: JSON.stringify({ action: "approve", soClaimData: depts, soClaimComments: comments, comment: "", signatureData: sig })
                       })
                       if (res.ok) {
                         const updated = await res.json()
@@ -2368,12 +2391,13 @@ export default function RequestDetailPage() {
                 {nextSelected.size > 0 && (
                   <button disabled={!!submitting} onClick={async () => {
                     const ids = Array.from(nextSelected)
+                    const sig = await askSignature(); if (!sig) return
                     const succeeded = new Set<string>()
                     for (const itemId of ids) {
                       setSubmitting(itemId)
                       const r = await fetch(`/api/requests/${id}/approve`, {
                         method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "approve_so_next", itemId })
+                        body: JSON.stringify({ action: "approve_so_next", itemId, signatureData: sig })
                       })
                       if (r.ok) {
                         const updated = await r.json()
@@ -2498,10 +2522,11 @@ export default function RequestDetailPage() {
                     {isPending && (
                       <div className="flex items-center gap-2 ml-auto shrink-0">
                         <button disabled={isSub} onClick={async () => {
+                          const sig = await askSignature(); if (!sig) return
                           setSubmitting(item.id)
                           const r = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "approve_so_next", itemId: item.id })
+                            body: JSON.stringify({ action: "approve_so_next", itemId: item.id, signatureData: sig })
                           })
                           if (r.ok) { r.json().then(setReq) }
                           else { const err = await r.json().catch(() => ({})); alert(err.error || `Approve failed (${r.status})`) }
@@ -3017,11 +3042,12 @@ export default function RequestDetailPage() {
                     onClick={async () => {
                       if (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)) { alert("Select the CR-entry person and the VP/EVP approver first."); return }
                       const ids = [...dvmSelected]
+                      const sig = await askSignature(); if (!sig) return
                       setSubmitting("_batch")
                       if (isGwClaimP1Role) {
                         // GW: one batch request → server approves all + notifies once (fast).
                         const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ action: "batch_approve_claim_gw", itemIds: ids, evpEmail: nykEvp?.email, crEmail: nykCr?.email }) })
+                          body: JSON.stringify({ action: "batch_approve_claim_gw", itemIds: ids, evpEmail: nykEvp?.email, crEmail: nykCr?.email, signatureData: sig }) })
                         if (res.ok) { window.location.href = "/requests"; return }
                         const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null)
                       } else {
@@ -3029,7 +3055,7 @@ export default function RequestDetailPage() {
                         let ok = true
                         for (const itemId of ids) {
                           const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "approve_so", itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined }) })
+                            body: JSON.stringify({ action: "approve_so", itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, signatureData: sig }) })
                           if (!res.ok) { const e = await res.json(); alert(e.error || "Error"); ok = false; break }
                         }
                         if (ok) { window.location.href = "/requests"; return }
@@ -3238,11 +3264,12 @@ export default function RequestDetailPage() {
                     <div className="flex items-center gap-2">
                       <button onClick={async () => {
                           if (role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)) { alert("Select the CR-entry person and the VP/EVP approver first."); return }
+                          const sig = await askSignature(); if (!sig) return
                           setSubmitting(item.id)
                           const approveAction = isGWRequest ? "approve_so_claim_gw" : "approve_so"
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: approveAction, itemId: item.id, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, evpEmail: nykEvp?.email, crEmail: nykCr?.email })
+                            body: JSON.stringify({ action: approveAction, itemId: item.id, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, evpEmail: nykEvp?.email, crEmail: nykCr?.email, signatureData: sig })
                           })
                           if (res.ok) { window.location.href = "/requests"; return }
                           else { const err = await res.json(); alert(err.error || "Error") }
@@ -3488,10 +3515,11 @@ export default function RequestDetailPage() {
                   {isMyTurn && (
                     <div className="flex gap-2">
                       <button onClick={async () => {
+                          const sig = await askSignature(); if (!sig) return
                           setSubmitting(item.id)
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "approve_so", itemId: item.id })
+                            body: JSON.stringify({ action: "approve_so", itemId: item.id, signatureData: sig })
                           })
                           if (res.ok) {
                             setReq(await res.json())
@@ -3593,12 +3621,13 @@ export default function RequestDetailPage() {
                 disabled={submitting !== null}
                 onClick={async () => {
                   const ids = [...vpSelected]
+                  const sig = await askSignature(); if (!sig) return
                   let updated: any = req
                   for (const itemId of ids) {
                     setSubmitting(itemId)
                     const res = await fetch(`/api/requests/${id}/approve`, {
                       method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: "approve_so", itemId })
+                      body: JSON.stringify({ action: "approve_so", itemId, signatureData: sig })
                     })
                     if (res.ok) updated = await res.json()
                   }
@@ -3650,11 +3679,12 @@ export default function RequestDetailPage() {
               <button
                 disabled={submitting === "_batch"}
                 onClick={async () => {
-                  setSubmitting("_batch")
                   const ids = [...claimGwSelected]
+                  const sig = await askSignature(); if (!sig) return
+                  setSubmitting("_batch")
                   const res = await fetch(`/api/requests/${id}/approve`, {
                     method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: "batch_approve_so", itemIds: ids })
+                    body: JSON.stringify({ action: "batch_approve_so", itemIds: ids, signatureData: sig })
                   })
                   if (res.ok) { setReq(await res.json()); setClaimGwSelected(new Set()) }
                   else { const err = await res.json(); alert(err.error || "Error") }
@@ -3696,10 +3726,11 @@ export default function RequestDetailPage() {
                   {isPending && !isRejRow && (
                     <div className="flex gap-2">
                       <button onClick={async () => {
+                          const sig = await askSignature(); if (!sig) return
                           setSubmitting(item.id)
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "approve_so", itemId: item.id })
+                            body: JSON.stringify({ action: "approve_so", itemId: item.id, signatureData: sig })
                           })
                           if (res.ok) setReq(await res.json())
                           setSubmitting(null)
@@ -3806,10 +3837,11 @@ export default function RequestDetailPage() {
                   {!isRejRow && (
                     <div className="flex gap-2">
                       <button onClick={async () => {
+                          const sig = await askSignature(); if (!sig) return
                           setSubmitting(item.id)
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "approve_so", itemId: item.id, crNo: crNoInput.trim() || req.crNo || undefined })
+                            body: JSON.stringify({ action: "approve_so", itemId: item.id, crNo: crNoInput.trim() || req.crNo || undefined, signatureData: sig })
                           })
                           if (!res.ok) { const err = await res.json(); alert(err.error || "Error"); setSubmitting(null); return }
                           setReq(await res.json())
@@ -4621,6 +4653,7 @@ export default function RequestDetailPage() {
                   {readyScmStyles.length > 0 && (
                     <button type="button" disabled={scmForwarding || !vpScmSelectedEmail}
                       onClick={async () => {
+                        const sig = await askSignature(); if (!sig) return
                         setScmForwarding(true)
                         const depts: Record<string, {dept: string, pct: number}[]> = {}
                         const comments: Record<string, string> = {}
@@ -4632,7 +4665,7 @@ export default function RequestDetailPage() {
                         })
                         const res = await fetch(`/api/requests/${id}/approve`, {
                           method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ action: "approve", soClaimData: depts, soClaimComments: comments, soDvmData: dvms, comment: "", assignedVpScm: vpScmSelectedEmail })
+                          body: JSON.stringify({ action: "approve", soClaimData: depts, soClaimComments: comments, soDvmData: dvms, comment: "", assignedVpScm: vpScmSelectedEmail, signatureData: sig })
                         })
                         if (res.ok) {
                           const updated = await res.json()

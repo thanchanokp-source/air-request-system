@@ -26,6 +26,8 @@ model User {
   resetTokenExpiry DateTime?
   loginToken       String?   @unique
   loginTokenExpiry DateTime?
+  signatureData    String?   // master signature (base64 PNG data URI) reused on approvals
+  signatureUpdatedAt DateTime?
   airRequests     AirRequest[]
   approvals       ApprovalLog[]
   claimApprovals  ClaimApproval[]
@@ -124,6 +126,27 @@ model AirRequest {
   attachments      RequestAttachment[]
   hawbGroups       HawbGroup[]
   claimForwards    ClaimForward[]
+  approvalSignatures ApprovalSignature[]
+}
+
+// A signature snapshot captured at the moment a person APPROVES (not data entry).
+// Snapshotted (not linked to User.signatureData) so later signature changes never
+// alter documents already signed. Stamped into the output PDF.
+model ApprovalSignature {
+  id            String     @id @default(cuid())
+  requestId     String
+  userId        String?
+  approverName  String
+  approverEmail String?
+  role          String?
+  positionLabel String?    // e.g. "VP MER", "President", "SCM NYK EVP", "Commercial"
+  signatureData String     // base64 PNG snapshot at approval time
+  crNo          String?    // for SCM NYK claim
+  branch        String?    // BU
+  signedAt      DateTime   @default(now())
+  request       AirRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
 }
 
 // Per-department forward state. Each claim department handles its own SO(s)

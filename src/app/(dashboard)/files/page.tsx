@@ -270,17 +270,18 @@ export default function FilesPage() {
         })
       })
       if (pages.length === 0) return
-      const [{ pdf }, { TransportationBookingPdf }] = await Promise.all([
+      // Combined output uses the same per-SO (by-SO) formal page layout — including
+      // the signature stamps — so the combined file looks identical to a single by-SO doc.
+      const [{ pdf }, { CombinedPdfDocument }] = await Promise.all([
         import("@react-pdf/renderer"),
         import("@/components/request-pdf"),
       ])
-      const generatedDate = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-      const element = React.createElement(TransportationBookingPdf as any, { pages, generatedDate })
+      const element = React.createElement(CombinedPdfDocument as any, { pages })
       const blob = await (pdf(element as any) as any).toBlob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `Transportation_Booking_${pages.length}SO.pdf`
+      a.download = `Combined_${pages.length}SO.pdf`
       document.body.appendChild(a); a.click()
       document.body.removeChild(a); URL.revokeObjectURL(url)
     } catch { alert("Combined PDF generation failed") }

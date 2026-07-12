@@ -21,6 +21,12 @@ const fmtDate = (v: any) => {
   const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
   return `${String(d.getDate()).padStart(2, "0")} ${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
 }
+const fmtDateTime = (v: any) => {
+  if (!v) return "-"
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return "-"
+  return `${fmtDate(v)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+}
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
 
 // Spell a THB amount in English words (for the "Say total" line, like a formal note).
@@ -112,17 +118,27 @@ function ItemPage({ req, item }: { req: any; item: any }) {
   const isGW = req.bu === "GW"
   const approveLogs = (req.approvalLogs || []).filter((l: any) => l.action === "APPROVE")
 
-  // Signature slots = requester + each approval position in chain order.
-  // A slot shows the approver's name + date once its approval log exists.
-  const chain: [string, string][] = isGW
-    ? [["PENDING_VP_MER_GW", "DPM"], ["PENDING_GM_GW", "GM"], ["PENDING_PRESIDENT_GW", "President"]]
-    : [["PENDING_VP_MER", "VP Merchandising"], ["PENDING_SCM", "SCM"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
-  const signers: { title: string; name: string; date: any; verb: string }[] = [
+  // Signature slots = requester + each captured approval signature (real e-sign
+  // snapshot: image + name + position + datetime + CR). Falls back to the expected
+  // approver chain (name only) for documents signed before e-signatures existed.
+  type Signer = { title: string; name: string; date: any; verb: string; sig?: string | null; crNo?: string | null }
+  const sigList: any[] = ((req.approvalSignatures || []) as any[]).slice()
+    .sort((a, b) => new Date(a.signedAt).getTime() - new Date(b.signedAt).getTime())
+  let signers: Signer[] = [
     { title: "Requester", name: req.createdBy?.name || "", date: req.createdAt, verb: "Created" },
   ]
-  for (const [status, label] of chain) {
-    const log = approveLogs.find((l: any) => l.fromStatus === status)
-    signers.push({ title: label, name: log?.user?.name || "", date: log?.createdAt, verb: log ? "Approved" : "" })
+  if (sigList.length) {
+    for (const sg of sigList) {
+      signers.push({ title: sg.positionLabel || sg.role || "Approver", name: sg.approverName || "", date: sg.signedAt, verb: "Approved", sig: sg.signatureData || null, crNo: sg.crNo || null })
+    }
+  } else {
+    const chain: [string, string][] = isGW
+      ? [["PENDING_VP_MER_GW", "DPM"], ["PENDING_GM_GW", "GM"], ["PENDING_PRESIDENT_GW", "President"]]
+      : [["PENDING_VP_MER", "VP Merchandising"], ["PENDING_SCM", "SCM"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
+    for (const [status, label] of chain) {
+      const log = approveLogs.find((l: any) => l.fromStatus === status)
+      signers.push({ title: label, name: log?.user?.name || "", date: log?.createdAt, verb: log ? "Approved" : "" })
+    }
   }
 
   const splits = getSplits(item)
@@ -246,10 +262,14 @@ function ItemPage({ req, item }: { req: any; item: any }) {
       <View style={s.sigWrap}>
         {signers.map((sg, i) => (
           <View key={i} style={s.sigCol}>
-            <View style={s.sigSpace}><View style={s.sigLine} /></View>
+            <View style={s.sigSpace}>
+              {sg.sig ? <Image src={sg.sig} style={s.sigImg} /> : null}
+              <View style={s.sigLine} />
+            </View>
             <Text style={s.sigName}>( {sg.name || "-"} )</Text>
             <Text style={s.sigTitle}>{sg.title}</Text>
-            <Text style={s.sigDate}>{sg.verb ? `${sg.verb} ${fmtDate(sg.date)}` : "Pending"}</Text>
+            <Text style={s.sigDate}>{sg.verb ? `${sg.verb} ${fmtDateTime(sg.date)}` : "Pending"}</Text>
+            {sg.crNo ? <Text style={s.sigDate}>CR: {sg.crNo}</Text> : null}
           </View>
         ))}
       </View>

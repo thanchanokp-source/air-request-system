@@ -7,6 +7,7 @@ import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { notifyClaimNext, notifyClaimFinalToAccounting } from "@/lib/notify"
 import { ownerCanonicalDept, isLastPosition, nextPositionLabel, itemHasPendingDept } from "@/lib/claim"
+import { captureApprovalSignature, isSignatureData } from "@/lib/signature"
 
 async function generateAndSavePdfs(requestId: string) {
   try {
@@ -16,8 +17,9 @@ async function generateAndSavePdfs(requestId: string) {
         items: true,
         createdBy: { select: { name: true, email: true } },
         approvalLogs: { include: { user: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
-        attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } }
-      }
+        attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
+        approvalSignatures: { orderBy: { signedAt: "asc" } },
+      } as any
     })
     if (!req) return
     const { renderToBuffer } = await import("@react-pdf/renderer")
@@ -25,7 +27,7 @@ async function generateAndSavePdfs(requestId: string) {
     const React = await import("react")
     const dir = join(process.cwd(), "public", "pdfs", (req as any).documentNo)
     await mkdir(dir, { recursive: true })
-    for (const item of req.items) {
+    for (const item of req.items as any[]) {
       if (!["CLAIM_PASSED", "COMPLETED"].includes(item.itemStatus)) continue
       const element = React.default.createElement(RequestPdfDocument as any, { req, item })
       const buffer = await (renderToBuffer as any)(element)
@@ -179,6 +181,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const posLabel = nextPositionLabel(forwarderDept, currentPos, undefined, branchVal) || forwarderDept
     await notifyClaimNext(id, nextEmail, nextName || nextEmail, forwarderName, token, `${forwarderDept} — ${posLabel} (${selIds.length} SO)`)
+
+    // Signature snapshot: the forwarder approves their claim position before forwarding.
+    if (isSignatureData(body.signatureData)) {
+      await captureApprovalSignature({
+        requestId: id, userId: (session.user as any).id, userRole: role,
+        name: forwarderName, email: userEmail || null, signatureData: body.signatureData,
+        positionLabel: forwarderDept, crNo: (request as any).crNo || null, branch: (request as any).bu || null,
+      })
+    }
 
     return NextResponse.json({ ok: true, action: "forwarded", to: nextEmail, dept: forwarderDept, position: nextPos, count: selIds.length })
   }
