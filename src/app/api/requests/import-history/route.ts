@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
+import { canonCountry } from "@/lib/freight"
 
 // Admin-only backfill of HISTORICAL, already-complete documents. Uses the same MER
 // template headers, but creates each doc as COMPLETED — no approval flow, no emails.
@@ -28,8 +29,14 @@ const col = (item: any, key: string) => {
   const k = Object.keys(item).find(k => k.toLowerCase() === key.toLowerCase()) ?? key
   return item[k]
 }
+// Fuzzy header match — find a column whose header CONTAINS all given substrings
+// (case-insensitive), so odd headers like "Weight(KG.)" / "Gross Wt" still match.
+const colLike = (item: any, ...subs: string[]) => {
+  const k = Object.keys(item).find(k => { const lk = k.toLowerCase(); return subs.every(s => lk.includes(s.toLowerCase())) })
+  return k ? item[k] : ""
+}
 const num = (v: any) => { const n = parseFloat(String(v ?? "").replace(/,/g, "")); return isNaN(n) ? 0 : n }
-const rateKey = (country: string) => String(country || "").trim().toUpperCase()
+const rateKey = (country: string) => canonCountry(country)
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -65,8 +72,9 @@ export async function POST(req: NextRequest) {
 
       const itemsData = rows.map((item: any) => {
         const country = String(col(item, "Country") || "").trim()
-        const gw = num(col(item, "WEIGHT(KG)"))
-        const rate = rates[rateKey(country)] || 0
+        // Weight header varies a lot → match ANY column containing "weight".
+        const gw = num(colLike(item, "weight"))
+        const rate = rates[rateKey(country)] || 0   // EST = weight × country rate (0 if no rate in Master)
         // Claim splits (+ per-dept ACTUAL AIRFREIGHT → summed to the SO's total actual)
         const splits = [1, 2, 3].map(n => ({
           dept: String(col(item, `CLAIM DEPT ${n}`) || "").trim(),

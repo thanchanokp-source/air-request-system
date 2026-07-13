@@ -38,12 +38,11 @@ export default function ImportHistoryPage() {
       })
       if (hIdx < 0) { setError("Header row not found — need columns like Document / Brand name / BU / HAWB# / Actual Airfreight."); return }
       const headers = (aoa[hIdx] || []).map(norm)
-      const ID_KEYS = ["Document", "No_Document", "Brand name", "BRAND", "SO", "STYLE", "INV NO.", "HAWB#", "Actual Airfreight"]
       const dataRows = aoa.slice(hIdx + 1).map(r => {
         const o: any = {}
         headers.forEach((h, i) => { if (h) o[h] = (r || [])[i] ?? "" })
         return o
-      }).filter(o => ID_KEYS.some(k => norm(o[k])))
+      }).filter(o => Object.values(o).some(v => norm(v)))   // keep every non-empty row
       if (dataRows.length === 0) { setError("No data rows found."); return }
       setRows(dataRows)
     } catch (err: any) {

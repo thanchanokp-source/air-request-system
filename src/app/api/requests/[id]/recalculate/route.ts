@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { canonCountry } from "@/lib/freight"
 
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -15,7 +16,7 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
 
   const items = request.items as any[]
   // Freight rate is keyed by COUNTRY only (one country = one rate). Case-insensitive.
-  const rateKey = (country: string) => country.trim().toUpperCase()
+  const rateKey = (country: string) => canonCountry(country)
   const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true }, orderBy: { updatedAt: "asc" } })
   const freightRates: Record<string, number> = {}
   for (const r of rateList) freightRates[rateKey(r.country)] = r.ratePerKg

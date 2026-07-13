@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange } from "@/lib/notify"
 import { sendMail } from "@/lib/email"
+import { canonCountry } from "@/lib/freight"
 import crypto from "crypto"
 
 // Normalize a year that may be 2-digit or Thai Buddhist (B.E.) to Gregorian.
@@ -108,7 +109,7 @@ export async function POST(req: NextRequest) {
 
     // Freight rate is keyed by BRAND + COUNTRY (MER selects the country; the port
     // is not used). The same country can have different rates per brand.
-    const rateKey = (country: string) => country.trim().toUpperCase()
+    const rateKey = (country: string) => canonCountry(country)
     // Freight rate is keyed by COUNTRY only (one country = one rate; brand ignored).
     const combos = [...new Map(items
       .map((i: any) => ({ country: String(col(i, "Country") || "").trim() }))

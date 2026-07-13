@@ -1,7 +1,18 @@
 import { prisma } from "@/lib/prisma"
 import { notifyStatusChange } from "@/lib/notify"
 
-const rateKey = (country: string) => country.trim().toUpperCase()
+// Canonical country key for freight-rate matching — folds common aliases so
+// "United States", "U.S.A", "USA", "US" all match the same Master rate.
+const COUNTRY_ALIAS: Record<string, string> = {
+  "USA": "USA", "US": "USA", "UNITED STATES": "USA", "UNITED STATES OF AMERICA": "USA", "AMERICA": "USA",
+  "UK": "UK", "UNITED KINGDOM": "UK", "GREAT BRITAIN": "UK", "ENGLAND": "UK",
+}
+export function canonCountry(c: string): string {
+  const raw = String(c || "").trim().toUpperCase().replace(/\./g, "").replace(/\s+/g, " ").trim()
+  return COUNTRY_ALIAS[raw] || raw
+}
+
+const rateKey = (country: string) => canonCountry(country)
 
 // Release any document HELD for a missing freight rate once every COUNTRY on it has
 // a rate (rate is keyed by country only). On release the doc is finally sent
