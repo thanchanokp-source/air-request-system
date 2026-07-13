@@ -3005,9 +3005,9 @@ export default function RequestDetailPage() {
                   if (appr.some((a: any) => a.userId === myUserId)) return false
                   // NYK: SCM_NYK (CR user) never approves; EVP only after the Approver.
                   if (role === "SCM_NYK") return false
-                  if (role === "SCM_NYK_EVP" && !appr.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")) return false
+                  if (role === "SCM_NYK_EVP" && !appr.some((a: any) => a.role === "SCM_NYK_APPROVER")) return false
                   // 2 SCM NYK approvers (split by brand): first to approve locks the other.
-                  if (role === "SCM_NYK_APPROVER" && appr.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")) return false
+                  if (role === "SCM_NYK_APPROVER" && appr.some((a: any) => a.role === "SCM_NYK_APPROVER")) return false
                   const lower = myPriority !== null ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority) : []
                   return lower.every((u: any) => appr.some((a: any) => a.userId === u.id))
                 })
@@ -3104,8 +3104,8 @@ export default function RequestDetailPage() {
               Approver has approved every SCM NYK SO. */}
           {role === "SCM_NYK" && (() => {
             const nykSOs = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && getSplits(i).some((s: any) => s.dept === "SCM NYK" && s.status !== "REJECTED"))
-            const approverAllDone = nykSOs.length > 0 && nykSOs.every((i: any) => (i.claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER"))
-            const awaitingCount = nykSOs.filter((i: any) => !(i.claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER")).length
+            const approverAllDone = nykSOs.length > 0 && nykSOs.every((i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER"))
+            const awaitingCount = nykSOs.filter((i: any) => !(i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER")).length
             const crLocked = !approverAllDone && !req.crNo
             return (
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 space-y-1.5">
@@ -3200,10 +3200,10 @@ export default function RequestDetailPage() {
               : []
             const lowerApproved = lowerApprovers.every((u: any) => itemApprovals.some((a: any) => a.userId === u.id))
             // NYK: SCM_NYK (CR user) never approves; SCM_NYK_EVP only after the Approver.
-            const approverApprovedThisItem = (item.claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
+            const approverApprovedThisItem = (item.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER")
             // 2 SCM NYK approvers split work by brand → first to approve locks the other;
             // the other sees who already approved and cannot approve.
-            const nykApproverAppr = (item.claimApprovals || []).find((a: any) => a.user?.role === "SCM_NYK_APPROVER")
+            const nykApproverAppr = (item.claimApprovals || []).find((a: any) => a.role === "SCM_NYK_APPROVER")
             const nykApproverName = nykApproverAppr?.user?.name || nykApproverAppr?.user?.email || "another approver"
             const nykApproverTaken = role === "SCM_NYK_APPROVER" && approverApprovedThisItem && !iHaveApproved
             const nykBlocked = role === "SCM_NYK" || (role === "SCM_NYK_EVP" && !approverApprovedThisItem)

@@ -756,7 +756,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // SCM NYK Approver must approve first before the CR user (parallel with EVP) can enter CR.
     const nykSOs = items.filter(it => getSplits(it).some((s: any) => s.dept === nykDept && s.status !== "REJECTED"))
     if (nykSOs.length === 0) return NextResponse.json({ error: "No SCM NYK claim SO awaiting a CR NO" }, { status: 400 })
-    const awaitingApprover = nykSOs.filter(it => !((it as any).claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER"))
+    const awaitingApprover = nykSOs.filter(it => !((it as any).claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER"))
     if (awaitingApprover.length > 0) return NextResponse.json({ error: `Waiting for the SCM NYK Approver to approve all SOs before entering the CR NO (${awaitingApprover.length} SO remaining)` }, { status: 400 })
     await prisma.airRequest.update({ where: { id }, data: { crNo: cr } as any })
     let finalizedCount = 0
@@ -764,8 +764,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const splits = getSplits(it)
       if (!splits.some((s: any) => s.dept === nykDept && s.status !== "REJECTED" && s.status !== doneStatus)) continue
       const appr: any[] = (it as any).claimApprovals || []
-      const hasApprover = appr.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
-      const hasEvp = appr.some((a: any) => a.user?.role === "SCM_NYK_EVP")
+      const hasApprover = appr.some((a: any) => a.role === "SCM_NYK_APPROVER")
+      const hasEvp = appr.some((a: any) => a.role === "SCM_NYK_EVP")
       const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: true }, doneStatus)
       const updated = setGwSplitStatus(splits, [nykDept], splitStatus, cr)
       await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: isGW ? deriveGwItemStatus(updated, it.actualAirFreight != null) : deriveNygItemStatus(updated) } })
@@ -855,8 +855,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       if (userRole === "SCM_NYK_APPROVER" || userRole === "SCM_NYK_EVP") {
         const appr = await (prisma as any).claimApproval.findMany({ where: { itemId: it.id }, include: { user: { select: { role: true } } } })
-        const approverDone = appr.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
-        const evpDone = appr.some((a: any) => a.user?.role === "SCM_NYK_EVP")
+        const approverDone = appr.some((a: any) => a.role === "SCM_NYK_APPROVER")
+        const evpDone = appr.some((a: any) => a.role === "SCM_NYK_EVP")
         if (userRole === "SCM_NYK_APPROVER" && approverDone) continue
         if (userRole === "SCM_NYK_EVP" && (!approverDone || evpDone)) continue
         await (prisma as any).claimApproval.upsert({ where: { itemId_userId: { itemId: it.id, userId } }, create: { itemId: it.id, userId, role: userRole }, update: { createdAt: new Date() } })
@@ -909,8 +909,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // ── NYK 3-role sub-flow: APPROVER approves first → then EVP approve ∥ CR entry ──
     if (userRole === "SCM_NYK_APPROVER" || userRole === "SCM_NYK_EVP") {
       const nykApprovals = await (prisma as any).claimApproval.findMany({ where: { itemId }, include: { user: { select: { role: true } } } })
-      const approverDone = nykApprovals.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
-      const evpDone = nykApprovals.some((a: any) => a.user?.role === "SCM_NYK_EVP")
+      const approverDone = nykApprovals.some((a: any) => a.role === "SCM_NYK_APPROVER")
+      const evpDone = nykApprovals.some((a: any) => a.role === "SCM_NYK_EVP")
       if (userRole === "SCM_NYK_APPROVER" && approverDone) return NextResponse.json({ error: "This SO has already been approved by the SCM NYK Approver" }, { status: 400 })
       if (userRole === "SCM_NYK_EVP") {
         if (!approverDone) return NextResponse.json({ error: "Waiting for the SCM NYK Approver to approve first" }, { status: 400 })
@@ -1119,8 +1119,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return NextResponse.json({ error: "This SO has no SCM NYK claim portion" }, { status: 400 })
       }
       const nykApprovals = await (prisma as any).claimApproval.findMany({ where: { itemId }, include: { user: { select: { role: true } } } })
-      const approverDone = nykApprovals.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
-      const evpDone = nykApprovals.some((a: any) => a.user?.role === "SCM_NYK_EVP")
+      const approverDone = nykApprovals.some((a: any) => a.role === "SCM_NYK_APPROVER")
+      const evpDone = nykApprovals.some((a: any) => a.role === "SCM_NYK_EVP")
       if (userRole === "SCM_NYK_APPROVER" && approverDone) return NextResponse.json({ error: "This SO has already been approved by the SCM NYK Approver" }, { status: 400 })
       if (userRole === "SCM_NYK_EVP") {
         if (!approverDone) return NextResponse.json({ error: "Waiting for the SCM NYK Approver to approve first" }, { status: 400 })
