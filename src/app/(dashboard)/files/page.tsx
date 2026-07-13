@@ -656,6 +656,8 @@ export default function FilesPage() {
             ))}
           </div>
           )}
+          {/* Spacer so the last rows clear the floating combine bar */}
+          {combineMode && <div className="h-28" aria-hidden />}
         </div>
       </div>
 
