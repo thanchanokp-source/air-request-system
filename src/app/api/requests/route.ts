@@ -106,17 +106,18 @@ export async function POST(req: NextRequest) {
 
     // Freight rate is keyed by BRAND + COUNTRY (MER selects the country; the port
     // is not used). The same country can have different rates per brand.
-    const rateKey = (brand: string, country: string) => `${brand.trim().toUpperCase()}|${country.trim().toUpperCase()}`
+    const rateKey = (country: string) => country.trim().toUpperCase()
+    // Freight rate is keyed by COUNTRY only (one country = one rate; brand ignored).
     const combos = [...new Map(items
-      .map((i: any) => ({ brand: String(col(i, "Brand name") || col(i, "BRAND") || "").trim(), country: String(col(i, "Country") || "").trim() }))
-      .filter((x: any) => x.brand && x.country)
-      .map((x: any) => [rateKey(x.brand, x.country), x])).values()] as { brand: string; country: string }[]
+      .map((i: any) => ({ country: String(col(i, "Country") || "").trim() }))
+      .filter((x: any) => x.country)
+      .map((x: any) => [rateKey(x.country), x])).values()] as { country: string }[]
 
-    const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
+    const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true }, orderBy: { updatedAt: "asc" } })
     const freightRates: Record<string, number> = {}
-    for (const r of rateList) freightRates[rateKey(r.brand, r.country)] = r.ratePerKg
+    for (const r of rateList) freightRates[rateKey(r.country)] = r.ratePerKg   // latest wins if duplicates
 
-    const missingRates = combos.filter(x => !(rateKey(x.brand, x.country) in freightRates))
+    const missingRates = combos.filter(x => !(rateKey(x.country) in freightRates))
     const missingCountryInfo = missingRates
 
     const first = items[0]
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
         status: isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER",
         createdById: userId,
         assignedVpMer,
-        // Hold from VP MER until every Brand+Country pair has a freight rate.
+        // Hold from VP MER until every Country has a freight rate.
         pendingRate: missingRates.length > 0,
         vpMerToken: crypto.randomUUID(),
         ...(isGW ? {
@@ -152,7 +153,7 @@ export async function POST(req: NextRequest) {
             const country = String(col(item, "Country") || "").trim()
             const itemBrand = String(col(item, "Brand name") || col(item, "BRAND") || "").trim()
             const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
-            const rate = freightRates[rateKey(itemBrand, country)] || 0
+            const rate = freightRates[rateKey(country)] || 0
             const gw = parseFloat(String(col(item, "WEIGHT(KG)") || "0")) || 0
             // GW: read up to 3 claim splits from Excel (CLAIM DEPT 1/2/3 + %CLAIM + REASON)
             // airCost is computed at display time from actualAirFreight so it stays accurate.
@@ -214,8 +215,7 @@ export async function POST(req: NextRequest) {
       try {
         const APP_URL = process.env.APP_URL || "http://localhost:3000"
         const portRowsHtml = missingCountryInfo.map(x => `<tr>
-          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;font-weight:600">${x.brand}</td>
-          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px">${x.country}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;font-weight:600">${x.country}</td>
           <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;color:#b45309">— add rate —</td>
         </tr>`).join("")
         const html = `
@@ -228,11 +228,10 @@ export async function POST(req: NextRequest) {
         <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
       </td></tr>
       <tr><td style="padding:28px 32px">
-        <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">Document <strong>${docNo}</strong> has Brand/Country pair(s) with no Freight Rate in Master — Est. Air Freight cannot be calculated (shows 0).</p>
-        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 12px"><strong>Please add these in Master &gt; Rate</strong> (Brand · Country · Rate THB/KG):</p>
+        <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">Document <strong>${docNo}</strong> has Country/countries with no Freight Rate in Master — Est. Air Freight cannot be calculated (shows 0).</p>
+        <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 12px"><strong>Please add these in Master &gt; Rate</strong> (Country · Rate THB/KG):</p>
         <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 18px">
           <thead><tr style="background:#fef3c7">
-            <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">BRAND</th>
             <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">COUNTRY</th>
             <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">RATE (THB/KG)</th>
           </tr></thead>
@@ -250,12 +249,14 @@ export async function POST(req: NextRequest) {
   </td></tr>
 </table></body></html>`
 
-        const subject = `[Freight Rate Missing] ${docNo} — no rate for (${missingRates.map(x => `${x.brand}/${x.country}`).join(", ")})`
-        // Notify this BU's Logistics + Admin. Send a PERSONALISED magic link per
-        // recipient so clicking logs THEM in (not whoever's browser session it is).
+        const subject = `[Freight Rate Missing] ${docNo} — no rate for (${missingRates.map(x => x.country).join(", ")})`
+        // Notify this BU's Logistics + Admin + a fixed extra recipient. Send a
+        // PERSONALISED magic link per recipient so clicking logs THEM in.
         const lgRoles = isGW ? ["LOGISTICS_GW"] : ["LOGISTICS"]
+        const EXTRA_EMAIL = "jariya.t@nanyangtextile.com"
         const recips = await (prisma.user as any).findMany({
-          where: { role: { in: [...lgRoles, "ADMIN"] }, isActive: true }, select: { id: true, email: true },
+          where: { isActive: true, OR: [{ role: { in: [...lgRoles, "ADMIN"] } }, { email: EXTRA_EMAIL }] },
+          select: { id: true, email: true },
         })
         for (const u of recips) {
           if (!u.email) continue
@@ -263,6 +264,10 @@ export async function POST(req: NextRequest) {
           await (prisma.user as any).update({ where: { id: u.id }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000) } })
           const link = `${APP_URL}/api/magic-login?token=${token}&redirect=/master/port`
           await sendMail(u.email, subject, html.replace("__LINK__", link))
+        }
+        // Ensure the fixed extra recipient always gets it, even if not a system user.
+        if (!recips.some((u: any) => (u.email || "").toLowerCase() === EXTRA_EMAIL)) {
+          await sendMail(EXTRA_EMAIL, subject, html.replace("__LINK__", `${APP_URL}/master/port`))
         }
       } catch (err) {
         console.error("[notify] missing freight-rate email failed:", err)

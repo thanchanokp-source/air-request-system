@@ -17,12 +17,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       where: { id },
       data: { brand: String(brand).trim(), country: String(country).trim(), ratePerKg: rate }
     })
-    // Auto-recalc open documents matching this brand+country so Est. Air Freight updates now.
+    // Auto-recalc open documents matching this COUNTRY (rate keyed by country only).
     let recalculated = 0
     if (rate > 0) {
       const affected = await (prisma.airRequestItem as any).findMany({
         where: {
-          brand: { equals: item.brand, mode: "insensitive" },
           country: { equals: item.country, mode: "insensitive" },
           request: { status: { notIn: ["COMPLETED", "REJECTED"] } },
         },

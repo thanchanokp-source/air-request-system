@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     })
     // Auto-recalc: any open document with this brand+country now gets its
     // Est. Air Freight filled in immediately (no manual Recalculate needed).
-    const recalculated = rate > 0 ? await recalcOpenItems(item.brand, item.country, rate) : 0
+    const recalculated = rate > 0 ? await recalcOpenItems(item.country, rate) : 0
     await releasePendingRateDocs()
     return NextResponse.json({ ...item, recalculated })
   } catch (e: any) {
@@ -58,11 +58,10 @@ export async function POST(req: NextRequest) {
 }
 
 // Recompute Est. Air Freight (grossWeight × rate) for every item on a non-closed
-// document matching this brand+country. Returns how many items were updated.
-async function recalcOpenItems(brand: string, country: string, rate: number): Promise<number> {
+// document matching this COUNTRY (rate is keyed by country only). Returns count updated.
+async function recalcOpenItems(country: string, rate: number): Promise<number> {
   const affected = await (prisma.airRequestItem as any).findMany({
     where: {
-      brand: { equals: brand, mode: "insensitive" },
       country: { equals: country, mode: "insensitive" },
       request: { status: { notIn: ["COMPLETED", "REJECTED"] } },
     },
