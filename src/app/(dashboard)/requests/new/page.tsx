@@ -333,26 +333,34 @@ export default function NewRequestPage() {
               <p className="text-xs text-gray-400 mt-0.5">All {preview.length} row(s) will be submitted — scroll to view.</p>
             </div>
             <div className="overflow-auto max-h-[520px]">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    <th className="text-left px-3 py-2 font-bold text-gray-800 whitespace-nowrap bg-gray-50">#</th>
-                    {Object.keys(preview[0] || {}).map(k => (
-                      <th key={k} className="text-left px-3 py-2 font-bold text-gray-800 whitespace-nowrap bg-gray-50">{k}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {preview.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{i + 1}</td>
-                      {Object.values(row).map((v: any, j) => (
-                        <td key={j} className="px-3 py-2 text-gray-700 whitespace-nowrap">{v}</td>
+              {(() => {
+                // Port & Reason delay are no longer used — hide them from the preview
+                // even if they still exist in the uploaded file.
+                const HIDE = ["port", "reason delay"]
+                const cols = Object.keys(preview[0] || {}).filter(k => !HIDE.includes(k.trim().toLowerCase()))
+                return (
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-bold text-gray-800 whitespace-nowrap bg-gray-50">#</th>
+                        {cols.map(k => (
+                          <th key={k} className="text-left px-3 py-2 font-bold text-gray-800 whitespace-nowrap bg-gray-50">{k}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {preview.map((row, i) => (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{i + 1}</td>
+                          {cols.map((k, j) => (
+                            <td key={j} className="px-3 py-2 text-gray-700 whitespace-nowrap">{(row as any)[k]}</td>
+                          ))}
+                        </tr>
                       ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                    </tbody>
+                  </table>
+                )
+              })()}
             </div>
           </div>
         )}
