@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { releasePendingRateDocs } from "@/lib/freight"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
         saved++
       } catch { /* skip bad row */ }
     }
+    await releasePendingRateDocs()
     return NextResponse.json({ ok: true, saved, total: body.rows.length })
   }
 
@@ -48,6 +50,7 @@ export async function POST(req: NextRequest) {
     // Auto-recalc: any open document with this brand+country now gets its
     // Est. Air Freight filled in immediately (no manual Recalculate needed).
     const recalculated = rate > 0 ? await recalcOpenItems(item.brand, item.country, rate) : 0
+    await releasePendingRateDocs()
     return NextResponse.json({ ...item, recalculated })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

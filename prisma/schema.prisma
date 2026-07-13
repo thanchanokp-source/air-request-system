@@ -120,6 +120,7 @@ model AirRequest {
   claimNextToken   String?
   claimNextName    String?
   bu               String              @default("NYG")
+  pendingRate      Boolean             @default(false)  // held: Brand+Country rate missing, not yet sent to VP MER
   createdBy        User                @relation(fields: [createdById], references: [id])
   items            AirRequestItem[]
   approvalLogs     ApprovalLog[]

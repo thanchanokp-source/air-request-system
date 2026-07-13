@@ -131,6 +131,8 @@ export async function POST(req: NextRequest) {
         status: isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER",
         createdById: userId,
         assignedVpMer,
+        // Hold from VP MER until every Brand+Country pair has a freight rate.
+        pendingRate: missingRates.length > 0,
         vpMerToken: crypto.randomUUID(),
         ...(isGW ? {
           gmToken: crypto.randomUUID(),
@@ -197,10 +199,15 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    try {
-      await notifyStatusChange(request.id, isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER")
-    } catch (err) {
-      console.error("[notify] send failed:", err)
+    // Only notify VP MER when the rate is complete. If any Brand+Country pair has
+    // no rate, the doc is HELD (pendingRate) — VP MER is notified later, once LG
+    // adds the rate (see releasePendingRateDocs in lib/freight.ts).
+    if (missingRates.length === 0) {
+      try {
+        await notifyStatusChange(request.id, isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER")
+      } catch (err) {
+        console.error("[notify] send failed:", err)
+      }
     }
 
     if (missingRates.length > 0) {

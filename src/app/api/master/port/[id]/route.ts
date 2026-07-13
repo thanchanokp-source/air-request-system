@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { releasePendingRateDocs } from "@/lib/freight"
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -32,6 +33,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
       recalculated = affected.length
     }
+    await releasePendingRateDocs()
     return NextResponse.json({ ...item, recalculated })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

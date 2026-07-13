@@ -43,7 +43,7 @@ export default function ApprovalsPage() {
   // Filter documents by item-status (per-style forwarding — each role acts on specific itemStatus)
   const myRequests = requests.filter(r => {
     const items = r.items || []
-    if (role === "VP_MER") return r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)
+    if (role === "VP_MER") return r.status === "PENDING_VP_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)
     if (role === "SCM_USER") {
       return (r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||
              (r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PENDING"))
@@ -58,7 +58,7 @@ export default function ApprovalsPage() {
     if (CLAIM_VP_ROLES.includes(role)) {
       return items.some((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
     }
-    if (role === "DPM_GW" || role === "VP_MER_GW") return (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail || r.status === "PENDING_DPM_GW")
+    if (role === "DPM_GW" || role === "VP_MER_GW") return (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW") && !r.pendingRate && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail || r.status === "PENDING_DPM_GW")
     if (role === "GM_GW") return r.status === "PENDING_GM_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")
     // President (GW) is now the FINAL approver — items sit at PRESIDENT_PENDING
     // (claim + logistics already complete) awaiting the whole-doc approval.
