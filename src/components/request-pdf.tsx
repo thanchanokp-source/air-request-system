@@ -106,7 +106,7 @@ const s = StyleSheet.create({
   sigWrap: { position: "absolute", bottom: 34, left: 34, right: 34, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   // Flowing variants (Combined / All-SO: SOs run continuously, not one page each)
   sigWrapFlow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 12 },
-  pageFlow: { fontFamily: "Sarabun", fontSize: 8.5, paddingHorizontal: 34, paddingTop: 26, paddingBottom: 44, color: "#1a1a1a" },
+  pageFlow: { fontFamily: "Sarabun", fontSize: 8.5, paddingHorizontal: 22, paddingTop: 26, paddingBottom: 44, color: "#1a1a1a" },
   soBlockFlow: { marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: "#D1D5DB" },
   sigCol: { width: "19%", alignItems: "center", marginBottom: 6 },
   sigSpace: { height: 26, width: "100%", justifyContent: "flex-end" },
@@ -335,10 +335,11 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
   const anyActual = rows.some(i => i.actualAirFreight != null)
   const totActual = rows.reduce((n, i) => n + (Number(i.actualAirFreight) || 0), 0)
   const grand = anyActual ? totActual : totEst
-  const C = { no: 16, so: 50, style: 44, sub: 24, desc: 26, fac: 46, ctry: 56, hawb: 46, inv: 48, qty: 36, gross: 40, est: 46, act: 46, claim: 58 }
+  // Portrait A4 (usable ~551pt). REASON takes the remaining width (flex) and wraps.
+  const C = { no: 14, so: 42, style: 36, sub: 18, desc: 16, fac: 34, ctry: 46, hawb: 38, inv: 40, qty: 26, gross: 30, est: 38, act: 38, claim: 46 }
   return (
     <Document title={`${req.documentNo || "Combined"}`}>
-      <Page size="A4" orientation="landscape" style={s.pageFlow} wrap>
+      <Page size="A4" style={s.pageFlow} wrap>
         {/* Letterhead */}
         <View style={s.lh}>
           <Image style={s.logo} src="/LOGO.png" />
