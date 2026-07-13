@@ -312,29 +312,36 @@ export function RequestPdfDocument({ req, item }: { req: any; item: any }) {
   )
 }
 
-// Combined / All-SO — ONE consolidated document: single letterhead + one DETAILS
-// table where every SO is a row (incl. a CLAIM column), one grand total, and the
-// signature ONCE at the end (all SO of a document share the same approvers).
+// Combined / All-SO — ONE consolidated document (landscape): single letterhead,
+// one DETAILS table where every SO is a row carrying Factory/Country/Reason/Claim,
+// descriptions listed once up top (A, B, C…) and referenced by letter, one grand
+// total, and the signature ONCE at the end (all SO share the same approvers).
 export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[] }) {
   const req = pages[0]?.req || {}
   const isGW = req.bu === "GW"
   const dept = isGW ? "GW" : "NYG"
   const rows = pages.map(p => p.item)
   const signers = computeSigners(req)
+  const requestBy = (() => { const b = String(req.createdBy?.name || req.createdBy?.email || "").split("@")[0]; return b ? b.split(".")[0] : "-" })()
+  // Unique descriptions → labelled A, B, C… and referenced by letter in the table.
+  const descList: string[] = []
+  for (const it of rows) { const d = (it.description || "").trim(); if (d && !descList.includes(d)) descList.push(d) }
+  const descLabel = (d: any) => { const i = descList.indexOf((d || "").trim()); return i >= 0 ? String.fromCharCode(65 + i) : "-" }
+  const reasonOf = (item: any) => { const sp = getSplits(item); return (sp.map((x: any) => x.reason).filter(Boolean).join("; ")) || item.reasonDelay || "-" }
+  const claimOf = (item: any) => {
+    const sp = getSplits(item)
+    return sp.length ? sp.map((x: any) => `${x.dept} ${x.pct}%`).join(", ") : ((isGW ? req.claimDepartment : item.claimDepartment) || "-")
+  }
   const totQty = rows.reduce((n, i) => n + (Number(i.qtyRequestAir) || 0), 0)
   const totGross = rows.reduce((n, i) => n + (Number(i.grossWeight) || 0), 0)
   const totEst = rows.reduce((n, i) => n + (Number(i.airFreight) || 0), 0)
   const anyActual = rows.some(i => i.actualAirFreight != null)
   const totActual = rows.reduce((n, i) => n + (Number(i.actualAirFreight) || 0), 0)
   const grand = anyActual ? totActual : totEst
-  const claimOf = (item: any) => {
-    const sp = getSplits(item)
-    return sp.length ? sp.map((x: any) => `${x.dept} ${x.pct}%`).join(", ") : ((isGW ? req.claimDepartment : item.claimDepartment) || "-")
-  }
-  const C = { no: 14, so: 44, style: 38, sub: 22, hawb: 40, inv: 42, qty: 30, gross: 34, est: 42, act: 42, claim: 56 }
+  const C = { no: 16, so: 50, style: 44, sub: 24, desc: 26, fac: 46, ctry: 56, hawb: 46, inv: 48, qty: 36, gross: 40, est: 46, act: 46, claim: 58 }
   return (
     <Document title={`${req.documentNo || "Combined"}`}>
-      <Page size="A4" style={s.pageFlow} wrap>
+      <Page size="A4" orientation="landscape" style={s.pageFlow} wrap>
         {/* Letterhead */}
         <View style={s.lh}>
           <Image style={s.logo} src="/LOGO.png" />
@@ -355,12 +362,13 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
         </View>
         <View style={s.blackRule} />
 
-        {/* Doc-level info */}
+        {/* Doc-level info (Request By restored) */}
         <View style={s.grid}>
           {([
             ["Date", fmtDate(req.createdAt)],
             ["Brand", req.brandName || "-"],
             ["BU", req.buName || dept],
+            ["Request By (MER)", requestBy],
           ] as [string, string][]).map(([l, v]) => (
             <View key={l} style={s.gcell}>
               <Text style={s.glabel}>{l} :</Text>
@@ -369,7 +377,17 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
           ))}
         </View>
 
-        {/* All SO in one table (with CLAIM column) */}
+        {/* Description legend — listed once, referenced by letter in the table */}
+        {descList.length > 0 && (
+          <View style={{ marginTop: 4, marginBottom: 2 }}>
+            <Text style={s.secLabel}>DESCRIPTION</Text>
+            {descList.map((d, i) => (
+              <Text key={i} style={{ fontSize: 7.5, marginBottom: 0.5 }}>{String.fromCharCode(65 + i)} = {d}</Text>
+            ))}
+          </View>
+        )}
+
+        {/* All SO in one table — Factory / Country / Reason / Claim as columns */}
         <Text style={s.secLabel}>DETAILS</Text>
         <View style={s.table}>
           <View style={s.thead} fixed>
@@ -377,7 +395,10 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
             <Text style={[s.th, { width: C.so }]}>S/O NO.</Text>
             <Text style={[s.th, { width: C.style }]}>STYLE</Text>
             <Text style={[s.th, { width: C.sub }]}>SUB</Text>
-            <Text style={[s.th, { flex: 1 }]}>DESCRIPTION</Text>
+            <Text style={[s.th, { width: C.desc }]}>DESC</Text>
+            <Text style={[s.th, { width: C.fac }]}>FACTORY</Text>
+            <Text style={[s.th, { width: C.ctry }]}>COUNTRY</Text>
+            <Text style={[s.th, { flex: 1 }]}>REASON</Text>
             <Text style={[s.th, { width: C.hawb }]}>HAWB#</Text>
             <Text style={[s.th, { width: C.inv }]}>INVOICE</Text>
             <Text style={[s.th, { width: C.qty }]}>QTY AIR</Text>
@@ -392,7 +413,10 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
               <Text style={[s.td, { width: C.so }]}>{item.so || "-"}</Text>
               <Text style={[s.td, { width: C.style }]}>{item.style || "-"}</Text>
               <Text style={[s.td, { width: C.sub }]}>{item.sub || "-"}</Text>
-              <Text style={[s.tdL, { flex: 1 }]}>{item.description || "-"}</Text>
+              <Text style={[s.td, { width: C.desc }]}>{descLabel(item.description)}</Text>
+              <Text style={[s.td, { width: C.fac }]}>{item.factory || "-"}</Text>
+              <Text style={[s.td, { width: C.ctry }]}>{item.country || "-"}</Text>
+              <Text style={[s.tdL, { flex: 1 }]}>{reasonOf(item)}</Text>
               <Text style={[s.td, { width: C.hawb }]}>{item.hawbNo || "-"}</Text>
               <Text style={[s.td, { width: C.inv }]}>{item.invoiceNo || "-"}</Text>
               <Text style={[s.td, { width: C.qty }]}>{fmtNum(item.qtyRequestAir)}</Text>
