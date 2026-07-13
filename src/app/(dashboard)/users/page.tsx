@@ -212,19 +212,32 @@ export default function UsersPage() {
       claimDepartment: form.claimDepartment || null,
       procurementType: form.procurementType || null,
     }
-    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
-    if (res.ok) {
-      await load()
-      setSaveStatus("done")
-      setSaveMsg(editId ? `Updated successfully` : `User "${form.name || form.email}" created`)
-      reset()
-    } else {
-      const e = await res.json()
-      setSaveStatus("error")
-      setSaveMsg(e.error || "Save failed")
-      setError(e.error || "Save failed")
+    const wasEdit = !!editId
+    const label = form.name || form.email
+    try {
+      // Guard against a hung request (e.g. slow DB) so the overlay can't spin forever.
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 30000)
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: ctrl.signal })
+      clearTimeout(timer)
+      if (res.ok) {
+        setSaveStatus("done")
+        setSaveMsg(wasEdit ? `Updated successfully` : `User "${label}" created`)
+        reset()
+        setSaving(false)
+        load()  // refresh the list in the background — don't hold the overlay for it
+      } else {
+        const e = await res.json().catch(() => ({}))
+        setSaveStatus("error"); setSaveMsg(e.error || "Save failed"); setError(e.error || "Save failed")
+        setSaving(false)
+      }
+    } catch (err: any) {
+      const msg = err?.name === "AbortError"
+        ? "Server is slow — timed out after 30s. The change may still have saved; press Cancel and refresh to check."
+        : (err?.message || "Save failed")
+      setSaveStatus("error"); setSaveMsg(msg); setError(msg)
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const sendReset = async (id: string, email: string) => {
