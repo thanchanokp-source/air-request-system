@@ -40,7 +40,8 @@ const STATUS_ROLES: Record<string, string[]> = {
   // GW — handled separately in notifyStatusChange
   PENDING_PRESIDENT_GW: ["PRESIDENT_GW"],
   PENDING_LOGISTICS_GW: ["LOGISTICS_GW"],
-  PENDING_CLAIM_GW:     ["CLAIM_GW"],
+  // PENDING_CLAIM_GW handled by its own block (SCM NYK / SCM NYG only —
+  // GW + SUPPLIER auto-approve, no alert). No generic CLAIM_GW notify.
 }
 
 // Extract claim dept from role string
@@ -262,9 +263,8 @@ export async function sendPasswordSetupEmail(email: string, name: string, token:
   await sendMail(email, "[Air Request] Set Your Password to Get Started", html)
 }
 
-// Map the claim splits present on a doc → recipient groups. CLAIM_GW is one role
-// but split into GW vs SUPPLIER people via User.claimDepartment, so a "GW" claim
-// only emails GW-tagged users (not SUPPLIER) and vice-versa.
+// Map the claim splits present on a doc → recipient groups. Only SCM NYK / SCM NYG
+// get alerted — GW + SUPPLIER claims are auto-approved (no approval, no email).
 function gwClaimGroups(depts: Set<string>, req: any): { role: string; label: string; claimDept?: string; token?: string }[] {
   const groups: { role: string; label: string; claimDept?: string; token?: string }[] = []
   // NYK entry point is the APPROVER (EVP + CR user are alerted later, after approve).
