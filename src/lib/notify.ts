@@ -1,6 +1,7 @@
 import { prisma } from "./prisma"
 import { sendMail } from "./email"
 import { getSplits } from "./claim"
+import { roleOr, roleInOr } from "./roles"
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
@@ -305,7 +306,7 @@ export async function notifyClaimNextPriority(
   try {
     const req = await prisma.airRequest.findUnique({ where: { id: requestId } })
     if (!req) return
-    const where: any = { role, isActive: true, bu: (req as any).bu, priority: { gt: afterPriority } }
+    const where: any = { isActive: true, bu: (req as any).bu, priority: { gt: afterPriority }, ...roleOr(role) }
     if (claimDept) where.claimDepartment = claimDept
     const higher = await (prisma.user as any).findMany({
       where, select: { email: true, priority: true }, orderBy: { priority: "asc" },
@@ -363,7 +364,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         if (assignedEmail) {
           emails = [assignedEmail]
         } else {
-          const users = await (prisma.user as any).findMany({ where: { role, isActive: true, bu: (req as any).bu }, select: { email: true } })
+          const users = await (prisma.user as any).findMany({ where: { isActive: true, bu: (req as any).bu, ...roleOr(role) }, select: { email: true } })
           emails = users.map((u: any) => u.email).filter(Boolean)
         }
         if (!emails.length) return
@@ -397,7 +398,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     // Claim dept rejected an SO → alert MER (GW) to re-select the claim department.
     if (newStatus === "CLAIM_REJECTED_GW") {
       const rejItems = await prisma.airRequestItem.findMany({ where: { requestId, itemStatus: "CLAIM_REJECT_GW" }, select: { so: true, itemComment: true } })
-      const merUsers = await (prisma.user as any).findMany({ where: { role: "MER_GW", isActive: true }, select: { email: true } })
+      const merUsers = await (prisma.user as any).findMany({ where: { isActive: true, ...roleOr("MER_GW") }, select: { email: true } })
       const emails = merUsers.map((u: any) => u.email).filter(Boolean)
       const creator = await (prisma.user as any).findUnique({ where: { id: (req as any).createdById }, select: { email: true } })
       if (creator?.email) emails.push(creator.email)
@@ -446,7 +447,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     // PENDING_GM_GW — notify all GM (GW) approvers with a magic link (reuses vpMerToken;
     // authorize resolves it to a GM session while the doc is at PENDING_GM_GW)
     if (newStatus === "PENDING_GM_GW") {
-      const gmUsers = await (prisma.user as any).findMany({ where: { role: "GM_GW", isActive: true }, select: { email: true } })
+      const gmUsers = await (prisma.user as any).findMany({ where: { isActive: true, ...roleOr("GM_GW") }, select: { email: true } })
       const recipients = gmUsers.map((u: any) => u.email).filter(Boolean)
       console.log(`[notify] PENDING_GM_GW → GM_GW active recipients: ${recipients.length ? recipients.join(", ") : "NONE (no active GM_GW user)"}`)
       if (!recipients.length) return
@@ -461,7 +462,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 
     // PENDING_PRESIDENT_GW — magic link to President (GW)
     if (newStatus === "PENDING_PRESIDENT_GW") {
-      const users = await (prisma.user as any).findMany({ where: { role: "PRESIDENT_GW", isActive: true }, select: { email: true } })
+      const users = await (prisma.user as any).findMany({ where: { isActive: true, ...roleOr("PRESIDENT_GW") }, select: { email: true } })
       const recipients = users.map((u: any) => u.email).filter(Boolean)
       console.log(`[notify] PENDING_PRESIDENT_GW → PRESIDENT_GW active recipients: ${recipients.length ? recipients.join(", ") : "NONE (no active PRESIDENT_GW user)"}`)
       if (!recipients.length) return
@@ -481,7 +482,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const link = `${APP_URL}/requests/${requestId}`
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
       // 1) Logistics GW
-      const lgUsers = await (prisma.user as any).findMany({ where: { role: "LOGISTICS_GW", isActive: true }, select: { email: true } })
+      const lgUsers = await (prisma.user as any).findMany({ where: { isActive: true, ...roleOr("LOGISTICS_GW") }, select: { email: true } })
       const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
       if (lgEmails.length) {
         const t = (req as any).logisticsToken
@@ -492,7 +493,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const depts = new Set<string>()
       for (const it of req.items) getSplits(it).forEach(s => depts.add(s.dept))
       for (const g of gwClaimGroups(depts, req)) {
-        const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
+        const where: any = { isActive: true, bu: (req as any).bu, ...roleOr(g.role) }
         if (g.claimDept) where.claimDepartment = g.claimDept
         const us = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
@@ -510,7 +511,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         await sendMail(em, `[Claim – ${g.label}] GM Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
       }
       // 3) Accounting (read alert) — this BU only (GW → ACCOUNTING_GW).
-      const acUsers = await (prisma.user as any).findMany({ where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: (req as any).bu }, select: { email: true } })
+      const acUsers = await (prisma.user as any).findMany({ where: { isActive: true, bu: (req as any).bu, ...roleInOr(["ACCOUNTING", "ACCOUNTING_GW"]) }, select: { email: true } })
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
       if (acEmails.length) {
         const t = (req as any).accountingToken
@@ -522,7 +523,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 
     // PENDING_PRESIDENT — send magic link to President
     if (newStatus === "PENDING_PRESIDENT") {
-      const presidentUser = await (prisma.user as any).findFirst({ where: { role: "PRESIDENT", isActive: true }, select: { email: true } })
+      const presidentUser = await (prisma.user as any).findFirst({ where: { isActive: true, ...roleOr("PRESIDENT") }, select: { email: true } })
       if (!presidentUser) return
       const token = (req as any).presidentToken
       const link = `${APP_URL}/requests/${req.id}`
@@ -541,8 +542,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const acMagicLink = acToken ? `${APP_URL}/api/magic-login?token=${acToken}&redirect=/approvals` : undefined
       const lgHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, lgMagicLink)
       const acHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, acMagicLink)
-      const lgUsers = await (prisma.user as any).findMany({ where: { role: "LOGISTICS", isActive: true }, select: { email: true } })
-      const acUsers = await (prisma.user as any).findMany({ where: { role: "ACCOUNTING", isActive: true }, select: { email: true } })
+      const lgUsers = await (prisma.user as any).findMany({ where: { isActive: true, ...roleOr("LOGISTICS") }, select: { email: true } })
+      const acUsers = await (prisma.user as any).findMany({ where: { isActive: true, ...roleOr("ACCOUNTING") }, select: { email: true } })
       const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
       const documentNo = (req as any).documentNo
@@ -554,7 +555,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     // PENDING_SCM — send magic link to SCM user
     if (newStatus === "PENDING_SCM") {
       const scmToken = (req as any).scmToken
-      const scmUsers = await (prisma.user as any).findMany({ where: { role: "SCM_USER", isActive: true }, select: { email: true } })
+      const scmUsers = await (prisma.user as any).findMany({ where: { isActive: true, ...roleOr("SCM_USER") }, select: { email: true } })
       const scmEmails = scmUsers.map((u: any) => u.email).filter(Boolean)
       if (!scmEmails.length) return
       const link = `${APP_URL}/requests/${requestId}`
@@ -587,7 +588,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const link = `${APP_URL}/requests/${requestId}`
       // Each group = a claim dept's people (GW≠SUPPLIER via claimDepartment).
       for (const g of groups) {
-        const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
+        const where: any = { isActive: true, bu: (req as any).bu, ...roleOr(g.role) }
         if (g.claimDept) where.claimDepartment = g.claimDept
         const users = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
         const magicLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
@@ -632,7 +633,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 
     const users = await prisma.user.findMany({
       // Scope to THIS document's BU — never email the other BU's role-holders.
-      where: { role: { in: rolesToNotify }, isActive: true, bu: (req as any).bu },
+      where: { isActive: true, bu: (req as any).bu, ...roleInOr(rolesToNotify) },
       select: { email: true, role: true }
     })
 
@@ -735,7 +736,7 @@ export async function notifyClaimFinalToAccounting(requestId: string) {
     if (!req) return
 
     const accountingUsers = await (prisma.user as any).findMany({
-      where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: (req as any).bu },
+      where: { isActive: true, bu: (req as any).bu, ...roleInOr(["ACCOUNTING", "ACCOUNTING_GW"]) },
       select: { email: true }
     })
     const recipients: string[] = accountingUsers.map((u: any) => u.email).filter(Boolean)
@@ -804,7 +805,7 @@ export async function notifyAdminAddPerson(opts: {
 }) {
   try {
     const admins = await (prisma.user as any).findMany({
-      where: { role: "ADMIN", isActive: true }, select: { email: true }
+      where: { isActive: true, ...roleOr("ADMIN") }, select: { email: true }
     })
     const to: string[] = admins.map((a: any) => a.email).filter(Boolean)
     if (to.length === 0) { console.warn("[notify] add-person: no ADMIN user with an email — nobody to notify"); return }
