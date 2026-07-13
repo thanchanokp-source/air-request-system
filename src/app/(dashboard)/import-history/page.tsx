@@ -75,7 +75,7 @@ export default function ImportHistoryPage() {
     <div className="space-y-5 max-w-5xl">
       <div>
         <h1 className="text-xl font-bold text-gray-800">Import History (Completed)</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Admin only — backfill old, already-complete documents using the MER template. Creates them as <strong>COMPLETED</strong> (no approval, no email). Rows are grouped into documents by the <strong>No_Document</strong> column; a new Document No. is generated for each.</p>
+        <p className="text-sm text-gray-500 mt-0.5">Admin only — backfill old, already-complete documents using the MER template. Creates them as <strong>COMPLETED</strong> (no approval, no email). <strong>All rows in the file become ONE document</strong> (each row = 1 SO) — unless the file has a <strong>No_Document</strong> column, then rows are split by it. A new Document No. is generated for each.</p>
       </div>
 
       <div className="bg-white rounded-xl border p-5 space-y-4">

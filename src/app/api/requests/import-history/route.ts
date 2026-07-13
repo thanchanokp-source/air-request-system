@@ -50,7 +50,9 @@ export async function POST(req: NextRequest) {
     // Group rows into documents by the historical No_Document (blank → one doc).
     const groups = new Map<string, any[]>()
     for (const it of items) {
-      const key = String(col(it, "No_Document") || col(it, "Document") || "").trim() || "__nodoc__"
+      // Group into documents by "No_Document" ONLY. Files without it (e.g. a plain
+      // historical export where "Document" is just a line number) → all rows = ONE doc.
+      const key = String(col(it, "No_Document") || "").trim() || "__onedoc__"
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(it)
     }
