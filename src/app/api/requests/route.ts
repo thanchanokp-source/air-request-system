@@ -62,7 +62,9 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
     include: {
       createdBy: { select: { name: true } },
-      items: true,
+      // claimApprovals (who approved which SO) so the approvals queue can hide a doc
+      // from the OTHER SCM NYK approver once one of them has claimed it.
+      items: { include: { claimApprovals: { select: { userId: true, role: true } } } },
       attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
       approvalLogs: {
         // REJECT logs (for rejection info) + the "ready to book" approval

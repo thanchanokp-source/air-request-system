@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits, gwDeptsForRole, hasPendingGwSplit, splitAirCost } from "@/lib/claim"
+import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost } from "@/lib/claim"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -15,6 +15,7 @@ export default function ApprovalsPage() {
   const { data: session } = useSession()
   const role = (session?.user as any)?.role || ""
   const userEmail = session?.user?.email || ""
+  const userId = (session?.user as any)?.id || ""
   const isGwRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
   const claimDeptOptions = isGwRole ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
   const [requests, setRequests] = useState<any[]>([])
@@ -39,6 +40,11 @@ export default function ApprovalsPage() {
     : CLAIM_VP_ROLES.includes(role) ? role.replace("VP_", "")
     : ""
   const userClaimDept = (session?.user as any)?.claimDepartment || null
+
+  // SCM NYK has 2 approvers → whoever approves first "owns" the doc; hide it from
+  // the OTHER approver's queue. Owner = who has ≥1 SCM_NYK_APPROVER approval on it.
+  const nykOwnedByOther = (r: any) => (r.items || []).some((i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER" && a.userId && a.userId !== userId))
+  const nykOwnedByMe = (r: any) => (r.items || []).some((i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER" && a.userId === userId))
 
   // Filter documents by item-status (per-style forwarding — each role acts on specific itemStatus)
   const myRequests = requests.filter(r => {
@@ -69,7 +75,15 @@ export default function ApprovalsPage() {
     // Once LG has entered actuals for all SO, the doc drops from their queue even
     // if Claim is still running in parallel.
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED" && i.actualAirFreight == null)
-    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
+    if (role === "SCM_NYK_APPROVER") {
+      if (r.bu !== "GW") return false
+      // Another SCM NYK approver already claimed this doc → hide from me.
+      if (nykOwnedByOther(r) && !nykOwnedByMe(r)) return false
+      const myDepts = gwDeptsForRole(role, userClaimDept)
+      // Show only while a NYK SO still AWAITS the approver (drops once approved).
+      return items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts))
+    }
+    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }
@@ -96,7 +110,11 @@ export default function ApprovalsPage() {
     if (role === "DPM_GW" || role === "VP_MER_GW" || role === "GM_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "PRESIDENT_GW") return items.filter((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED" && i.actualAirFreight == null)
-    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
+    if (role === "SCM_NYK_APPROVER") {
+      const myDepts = gwDeptsForRole(role, userClaimDept)
+      return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts))
+    }
+    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }

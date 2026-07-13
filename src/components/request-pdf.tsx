@@ -360,13 +360,12 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
         </View>
         <View style={s.blackRule} />
 
-        {/* Doc-level info (Request By restored) */}
+        {/* Doc-level info (Request By moved below the table, next to TOTAL) */}
         <View style={s.grid}>
           {([
             ["Date", fmtDate(req.createdAt)],
             ["Brand", req.brandName || "-"],
             ["BU", req.buName || dept],
-            ["Request By (MER)", requestBy],
           ] as [string, string][]).map(([l, v]) => (
             <View key={l} style={s.gcell}>
               <Text style={s.glabel}>{l} :</Text>
@@ -434,8 +433,12 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
           </View>
         </View>
 
-        {/* Grand total */}
-        <View style={s.totalBoxWrap}>
+        {/* Request By (left) + Grand total (right), same row */}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+          <View style={{ flexDirection: "row" }}>
+            <Text style={s.glabel}>Request By (MER) : </Text>
+            <Text style={s.gval}>{requestBy}</Text>
+          </View>
           <View style={s.totalBox}>
             <View style={s.totalBoxRowLast}>
               <Text style={s.totalBoxK}>TOTAL</Text>
