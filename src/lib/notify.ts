@@ -466,7 +466,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       return
     }
 
-    // PENDING_LOGISTICS_GW (after President approves) — Logistics ∥ Claim run in parallel.
+    // PENDING_LOGISTICS_GW (after GM approves) — Logistics ∥ Claim run in parallel.
+    // (President is the FINAL approver, after Claim+Logistics complete.)
     // Notify 3 groups: Logistics (booking), Claim departments (per split), Accounting (read alert).
     if (newStatus === "PENDING_LOGISTICS_GW") {
       const link = `${APP_URL}/requests/${requestId}`
@@ -477,7 +478,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       if (lgEmails.length) {
         const t = (req as any).logisticsToken
         const ml = t ? `${APP_URL}/api/magic-login?token=${t}&redirect=/approvals` : undefined
-        await sendMail(lgEmails, `[Logistics – GW] President Approved — Please prepare Booking — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
+        await sendMail(lgEmails, `[Logistics – GW] GM Approved — Please prepare Booking — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
       }
       // 2) Claim departments (parallel) — per-dept recipients (GW≠SUPPLIER)
       const depts = new Set<string>()
@@ -492,7 +493,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         const em = firstUs.map((u: any) => u.email).filter(Boolean)
         if (!em.length) continue
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
-        await sendMail(em, `[Claim – ${g.label}] President Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
+        await sendMail(em, `[Claim – ${g.label}] GM Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
       }
       // 3) Accounting (read alert) — this BU only (GW → ACCOUNTING_GW).
       const acUsers = await (prisma.user as any).findMany({ where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: (req as any).bu }, select: { email: true } })
@@ -500,7 +501,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       if (acEmails.length) {
         const t = (req as any).accountingToken
         const ml = t ? `${APP_URL}/api/magic-login?token=${t}&redirect=/requests/${requestId}` : undefined
-        await sendMail(acEmails, `[Accounting – GW] President Approved (Alert) — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
+        await sendMail(acEmails, `[Accounting – GW] GM Approved (Alert) — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
       }
       return
     }
