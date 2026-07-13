@@ -2,7 +2,6 @@ import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { prisma } from "./prisma"
 import bcrypt from "bcryptjs"
-import { roleOr, roleInOr } from "./roles"
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -43,7 +42,7 @@ export const authOptions: NextAuthOptions = {
           // GM (GW) — dedicated token, always resolves to a GM_GW session
           const gmReq = await (prisma.airRequest as any).findFirst({ where: { gmToken: token } })
           if (gmReq) {
-            const gmUser = await (prisma.user as any).findFirst({ where: { isActive: true, ...roleOr("GM_GW") } })
+            const gmUser = await (prisma.user as any).findFirst({ where: { role: "GM_GW", isActive: true } })
             if (gmUser) return { id: gmUser.id, email: gmUser.email, name: gmUser.name, role: "GM_GW", bu: "GW", claimDepartment: null, priority: null }
             return null
           }
@@ -52,7 +51,7 @@ export const authOptions: NextAuthOptions = {
           if (presReq) {
             const isGW = presReq.bu === "GW"
             const presRole = isGW ? "PRESIDENT_GW" : "PRESIDENT"
-            const presUser = await (prisma.user as any).findFirst({ where: { isActive: true, ...roleOr(presRole) } })
+            const presUser = await (prisma.user as any).findFirst({ where: { role: presRole, isActive: true } })
             if (presUser) {
               return { id: presUser.id, email: presUser.email, name: presUser.name, role: presRole, bu: isGW ? "GW" : (presUser.bu || "NYG"), claimDepartment: null, priority: null }
             }
@@ -62,7 +61,7 @@ export const authOptions: NextAuthOptions = {
           // Try scmToken
           const scmReq = await (prisma.airRequest as any).findFirst({ where: { scmToken: token } })
           if (scmReq) {
-            const scmUser = await (prisma.user as any).findFirst({ where: { isActive: true, ...roleOr("SCM_USER") } })
+            const scmUser = await (prisma.user as any).findFirst({ where: { role: "SCM_USER", isActive: true } })
             if (scmUser) return { id: scmUser.id, email: scmUser.email, name: scmUser.name, role: "SCM_USER", bu: scmUser.bu || "NYG", claimDepartment: null, priority: null }
             return null
           }
@@ -72,7 +71,7 @@ export const authOptions: NextAuthOptions = {
             const assignedEmail = (vpScmReq as any).assignedVpScm
             const vpScmUser = assignedEmail
               ? await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
-              : await (prisma.user as any).findFirst({ where: { isActive: true, ...roleOr("VP_SCM") } })
+              : await (prisma.user as any).findFirst({ where: { role: "VP_SCM", isActive: true } })
             if (vpScmUser) return { id: vpScmUser.id, email: vpScmUser.email, name: vpScmUser.name, role: "VP_SCM", bu: vpScmUser.bu || "NYG", claimDepartment: null, priority: null }
             return null
           }
@@ -81,7 +80,7 @@ export const authOptions: NextAuthOptions = {
           if (logReq) {
             const isGW = logReq.bu === "GW"
             const logRole = isGW ? "LOGISTICS_GW" : "LOGISTICS"
-            const logUser = await (prisma.user as any).findFirst({ where: { isActive: true, ...roleOr(logRole) } })
+            const logUser = await (prisma.user as any).findFirst({ where: { role: logRole, isActive: true } })
             if (logUser) return { id: logUser.id, email: logUser.email, name: logUser.name, role: logRole, bu: isGW ? "GW" : (logUser.bu || "NYG"), claimDepartment: null, priority: null }
             return null
           }
@@ -101,7 +100,7 @@ export const authOptions: NextAuthOptions = {
               }
               // Scope to the document's BU — SCM roles exist in both NYG & GW.
               // For CLAIM_GW also scope by claimDepartment (GW vs SUPPLIER).
-              const u = await (prisma.user as any).findFirst({ where: { isActive: true, bu: cReq.bu, ...(scopeDept ? { claimDepartment: scopeDept } : {}), ...roleOr(gwRole) } })
+              const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true, bu: cReq.bu, ...(scopeDept ? { claimDepartment: scopeDept } : {}) } })
               if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (u as any).claimDepartment ?? scopeDept ?? null, priority: (u as any).priority ?? null }
               return null
             }
@@ -123,7 +122,7 @@ export const authOptions: NextAuthOptions = {
           if (acReq) {
             const isGW = acReq.bu === "GW"
             const acRoles = isGW ? ["ACCOUNTING_GW", "ACCOUNTING"] : ["ACCOUNTING"]
-            const acUser = await (prisma.user as any).findFirst({ where: { isActive: true, ...roleInOr(acRoles) } })
+            const acUser = await (prisma.user as any).findFirst({ where: { role: { in: acRoles }, isActive: true } })
             if (acUser) return { id: acUser.id, email: acUser.email, name: acUser.name, role: acUser.role, bu: isGW ? "GW" : (acUser.bu || "NYG"), claimDepartment: null, priority: null }
             return null
           }
