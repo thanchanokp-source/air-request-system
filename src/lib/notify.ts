@@ -284,6 +284,14 @@ const CLAIM_ROLE_TOKEN: Record<string, string> = {
   SCM_NYK: "scmNykToken",
 }
 
+// SCM NYK has 2 approvers who split work BY BRAND. Their alert shows the doc's
+// brand(s) so each recognises the ones they own, and BOTH are alerted in parallel
+// (first to approve locks the other — see approve route).
+function nykBrandLabel(req: any): string {
+  const brands = [...new Set((req.items || []).map((i: any) => i.brand).filter(Boolean))]
+  return brands.length ? brands.join(", ") : (req.brandName || "-")
+}
+
 // Auto-cascade: after a claim approver at priority `afterPriority` approves,
 // email the NEXT priority level (the immediate next, not everyone above) of the
 // same role/dept so the chain runs to the last priority with NO manual forward.
@@ -487,12 +495,18 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
         if (g.claimDept) where.claimDepartment = g.claimDept
         const us = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
+        const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
+        if (g.role === "SCM_NYK_APPROVER") {
+          // Alert BOTH SCM NYK approvers in parallel + show brand(s).
+          const em = us.map((u: any) => u.email).filter(Boolean)
+          if (em.length) await sendMail(em, `[Claim – SCM NYK] GM Approved — Pending Approval — Brand: ${nykBrandLabel(req)} — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
+          continue
+        }
         // Priority chain: alert only priority 1; approvals cascade upward.
         const usP = us.filter((u: any) => u.priority != null)
         const firstUs = usP.length ? usP.filter((u: any) => u.priority === usP[0].priority) : us
         const em = firstUs.map((u: any) => u.email).filter(Boolean)
         if (!em.length) continue
-        const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
         await sendMail(em, `[Claim – ${g.label}] GM Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
       }
       // 3) Accounting (read alert) — this BU only (GW → ACCOUNTING_GW).
@@ -576,14 +590,20 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
         if (g.claimDept) where.claimDepartment = g.claimDept
         const users = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
+        const magicLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
+        const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
+        if (g.role === "SCM_NYK_APPROVER") {
+          // Alert BOTH SCM NYK approvers in parallel + show brand(s).
+          const recipients = users.map((u: any) => u.email).filter(Boolean)
+          if (recipients.length) await sendMail(recipients, `[Claim – SCM NYK] Pending Approval — Brand: ${nykBrandLabel(req)} — ${req.documentNo}`, html)
+          continue
+        }
         // Priority chain: alert only the LOWEST priority first; each approval
         // auto-cascades to the next priority (notifyClaimNextPriority).
         const withP = users.filter((u: any) => u.priority != null)
         const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : users
         const recipients = firstBatch.map((u: any) => u.email).filter(Boolean)
         if (!recipients.length) continue
-        const magicLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
-        const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
         await sendMail(recipients, `[Claim – ${g.label}] Pending Approval — ${req.documentNo}`, html)
       }
       return

@@ -3006,6 +3006,8 @@ export default function RequestDetailPage() {
                   // NYK: SCM_NYK (CR user) never approves; EVP only after the Approver.
                   if (role === "SCM_NYK") return false
                   if (role === "SCM_NYK_EVP" && !appr.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")) return false
+                  // 2 SCM NYK approvers (split by brand): first to approve locks the other.
+                  if (role === "SCM_NYK_APPROVER" && appr.some((a: any) => a.user?.role === "SCM_NYK_APPROVER")) return false
                   const lower = myPriority !== null ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority) : []
                   return lower.every((u: any) => appr.some((a: any) => a.userId === u.id))
                 })
@@ -3199,10 +3201,15 @@ export default function RequestDetailPage() {
             const lowerApproved = lowerApprovers.every((u: any) => itemApprovals.some((a: any) => a.userId === u.id))
             // NYK: SCM_NYK (CR user) never approves; SCM_NYK_EVP only after the Approver.
             const approverApprovedThisItem = (item.claimApprovals || []).some((a: any) => a.user?.role === "SCM_NYK_APPROVER")
+            // 2 SCM NYK approvers split work by brand → first to approve locks the other;
+            // the other sees who already approved and cannot approve.
+            const nykApproverAppr = (item.claimApprovals || []).find((a: any) => a.user?.role === "SCM_NYK_APPROVER")
+            const nykApproverName = nykApproverAppr?.user?.name || nykApproverAppr?.user?.email || "another approver"
+            const nykApproverTaken = role === "SCM_NYK_APPROVER" && approverApprovedThisItem && !iHaveApproved
             const nykBlocked = role === "SCM_NYK" || (role === "SCM_NYK_EVP" && !approverApprovedThisItem)
             // SCM NYK Approver must pick BOTH the CR-entry person and EVP approver first.
             const nykSelectionMissing = role === "SCM_NYK_APPROVER" && (!nykCr || !nykEvp)
-            const canApproveNow = isPending && !iHaveApproved && lowerApproved && !nykBlocked
+            const canApproveNow = isPending && !iHaveApproved && lowerApproved && !nykBlocked && !nykApproverTaken
             // Next approver info
             const nextApprover = claimApproversList.find((u: any) =>
               !itemApprovals.some((a: any) => a.userId === u.id)
@@ -3233,6 +3240,11 @@ export default function RequestDetailPage() {
                     awaitingCr
                       ? <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap font-medium">Accepted · Awaiting CR</span>
                       : <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">You approved ✓</span>
+                  )}
+                  {nykApproverTaken && (
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full whitespace-nowrap font-medium" title={`Approved ${nykApproverAppr?.createdAt ? fmtDT(nykApproverAppr.createdAt) : ""}`}>
+                      ✓ Approved by {nykApproverName}
+                    </span>
                   )}
 
                   {/* Attach — priority 1 only (NYG per-SO; GW uses by-document attach above) */}
