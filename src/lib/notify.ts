@@ -270,8 +270,8 @@ function gwClaimGroups(depts: Set<string>, req: any): { role: string; label: str
   // NYK entry point is the APPROVER (EVP + CR user are alerted later, after approve).
   if (depts.has("SCM NYK")) groups.push({ role: "SCM_NYK_APPROVER", label: "SCM NYK", token: (req as any).scmNykApproverToken })
   if (depts.has("SCM NYG")) groups.push({ role: "SCM_NYG", label: "SCM NYG", token: (req as any).scmNygToken })
-  if (depts.has("GW")) groups.push({ role: "CLAIM_GW", label: "GW", claimDept: "GW", token: (req as any).claimGwToken })
-  // SUPPLIER needs NO approval (auto-approved) → do NOT alert / create a group for it.
+  // GW + SUPPLIER need NO approval (auto-approved) → do NOT alert / create groups for
+  // them. Only SCM NYK / SCM NYG approve.
   return groups
 }
 
