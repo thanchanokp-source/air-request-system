@@ -274,6 +274,11 @@ export default function RequestsPage() {
             + New Request
           </Link>
         )}
+        {role === "ADMIN" && (
+          <Link href="/import-history" className="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+            📥 Import History
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
