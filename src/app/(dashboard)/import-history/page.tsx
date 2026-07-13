@@ -27,20 +27,24 @@ export default function ImportHistoryPage() {
       const wb = XLSX.read(buf, { type: "array", cellDates: true })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, blankrows: false })
-      // Auto-detect the header row (the one containing both SO and STYLE).
+      // Auto-detect the header row = the first row matching ≥3 known column names
+      // (works for both the MER template and simpler historical layouts).
       const norm = (v: any) => String(v ?? "").trim()
+      const KNOWN = ["document", "no_document", "brand name", "brand", "bu", "style", "so",
+        "country", "factory", "hawb#", "inv no.", "actual airfreight", "claim dept 1", "reason delay"]
       const hIdx = aoa.findIndex(r => {
         const s = (r || []).map(c => norm(c).toLowerCase())
-        return s.includes("so") && s.includes("style")
+        return s.filter(c => KNOWN.includes(c)).length >= 3
       })
-      if (hIdx < 0) { setError("Header row not found — the file must contain SO and STYLE columns (MER template)."); return }
+      if (hIdx < 0) { setError("Header row not found — need columns like Document / Brand name / BU / HAWB# / Actual Airfreight."); return }
       const headers = (aoa[hIdx] || []).map(norm)
+      const ID_KEYS = ["Document", "No_Document", "Brand name", "BRAND", "SO", "STYLE", "INV NO.", "HAWB#", "Actual Airfreight"]
       const dataRows = aoa.slice(hIdx + 1).map(r => {
         const o: any = {}
         headers.forEach((h, i) => { if (h) o[h] = (r || [])[i] ?? "" })
         return o
-      }).filter(o => norm(o["SO"] || o["so"]) || norm(o["STYLE"] || o["style"]))
-      if (dataRows.length === 0) { setError("No data rows found (every row is missing SO and STYLE)."); return }
+      }).filter(o => ID_KEYS.some(k => norm(o[k])))
+      if (dataRows.length === 0) { setError("No data rows found."); return }
       setRows(dataRows)
     } catch (err: any) {
       setError("Could not read the file: " + (err?.message || "unknown error"))

@@ -38,7 +38,8 @@ function docStage(req: any): "BOOKING" | "LOGISTICS" | "FINAL" {
 function matchesStatus(req: any, f: StatusFilter): boolean {
   if (f === "ALL") return true
   if (f === "COMPLETED") return req.status === "COMPLETED"
-  if (f === "TOBOOK") return unbookedCount(req) > 0
+  // A COMPLETED doc is done — never show it in To-book / Booked (e.g. imported history).
+  if (f === "TOBOOK") return req.status !== "COMPLETED" && unbookedCount(req) > 0
   if (f === "BOOKED") return isBooked(req) && req.status !== "COMPLETED"
   return true
 }

@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     // Group rows into documents by the historical No_Document (blank → one doc).
     const groups = new Map<string, any[]>()
     for (const it of items) {
-      const key = String(col(it, "No_Document") || "").trim() || "__nodoc__"
+      const key = String(col(it, "No_Document") || col(it, "Document") || "").trim() || "__nodoc__"
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(it)
     }
@@ -72,7 +72,10 @@ export async function POST(req: NextRequest) {
           reason: String(col(item, `REASON ${n}`) || "").trim() || null,
           actual: num(col(item, `ACTUAL AIRFREIGHT${n}`)),
         })).filter(s => s.dept)
-        const totalActual = splits.reduce((s, x) => s + x.actual, 0)
+        // Actual per SO: prefer a single SO-level column if the file has one,
+        // else sum the per-dept ACTUAL AIRFREIGHT 1/2/3.
+        const soActual = num(col(item, "Actual Airfreight")) || num(col(item, "ACTUAL AIRFREIGHT")) || num(col(item, "ACTUAL (THB)")) || num(col(item, "Actual Freight (THB)"))
+        const totalActual = soActual > 0 ? soActual : splits.reduce((s, x) => s + x.actual, 0)
         const claimDepts = splits.length ? splits.map(({ actual, ...rest }) => rest) : null
 
         return {
@@ -86,7 +89,7 @@ export async function POST(req: NextRequest) {
           planShipmentDate: parseDate(col(item, "Plan Shipment Date")),
           qtyOriginalShipment: Math.round(num(col(item, "QTY Original Shipment (pcs)"))),
           qtyRequestAir: Math.round(num(col(item, "QTY Request ship Air (pcs)"))),
-          reasonDelay: "",
+          reasonDelay: String(col(item, "Reason delay") || ""),
           factory: String(col(item, "Factory") || ""),
           country,
           port: "",
