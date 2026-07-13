@@ -9,6 +9,7 @@ export default function ImportHistoryPage() {
   const { data: session } = useSession()
   const role = (session?.user as any)?.role
   const [rows, setRows] = useState<any[]>([])
+  const [readCount, setReadCount] = useState(0)
   const [fileName, setFileName] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<string | null>(null)
@@ -38,12 +39,17 @@ export default function ImportHistoryPage() {
       })
       if (hIdx < 0) { setError("Header row not found — need columns like Document / Brand name / BU / HAWB# / Actual Airfreight."); return }
       const headers = (aoa[hIdx] || []).map(norm)
-      const dataRows = aoa.slice(hIdx + 1).map(r => {
+      const body = aoa.slice(hIdx + 1)
+      // Keep any row that has content in the RAW sheet row (not just mapped headers)
+      // so nothing is dropped by merged cells / unheadered columns.
+      const kept = body.filter(r => (r || []).some(c => norm(c)))
+      const dataRows = kept.map(r => {
         const o: any = {}
         headers.forEach((h, i) => { if (h) o[h] = (r || [])[i] ?? "" })
         return o
-      }).filter(o => Object.values(o).some(v => norm(v)))   // keep every non-empty row
+      })
       if (dataRows.length === 0) { setError("No data rows found."); return }
+      setReadCount(body.length)
       setRows(dataRows)
     } catch (err: any) {
       setError("Could not read the file: " + (err?.message || "unknown error"))
@@ -82,7 +88,7 @@ export default function ImportHistoryPage() {
           ⬆ Choose Excel file
           <input type="file" accept=".xlsx,.xls" onChange={onFile} className="hidden" />
         </label>
-        {fileName && <span className="ml-3 text-sm text-gray-600">{fileName} · <strong>{rows.length}</strong> row(s)</span>}
+        {fileName && <span className="ml-3 text-sm text-gray-600">{fileName} · read <strong>{readCount}</strong> row(s) → importing <strong>{rows.length}</strong> SO{readCount !== rows.length && <span className="text-amber-600"> ({readCount - rows.length} blank skipped)</span>}</span>}
 
         {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm whitespace-pre-line">{error}</div>}
         {result && <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-green-700 text-sm">{result}</div>}

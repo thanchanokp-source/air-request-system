@@ -56,18 +56,22 @@ function CostBar({ data, height=200, onBarClick, drillLabel, onBack }: {
   const renderEstLabel = (props:any) => {
     const {x,y,width,value} = props
     if(!value) return null
-    return <text x={x+width/2} y={y-5} textAnchor="middle" fill="#374151" fontSize={12} fontWeight="700">{fmtK(value)}</text>
+    return <text x={x+width/2} y={y-4} textAnchor="middle" fill="#374151" fontSize={9} fontWeight="700">{fmtK(value)}</text>
   }
   const renderActualLabel = (props:any) => {
     const {x,y,width,value,index} = props
     if(!value) return null
     const est = data[index]?.est
     const valLabel = fmtK(value)
-    if(!est) return <text x={x+width/2} y={y-5} textAnchor="middle" fill="#374151" fontSize={12} fontWeight="700">{valLabel}</text>
+    if(!est) return <text x={x+width/2} y={y-4} textAnchor="middle" fill="#374151" fontSize={9} fontWeight="700">{valLabel}</text>
     const pct = (value-est)/est*100
     const arrow = pct>0?"↑":pct<0?"↓":"→"
     const pctColor = pct>0?"#ef4444":"#10b981"
-    return <text x={x+width/2} y={y-5} textAnchor="middle" fill={pctColor} fontSize={12} fontWeight="700">{valLabel} ({arrow}{Math.abs(pct).toFixed(0)}%)</text>
+    // value on top line, variance% on a second line → no horizontal overlap with the Est label.
+    return <text x={x+width/2} y={y-4} textAnchor="middle" fill={pctColor} fontSize={9} fontWeight="700">
+      <tspan x={x+width/2}>{valLabel}</tspan>
+      <tspan x={x+width/2} dy={-9}>{arrow}{Math.abs(pct).toFixed(0)}%</tspan>
+    </text>
   }
   return (
     <div className="bg-white rounded-xl border p-3">
@@ -104,19 +108,12 @@ function CostBar({ data, height=200, onBarClick, drillLabel, onBack }: {
   )
 }
 
-function QtyBar({ data, height=200 }: { data:{name:string;orig:number;air:number;airRate:number}[]; height?:number }) {
-  const renderOrigLabel = (props:any) => {
+function QtyBar({ data, height=200 }: { data:any[]; height?:number }) {
+  // Only the ACTUAL air-shipped qty (plan/original removed per request → no overlap).
+  const renderAirLabel = (props:any) => {
     const {x,y,width,value} = props
     if(!value) return null
-    return <text x={x+width/2} y={y-5} textAnchor="middle" fill="#374151" fontSize={12} fontWeight="700">{fmtNum(value)}</text>
-  }
-  const renderAirLabel = (props:any) => {
-    const {x,y,width,value,index} = props
-    if(!value) return null
-    const rate = data[index]?.airRate ?? 0
-    const rateColor = rate>50?"#ef4444":rate>20?"#f59e0b":"#10b981"
-    const arrow = rate>50?"↑":rate>20?"→":""
-    return <text x={x+width/2} y={y-5} textAnchor="middle" fill={rateColor} fontSize={12} fontWeight="700">{fmtNum(value)} ({arrow}{rate}%)</text>
+    return <text x={x+width/2} y={y-4} textAnchor="middle" fill="#374151" fontSize={9} fontWeight="700">{fmtK(value)}</text>
   }
   return (
     <div className="bg-white rounded-xl border p-3">
@@ -126,21 +123,14 @@ function QtyBar({ data, height=200 }: { data:{name:string;orig:number;air:number
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
             <XAxis dataKey="name" tick={{fontSize:13}} angle={-35} textAnchor="end" interval={0}/>
             <YAxis tick={{fontSize:13}} width={40}/>
-            <Tooltip formatter={(v:any,n:any,p:any)=>{
-              if(n==="QTY Air") return [`${fmtNum(v)} pcs — Air Rate: ${p?.payload?.airRate??0}%`,n]
-              return [fmtNum(v)+" pcs",n]
-            }}/>
-            <Bar dataKey="orig" name="QTY Orig." fill="#c05070" radius={[2,2,0,0]}>
-              <LabelList content={renderOrigLabel}/>
-            </Bar>
-            <Bar dataKey="air"  name="QTY Air"  fill="#f5c0c8" radius={[2,2,0,0]}>
+            <Tooltip formatter={(v:any)=>[fmtNum(v)+" pcs","QTY Air"]}/>
+            <Bar dataKey="air" name="QTY Air" fill="#e07878" radius={[2,2,0,0]}>
               <LabelList content={renderAirLabel}/>
             </Bar>
           </BarChart>
         </ResponsiveContainer>
         <div className="flex items-center justify-center gap-4 pt-1 pb-0.5">
-          <div className="flex items-center gap-1"><span className="inline-block w-3 h-2.5 rounded-sm" style={{background:"#c05070"}}/><span className="text-xs text-gray-600">QTY Orig.</span></div>
-          <div className="flex items-center gap-1"><span className="inline-block w-3 h-2.5 rounded-sm" style={{background:"#f5c0c8"}}/><span className="text-xs text-gray-600">QTY Air</span></div>
+          <div className="flex items-center gap-1"><span className="inline-block w-3 h-2.5 rounded-sm" style={{background:"#e07878"}}/><span className="text-xs text-gray-600">QTY Air (pcs)</span></div>
         </div>
       </>}
     </div>
@@ -649,15 +639,13 @@ export default function DashboardPage() {
       </div>
 
       {/* ── KPI ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
         {([
           ["TOTAL SO","SO",totalSO,"text-blue-700","bg-blue-50 border-blue-200",`${compDone} completed`],
           ["EST. AIRFREIGHT","THB",fmtK(totalEst),"text-sky-700","bg-sky-50 border-sky-200",`${fmtNum(totalEst)} THB`],
           ["ACTUAL AIRFREIGHT","THB",fmtK(totalAct),"text-teal-700","bg-teal-50 border-teal-200",`${fmtNum(totalAct)} THB`],
           ["ACTUAL vs EST","%",varPct!=null?(varPct>0?"↑":"↓")+Math.abs(varPct).toFixed(1)+"%":"N/A",varPct!=null&&varPct>0?"text-red-600":varPct!=null&&varPct<0?"text-green-600":"text-gray-400","bg-orange-50 border-orange-200",varPct!=null?`Variance ${fmtPct(varPct)}`:"Actual N/A"],
-          ["QTY PLAN","pcs",fmtNum(totalQOrig),"text-purple-700","bg-purple-50 border-purple-200","Original shipment"],
           ["QTY SHIP AIR","pcs",fmtNum(totalQAir),"text-orange-700","bg-orange-50 border-orange-200","Requested air"],
-          ["SHIP RATE","%",fmtPct(airRatePct,false),"text-indigo-700","bg-indigo-50 border-indigo-200",`Air vs Plan qty`],
         ] as [string,string,any,string,string,string][]).map(([label,unit,value,tc,bg,sub])=>(
           <div key={label} className={`${bg} border rounded-xl p-4`}>
             <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide leading-tight">{label}</p>
@@ -716,7 +704,7 @@ export default function DashboardPage() {
       {/* ── Column Headers ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>EST vs ACTUAL AIR FREIGHT (THB)</div>
-        <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>QTY ORIGINAL vs QTY AIR (pcs)</div>
+        <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>QTY SHIP AIR (pcs)</div>
         <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>AVG DELAY DAYS (Plan − Original)</div>
       </div>
 
