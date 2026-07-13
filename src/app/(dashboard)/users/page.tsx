@@ -609,7 +609,9 @@ export default function UsersPage() {
                   </select>
                 </div>
 
-                {isMasterRole && (
+                {/* GW claim uses its own priority field below (after Claim Dept), so
+                    exclude it here to avoid a duplicate Priority dropdown. */}
+                {isMasterRole && !isGWClaim && (
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">
                       Priority <span className="text-gray-400 font-normal">(1 = handles first)</span>
