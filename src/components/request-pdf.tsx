@@ -304,12 +304,9 @@ function ItemPage({ req, item }: { req: any; item: any }) {
   )
 }
 
+// Single by-SO download — same consolidated layout as Combined, just one SO row.
 export function RequestPdfDocument({ req, item }: { req: any; item: any }) {
-  return (
-    <Document title={`${req.documentNo}_${item.so}`}>
-      <ItemPage req={req} item={item} />
-    </Document>
-  )
+  return <CombinedPdfDocument pages={[{ req, item }]} />
 }
 
 // Combined / All-SO — ONE consolidated document (landscape): single letterhead,
