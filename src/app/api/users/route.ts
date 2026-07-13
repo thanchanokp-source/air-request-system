@@ -10,7 +10,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const users = await (prisma.user as any).findMany({
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, email: true, role: true, bu: true, claimDepartment: true, procurementType: true, isActive: true, priority: true, createdAt: true }
+    select: { id: true, name: true, email: true, role: true, roles: true, bu: true, claimDepartment: true, procurementType: true, isActive: true, priority: true, createdAt: true }
   })
   return NextResponse.json(users)
 }
@@ -30,18 +30,31 @@ export async function POST(req: NextRequest) {
   const isGwOnlyRole = role.endsWith("_GW") || role.startsWith("SCM_NYG")
   const resolvedBu = isGwOnlyRole ? "GW" : (bu || "NYG")
 
+  const emailLc = email.toLowerCase()
   try {
-    const user = await prisma.user.create({
+    // 1 person can hold MANY roles: if the email already exists, just ADD this role
+    // to their roles[] (so they show up in that role's approver dropdown) — don't
+    // create a duplicate account.
+    const existing = await (prisma.user as any).findUnique({ where: { email: emailLc } })
+    if (existing) {
+      const current: string[] = (existing.roles && existing.roles.length) ? existing.roles : [existing.role]
+      if (current.includes(role)) return NextResponse.json({ id: existing.id, alreadyHadRole: true })
+      const roles = Array.from(new Set([...current, role]))
+      await (prisma.user as any).update({ where: { id: existing.id }, data: { roles } })
+      return NextResponse.json({ id: existing.id, addedRole: role, multiRole: true })
+    }
+
+    const user = await (prisma.user as any).create({
       data: {
-        name, email: email.toLowerCase(), password: null,
-        role, bu: resolvedBu,
+        name, email: emailLc, password: null,
+        role, roles: [role], bu: resolvedBu,
         claimDepartment: (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") ? (claimDepartment || null) : null,
         procurementType: isProcurement ? (procurementType || null) : null,
         priority: priority ?? null,
         isActive: false,
         resetToken: token,
         resetTokenExpiry: expiry,
-      } as any
+      }
     })
     if (sendEmail) {
       sendPasswordSetupEmail(email, name || email, token).catch(() => {})

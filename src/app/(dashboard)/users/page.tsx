@@ -266,9 +266,12 @@ export default function UsersPage() {
     setPeopleLoading(false)
   }
 
+  // A person can hold multiple roles → match the primary role OR any in roles[].
+  const hasRole = (u: any, r: string) => u.role === r || (Array.isArray(u.roles) && u.roles.includes(r))
+
   // Checklist logic
-  const isRoleSetup = (role: string) => users.some(u => u.role === role && u.isActive)
-  const isClaimP1Setup = (role: string) => users.some(u => u.role === role && u.priority === 1 && u.isActive)
+  const isRoleSetup = (role: string) => users.some(u => hasRole(u, role) && u.isActive)
+  const isClaimP1Setup = (role: string) => users.some(u => hasRole(u, role) && u.priority === 1 && u.isActive)
 
   const isMasterRole = CLAIM_ROLES.includes(form.role)
   const isGWClaim = form.role === "CLAIM_GW"
@@ -433,7 +436,7 @@ export default function UsersPage() {
                         </div>
                         {CLAIM_GW_DEPTS.map(dept => {
                           const deptUsers = users
-                            .filter(u => u.role === "CLAIM_GW" && u.claimDepartment === dept && u.isActive)
+                            .filter(u => hasRole(u, "CLAIM_GW") && u.claimDepartment === dept && u.isActive)
                             .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
                           const maxP = deptUsers.length > 0 ? Math.max(...deptUsers.map(u => u.priority ?? 0)) : 0
                           const hasP1 = deptUsers.some(u => u.priority === 1)
@@ -472,7 +475,7 @@ export default function UsersPage() {
 
                   // Normal roles
                   const done = mr.needsPriority ? isClaimP1Setup(mr.role) : isRoleSetup(mr.role)
-                  const count = users.filter(u => u.role === mr.role && u.isActive).length
+                  const count = users.filter(u => hasRole(u, mr.role) && u.isActive).length
                   return (
                     <div key={mr.role}
                       onClick={() => { setForm(p => ({ ...p, role: mr.role, bu: mr.bu, priority: mr.needsPriority ? "1" : "", claimDepartment: "", nygPosition: "" })); setEditId(null); setError("") }}
@@ -691,7 +694,7 @@ export default function UsersPage() {
               </div>
               <div className="divide-y">
                 {visibleMasterRoles.map(mr => {
-                  const group = users.filter(u => u.role === mr.role)
+                  const group = users.filter(u => hasRole(u, mr.role))
                   if (group.length === 0) return (
                     <div key={mr.role} className="px-4 py-3 flex items-center justify-between">
                       <div>

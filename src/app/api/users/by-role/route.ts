@@ -9,8 +9,9 @@ export async function GET(req: NextRequest) {
   const role = req.nextUrl.searchParams.get("role")
   const bu = req.nextUrl.searchParams.get("bu")
   if (!role) return NextResponse.json([])
-  const users = await prisma.user.findMany({
-    where: { role, isActive: true, ...(bu ? { bu } : {}) },
+  // A person can hold multiple roles → match the primary `role` OR any in `roles[]`.
+  const users = await (prisma.user as any).findMany({
+    where: { isActive: true, ...(bu ? { bu } : {}), OR: [{ role }, { roles: { has: role } }] },
     select: { id: true, name: true, email: true, role: true, priority: true },
     orderBy: [{ priority: "asc" }, { createdAt: "asc" }]
   })

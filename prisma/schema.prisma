@@ -14,7 +14,8 @@ model User {
   name             String?
   email            String    @unique
   password         String?
-  role             String    @default("MER_USER")
+  role             String    @default("MER_USER")   // primary role (login/session)
+  roles            String[]  @default([])            // all roles this person holds (incl. primary) — 1 person, many positions
   claimDepartment  String?
   isActive         Boolean   @default(true)
   createdAt        DateTime  @default(now())
