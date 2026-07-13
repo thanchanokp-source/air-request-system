@@ -7,7 +7,7 @@ import { canonCountry } from "@/lib/freight"
 
 // Admin-only backfill of HISTORICAL, already-complete documents. Uses the same MER
 // template headers, but creates each doc as COMPLETED — no approval flow, no emails.
-// Rows are grouped into documents by the "No_Document" column (blank → one doc).
+// ONE uploaded file = ONE document (every row becomes an SO of that document).
 
 const normYear = (y: number): number => {
   if (y < 100) return y + 2000
@@ -54,15 +54,8 @@ export async function POST(req: NextRequest) {
     const rates: Record<string, number> = {}
     for (const r of rateList) rates[rateKey(r.country)] = r.ratePerKg
 
-    // Group rows into documents by the historical No_Document (blank → one doc).
-    const groups = new Map<string, any[]>()
-    for (const it of items) {
-      // Group into documents by "No_Document" ONLY. Files without it (e.g. a plain
-      // historical export where "Document" is just a line number) → all rows = ONE doc.
-      const key = String(col(it, "No_Document") || "").trim() || "__onedoc__"
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key)!.push(it)
-    }
+    // ONE uploaded file = ONE document — every row becomes an SO of that single doc.
+    const groups = new Map<string, any[]>([["__onedoc__", items]])
 
     let createdDocs = 0, createdItems = 0
     for (const [, rows] of groups) {
