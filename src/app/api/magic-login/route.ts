@@ -44,6 +44,8 @@ export async function GET(req: NextRequest) {
   // Hand off to client-side page which calls signIn() via NextAuth
   const magicAuthUrl = new URL("/magic-auth", req.url)
   magicAuthUrl.searchParams.set("token", token)
+  const asParam = req.nextUrl.searchParams.get("as")   // per-recipient identity
+  if (asParam) magicAuthUrl.searchParams.set("as", asParam)
   magicAuthUrl.searchParams.set("redirect", finalRedirect)
   return NextResponse.redirect(magicAuthUrl)
 }

@@ -497,9 +497,14 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         const us = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
         if (g.role === "SCM_NYK_APPROVER") {
-          // Alert BOTH SCM NYK approvers in parallel + show brand(s).
-          const em = us.map((u: any) => u.email).filter(Boolean)
-          if (em.length) await sendMail(em, `[Claim – SCM NYK] GM Approved — Pending Approval — Brand: ${nykBrandLabel(req)} — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
+          // 2 approvers (by brand) → send EACH their OWN link (?as=email) so clicking
+          // logs in as THEM (not the first user). Show brand(s).
+          const subj = `[Claim – SCM NYK] GM Approved — Pending Approval — Brand: ${nykBrandLabel(req)} — ${req.documentNo}`
+          for (const u of us) {
+            if (!u.email) continue
+            const perLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&as=${encodeURIComponent(u.email)}&redirect=/approvals` : undefined
+            await sendMail(u.email, subj, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, perLink))
+          }
           continue
         }
         // Priority chain: alert only priority 1; approvals cascade upward.
@@ -593,9 +598,14 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         const magicLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
         const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
         if (g.role === "SCM_NYK_APPROVER") {
-          // Alert BOTH SCM NYK approvers in parallel + show brand(s).
-          const recipients = users.map((u: any) => u.email).filter(Boolean)
-          if (recipients.length) await sendMail(recipients, `[Claim – SCM NYK] Pending Approval — Brand: ${nykBrandLabel(req)} — ${req.documentNo}`, html)
+          // 2 approvers (by brand) → send EACH their OWN link (?as=email) so clicking
+          // logs in as THEM (not the first user). Show brand(s).
+          const subj = `[Claim – SCM NYK] Pending Approval — Brand: ${nykBrandLabel(req)} — ${req.documentNo}`
+          for (const u of users) {
+            if (!u.email) continue
+            const perLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&as=${encodeURIComponent(u.email)}&redirect=/approvals` : undefined
+            await sendMail(u.email, subj, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, perLink))
+          }
           continue
         }
         // Priority chain: alert only the LOWEST priority first; each approval

@@ -11,10 +11,11 @@ function MagicAuthContent() {
   useEffect(() => {
     const token = params.get("token")
     const redirect = params.get("redirect") || "/dashboard"
+    const as = params.get("as") || undefined   // recipient identity (per-person links)
     if (!token) { setStatus("error"); return }
 
     signOut({ redirect: false })
-      .then(() => signIn("credentials", { magicToken: token, redirect: false }))
+      .then(() => signIn("credentials", { magicToken: token, magicAs: as, redirect: false }))
       .then(res => {
         if (res?.ok) {
           router.replace(redirect)

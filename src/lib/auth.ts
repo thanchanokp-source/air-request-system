@@ -11,6 +11,7 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
         magicToken: { label: "Magic Token", type: "text" },
+        magicAs: { label: "Magic As (recipient email)", type: "text" },
       },
       async authorize(credentials) {
         // Magic link login — token validates identity without password
@@ -89,6 +90,16 @@ export const authOptions: NextAuthOptions = {
           for (const [field, gwRole, scopeDept] of [["claimGwToken", "CLAIM_GW", "GW"], ["claimSupplierToken", "CLAIM_GW", "SUPPLIER"], ["scmNykApproverToken", "SCM_NYK_APPROVER", null], ["scmNykEvpToken", "SCM_NYK_EVP", null], ["scmNykToken", "SCM_NYK", null], ["scmNygToken", "SCM_NYG", null]] as const) {
             const cReq = await (prisma.airRequest as any).findFirst({ where: { [field]: token } })
             if (cReq) {
+              // Per-recipient link (?as=email) → log in AS that specific person for
+              // this role. SCM NYK has 2 approvers (by brand); each gets their OWN
+              // link, else both would resolve to the first user via findFirst.
+              const asEmail = String((credentials as any).magicAs || "").toLowerCase()
+              if (asEmail) {
+                const asU = await (prisma.user as any).findUnique({ where: { email: asEmail } })
+                if (asU && asU.isActive && (asU.role === gwRole || (Array.isArray(asU.roles) && asU.roles.includes(gwRole)))) {
+                  return { id: asU.id, email: asU.email, name: asU.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (asU as any).claimDepartment ?? scopeDept ?? null, priority: (asU as any).priority ?? null }
+                }
+              }
               // SCM NYK EVP / CR user: the Approver chose a specific person — resolve
               // to them (grant the role for this session). Else fall back to role.
               const assignedEmail = gwRole === "SCM_NYK_EVP" ? (cReq as any).assignedScmNykEvp
