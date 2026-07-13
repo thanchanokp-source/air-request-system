@@ -581,6 +581,76 @@ export function HawbPdfDocument({
   )
 }
 
+// ─── Print by HAWB (cross-document) ───────────────────────────────────────────
+// One HAWB# → all its SO across ANY document(s): total charge + INV + SO list.
+export function HawbReportPdf({ hawbNo, items, generatedDate }: {
+  hawbNo: string
+  items: any[]
+  generatedDate?: string
+}) {
+  const fmt2 = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmt0 = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 })
+  const totalQty = items.reduce((s, i) => s + (i.qtyActualShip ?? i.qtyRequestAir ?? 0), 0)
+  const totalVwt = items.reduce((s, i) => s + (i.grossWeight ?? 0), 0)
+  const totalAmt = items.reduce((s, i) => s + (i.actualAirFreight ?? 0), 0)
+  const docs = [...new Set(items.map(i => i.documentNo).filter(Boolean))]
+  const brands = [...new Set(items.map(i => i.brand).filter(Boolean))]
+  const C = { no: 26, doc: 82, so: 64, style: 58, inv: 82, qty: 46, vwt: 58, amt: 84 }
+  return (
+    <Document title={`HAWB_${hawbNo}`}>
+      <Page size="A4" orientation="landscape" style={hw.page} wrap>
+        <Text style={hw.title}>HAWB REPORT</Text>
+        <View style={hw.headerBox}>
+          {[
+            { label: "HAWB NO.", value: hawbNo || "—" },
+            { label: "TOTAL AIR CHARGE (THB)", value: fmt2(totalAmt) },
+            { label: "TOTAL QTY (PCS)", value: fmt0(totalQty) },
+            { label: "CONTAINS", value: `${items.length} SO · ${docs.length} doc` },
+            { label: "BRAND", value: brands.join(", ") || "—" },
+          ].map((c, i, arr) => (
+            <View key={c.label} style={i < arr.length - 1 ? hw.headerCell : hw.headerCellLast}>
+              <Text style={hw.headerLabel}>{c.label}</Text>
+              <Text style={hw.headerValue}>{c.value}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={hw.table}>
+          <View style={hw.thead} fixed>
+            {([["#", C.no], ["DOC NO.", C.doc], ["S/O NO.", C.so], ["STYLE", C.style], ["INVOICE NO.", C.inv], ["QTY", C.qty], ["WEIGHT (KG)", C.vwt], ["AIR CHARGE (THB)", C.amt]] as [string, number][]).map(([label, w], i, arr) => (
+              <Text key={label} style={[hw.th, { width: w, ...(i === arr.length - 1 ? { borderRightWidth: 0 } : {}) }]}>{label}</Text>
+            ))}
+          </View>
+          {items.map((item, i) => {
+            const qty = item.qtyActualShip ?? item.qtyRequestAir ?? 0
+            return (
+              <View key={item.id ?? i} style={i % 2 === 0 ? hw.tr : hw.trAlt} wrap={false}>
+                <Text style={[hw.td, { width: C.no }]}>{i + 1}</Text>
+                <Text style={[hw.tdLeft, { width: C.doc }]}>{item.documentNo || "—"}</Text>
+                <Text style={[hw.tdLeft, { width: C.so }]}>{item.so || "—"}</Text>
+                <Text style={[hw.td, { width: C.style }]}>{item.style || "—"}</Text>
+                <Text style={[hw.tdLeft, { width: C.inv }]}>{item.invoiceNo || "—"}</Text>
+                <Text style={[hw.td, { width: C.qty }]}>{qty}</Text>
+                <Text style={[hw.td, { width: C.vwt }]}>{item.grossWeight != null ? fmt2(item.grossWeight) : "—"}</Text>
+                <Text style={[hw.td, { width: C.amt, borderRightWidth: 0 }]}>{item.actualAirFreight != null ? fmt2(item.actualAirFreight) : "—"}</Text>
+              </View>
+            )
+          })}
+          <View style={hw.totalRow}>
+            <Text style={[hw.td, { width: C.no + C.doc + C.so + C.style + C.inv, textAlign: "right", fontFamily: "SarabunB", borderRightWidth: 0.5, borderRightColor: "#93C5FD" }]}>TOTAL ({items.length} SO)</Text>
+            <Text style={[hw.td, { width: C.qty, fontFamily: "SarabunB" }]}>{fmt0(totalQty)}</Text>
+            <Text style={[hw.td, { width: C.vwt, fontFamily: "SarabunB" }]}>{fmt2(totalVwt)}</Text>
+            <Text style={[hw.td, { width: C.amt, fontFamily: "SarabunB", color: "#1E3A8A", borderRightWidth: 0 }]}>{fmt2(totalAmt)}</Text>
+          </View>
+        </View>
+        <View style={hw.footer}>
+          <Text>Generated{generatedDate ? `: ${generatedDate}` : ""}</Text>
+          <Text>Nan Yang Textile — Air Request System</Text>
+        </View>
+      </Page>
+    </Document>
+  )
+}
+
 // ─── Transportation Booking PDF ───────────────────────────────────────────────
 const tb = StyleSheet.create({
   page: { fontFamily: "Sarabun", fontSize: 7.5, paddingHorizontal: 28, paddingVertical: 24, color: "#111" },

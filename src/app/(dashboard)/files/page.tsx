@@ -92,6 +92,7 @@ export default function FilesPage() {
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
   const [combineMode, setCombineMode] = useState(false)
+  const [hawbLoading, setHawbLoading] = useState(false)
   const [unbookedOnly, setUnbookedOnly] = useState(false)
   const [selectedForCombine, setSelectedForCombine] = useState<Set<string>>(new Set())
   const [combineLoading, setCombineLoading] = useState(false)
@@ -193,6 +194,36 @@ export default function FilesPage() {
   const toggleYear = (y: string) => setExpandedYears(p => { const n = new Set(p); n.has(y) ? n.delete(y) : n.add(y); return n })
   const toggleMonth = (k: string) => setExpandedMonths(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
   const toggleDoc = (k: string) => setExpandedDocs(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
+
+  // All HAWB numbers across every document (for the "Print by HAWB" picker).
+  const allHawbs = useMemo(
+    () => [...new Set(requests.flatMap((r: any) => (r.items || []).map((i: any) => (i.hawbNo || "").trim()).filter(Boolean)))].sort(),
+    [requests]
+  )
+
+  // Print ONE HAWB# → all its SO across ANY document(s): total + INV + SO list.
+  const printHawb = async (hawb: string) => {
+    setHawbLoading(true)
+    try {
+      const items: any[] = []
+      requests.forEach((r: any) => (r.items || []).forEach((it: any) => {
+        if ((it.hawbNo || "").trim() === hawb && it.itemStatus !== "REJECTED") {
+          items.push({ ...it, documentNo: r.documentNo, brand: it.brand || r.brandName, buName: r.buName })
+        }
+      }))
+      if (items.length === 0) { alert("No SO found for this HAWB"); return }
+      const [{ pdf }, { HawbReportPdf }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/request-pdf"),
+      ])
+      const el = React.createElement(HawbReportPdf as any, { hawbNo: hawb, items })
+      const blob = await (pdf(el as any) as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a"); a.href = url; a.download = `HAWB_${hawb}.pdf`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch { alert("HAWB PDF generation failed") }
+    finally { setHawbLoading(false) }
+  }
 
   const downloadPdf = async (req: any, item: any) => {
     const key = `${req.id}-${item.id}`
@@ -396,6 +427,14 @@ export default function FilesPage() {
                 className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${combineMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"}`}>
                 {combineMode ? "✕ Cancel Combine" : "⊞ Combine Mode"}
               </button>
+              {/* Print by HAWB — pick a HAWB# → report of all its SO (across docs) */}
+              {allHawbs.length > 0 && (
+                <select value="" disabled={hawbLoading} onChange={e => { if (e.target.value) printHawb(e.target.value) }}
+                  className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white text-gray-700 font-medium max-w-[170px] disabled:opacity-50">
+                  <option value="">{hawbLoading ? "Generating…" : `🖨 Print by HAWB (${allHawbs.length})`}</option>
+                  {allHawbs.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              )}
             </div>
           </div>
 
