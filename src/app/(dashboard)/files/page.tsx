@@ -93,6 +93,7 @@ export default function FilesPage() {
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
   const [combineMode, setCombineMode] = useState(false)
   const [hawbLoading, setHawbLoading] = useState(false)
+  const [hawbQuery, setHawbQuery] = useState("")
   const [unbookedOnly, setUnbookedOnly] = useState(false)
   const [selectedForCombine, setSelectedForCombine] = useState<Set<string>>(new Set())
   const [combineLoading, setCombineLoading] = useState(false)
@@ -201,22 +202,34 @@ export default function FilesPage() {
     [requests]
   )
 
-  // Print ONE HAWB# → all its SO across ANY document(s): total + INV + SO list.
-  const printHawb = async (hawb: string) => {
+  // Print ONE HAWB# → all its SO across ANY document(s), in the SAME consolidated
+  // layout as the other PDFs (letterhead + table + signatures).
+  const printHawb = async (hawbRaw: string) => {
+    const hawb = (hawbRaw || "").trim()
+    if (!hawb) return
     setHawbLoading(true)
     try {
-      const items: any[] = []
+      const reqIds = new Set<string>()
       requests.forEach((r: any) => (r.items || []).forEach((it: any) => {
-        if ((it.hawbNo || "").trim() === hawb && it.itemStatus !== "REJECTED") {
-          items.push({ ...it, documentNo: r.documentNo, brand: it.brand || r.brandName, buName: r.buName })
-        }
+        if ((it.hawbNo || "").trim() === hawb && it.itemStatus !== "REJECTED") reqIds.add(r.id)
       }))
-      if (items.length === 0) { alert("No SO found for this HAWB"); return }
-      const [{ pdf }, { HawbReportPdf }] = await Promise.all([
+      if (reqIds.size === 0) { alert(`No SO found for HAWB "${hawb}"`); return }
+      // Fetch full docs (incl. signatures) so the PDF stamps approvals correctly.
+      const full: Record<string, any> = {}
+      await Promise.all([...reqIds].map(async id => { full[id] = await fetch(`/api/requests/${id}`).then(r => r.json()) }))
+      const pages: { req: any; item: any }[] = []
+      requests.forEach((r: any) => {
+        const fr = full[r.id]; if (!fr) return
+        ;(fr.items || []).forEach((it: any) => {
+          if ((it.hawbNo || "").trim() === hawb && it.itemStatus !== "REJECTED") pages.push({ req: fr, item: it })
+        })
+      })
+      if (pages.length === 0) { alert(`No SO found for HAWB "${hawb}"`); return }
+      const [{ pdf }, { CombinedPdfDocument }] = await Promise.all([
         import("@react-pdf/renderer"),
         import("@/components/request-pdf"),
       ])
-      const el = React.createElement(HawbReportPdf as any, { hawbNo: hawb, items })
+      const el = React.createElement(CombinedPdfDocument as any, { pages })
       const blob = await (pdf(el as any) as any).toBlob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a"); a.href = url; a.download = `HAWB_${hawb}.pdf`
@@ -427,14 +440,19 @@ export default function FilesPage() {
                 className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${combineMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"}`}>
                 {combineMode ? "✕ Cancel Combine" : "⊞ Combine Mode"}
               </button>
-              {/* Print by HAWB — pick a HAWB# → report of all its SO (across docs) */}
-              {allHawbs.length > 0 && (
-                <select value="" disabled={hawbLoading} onChange={e => { if (e.target.value) printHawb(e.target.value) }}
-                  className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white text-gray-700 font-medium max-w-[170px] disabled:opacity-50">
-                  <option value="">{hawbLoading ? "Generating…" : `🖨 Print by HAWB (${allHawbs.length})`}</option>
-                  {allHawbs.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              )}
+              {/* Print by HAWB — type (or pick) a HAWB# → consolidated PDF of all its SO */}
+              <div className="flex items-center gap-1">
+                <input list="hawb-list" value={hawbQuery} disabled={hawbLoading}
+                  onChange={e => setHawbQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") printHawb(hawbQuery) }}
+                  placeholder="HAWB#…"
+                  className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white text-gray-700 w-[130px] disabled:opacity-50" />
+                <datalist id="hawb-list">{allHawbs.map(h => <option key={h} value={h} />)}</datalist>
+                <button onClick={() => printHawb(hawbQuery)} disabled={hawbLoading || !hawbQuery.trim()}
+                  className="text-xs px-3 py-1.5 rounded-lg font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                  {hawbLoading ? "…" : "🖨 HAWB"}
+                </button>
+              </div>
             </div>
           </div>
 
