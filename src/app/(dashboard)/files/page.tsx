@@ -229,7 +229,7 @@ export default function FilesPage() {
         import("@react-pdf/renderer"),
         import("@/components/request-pdf"),
       ])
-      const el = React.createElement(CombinedPdfDocument as any, { pages })
+      const el = React.createElement(CombinedPdfDocument as any, { pages, hawbNo: hawb })
       const blob = await (pdf(el as any) as any).toBlob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a"); a.href = url; a.download = `HAWB_${hawb}.pdf`

@@ -313,7 +313,7 @@ export function RequestPdfDocument({ req, item }: { req: any; item: any }) {
 // one DETAILS table where every SO is a row carrying Factory/Country/Reason/Claim,
 // descriptions listed once up top (A, B, C…) and referenced by letter, one grand
 // total, and the signature ONCE at the end (all SO share the same approvers).
-export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[] }) {
+export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbNo?: string }) {
   const req = pages[0]?.req || {}
   const isGW = req.bu === "GW"
   const dept = isGW ? "GW" : "NYG"
@@ -366,6 +366,7 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
             ["Date", fmtDate(req.createdAt)],
             ["Brand", req.brandName || "-"],
             ["BU", req.buName || dept],
+            ...(hawbNo ? [["HAWB No.", hawbNo]] as [string, string][] : []),
           ] as [string, string][]).map(([l, v]) => (
             <View key={l} style={s.gcell}>
               <Text style={s.glabel}>{l} :</Text>
@@ -435,9 +436,9 @@ export function CombinedPdfDocument({ pages }: { pages: { req: any; item: any }[
 
         {/* Request By (left) + Grand total (right), same row */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-          <View style={{ flexDirection: "row" }}>
+          <View style={{ flexDirection: "row", flex: 1, paddingRight: 12 }}>
             <Text style={s.glabel}>Request By (MER) : </Text>
-            <Text style={s.gval}>{requestBy}</Text>
+            <Text style={[s.gval, { flex: 1 }]}>{requestBy}</Text>
           </View>
           <View style={s.totalBox}>
             <View style={s.totalBoxRowLast}>
