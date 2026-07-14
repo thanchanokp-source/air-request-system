@@ -29,6 +29,18 @@ export const authOptions: NextAuthOptions = {
           const airReq = await (prisma.airRequest as any).findFirst({ where: { vpMerToken: token } })
           if (airReq) {
             const isGW = airReq.bu === "GW"
+            // NYG has a DVM MER stage BEFORE VP MER that reuses this same per-request
+            // token. While the doc sits at PENDING_DVM_MER, resolve the link to a DVM MER
+            // user (role-based, like GM); once it advances to PENDING_VP_MER the same
+            // token resolves to VP MER below.
+            if (!isGW && airReq.status === "PENDING_DVM_MER") {
+              const dvm = await (prisma.user as any).findFirst({
+                where: { isActive: true, bu: "NYG", OR: [{ role: "DVM_MER" }, { roles: { has: "DVM_MER" } }] },
+                orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+              })
+              if (dvm) return { id: dvm.id, email: dvm.email, name: dvm.name, role: "DVM_MER", bu: "NYG", claimDepartment: null, priority: dvm.priority ?? null }
+              return null
+            }
             const assignedEmail = airReq.assignedVpMer
             if (!assignedEmail) return null
             const user = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })

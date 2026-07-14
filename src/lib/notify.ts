@@ -436,7 +436,11 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const recipients = [...new Set(firstBatch.map((u: any) => u.email).filter(Boolean))] as string[]
       if (!recipients.length) return
       const link = `${APP_URL}/requests/${requestId}`
-      const html = buildHtml(req, newStatus, link)
+      // Reuse the per-request vpMerToken for one-click login (auth resolves it to a
+      // DVM MER session while the doc is at PENDING_DVM_MER) → lands on /approvals.
+      const token = (req as any).vpMerToken
+      const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
+      const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
       await sendMail(recipients, `${STATUS_SUBJECT[newStatus]} — ${req.documentNo}`, html)
       return
     }
