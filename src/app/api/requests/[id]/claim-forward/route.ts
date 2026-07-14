@@ -47,12 +47,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const role = (session.user as any).role
   const userClaimDept = (session.user as any).claimDepartment || null
   const forwarderName = (session.user as any).name || role
+  const userId = (session.user as any).id
   const { id } = await params
   const body = await req.json()
   const { final, nextEmail, nextName, branch, itemIds } = body
 
-  // Must be a claim owner (master role) or a forwarded Claim Next Approver
-  const isClaimP1 = (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_") || role === "SCM_NYK" || role === "SCM_NYG"
+  // A person may hold several roles (User.roles[]); the session carries only the
+  // primary. Treat them as holding ALL their roles so a multi-role person (e.g. VP
+  // MER who is also a claim approver) can act at the claim step. Fetched from DB so
+  // it works for sessions issued before roles[] existed.
+  const dbUserRoles: string[] = await prisma.user
+    .findUnique({ where: { id: userId }, select: { roles: true } as any })
+    .then((u: any) => (Array.isArray(u?.roles) ? u.roles : []))
+    .catch(() => [])
+  const heldRoles: string[] = [role, ...dbUserRoles.filter((r: string) => r && r !== role)]
+  const isClaimRole = (r: string) => (r.startsWith("CLAIM_") && r !== "CLAIM_NEXT_APPROVER") || r.startsWith("DVM_") || r === "SCM_NYK" || r === "SCM_NYG"
+
+  // Must be a claim owner (master role, incl. via roles[]) or a forwarded Claim Next Approver
+  const isClaimP1 = heldRoles.some(isClaimRole)
   const isClaimNext = role === "CLAIM_NEXT_APPROVER"
   if (!isClaimP1 && !isClaimNext) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -86,6 +98,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     currentPos = ownerRow.position ?? 0
   } else {
     forwarderDept = ownerCanonicalDept(role, userClaimDept)
+    if (!forwarderDept) {
+      // Multi-role: the primary role isn't a claim role, but one in roles[] may be.
+      // Pick the held claim dept that still has a pending split on THIS document.
+      for (const r of heldRoles) {
+        const d = ownerCanonicalDept(r, userClaimDept)
+        if (d && request.items.some((it: any) => itemHasPendingDept(it, d))) { forwarderDept = d; break }
+      }
+    }
   }
   if (!forwarderDept) return NextResponse.json({ error: "Cannot determine your claim department" }, { status: 400 })
 

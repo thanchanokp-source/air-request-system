@@ -332,7 +332,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 
     const req = await prisma.airRequest.findUnique({
       where: { id: requestId },
-      include: { items: { select: { claimDepartment: true, claimDepts: true, assignedDvm: true } } }
+      include: { items: { select: { claimDepartment: true, claimDepts: true, assignedDvm: true, itemStatus: true } } }
     })
     if (!req) return
 

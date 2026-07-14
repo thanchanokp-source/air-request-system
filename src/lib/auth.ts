@@ -163,7 +163,7 @@ export const authOptions: NextAuthOptions = {
         if (!user.password) return null
         const valid = await bcrypt.compare(credentials.password, user.password)
         if (!valid) return null
-        return { id: user.id, email: user.email, name: user.name, role: user.role, bu: (user as any).bu || "NYG", claimDepartment: (user as any).claimDepartment, priority: (user as any).priority ?? null }
+        return { id: user.id, email: user.email, name: user.name, role: user.role, roles: (user as any).roles ?? [], bu: (user as any).bu || "NYG", claimDepartment: (user as any).claimDepartment, priority: (user as any).priority ?? null }
       }
     })
   ],
@@ -172,6 +172,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         token.role = (user as any).role
+        ;(token as any).roles = (user as any).roles ?? []
         token.bu = (user as any).bu || "NYG"
         token.claimDepartment = (user as any).claimDepartment
         token.priority = (user as any).priority ?? null
@@ -183,6 +184,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.id
         ;(session.user as any).role = token.role
+        ;(session.user as any).roles = (token as any).roles ?? []
         ;(session.user as any).bu = token.bu || "NYG"
         ;(session.user as any).claimDepartment = token.claimDepartment
         ;(session.user as any).priority = token.priority ?? null

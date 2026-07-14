@@ -41,13 +41,30 @@ export default function ApprovalsPage() {
     : ""
   const userClaimDept = (session?.user as any)?.claimDepartment || null
 
+  // Multi-role: a person may hold claim roles beyond their primary login role
+  // (User.roles[]). Derive every NYG claim dept they can act on so a person who is
+  // (e.g.) VP MER AND a claim approver sees the doc again at the claim step.
+  const myRoles: string[] = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const claimDeptsHeld = [...new Set(myRoles
+    .filter(r => (r.startsWith("DVM_") || r.startsWith("CLAIM_")) && !r.endsWith("_GW") && r !== "CLAIM_NEXT_APPROVER")
+    .map(r => r.replace(/^DVM_/, "").replace(/^CLAIM_/, "")))]
+  const vpClaimDeptsHeld = [...new Set(myRoles.filter(r => CLAIM_VP_ROLES.includes(r)).map(r => r.replace("VP_", "")))]
+  // Claim SO this person owns on a doc via any held role (NYG only; GW has its own roles).
+  const heldClaimItems = (r: any) => {
+    if (r.bu === "GW") return []
+    return (r.items || []).filter((i: any) =>
+      (claimDeptsHeld.length && i.itemStatus === "LOG_PASSED" && claimDeptsHeld.includes(i.claimDepartment)) ||
+      (vpClaimDeptsHeld.length && i.itemStatus === "CLAIM_PASSED" && vpClaimDeptsHeld.includes(i.claimDepartment))
+    )
+  }
+
   // SCM NYK has 2 approvers → whoever approves first "owns" the doc; hide it from
   // the OTHER approver's queue. Owner = who has ≥1 SCM_NYK_APPROVER approval on it.
   const nykOwnedByOther = (r: any) => (r.items || []).some((i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER" && a.userId && a.userId !== userId))
   const nykOwnedByMe = (r: any) => (r.items || []).some((i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER" && a.userId === userId))
 
   // Filter documents by item-status (per-style forwarding — each role acts on specific itemStatus)
-  const myRequests = requests.filter(r => {
+  const matchesPrimary = (r: any) => {
     const items = r.items || []
     if (role === "VP_MER") return r.status === "PENDING_VP_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)
     if (role === "SCM_USER") {
@@ -88,10 +105,13 @@ export default function ApprovalsPage() {
       return r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }
     return false
-  })
+  }
+  // Show a doc if the primary role's stage matches OR the person owns claim SO on it
+  // via any held role (multi-role: e.g. VP MER who is also a claim approver).
+  const myRequests = requests.filter(r => matchesPrimary(r) || heldClaimItems(r).length > 0)
 
   // Show only items relevant to this role
-  const getRelevantItems = (r: any) => {
+  const primaryItems = (r: any) => {
     const items = r.items || []
     if (role === "VP_MER") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "SCM_USER") {
@@ -119,6 +139,13 @@ export default function ApprovalsPage() {
       return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }
     return items.filter((i: any) => i.itemStatus !== "REJECTED")
+  }
+
+  // Union of primary-role items + claim SO owned via any held role (multi-role).
+  const getRelevantItems = (r: any) => {
+    const prim = primaryItems(r)
+    const seen = new Set(prim.map((i: any) => i.id))
+    return [...prim, ...heldClaimItems(r).filter((i: any) => !seen.has(i.id))]
   }
 
   const allRows = myRequests.flatMap(r =>

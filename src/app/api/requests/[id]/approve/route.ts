@@ -52,6 +52,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const userId = (session.user as any).id
   const userRole = (session.user as any).role
   const userClaimDept = (session.user as any).claimDepartment || null
+  // A person may hold several roles (User.roles[]); the login session carries only
+  // the primary role. For CLAIM actions, treat them as holding ALL their roles so a
+  // person who is (e.g.) VP MER AND a claim approver can act at the claim step too.
+  // Fetched from DB so it works even for sessions issued before roles[] existed.
+  const dbUserRoles: string[] = await prisma.user
+    .findUnique({ where: { id: userId }, select: { roles: true } as any })
+    .then((u: any) => (Array.isArray(u?.roles) ? u.roles : []))
+    .catch(() => [])
+  const heldRoles: string[] = [userRole, ...dbUserRoles.filter((r: string) => r && r !== userRole)]
   const { id } = await params
   const body = await req.json()
     const { action, comment, style, itemId, itemIds, claimDepartment, gwClaimDept, logisticsData, itemActuals, soClaimData, soClaimComments, soDvmData, itemLogistics, assignedVpScm } = body
@@ -1013,7 +1022,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // A claim department (owner role or a forwarded CLAIM_NEXT_APPROVER) finalizes
   // ITS OWN splits across the doc. Other departments are untouched (parallel,
   // independent). Works for both BU. SCM NYK keeps its own CR flow (excluded).
-  if (action === "finalize_claim_dept" && ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER"].includes(userRole)) {
+  if (action === "finalize_claim_dept" && heldRoles.some(r => ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER"].includes(r))) {
     const isGW = request.bu === "GW"
     const expected = isGW ? "PENDING_CLAIM_GW" : "PENDING_CLAIM"
     if (request.status !== expected) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
@@ -1033,6 +1042,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       currentPos = ownerRow.position ?? 0
     } else {
       dept = ownerCanonicalDept(userRole, userClaimDept)
+      if (!dept) {
+        // Multi-role: the primary role isn't a claim role, but one in roles[] may be.
+        // Pick the held claim dept that still has a pending split on THIS document.
+        for (const r of heldRoles) {
+          const d = ownerCanonicalDept(r, userClaimDept)
+          if (d && (request.items as any[]).some((it: any) => itemHasPendingDept(it, d))) { dept = d; break }
+        }
+      }
     }
     if (!dept) return NextResponse.json({ error: "Cannot determine your claim department" }, { status: 400 })
     // Forced chain: only the LAST position may finish. Earlier positions must

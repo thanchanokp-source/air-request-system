@@ -656,19 +656,45 @@ export default function RequestDetailPage() {
   const canAct = req && ROLE_ACTIONS[role]?.includes(req.status) && (!isGWRole || isGWRequest)
   const isStyleApprover = req && STYLE_APPROVER_STATUSES.includes(req.status)
   const CLAIM_VP_ROLES_LOCAL = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
-  const claimDept = role.startsWith("DVM_") ? role.replace("DVM_", "")
-    : role.startsWith("CLAIM_") ? role.replace("CLAIM_", "")
-    : role === "SCM_NYK" ? "SCM NYK"
-    : role === "SCM_NYG" ? "SCM NYG"
-    : CLAIM_VP_ROLES_LOCAL.includes(role) ? role.replace("VP_", "") : ""
+  // Multi-role: the session carries ONE primary role, but a person may hold more via
+  // roles[]. When the primary role can't act on this doc's claim yet a held role can
+  // (its dept has a pending split here), act as that claim role — so a VP MER who is
+  // ALSO a claim approver sees the claim panel when the claim reaches them. Non-claim
+  // stages are unaffected (claimRole === role whenever the primary role is a claim role).
+  const primaryIsClaimRole =
+    role.startsWith("DVM_") || (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER")
+    || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG"
+    || CLAIM_VP_ROLES_LOCAL.includes(role) || role === "CLAIM_NEXT_APPROVER"
+  const claimRole: string = (() => {
+    if (primaryIsClaimRole) return role
+    const others: string[] = (((session?.user as any)?.roles) || []).filter((r: string) => r && r !== role)
+    const items = req?.items || []
+    const deptListOf = (i: any) => Array.isArray(i.claimDepts) && i.claimDepts.length ? i.claimDepts.map((d: any) => d.dept) : (i.claimDepartment ? [i.claimDepartment] : [])
+    for (const r of others) {
+      if ((r.startsWith("DVM_") || r.startsWith("CLAIM_")) && !r.endsWith("_GW") && r !== "CLAIM_NEXT_APPROVER") {
+        const d = r.replace(/^DVM_/, "").replace(/^CLAIM_/, "")
+        if (items.some((i: any) => i.itemStatus === "LOG_PASSED" && deptListOf(i).includes(d) && deptSplitStatus(i, d) === null)) return r
+      }
+      if (CLAIM_VP_ROLES_LOCAL.includes(r)) {
+        const d = r.replace("VP_", "")
+        if (items.some((i: any) => i.itemStatus === "CLAIM_PASSED" && deptListOf(i).includes(d) && deptSplitStatus(i, d) === "CLAIM_PASSED")) return r
+      }
+    }
+    return role
+  })()
+  const claimDept = claimRole.startsWith("DVM_") ? claimRole.replace("DVM_", "")
+    : claimRole.startsWith("CLAIM_") ? claimRole.replace("CLAIM_", "")
+    : claimRole === "SCM_NYK" ? "SCM NYK"
+    : claimRole === "SCM_NYG" ? "SCM NYG"
+    : CLAIM_VP_ROLES_LOCAL.includes(claimRole) ? claimRole.replace("VP_", "") : ""
   const claimDeptRole = claimDept
-  const isNykClaimRole = role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP"
+  const isNykClaimRole = claimRole === "SCM_NYK" || claimRole === "SCM_NYK_APPROVER" || claimRole === "SCM_NYK_EVP"
   // SCM NYK 3-role UI applies in BOTH BU (dept "SCM NYK" in GW, "NYK" in NYG).
   // CLAIM_GW / SCM_NYG use this UI only in GW.
-  const isGwClaimP1Role = isNykClaimRole || ((role === "CLAIM_GW" || role === "SCM_NYG") && isGWRequest)
-  const gwClaimDepts = role === "CLAIM_GW"
+  const isGwClaimP1Role = isNykClaimRole || ((claimRole === "CLAIM_GW" || claimRole === "SCM_NYG") && isGWRequest)
+  const gwClaimDepts = claimRole === "CLAIM_GW"
     ? (myClaimDept === "GW" ? ["GW"] : myClaimDept === "SUPPLIER" ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"] : ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"])
-    : isNykClaimRole ? (isGWRequest ? ["SCM NYK"] : ["NYK"]) : role === "SCM_NYG" ? ["SCM NYG"] : []
+    : isNykClaimRole ? (isGWRequest ? ["SCM NYK"] : ["NYK"]) : claimRole === "SCM_NYG" ? ["SCM NYG"] : []
   // NYG per-split: my dept's split status (null = still waiting my DVM). undefined = my dept not on this SO.
   const mySplitStatus = (i: any): string | null | undefined => {
     const list: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
@@ -677,7 +703,7 @@ export default function RequestDetailPage() {
     if (!list.includes(claimDept)) return undefined
     return deptSplitStatus(i, claimDept)
   }
-  const isDvmClaim = (role.startsWith("DVM_") || role.startsWith("CLAIM_") || isNykClaimRole || role === "SCM_NYG") && (req?.items || []).some((i: any) => {
+  const isDvmClaim = (claimRole.startsWith("DVM_") || claimRole.startsWith("CLAIM_") || isNykClaimRole || claimRole === "SCM_NYG") && (req?.items || []).some((i: any) => {
     if (isGwClaimP1Role) {
       // GW parallel (Logistics ∥ Claim): SO sits at PRES_PASSED; my dept has a split still awaiting approval.
       return ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED")
@@ -685,13 +711,13 @@ export default function RequestDetailPage() {
     // NYG DVM: my dept is on the SO and its split still awaits DVM approval.
     return i.itemStatus === "LOG_PASSED" && mySplitStatus(i) === null
   })
-  const isVpClaim = CLAIM_VP_ROLES_LOCAL.includes(role) && (req?.items || []).some((i: any) =>
+  const isVpClaim = CLAIM_VP_ROLES_LOCAL.includes(claimRole) && (req?.items || []).some((i: any) =>
     i.itemStatus === "CLAIM_PASSED" && mySplitStatus(i) === "CLAIM_PASSED"
   )
   const isClaimApprover = isDvmClaim || isVpClaim
   // Forward-to-next-approver box is only for the legacy NYG DVM/CLAIM flow.
   // GW / SCM NYK / SCM NYG claim auto-route by master priority (no manual forward).
-  const isClaimP1ForForward = ((role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") || role.startsWith("DVM_")) && req?.status === "PENDING_CLAIM"
+  const isClaimP1ForForward = ((claimRole.startsWith("CLAIM_") && claimRole !== "CLAIM_NEXT_APPROVER") || claimRole.startsWith("DVM_")) && req?.status === "PENDING_CLAIM"
   const isClaimNextApprover = role === "CLAIM_NEXT_APPROVER" && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
   // ── GW per-department forward model: each dept finishes OR forwards its own
   // splits independently. Owner = CLAIM_GW / SCM_NYG (NOT NYK — CR flow). Next =
@@ -700,21 +726,21 @@ export default function RequestDetailPage() {
   //   GW:  CLAIM_GW (GW/SUPPLIER), SCM_NYG      NYG: CLAIM_COMMERCIAL/PRODUCTION/PROCUREMENT
   //   plus a forwarded CLAIM_NEXT_APPROVER (scoped to dept + position via ClaimForward).
   const gwFwdCanonicalDept: string | null =
-    role === "CLAIM_NEXT_APPROVER" ? (myClaimDept || null)
-    : role === "CLAIM_GW" ? (myClaimDept === "SUPPLIER" ? "SUPPLIER" : "GW")
-    : role === "SCM_NYG" ? "SCM NYG"
-    : role === "CLAIM_COMMERCIAL" ? "COMMERCIAL"
-    : role === "CLAIM_PRODUCTION" ? "PRODUCTION"
-    : role === "CLAIM_PROCUREMENT" ? "PROCUREMENT"
+    claimRole === "CLAIM_NEXT_APPROVER" ? (myClaimDept || null)
+    : claimRole === "CLAIM_GW" ? (myClaimDept === "SUPPLIER" ? "SUPPLIER" : "GW")
+    : claimRole === "SCM_NYG" ? "SCM NYG"
+    : claimRole === "CLAIM_COMMERCIAL" ? "COMMERCIAL"
+    : claimRole === "CLAIM_PRODUCTION" ? "PRODUCTION"
+    : claimRole === "CLAIM_PROCUREMENT" ? "PROCUREMENT"
     : null
   const gwFwdSplitDepts = gwFwdCanonicalDept === "SUPPLIER"
     ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
     : gwFwdCanonicalDept ? [gwFwdCanonicalDept] : []
   const fwdEntryRole = isGWRequest
-    ? (role === "CLAIM_GW" || role === "SCM_NYG")
-    : (role === "CLAIM_COMMERCIAL" || role === "CLAIM_PRODUCTION" || role === "CLAIM_PROCUREMENT")
+    ? (claimRole === "CLAIM_GW" || claimRole === "SCM_NYG")
+    : (claimRole === "CLAIM_COMMERCIAL" || claimRole === "CLAIM_PRODUCTION" || claimRole === "CLAIM_PROCUREMENT")
   const isGwForwardRole = req?.status === (isGWRequest ? "PENDING_CLAIM_GW" : "PENDING_CLAIM") &&
-    (fwdEntryRole || role === "CLAIM_NEXT_APPROVER")
+    (fwdEntryRole || claimRole === "CLAIM_NEXT_APPROVER")
   const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED"]
   // My forward row (CLAIM_NEXT_APPROVER = the row I logged in with, by token).
   const myClaimToken = (session?.user as any)?.claimNextToken || null
