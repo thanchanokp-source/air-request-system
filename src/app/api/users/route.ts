@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id: user.id })
   } catch (e: any) {
     if (e?.code === "P2002") return NextResponse.json({ error: "This email is already registered" }, { status: 409 })
-    throw e
+    console.error("[users POST] error:", e)
+    return NextResponse.json({ error: e?.message || "Create failed" }, { status: 500 })
   }
 }
