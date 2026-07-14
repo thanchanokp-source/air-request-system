@@ -7,6 +7,7 @@ const APP_URL = process.env.APP_URL || "http://localhost:3000"
 // Format: [ROLE] action — DOC
 const STATUS_SUBJECT: Record<string, string> = {
   // NYG
+  PENDING_DVM_MER:     "[DVM MER] Pending Approval",
   PENDING_VP_MER:      "[VP MER] Pending Approval",
   PENDING_SCM:         "[SCM User] Pending Claim Assignment",
   PENDING_VP_SCM:      "[VP SCM] Pending Approval",
@@ -29,6 +30,7 @@ const STATUS_SUBJECT: Record<string, string> = {
 
 // Roles that receive notification per status
 const STATUS_ROLES: Record<string, string[]> = {
+  PENDING_DVM_MER:      ["DVM_MER"],
   PENDING_VP_MER:       ["VP_MER"],
   PENDING_SCM:          ["SCM_USER"],
   PENDING_VP_SCM:       ["VP_SCM"],
@@ -84,6 +86,7 @@ const EMAIL_HEAD = `<head>
 
 function buildHtml(req: any, newStatus: string, link: string, approveUrl?: string, rejectUrl?: string, magicLink?: string) {
   const statusLabel: Record<string,string> = {
+    PENDING_DVM_MER:"Pending DVM MER",
     PENDING_VP_MER:"Pending VP MER", PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
     PENDING_PRESIDENT:"Pending President", PENDING_LOGISTICS:"Pending Logistics",
     PENDING_CLAIM:"Pending Claim (DVM)", PENDING_VP_CLAIM:"Pending VP Claim",
@@ -414,6 +417,27 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         ${loginLinkBlock()}
       </div>`
       await sendMail(recipients, `[MER – GW] Claim Rejected — please re-assign — ${(req as any).documentNo}`, html)
+      return
+    }
+
+    // For PENDING_DVM_MER (NYG first approver, before VP MER) — notify the DVM MER
+    // role-holder(s). Multi-role aware (primary role OR roles[]); web login link.
+    if (newStatus === "PENDING_DVM_MER") {
+      const users = await (prisma.user as any).findMany({
+        where: {
+          isActive: true, bu: (req as any).bu,
+          OR: [{ role: "DVM_MER" }, { roles: { has: "DVM_MER" } }],
+        },
+        select: { email: true, priority: true },
+        orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      })
+      const withP = users.filter((u: any) => u.priority != null)
+      const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : users
+      const recipients = [...new Set(firstBatch.map((u: any) => u.email).filter(Boolean))] as string[]
+      if (!recipients.length) return
+      const link = `${APP_URL}/requests/${requestId}`
+      const html = buildHtml(req, newStatus, link)
+      await sendMail(recipients, `${STATUS_SUBJECT[newStatus]} — ${req.documentNo}`, html)
       return
     }
 

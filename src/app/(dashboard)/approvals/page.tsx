@@ -66,6 +66,7 @@ export default function ApprovalsPage() {
   // Filter documents by item-status (per-style forwarding — each role acts on specific itemStatus)
   const matchesPrimary = (r: any) => {
     const items = r.items || []
+    if (role === "DVM_MER") return r.status === "PENDING_DVM_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "VP_MER") return r.status === "PENDING_VP_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)
     if (role === "SCM_USER") {
       return (r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||
@@ -113,6 +114,7 @@ export default function ApprovalsPage() {
   // Show only items relevant to this role
   const primaryItems = (r: any) => {
     const items = r.items || []
+    if (role === "DVM_MER") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "VP_MER") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "SCM_USER") {
       if (r.status === "PENDING_VP_MER") return items.filter((i: any) => i.itemStatus === "VP_MER_PASSED")

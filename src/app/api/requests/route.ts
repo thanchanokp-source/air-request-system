@@ -126,13 +126,21 @@ export async function POST(req: NextRequest) {
     const first = items[0]
     const docNo = await generateDocumentNo()
 
+    // NYG now has a DVM MER approval step BEFORE VP MER. Only route there if a DVM MER
+    // user is actually configured (role or roles[]); otherwise skip straight to VP MER
+    // so documents never get stuck at an unstaffed stage.
+    const hasDvmMer = !isGW && (await prisma.user.count({
+      where: { isActive: true, bu: "NYG", OR: [{ role: "DVM_MER" }, { roles: { has: "DVM_MER" } }] } as any,
+    })) > 0
+    const initialStatus = isGW ? "PENDING_VP_MER_GW" : (hasDvmMer ? "PENDING_DVM_MER" : "PENDING_VP_MER")
+
     const request = await prisma.airRequest.create({
       data: {
         documentNo: docNo,
         brandName: String(col(first, "Brand name") || col(first, "BRAND") || ""),
         buName: String(col(first, "BU") || ""),
         bu: isGW ? "GW" : "NYG",
-        status: isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER",
+        status: initialStatus,
         createdById: userId,
         assignedVpMer,
         // Hold from VP MER until every Country has a freight rate.
@@ -208,7 +216,7 @@ export async function POST(req: NextRequest) {
     // adds the rate (see releasePendingRateDocs in lib/freight.ts).
     if (missingRates.length === 0) {
       try {
-        await notifyStatusChange(request.id, isGW ? "PENDING_VP_MER_GW" : "PENDING_VP_MER")
+        await notifyStatusChange(request.id, initialStatus)
       } catch (err) {
         console.error("[notify] send failed:", err)
       }

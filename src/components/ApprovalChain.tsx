@@ -24,14 +24,15 @@ const GW_ITEM_ORD: Record<string, number> = {
   PRES_PASSED: 2, LOG_PASSED: 2, PRESIDENT_PENDING: 3, ACCOUNTING_PENDING: 4, COMPLETED: 5,
 }
 
-// New order: VP MER → SCM → VP SCM → Logistics → Claim → President (final).
+// New order: DVM MER → VP MER → SCM → VP SCM → Logistics → Claim → President (final).
 const NYG_STAGES: Node[] = [
-  { key: "PENDING_VP_MER", label: "VP MER", ord: 0 },
-  { key: "PENDING_SCM", label: "SCM", ord: 1 },
-  { key: "PENDING_VP_SCM", label: "VP SCM", ord: 2 },
-  { key: "PENDING_LOGISTICS", label: "Logistics", ord: 3 },
-  { key: "PENDING_CLAIM", label: "Claim", ord: 4 },
-  { key: "PENDING_PRESIDENT", label: "President", ord: 5 },
+  { key: "PENDING_DVM_MER", label: "DVM MER", ord: 0 },
+  { key: "PENDING_VP_MER", label: "VP MER", ord: 1 },
+  { key: "PENDING_SCM", label: "SCM", ord: 2 },
+  { key: "PENDING_VP_SCM", label: "VP SCM", ord: 3 },
+  { key: "PENDING_LOGISTICS", label: "Logistics", ord: 4 },
+  { key: "PENDING_CLAIM", label: "Claim", ord: 5 },
+  { key: "PENDING_PRESIDENT", label: "President", ord: 6 },
 ]
 
 function Chip({ state, label, sm }: { state: "done" | "active" | "pending"; label: React.ReactNode; sm?: boolean }) {
@@ -126,8 +127,8 @@ export function ApprovalChain({ status, bu, items, soItem, sm }: { status: strin
 // NYG per-SO item status → chain ordinal (new order; President is last).
 function nygItemOrd(item: any, docStatus: string): number {
   const m: Record<string, number> = {
-    VP_MER_PASSED: 1, PASSED: 2, VP_PASSED: 3, PRES_PASSED: 3, LOG_PASSED: 4,
-    CLAIM_PASSED: 4, PRESIDENT_PENDING: 5, ACCOUNTING_PENDING: 6, COMPLETED: 7,
+    DVM_MER_PASSED: 1, VP_MER_PASSED: 2, PASSED: 3, VP_PASSED: 4, PRES_PASSED: 4, LOG_PASSED: 5,
+    CLAIM_PASSED: 5, PRESIDENT_PENDING: 6, ACCOUNTING_PENDING: 7, COMPLETED: 8,
   }
   if (item.itemStatus === "PENDING") return NYG_STAGES.find(s => s.key === docStatus)?.ord ?? 0
   return m[item.itemStatus] ?? 0

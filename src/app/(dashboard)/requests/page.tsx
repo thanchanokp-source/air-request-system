@@ -7,6 +7,7 @@ import { getSplits } from "@/lib/claim"
 import { ApprovalChain } from "@/components/ApprovalChain"
 
 const STATUS_LABELS: Record<string, string> = {
+  PENDING_DVM_MER: "Pending DVM MER",
   PENDING_VP_MER: "Pending VP MER", PENDING_SCM: "Pending SCM",
   PENDING_VP_SCM: "Pending VP SCM", PENDING_PRESIDENT: "Pending President",
   PENDING_LOGISTICS: "Pending Logistics", PENDING_CLAIM: "Pending Claim",
@@ -39,6 +40,7 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
     if (docStatus === "PENDING_LOGISTICS") return "Logistics"
     if (docStatus === "PENDING_VP_MER_GW") return "DPM GW"
     if (docStatus === "PENDING_GM_GW") return "GM GW"
+    if (docStatus === "PENDING_DVM_MER") return "DVM MER"
     return "VP MER"
   }
   if (itemStatus === "VP_MER_PASSED") return "President"
@@ -214,6 +216,7 @@ export default function RequestsPage() {
     { key: "PENDING_CLAIM_GW", label: "CLAIM" },
     { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
   ] : [
+    { key: "PENDING_DVM_MER", label: "DVM MER" },
     { key: "PENDING_VP_MER", label: "VP MER" },
     { key: "PENDING_SCM", label: "SCM" },
     { key: "PENDING_VP_SCM", label: "VP SCM" },

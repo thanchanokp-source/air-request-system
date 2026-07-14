@@ -33,7 +33,8 @@ export async function releasePendingRateDocs() {
     if (!allCovered) continue
 
     await (prisma.airRequest as any).update({ where: { id: doc.id }, data: { pendingRate: false } })
-    // status is still PENDING_VP_MER / PENDING_VP_MER_GW — now notify VP MER.
+    // Status is unchanged (PENDING_DVM_MER / PENDING_VP_MER / PENDING_VP_MER_GW) —
+    // now notify the current first approver for that stage.
     await notifyStatusChange(doc.id, doc.status).catch(() => {})
   }
 }

@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation"
 
 // Roles that must be set by Admin (master)
 const MASTER_ROLES_NYG = [
-  // Flow: MER → VP MER (finder) → President → SCM User → VP SCM (finder) → Claim → Logistics → Accounting
+  // Flow: MER → DVM MER → VP MER (finder) → President → SCM User → VP SCM (finder) → Claim → Logistics → Accounting
+  { role: "DVM_MER",              label: "DVM MER",               hint: "Approves FIRST after MER upload (before VP MER). Priority 1 = handles first", needsPriority: true, bu: "NYG" },
   { role: "PRESIDENT",            label: "President",             hint: "Approves all requests after VP MER",         needsPriority: false, bu: "NYG" },
   { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
   { role: "CLAIM_COMMERCIAL",     label: "Claim – Commercial",    hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
@@ -62,7 +63,7 @@ const ALL_ROLES = [
 // Role order by approval flow (NYG then GW)
 const FLOW_ORDER: string[] = [
   // NYG flow
-  "MER_USER", "VP_MER", "PRESIDENT", "SCM_USER", "VP_SCM",
+  "MER_USER", "DVM_MER", "VP_MER", "PRESIDENT", "SCM_USER", "VP_SCM",
   "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_NYG", "CLAIM_NYK", "CLAIM_PROCUREMENT",
   "LOGISTICS", "ACCOUNTING",
   // GW flow
@@ -77,7 +78,7 @@ const FLOW_ORDER: string[] = [
 type ActionType = "Approver" | "User" | "Read"
 const ROLE_ACTION: Record<string, ActionType> = {
   // Approvers — click to approve
-  VP_MER: "Approver", PRESIDENT: "Approver", VP_SCM: "Approver",
+  DVM_MER: "Approver", VP_MER: "Approver", PRESIDENT: "Approver", VP_SCM: "Approver",
   DPM_GW: "Approver", GM_GW: "Approver", PRESIDENT_GW: "Approver",
   CLAIM_COMMERCIAL: "Approver", CLAIM_PRODUCTION: "Approver",
   CLAIM_NYG: "Approver", CLAIM_NYK: "Approver", CLAIM_PROCUREMENT: "Approver",
@@ -99,7 +100,7 @@ const ACTION_STYLE: Record<ActionType, string> = {
 
 const ROLE_LABEL: Record<string, string> = {
   // NYG
-  VP_MER: "VP MER", PRESIDENT: "President", LOGISTICS: "Logistics", ACCOUNTING: "Accounting",
+  DVM_MER: "DVM MER", VP_MER: "VP MER", PRESIDENT: "President", LOGISTICS: "Logistics", ACCOUNTING: "Accounting",
   SCM_USER: "SCM User", VP_SCM: "VP SCM",
   CLAIM_COMMERCIAL:  "Claim-Commercial",
   CLAIM_PRODUCTION:  "Claim-Production",

@@ -1,5 +1,6 @@
 export const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
+  PENDING_DVM_MER: "Pending DVM MER",
   PENDING_VP_MER: "Pending VP MER",
   PENDING_SCM: "Pending SCM",
   PENDING_VP_SCM: "Pending VP SCM",
@@ -23,6 +24,7 @@ export const STATUS_LABELS: Record<string, string> = {
 
 export const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-700",
+  PENDING_DVM_MER: "bg-lime-100 text-lime-700",
   PENDING_VP_MER: "bg-yellow-100 text-yellow-700",
   PENDING_SCM: "bg-orange-100 text-orange-700",
   PENDING_VP_SCM: "bg-amber-100 text-amber-700",
@@ -45,6 +47,7 @@ export const STATUS_COLORS: Record<string, string> = {
 
 export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> = {
   // NYG flow
+  PENDING_DVM_MER: { approve: "PENDING_VP_MER", reject: "REJECTED" },
   PENDING_VP_MER: { approve: "PENDING_PRESIDENT", reject: "REJECTED" },
   PENDING_SCM: { approve: "PENDING_VP_SCM" },
   PENDING_VP_SCM: { approve: "PENDING_CLAIM", reject: "REJECTED" },
@@ -63,7 +66,7 @@ export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> =
   PENDING_ACCOUNTING: { approve: "COMPLETED", reject: "REJECTED" },
 }
 
-export const STYLE_APPROVER_STATUSES = ["PENDING_VP_MER", "PENDING_VP_SCM", "PENDING_PRESIDENT"]
+export const STYLE_APPROVER_STATUSES = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_VP_SCM", "PENDING_PRESIDENT"]
 
 export const CLAIM_VP_ROLES = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
 
@@ -77,6 +80,7 @@ export const GW_CLAIM_DEPT_LABELS: Record<string, string> = {
 export const GW_SCM_DEPTS = ["NYK", "NYG"]
 
 export const ROLE_ACTIONS: Record<string, string[]> = {
+  DVM_MER: ["PENDING_DVM_MER"],
   VP_MER: ["PENDING_VP_MER"],
   SCM_USER: ["PENDING_SCM", "PENDING_VP_MER"],
   VP_SCM: ["PENDING_SCM", "PENDING_VP_SCM"],

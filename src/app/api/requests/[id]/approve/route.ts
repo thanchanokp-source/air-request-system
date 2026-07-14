@@ -241,6 +241,43 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
+  // DVM MER per-style (NYG): the FIRST approver, before VP MER. approve → DVM_MER_PASSED,
+  // reject → REJECTED. When every style is processed, hand the whole doc to VP MER.
+  if (request.status === "PENDING_DVM_MER" && (action === "approve_style" || action === "reject_style")) {
+    if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
+    if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
+
+    const newItemStatus = action === "approve_style" ? "DVM_MER_PASSED" : "REJECTED"
+    await prisma.airRequestItem.updateMany({
+      where: { requestId: id, style, itemStatus: "PENDING" },
+      data: { itemStatus: newItemStatus, itemComment: comment || null }
+    })
+    await prisma.approvalLog.create({
+      data: {
+        requestId: id, userId,
+        action: action === "approve_style" ? "APPROVE" : "REJECT",
+        fromStatus: "PENDING_DVM_MER", toStatus: "PENDING_DVM_MER",
+        comment: `Style: ${style}${comment ? ` - ${comment}` : ""}`
+      }
+    })
+
+    // When DVM MER is done (no PENDING left) → reset approved items to PENDING and
+    // advance to VP MER (which is unchanged from here on).
+    const pendingCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
+    if (pendingCount === 0) {
+      const passedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "DVM_MER_PASSED" } })
+      if (passedCount === 0) {
+        await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED" } })
+        await notifyStatusChange(id, "REJECTED").catch(() => {})
+      } else {
+        await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "DVM_MER_PASSED" }, data: { itemStatus: "PENDING" } })
+        await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_VP_MER" } })
+        await notifyStatusChange(id, "PENDING_VP_MER").catch(() => {})
+      }
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
   // VP MER per-style: approve → VP_MER_PASSED (SCM can start immediately), reject → REJECTED
   if (request.status === "PENDING_VP_MER" && (action === "approve_style" || action === "reject_style")) {
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
