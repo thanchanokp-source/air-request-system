@@ -1270,6 +1270,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — Approved (Priority ${myPriority ?? "–"})${comment ? ` - ${comment}` : ""}` }
       })
+      // Auto-cascade (like GW): once THIS priority has approved ALL of its dept SO,
+      // email the NEXT priority level automatically (no manual forward). Guarded so
+      // it fires once per priority, not once per SO.
+      if (myPriority != null) {
+        const gate = isVpClaimRole ? "CLAIM_PASSED" : "LOG_PASSED"
+        const gateItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: gate } })
+        const mine = await (prisma as any).claimApproval.findMany({ where: { userId, item: { requestId: id } }, select: { itemId: true } })
+        const mineIds = new Set(mine.map((a: any) => a.itemId))
+        const remaining = gateItems.filter((it: any) => getSplits(it).some((s: any) => s.dept === dept) && !mineIds.has(it.id))
+        if (remaining.length === 0) {
+          await notifyClaimNextPriority(id, groupRole, null, myPriority, dept).catch(() => {})
+        }
+      }
     }
 
     return NextResponse.json(await getUpdated())

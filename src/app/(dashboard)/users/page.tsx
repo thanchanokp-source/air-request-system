@@ -9,9 +9,12 @@ const MASTER_ROLES_NYG = [
   { role: "DVM_MER",              label: "DVM MER",               hint: "Approves FIRST after MER upload (before VP MER). Priority 1 = handles first", needsPriority: true, bu: "NYG" },
   { role: "PRESIDENT",            label: "President",             hint: "Approves all requests after VP MER",         needsPriority: false, bu: "NYG" },
   { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
-  { role: "CLAIM_COMMERCIAL",     label: "Claim – Commercial",    hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
-  { role: "CLAIM_PRODUCTION",     label: "Claim – Production",    hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
-  { role: "CLAIM_PROCUREMENT",    label: "Claim – Procurement",   hint: "Priority 1 = handles first",              needsPriority: true,  bu: "NYG" },
+  { role: "CLAIM_COMMERCIAL",     label: "Claim – Commercial",    hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
+  { role: "VP_COMMERCIAL",        label: "VP Claim – Commercial", hint: "Approves after Claim Commercial (Priority 1 first)", needsPriority: true, bu: "NYG" },
+  { role: "CLAIM_PRODUCTION",     label: "Claim – Production",    hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
+  { role: "VP_PRODUCTION",        label: "VP Claim – Production", hint: "Approves after Claim Production (Priority 1 first)", needsPriority: true, bu: "NYG" },
+  { role: "CLAIM_PROCUREMENT",    label: "Claim – Procurement",   hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
+  { role: "VP_PROCUREMENT",       label: "VP Claim – Procurement",hint: "Approves after Claim Procurement (Priority 1 first)", needsPriority: true, bu: "NYG" },
   // SCM NYK uses the 3-role flow (Approver → EVP + CR) — same as GW, but BU = NYG.
   { role: "SCM_NYK_APPROVER",     label: "Claim-SCM NYK Action Approver", hint: "Approves NYK claim first → alerts EVP + CR user", needsPriority: true, bu: "NYG" },
   { role: "SCM_NYK",              label: "Claim-SCM NYK User",    hint: "Enter CR NO",                             needsPriority: true, bu: "NYG" },
@@ -64,7 +67,8 @@ const ALL_ROLES = [
 const FLOW_ORDER: string[] = [
   // NYG flow
   "MER_USER", "DVM_MER", "VP_MER", "PRESIDENT", "SCM_USER", "VP_SCM",
-  "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_NYG", "CLAIM_NYK", "CLAIM_PROCUREMENT",
+  "CLAIM_COMMERCIAL", "VP_COMMERCIAL", "CLAIM_PRODUCTION", "VP_PRODUCTION",
+  "CLAIM_NYG", "CLAIM_NYK", "CLAIM_PROCUREMENT", "VP_PROCUREMENT",
   "LOGISTICS", "ACCOUNTING",
   // GW flow
   "MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW",
@@ -82,6 +86,7 @@ const ROLE_ACTION: Record<string, ActionType> = {
   DPM_GW: "Approver", GM_GW: "Approver", PRESIDENT_GW: "Approver",
   CLAIM_COMMERCIAL: "Approver", CLAIM_PRODUCTION: "Approver",
   CLAIM_NYG: "Approver", CLAIM_NYK: "Approver", CLAIM_PROCUREMENT: "Approver",
+  VP_COMMERCIAL: "Approver", VP_PRODUCTION: "Approver", VP_PROCUREMENT: "Approver", VP_NYK: "Approver",
   CLAIM_GW: "Approver",
   SCM_NYK_APPROVER: "Approver", SCM_NYK: "User", SCM_NYK_EVP: "Approver", SCM_NYG: "Approver", SCM_NYG_VP: "Approver",
   SCM_NYG_VP_PROD_G1G3: "Approver", SCM_NYG_VP_PROD_G2G4: "Approver", SCM_NYG_EVP: "Approver",
@@ -107,6 +112,10 @@ const ROLE_LABEL: Record<string, string> = {
   CLAIM_NYG:         "Claim-SCM NYG",
   CLAIM_NYK:         "Claim-SCM NYK",
   CLAIM_PROCUREMENT: "Claim-Procurement",
+  VP_COMMERCIAL:     "VP Claim-Commercial",
+  VP_PRODUCTION:     "VP Claim-Production",
+  VP_PROCUREMENT:    "VP Claim-Procurement",
+  VP_NYK:            "VP Claim-NYK",
   MER_USER: "MER User",
   // GW
   MER_GW: "MER (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)",

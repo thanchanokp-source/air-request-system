@@ -582,7 +582,10 @@ export default function RequestDetailPage() {
   const myUserId: string = (session?.user as any)?.id || ""
   const isGWRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
   const isGWRequest = req?.bu === "GW"
-  const isProcureDvm = (role === "DVM_PROCUREMENT" || role === "CLAIM_PROCUREMENT") && req?.status === "PENDING_CLAIM"
+  // Procurement's special "approve-self or forward-to-boss" flow belonged to the
+  // manual-forward model. NYG now uses the priority model → Procurement approves like
+  // any other dept (VP_PROCUREMENT is the next priority group), so disable it.
+  const isProcureDvm = false
 
   useEffect(() => {
     if (!role) return
@@ -717,7 +720,9 @@ export default function RequestDetailPage() {
   const isClaimApprover = isDvmClaim || isVpClaim
   // Forward-to-next-approver box is only for the legacy NYG DVM/CLAIM flow.
   // GW / SCM NYK / SCM NYG claim auto-route by master priority (no manual forward).
-  const isClaimP1ForForward = ((claimRole.startsWith("CLAIM_") && claimRole !== "CLAIM_NEXT_APPROVER") || claimRole.startsWith("DVM_")) && req?.status === "PENDING_CLAIM"
+  // NYG claim now uses the GW-style PRIORITY model (auto-cascade), NOT manual forward.
+  // Keep manual-forward only for GW (this flag gates the NYG forward box → always off).
+  const isClaimP1ForForward = false && ((claimRole.startsWith("CLAIM_") && claimRole !== "CLAIM_NEXT_APPROVER") || claimRole.startsWith("DVM_")) && req?.status === "PENDING_CLAIM"
   const isClaimNextApprover = role === "CLAIM_NEXT_APPROVER" && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
   // ── GW per-department forward model: each dept finishes OR forwards its own
   // splits independently. Owner = CLAIM_GW / SCM_NYG (NOT NYK — CR flow). Next =
@@ -736,9 +741,11 @@ export default function RequestDetailPage() {
   const gwFwdSplitDepts = gwFwdCanonicalDept === "SUPPLIER"
     ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
     : gwFwdCanonicalDept ? [gwFwdCanonicalDept] : []
+  // Forced-position forward is GW-only now. NYG claim routes through the priority
+  // approve model (approve_so → auto-cascade), so NYG has no forward entry role.
   const fwdEntryRole = isGWRequest
     ? (claimRole === "CLAIM_GW" || claimRole === "SCM_NYG")
-    : (claimRole === "CLAIM_COMMERCIAL" || claimRole === "CLAIM_PRODUCTION" || claimRole === "CLAIM_PROCUREMENT")
+    : false
   const isGwForwardRole = req?.status === (isGWRequest ? "PENDING_CLAIM_GW" : "PENDING_CLAIM") &&
     (fwdEntryRole || claimRole === "CLAIM_NEXT_APPROVER")
   const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED"]
