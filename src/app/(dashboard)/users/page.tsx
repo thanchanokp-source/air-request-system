@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 // Roles that must be set by Admin (master)
 const MASTER_ROLES_NYG = [
   // Flow: MER → DVM MER → VP MER (finder) → President → SCM User → VP SCM (finder) → Claim → Logistics → Accounting
-  { role: "DVM_MER",              label: "DVM MER",               hint: "Approves FIRST after MER upload (before VP MER). Priority 1 = handles first", needsPriority: true, bu: "NYG" },
+  { role: "DVM_MER",              label: "DVM MER",               hint: "Approves FIRST after MER upload (before VP MER)", needsPriority: false, bu: "NYG" },
   { role: "VP_MER",               label: "VP MER",                hint: "Approves after DVM MER (also selectable by MER at upload)", needsPriority: false, bu: "NYG" },
   { role: "PRESIDENT",            label: "President",             hint: "Approves all requests after VP MER",         needsPriority: false, bu: "NYG" },
   { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
