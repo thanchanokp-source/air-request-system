@@ -643,7 +643,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       }
       if (deptItems.size === 0) return
       for (const [dept, items] of deptItems) {
-        // Assigned person(s) for this dept win; else the dept's role-holders.
+        // Assigned person(s) for this dept win; else the FIRST claim approver only.
         const assigned = [...new Set(items.map((i: any) => i.assignedDvm).filter(Boolean))]
         let emails: string[] = assigned as string[]
         if (!emails.length) {
@@ -653,9 +653,14 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
               isActive: true, bu: (req as any).bu,
               OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }],
             },
-            select: { email: true },
+            select: { email: true, priority: true } as any,
+            orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
           })
-          emails = [...new Set(users.map((u: any) => u.email).filter(Boolean))] as string[]
+          // Alert ONLY the first claim approver of this dept (lowest priority) — not
+          // everyone. Later positions are reached by manual forward / priority cascade.
+          const withP = users.filter((u: any) => u.priority != null)
+          const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : users.slice(0, 1)
+          emails = [...new Set(firstBatch.map((u: any) => u.email).filter(Boolean))] as string[]
         }
         if (!emails.length) continue
         const label = dept.replace(/_/g, " ")
