@@ -325,6 +325,131 @@ export default function UsersPage() {
   }
   const handleDragEnd = () => { dragIdx.current = null; setDragOverIdx(null) }
 
+  // Shared Create/Edit form — rendered inline on the Setup tab AND inside a modal on
+  // the All Users tab (so a user can be edited without leaving the list). Kept as a JSX
+  // element (not a nested component) so inputs don't remount / lose focus per keystroke.
+  const userForm = (
+    <div className="bg-white rounded-xl border p-5 space-y-4">
+      <div className="flex items-center justify-between border-b pb-3">
+        <h2 className="font-semibold text-gray-800">{editId ? "Edit User" : "Add New User"}</h2>
+        {editId && <button onClick={reset} className="text-xs text-gray-400 hover:text-gray-600">✕ Cancel</button>}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
+          <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+            placeholder="Full name"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Email *</label>
+          <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+            placeholder="email@nanyangtextile.com"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Role *</label>
+          <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value, priority: "", claimDepartment: "" }))}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <optgroup label="── NYG Master">
+              {MASTER_ROLES.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
+            </optgroup>
+            <optgroup label="── GW Master">
+              {MASTER_ROLES_GW.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
+            </optgroup>
+            <optgroup label="── General">
+              <option value="MER_USER">MER User (NYG)</option>
+              <option value="MER_GW">MER (GW)</option>
+              <option value="ADMIN">Admin</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">BU</label>
+          <select value={form.bu} onChange={e => setForm(p => ({ ...p, bu: e.target.value }))}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="NYG">NYG</option>
+            <option value="GW">GW</option>
+            <option value="ALL">ALL</option>
+          </select>
+        </div>
+
+        {isMasterRole && !isGWClaim && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Priority <span className="text-gray-400 font-normal">(1 = handles first)</span>
+            </label>
+            <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- Select Priority --</option>
+              {[1,2,3,4,5].map(n => <option key={n} value={n}>Priority {n}</option>)}
+            </select>
+          </div>
+        )}
+
+        {isProcurementRole && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Procurement Type *</label>
+            <select value={form.procurementType} onChange={e => setForm(p => ({ ...p, procurementType: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- Select --</option>
+              <option value="PURCHASING">Purchasing</option>
+              <option value="SOURCING">Sourcing</option>
+            </select>
+          </div>
+        )}
+
+        {isGWClaim && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Claim Dept (GW)</label>
+            <select value={form.claimDepartment}
+              onChange={e => setForm(p => ({ ...p, claimDepartment: e.target.value, nygPosition: "", priority: "" }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- Select --</option>
+              {CLAIM_GW_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+        )}
+
+        {isGWClaim && form.claimDepartment && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              Priority <span className="text-gray-400 font-normal">(1 = handles first)</span>
+            </label>
+            <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- Select Priority --</option>
+              {[1,2,3,4,5].map(n => <option key={n} value={n}>Priority {n}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {!editId && (
+        <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5">
+          <div>
+            <p className="text-xs font-medium text-gray-700">Send password setup email now</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Off → you can click "Send Link" later</p>
+          </div>
+          <button type="button" onClick={() => setForm(p => ({ ...p, sendEmail: !p.sendEmail }))}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.sendEmail ? "bg-blue-600" : "bg-gray-300"}`}>
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.sendEmail ? "translate-x-6" : "translate-x-1"}`} />
+          </button>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-red-500">{error}</p>}
+
+      <button onClick={save} disabled={saving || !form.email}
+        className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+        {saving ? "Saving..." : editId ? "Save Changes" : "Create User"}
+      </button>
+    </div>
+  )
+
   return (
     <div className="space-y-5">
 
@@ -573,129 +698,8 @@ export default function UsersPage() {
               )}
             </div>
 
-            {/* Create / Edit Form */}
-            <div className="bg-white rounded-xl border p-5 space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h2 className="font-semibold text-gray-800">{editId ? "Edit User" : "Add New User"}</h2>
-                {editId && <button onClick={reset} className="text-xs text-gray-400 hover:text-gray-600">✕ Cancel</button>}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-                  <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                    placeholder="Full name"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Email *</label>
-                  <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                    placeholder="email@nanyangtextile.com"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Role *</label>
-                  <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value, priority: "", claimDepartment: "" }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <optgroup label="── NYG Master">
-                      {MASTER_ROLES.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
-                    </optgroup>
-                    <optgroup label="── GW Master">
-                      {MASTER_ROLES_GW.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
-                    </optgroup>
-                    <optgroup label="── General">
-                      <option value="MER_USER">MER User (NYG)</option>
-                      <option value="MER_GW">MER (GW)</option>
-                      <option value="ADMIN">Admin</option>
-                    </optgroup>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">BU</label>
-                  <select value={form.bu} onChange={e => setForm(p => ({ ...p, bu: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="NYG">NYG</option>
-                    <option value="GW">GW</option>
-                    <option value="ALL">ALL</option>
-                  </select>
-                </div>
-
-                {/* GW claim uses its own priority field below (after Claim Dept), so
-                    exclude it here to avoid a duplicate Priority dropdown. */}
-                {isMasterRole && !isGWClaim && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Priority <span className="text-gray-400 font-normal">(1 = handles first)</span>
-                    </label>
-                    <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">-- Select Priority --</option>
-                      {[1,2,3,4,5].map(n => <option key={n} value={n}>Priority {n}</option>)}
-                    </select>
-                  </div>
-                )}
-
-                {isProcurementRole && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Procurement Type *</label>
-                    <select value={form.procurementType} onChange={e => setForm(p => ({ ...p, procurementType: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">-- Select --</option>
-                      <option value="PURCHASING">Purchasing</option>
-                      <option value="SOURCING">Sourcing</option>
-                    </select>
-                  </div>
-                )}
-
-                {isGWClaim && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Claim Dept (GW)</label>
-                    <select value={form.claimDepartment}
-                      onChange={e => setForm(p => ({ ...p, claimDepartment: e.target.value, nygPosition: "", priority: "" }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">-- Select --</option>
-                      {CLAIM_GW_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                )}
-
-                {/* All CLAIM_GW depts: priority input */}
-                {isGWClaim && form.claimDepartment && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Priority <span className="text-gray-400 font-normal">(1 = handles first)</span>
-                    </label>
-                    <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">-- Select Priority --</option>
-                      {[1,2,3,4,5].map(n => <option key={n} value={n}>Priority {n}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {!editId && (
-                <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5">
-                  <div>
-                    <p className="text-xs font-medium text-gray-700">Send password setup email now</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">Off → you can click "Send Link" later</p>
-                  </div>
-                  <button type="button" onClick={() => setForm(p => ({ ...p, sendEmail: !p.sendEmail }))}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.sendEmail ? "bg-blue-600" : "bg-gray-300"}`}>
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.sendEmail ? "translate-x-6" : "translate-x-1"}`} />
-                  </button>
-                </div>
-              )}
-
-              {error && <p className="text-sm text-red-500">{error}</p>}
-
-              <button onClick={save} disabled={saving || !form.email}
-                className="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                {saving ? "Saving..." : editId ? "Save Changes" : "Create User"}
-              </button>
-            </div>
+            {/* Create / Edit Form — shared element (defined as userForm above the return) */}
+            {userForm}
 
             {/* Quick list of master roles */}
             <div className="bg-white rounded-xl border overflow-hidden">
@@ -751,7 +755,7 @@ export default function UsersPage() {
       )}
 
       {/* ALL USERS TAB */}
-      {tab === "all" && (
+      {tab === "all" && (<>
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="px-5 py-3 border-b bg-slate-50 flex items-center gap-3 flex-wrap">
             <span className="font-semibold text-slate-700 text-sm">
@@ -859,7 +863,7 @@ export default function UsersPage() {
                     </td>
                     <td className="px-2.5 py-2 align-top">
                       <div className="flex flex-wrap gap-x-1.5 gap-y-0.5 items-center text-[11px]">
-                        <button onClick={() => { openEdit(u); setTab("setup") }} className="font-medium text-blue-600 hover:text-blue-800">Edit</button>
+                        <button onClick={() => openEdit(u)} className="font-medium text-blue-600 hover:text-blue-800">Edit</button>
                         <span className="text-gray-200">|</span>
                         <button onClick={() => sendReset(u.id, u.email)} className="font-medium text-amber-600 hover:text-amber-800">Send Link</button>
                         <span className="text-gray-200">|</span>
@@ -874,7 +878,15 @@ export default function UsersPage() {
             </div>
           )}
         </div>
-      )}
+        {/* Edit-in-place: clicking Edit on this tab opens the form in a modal (no tab switch). */}
+        {editId && (
+          <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-10" onClick={reset}>
+            <div className="w-full max-w-2xl my-auto" onClick={e => e.stopPropagation()}>
+              {userForm}
+            </div>
+          </div>
+        )}
+      </>)}
     </div>
   )
 }
