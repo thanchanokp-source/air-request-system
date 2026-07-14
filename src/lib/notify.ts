@@ -300,7 +300,7 @@ function nykBrandLabel(req: any): string {
 // same role/dept so the chain runs to the last priority with NO manual forward.
 export async function notifyClaimNextPriority(
   requestId: string,
-  role: string,
+  role: string | string[],
   claimDept: string | null | undefined,
   afterPriority: number,
   label?: string,
@@ -308,7 +308,12 @@ export async function notifyClaimNextPriority(
   try {
     const req = await prisma.airRequest.findUnique({ where: { id: requestId } })
     if (!req) return
-    const where: any = { role, isActive: true, bu: (req as any).bu, priority: { gt: afterPriority } }
+    const roleList = Array.isArray(role) ? role : [role]
+    // Multi-role aware: match the primary role OR any role in roles[].
+    const where: any = {
+      isActive: true, bu: (req as any).bu, priority: { gt: afterPriority },
+      OR: [{ role: { in: roleList } }, { roles: { hasSome: roleList } }],
+    }
     if (claimDept) where.claimDepartment = claimDept
     const higher = await (prisma.user as any).findMany({
       where, select: { email: true, priority: true }, orderBy: { priority: "asc" },
@@ -318,7 +323,7 @@ export async function notifyClaimNextPriority(
     const recipients = higher.filter((u: any) => u.priority === nextP).map((u: any) => u.email).filter(Boolean)
     if (!recipients.length) return
     const link = `${APP_URL}/requests/${requestId}`
-    const tokenField = CLAIM_ROLE_TOKEN[role]
+    const tokenField = CLAIM_ROLE_TOKEN[roleList[0]]
     const token = tokenField ? (req as any)[tokenField] : null
     const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
     const html = buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, magicLink)

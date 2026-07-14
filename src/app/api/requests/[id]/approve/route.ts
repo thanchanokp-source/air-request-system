@@ -1144,7 +1144,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // Per-SO claim/VP approval with priority-based sequential logic
   if (action === "approve_so" || action === "reject_so") {
-    const isVpClaimRole = CLAIM_VP_ROLES.includes(userRole)
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     if (request.status === "COMPLETED" || request.status === "REJECTED") {
       return NextResponse.json({ error: "The document is closed and cannot be approved" }, { status: 400 })
@@ -1206,20 +1205,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json(await getUpdated())
     }
 
-    // Determine role group for this dept (DVM_* or VP_*)
-    const rolePrefix = isVpClaimRole ? "VP_" : "DVM_"
-    const dept = userRole.replace(rolePrefix, "") // e.g. "NYK"
-    const groupRole = `${rolePrefix}${dept}`
+    // Determine which claim role this user is acting as for THIS SO. A person can hold
+    // several roles (roles[]); pick the claim role whose dept is a split on this SO.
+    // Handles DVM_/CLAIM_ (entry step) and VP_ (VP step) prefixes → multi-role aware.
+    const itemSplits = getSplits(itemData)
+    const deptOfRole = (r: string) =>
+      r.startsWith("DVM_") ? r.slice(4)
+      : (r.startsWith("CLAIM_") && r !== "CLAIM_NEXT_APPROVER") ? r.slice(6)
+      : CLAIM_VP_ROLES.includes(r) ? r.slice(3) : null
+    let actingRole = userRole
+    for (const r of [userRole, ...heldRoles.filter((x: string) => x !== userRole)]) {
+      const d = deptOfRole(r)
+      if (d && itemSplits.some(s => s.dept === d)) { actingRole = r; break }
+    }
+    const actingIsVp = CLAIM_VP_ROLES.includes(actingRole)
+    const dept = deptOfRole(actingRole) || actingRole.replace(/^(DVM_|CLAIM_|VP_)/, "")
+    // Everyone who can act at this step for this dept: the DVM/CLAIM entry role, or the
+    // VP role. Matched on primary role OR roles[] (multi-role aware).
+    const groupRoles = actingIsVp ? [`VP_${dept}`] : [`DVM_${dept}`, `CLAIM_${dept}`]
+    const groupWhere: any = { OR: [{ role: { in: groupRoles } }, { roles: { hasSome: groupRoles } }] }
 
     // Guard: this approver's department must be one of the item's claim splits.
-    const itemSplits = getSplits(itemData)
     if (itemSplits.length > 0 && !itemSplits.some(s => s.dept === dept)) {
       return NextResponse.json({ error: "Your department is not part of the claim for this SO" }, { status: 403 })
     }
 
-    // Get all active approvers with priority set — users without priority are excluded
+    // Get all active approvers at this step with priority set (no priority = excluded).
     const allApprovers = await (prisma.user as any).findMany({
-      where: { role: groupRole, isActive: true, priority: { not: null } },
+      where: { ...groupWhere, isActive: true, priority: { not: null } },
       orderBy: [{ priority: "asc" }, { createdAt: "asc" }]
     })
 
@@ -1237,16 +1250,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    // Record this approval
+    // Record this approval (recorded as the acting claim role)
     await (prisma as any).claimApproval.upsert({
       where: { itemId_userId: { itemId, userId } },
-      create: { itemId, userId, role: userRole },
+      create: { itemId, userId, role: actingRole },
       update: { createdAt: new Date() }
     })
 
     // Check if ALL approvers in this group have now approved
     const allDone = await (prisma as any).claimApproval.findMany({
-      where: { itemId, user: { role: groupRole } }
+      where: { itemId, user: groupWhere }
     })
     const approvedIds = new Set(allDone.map((a: any) => a.userId))
     const everyoneApproved = allApprovers.every((u: any) => approvedIds.has(u.id))
@@ -1254,12 +1267,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (everyoneApproved) {
       // Per-split: mark only THIS department's split (DVM done → CLAIM_PASSED, VP done → COMPLETED).
       // The item advances only when every split's department has cleared this level.
-      const splitStatus = isVpClaimRole ? "COMPLETED" : "CLAIM_PASSED"
+      const splitStatus = actingIsVp ? "COMPLETED" : "CLAIM_PASSED"
       const updatedSplits = setDeptSplitStatus(getSplits(itemData), dept, splitStatus)
       const newItemStatus = deriveNygItemStatus(updatedSplits)
       await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updatedSplits as any, itemStatus: newItemStatus, itemComment: comment || null } })
       await prisma.approvalLog.create({
-        data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — All ${groupRole} approved (${dept})${comment ? ` - ${comment}` : ""}` }
+        data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — All ${dept}${actingIsVp ? " VP" : ""} approved${comment ? ` - ${comment}` : ""}` }
       })
       const newStatus = await recalcDocStatus(id)
       if (newStatus !== request.status) {
@@ -1274,13 +1287,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // email the NEXT priority level automatically (no manual forward). Guarded so
       // it fires once per priority, not once per SO.
       if (myPriority != null) {
-        const gate = isVpClaimRole ? "CLAIM_PASSED" : "LOG_PASSED"
+        const gate = actingIsVp ? "CLAIM_PASSED" : "LOG_PASSED"
         const gateItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: gate } })
         const mine = await (prisma as any).claimApproval.findMany({ where: { userId, item: { requestId: id } }, select: { itemId: true } })
         const mineIds = new Set(mine.map((a: any) => a.itemId))
         const remaining = gateItems.filter((it: any) => getSplits(it).some((s: any) => s.dept === dept) && !mineIds.has(it.id))
         if (remaining.length === 0) {
-          await notifyClaimNextPriority(id, groupRole, null, myPriority, dept).catch(() => {})
+          await notifyClaimNextPriority(id, groupRoles, null, myPriority, dept).catch(() => {})
         }
       }
     }

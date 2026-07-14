@@ -38,9 +38,16 @@ export async function POST(req: NextRequest) {
     const existing = await (prisma.user as any).findUnique({ where: { email: emailLc } })
     if (existing) {
       const current: string[] = (existing.roles && existing.roles.length) ? existing.roles : [existing.role]
-      if (current.includes(role)) return NextResponse.json({ id: existing.id, alreadyHadRole: true })
       const roles = Array.from(new Set([...current, role]))
-      await (prisma.user as any).update({ where: { id: existing.id }, data: { roles } })
+      // Append the role AND apply its priority / claim dept (so a multi-role person
+      // added via "Add" is ordered correctly in the NEW role's approval chain). The
+      // primary role/BU stay unchanged — this only ADDS a position.
+      const upd: any = { roles }
+      if (priority != null) upd.priority = priority
+      if ((role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") && claimDepartment) upd.claimDepartment = claimDepartment
+      if (isProcurement && procurementType) upd.procurementType = procurementType
+      await (prisma.user as any).update({ where: { id: existing.id }, data: upd })
+      if (current.includes(role)) return NextResponse.json({ id: existing.id, alreadyHadRole: true, updated: true })
       return NextResponse.json({ id: existing.id, addedRole: role, multiRole: true })
     }
 
