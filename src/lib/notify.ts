@@ -625,16 +625,44 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       return
     }
 
-    // For PENDING_CLAIM — send only to assignedDvm per item (if set)
+    // For PENDING_CLAIM — split PER claim department (like GW): each dept's claim
+    // approver(s) get their OWN email covering only their dept's SO, so nobody gets
+    // a confusing cross-department blast. Recipient lookup is multi-role aware
+    // (primary role OR any of roles[]); a per-SO assignedDvm wins for that dept.
     if (newStatus === "PENDING_CLAIM") {
-      const assignedEmails = [...new Set(req.items.map((i:any) => i.assignedDvm).filter(Boolean))]
-      if (assignedEmails.length > 0) {
-        const link = `${APP_URL}/requests/${requestId}`
-        const html = buildHtml(req, newStatus, link)
-        const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
-        await sendMail(assignedEmails, `${subject} — ${req.documentNo}`, html)
-        return
+      const link = `${APP_URL}/requests/${requestId}`
+      // Group this doc's pending SOs by the claim dept(s) still awaiting their DVM.
+      const deptItems = new Map<string, any[]>()
+      for (const it of req.items) {
+        if (it.itemStatus !== "LOG_PASSED") continue
+        for (const s of getSplits(it)) {
+          if (s.status != null && s.status !== "CLAIM_PENDING") continue // dept already acted
+          if (!deptItems.has(s.dept)) deptItems.set(s.dept, [])
+          deptItems.get(s.dept)!.push(it)
+        }
       }
+      if (deptItems.size === 0) return
+      for (const [dept, items] of deptItems) {
+        // Assigned person(s) for this dept win; else the dept's role-holders.
+        const assigned = [...new Set(items.map((i: any) => i.assignedDvm).filter(Boolean))]
+        let emails: string[] = assigned as string[]
+        if (!emails.length) {
+          const deptRoles = [`DVM_${dept}`, `CLAIM_${dept}`]
+          const users = await prisma.user.findMany({
+            where: {
+              isActive: true, bu: (req as any).bu,
+              OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }],
+            },
+            select: { email: true },
+          })
+          emails = [...new Set(users.map((u: any) => u.email).filter(Boolean))] as string[]
+        }
+        if (!emails.length) continue
+        const label = dept.replace(/_/g, " ")
+        const html = buildHtml(req, newStatus, link)
+        await sendMail(emails, `[Claim – ${label}] Pending Approval — ${items.length} SO — ${req.documentNo}`, html)
+      }
+      return
     }
 
     // For claim statuses, filter by depts that actually have items
