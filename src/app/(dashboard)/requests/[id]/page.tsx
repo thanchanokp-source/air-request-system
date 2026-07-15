@@ -863,7 +863,7 @@ export default function RequestDetailPage() {
   // President (NYG) = FINAL approver: doc at PENDING_PRESIDENT, items PRESIDENT_PENDING.
   const isPresidentRole = role === "PRESIDENT" && req?.status === "PENDING_PRESIDENT" && (req?.items || []).some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
   const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0 && !isGWRequest
-  const isLgParallelAtScm = role === "LOGISTICS" && (req?.status === "PENDING_SCM" || req?.status === "PENDING_PRESIDENT") && !isGWRequest
+  const isLgParallelAtScm = role === "LOGISTICS" && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(req?.status) && !isGWRequest
   // GW Logistics uses the same Air Waybill Entry UI (at its own PENDING_LOGISTICS_GW stage).
   const isLgGwEntry = role === "LOGISTICS_GW" && (req?.status === "PENDING_CLAIM_GW" || req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && isGWRequest
   const showAwbEntry = isLgParallelAtScm || isLgGwEntry

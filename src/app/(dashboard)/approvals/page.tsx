@@ -74,7 +74,7 @@ export default function ApprovalsPage() {
     if (role === "VP_SCM") return r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PASSED")
     // President (NYG) is now the FINAL approver — items sit at PRESIDENT_PENDING.
     if (role === "PRESIDENT") return r.status === "PENDING_PRESIDENT" && items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
-    if (role === "LOGISTICS") return r.bu !== "GW" && (r.status === "PENDING_SCM" || r.status === "PENDING_PRESIDENT")
+    if (role === "LOGISTICS") return r.bu !== "GW" && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }

@@ -669,7 +669,6 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     if (newStatus === "PENDING_CLAIM" || newStatus === "PENDING_VP_CLAIM") {
       const isVp = newStatus === "PENDING_VP_CLAIM"
       const gate = isVp ? "CLAIM_PASSED" : "LOG_PASSED"
-      const link = `${APP_URL}/requests/${requestId}`
       const deptItems = new Map<string, any[]>()
       for (const it of req.items) {
         if (it.itemStatus !== gate) continue
@@ -680,24 +679,45 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
           deptItems.get(s.dept)!.push(it)
         }
       }
-      if (deptItems.size === 0) return
-      for (const [dept, items] of deptItems) {
-        const deptRoles = isVp ? claimVpRoles(dept) : claimEntryRoles(dept)
-        const users = await prisma.user.findMany({
-          where: {
-            isActive: true, bu: (req as any).bu,
-            OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }],
-          },
-          select: { email: true, priority: true } as any,
-          orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
-        })
-        const withP = users.filter((u: any) => u.priority != null)
-        const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : users.slice(0, 1)
-        const emails = [...new Set(firstBatch.map((u: any) => u.email).filter(Boolean))] as string[]
-        if (!emails.length) continue
-        const label = dept.replace(/_/g, " ")
-        const html = buildHtml(req, newStatus, link)
-        await sendMail(emails, `[Claim${isVp ? " VP" : ""} – ${label}] Pending Approval — ${items.length} SO — ${req.documentNo}`, html)
+      const docLink = `${APP_URL}/requests/${requestId}`
+      // Personal magic-login so clicking the email logs the approver in as THEMSELVES and
+      // lands on /approvals (the doc then shows in their queue). Reused for LG below.
+      const magicFor = async (uid: string) => {
+        const token = randomUUID()
+        await (prisma.user as any).update({ where: { id: uid }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } }).catch(() => {})
+        return `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals`
+      }
+      if (deptItems.size > 0) {
+        for (const [dept, items] of deptItems) {
+          const deptRoles = isVp ? claimVpRoles(dept) : claimEntryRoles(dept)
+          const users = await prisma.user.findMany({
+            where: {
+              isActive: true, bu: (req as any).bu,
+              OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }],
+            },
+            select: { id: true, email: true, priority: true },
+            orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+          })
+          const withP = users.filter((u: any) => u.priority != null)
+          const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : users.slice(0, 1)
+          const label = dept.replace(/_/g, " ")
+          // Send EACH approver their OWN email (separate) so the magic link resolves per person.
+          for (const u of firstBatch) {
+            if (!u.email) continue
+            const html = buildHtml(req, newStatus, docLink, undefined, undefined, await magicFor(u.id))
+            await sendMail(u.email, `[Claim${isVp ? " VP" : ""} – ${label}] Pending Approval — ${items.length} SO — ${req.documentNo}`, html)
+          }
+        }
+      }
+      // NYG: Logistics runs IN PARALLEL with Claim → alert LG (enter INV / HAWB / Actual Air)
+      // when the doc first enters the claim stage. Only at the DVM step (PENDING_CLAIM).
+      if (!isVp && (req as any).bu !== "GW") {
+        const lgUsers = await prisma.user.findMany({ where: { isActive: true, role: "LOGISTICS" } as any, select: { id: true, email: true } })
+        for (const u of lgUsers) {
+          if (!u.email) continue
+          const html = buildHtml(req, "PENDING_LOGISTICS", docLink, undefined, undefined, await magicFor(u.id))
+          await sendMail(u.email, `[Logistics] Ready for HAWB / Actual (parallel with Claim) — ${req.documentNo}`, html)
+        }
       }
       return
     }
