@@ -14,7 +14,8 @@ export function canonCountry(c: string): string {
 
 const rateKey = (country: string) => canonCountry(country)
 
-const descKey = (s: string) => String(s || "").trim().toUpperCase()
+// Must match the upload's normalisation (case-insensitive, trim, collapse spaces).
+const descKey = (s: string) => String(s || "").trim().toUpperCase().replace(/\s+/g, " ")
 
 // Release documents HELD for missing master data. A doc is held while any COUNTRY has
 // no freight rate (pendingRate) OR any DESCRIPTION has no WT Charge (pendingWeight).

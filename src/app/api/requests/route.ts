@@ -126,7 +126,9 @@ export async function POST(req: NextRequest) {
     // Gross Weight = QTY Air × WT Charge/pc of the DESCRIPTION (MER no longer types weight).
     // The description must exist in Master Description with a WT Charge > 0. Any description
     // that's missing / has no WT Charge → the doc is HELD (pendingWeight) until LG adds it.
-    const descKey = (s: string) => String(s || "").trim().toUpperCase()
+    // Normalise for matching: case-insensitive, trim, and collapse repeated spaces so
+    // "t-shirt", "T-SHIRT", "  T-SHIRT " all match the same Master Description.
+    const descKey = (s: string) => String(s || "").trim().toUpperCase().replace(/\s+/g, " ")
     const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
     const descWeights: Record<string, number> = {}
     for (const d of descList) descWeights[descKey(d.name)] = d.weightPerUnit || 0
