@@ -887,12 +887,14 @@ export default function RequestDetailPage() {
     return { items, totalQty, totalCost, avgPerUnit, hasOverride, overrideTotal }
   }
   const LG_REQUIRED_FILES = [{ key: "INV", label: "INV" }, { key: "AWB", label: "AWB" }, { key: "EXPENSE", label: "Expense" }]
+  const LG_FILE_CATS = ["INV", "AWB", "EXPENSE", "COMBINE"]
+  const lgFileCount = (req?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).length
   const saveLgHawb = async () => {
-    // GW Logistics must attach INV + AWB + Expense before forwarding.
-    if (isLgGwEntry) {
-      const cats = new Set((req?.attachments || []).map((a: any) => a.category).filter(Boolean))
-      const missing = LG_REQUIRED_FILES.filter(f => !cats.has(f.key)).map(f => f.label)
-      if (missing.length) { alert(`Please attach all required files before Save: ${missing.join(", ")}`); return }
+    // Logistics (both GW & NYG) must attach AT LEAST ONE file (any of INV / AWB / Expense
+    // / Combine) before saving — no longer all 3 required.
+    if (showAwbEntry && lgFileCount === 0) {
+      alert("Please attach at least 1 file (INV / AWB / Expense / Combine) before Save")
+      return
     }
     const itemLogisticsData: Record<string, { invoiceNo: string; hawbNo: string; bookingDate: string }> = {}
     const itemActualsData: Record<string, string> = {}
@@ -4123,20 +4125,26 @@ export default function RequestDetailPage() {
             </div>
           </div>
 
-          {/* Required attachments (GW) — must attach INV / AWB / Expense before Save */}
-          {isLgGwEntry && (
-            <div className="bg-white rounded-xl border border-orange-200 p-3">
-              <p className="text-xs font-semibold text-orange-800 mb-2">Attach files (required before Save): INV · AWB · Expense</p>
+          {/* Logistics attachments (GW + NYG) — INV / AWB / Expense are OPTIONAL, plus a
+              Combine slot that accepts many files. At least 1 file (any slot) before Save. */}
+          {showAwbEntry && (() => {
+            const combineAtts = (req?.attachments || []).filter((a: any) => a.category === "COMBINE")
+            return (
+            <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
+              <p className="text-xs font-semibold text-orange-800">
+                Attach files <span className="font-normal text-gray-500">(INV · AWB · Expense are optional — attach at least 1 file, any slot)</span>
+                {lgFileCount > 0 ? <span className="ml-1 text-green-600">✓ {lgFileCount} file(s)</span> : <span className="ml-1 text-red-500">* need ≥ 1</span>}
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {LG_REQUIRED_FILES.map(f => {
                   const att = (req?.attachments || []).find((a: any) => a.category === f.key)
                   return (
                     <div key={f.key} className={`rounded-lg border p-2 flex items-center justify-between gap-2 ${att ? "border-green-300 bg-green-50" : "border-gray-300 bg-gray-50"}`}>
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-gray-700">{f.label} {att ? "✓" : <span className="text-red-500">*</span>}</p>
+                        <p className="text-xs font-medium text-gray-700">{f.label} {att && "✓"}</p>
                         {att ? (
                           <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline truncate block">{att.fileName}</a>
-                        ) : <p className="text-[10px] text-gray-400">Not attached</p>}
+                        ) : <p className="text-[10px] text-gray-400">Optional</p>}
                       </div>
                       <label className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer whitespace-nowrap shrink-0">
                         {att ? "Change" : "Attach"}
@@ -4147,8 +4155,27 @@ export default function RequestDetailPage() {
                   )
                 })}
               </div>
+              {/* Combine slot — multiple files in one field */}
+              <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/40 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-blue-800">Combine File <span className="font-normal text-gray-500">(multiple files allowed)</span></p>
+                  <label className="text-[10px] px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-100 cursor-pointer whitespace-nowrap shrink-0">
+                    {lgDraftSaving ? "Uploading…" : "＋ Add files"}
+                    <input type="file" className="hidden" multiple disabled={lgDraftSaving}
+                      onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await uploadLgFile(f, "COMBINE") }} />
+                  </label>
+                </div>
+                {combineAtts.length > 0 && (
+                  <div className="mt-1.5 flex flex-col gap-0.5">
+                    {combineAtts.map((att: any) => (
+                      <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline truncate">📎 {att.fileName}</a>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+            )
+          })()}
 
 
           {/* INV Assignment Table */}
