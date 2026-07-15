@@ -41,6 +41,9 @@ const STATUS_LABELS: Record<string,string> = {
 // Brand of an SO row — per-item brand (a doc can hold many brands), fallback to
 // the document-level brand for older uploads.
 const soBrand = (r: any) => r?.brand || r?.request?.brandName || r?.brandName || "N/A"
+// Normalised brand key for matching — uppercase + collapse spaces so MER's inconsistent
+// entries ("rhone", "RHONE ", "RHONE  X") group together. Filtering uses CONTAINS on this.
+const brandKey = (r: any) => soBrand(r).trim().toUpperCase().replace(/\s+/g, " ")
 const CLAIM_DEPTS = ["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]
 const MONTH_OPTS = [
   {value:"01",label:"Jan"},{value:"02",label:"Feb"},{value:"03",label:"Mar"},{value:"04",label:"Apr"},
@@ -462,7 +465,7 @@ export default function DashboardPage() {
              statusFilter==="COMPLETED" ? (row.itemStatus === "COMPLETED" || row.itemStatus === "ACCOUNTING_PENDING") :
              statusFilter==="REJECTED"  ? row.itemStatus === "REJECTED" : true
            )) &&
-           (!brandFilter  || soBrand(row)===brandFilter) &&
+           (!brandFilter  || brandKey(row).includes(brandFilter)) &&
            (!soF.length   || soF.includes(row.so)) &&
            (!cpF.length   || cpF.includes(row.customerPO)) &&
            (!portFilter   || row.port===portFilter) &&
@@ -529,9 +532,9 @@ export default function DashboardPage() {
     return Object.entries(m).sort(([,a],[,b])=>a.ym.localeCompare(b.ym)).map(([name,v])=>({name,orig:Math.round(v.orig),air:Math.round(v.air),airRate:v.orig>0?Math.round(v.air/v.orig*100):0}))
   },[filtered])
 
-  const brandCost  = useMemo(()=>buildCost(filtered,r=>soBrand(r)),[filtered])
-  const brandQty   = useMemo(()=>buildQty(filtered,r=>soBrand(r)),[filtered])
-  const brandDelay = useMemo(()=>buildDelay(filtered,r=>soBrand(r)),[filtered])
+  const brandCost  = useMemo(()=>buildCost(filtered,r=>brandKey(r)),[filtered])
+  const brandQty   = useMemo(()=>buildQty(filtered,r=>brandKey(r)),[filtered])
+  const brandDelay = useMemo(()=>buildDelay(filtered,r=>brandKey(r)),[filtered])
 
   const cRows = (_r:any) => true
   const cKey  = (r:any) => r.country
@@ -575,7 +578,7 @@ export default function DashboardPage() {
 
   // Filter options
   const years    = useMemo(()=>[...new Set(allSOs.map(r=>r.originalShipmentDate?String(new Date(r.originalShipmentDate).getFullYear()):"").filter(Boolean))].sort().reverse(),[allSOs])
-  const brands   = [...new Set(allSOs.map((r:any)=>soBrand(r)).filter((b:string)=>b&&b!=="N/A"))].sort()
+  const brands   = [...new Set(allSOs.map((r:any)=>brandKey(r)).filter((b:string)=>b&&b!=="N/A"))].sort()
   const sos      = [...new Set(allSOs.map(r=>r.so).filter(Boolean))].sort()
   const cps      = [...new Set(allSOs.map(r=>r.customerPO).filter(Boolean))].sort()
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
@@ -720,7 +723,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <CostBar  data={brandCost}  height={H}/>
         <QtyBar   data={brandQty}   height={H}/>
-        <DelayBar data={brandDelay} rows={filtered} groupFn={(r:any)=>soBrand(r)} height={H}/>
+        <DelayBar data={brandDelay} rows={filtered} groupFn={(r:any)=>brandKey(r)} height={H}/>
       </div>
 
       {/* ── Row 3: By Country ────────────────────────────────────────────── */}
