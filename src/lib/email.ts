@@ -17,7 +17,21 @@ async function getAccessToken(): Promise<string> {
   return data.access_token
 }
 
-export async function sendMail(to: string | string[], subject: string, html: string) {
+export type MailAttachment = { filename: string; contentBase64: string; contentType?: string }
+
+// Build the Microsoft Graph fileAttachment array (base64 inline). Graph's simple sendMail
+// caps the whole message at ~4 MB, so keep attachments small (PDF + a few files).
+function graphAttachments(attachments?: MailAttachment[]) {
+  if (!attachments?.length) return undefined
+  return attachments.filter(a => a.contentBase64).map(a => ({
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    name: a.filename,
+    contentType: a.contentType || "application/octet-stream",
+    contentBytes: a.contentBase64,
+  }))
+}
+
+export async function sendMail(to: string | string[], subject: string, html: string, attachments?: MailAttachment[]) {
   const sender = process.env.GRAPH_SENDER
   if (!process.env.AZURE_TENANT_ID || !process.env.AZURE_CLIENT_ID || !sender) {
     console.warn("[email] Microsoft Graph not configured — skipping")
@@ -26,6 +40,7 @@ export async function sendMail(to: string | string[], subject: string, html: str
 
   const override = process.env.TEST_EMAIL_OVERRIDE
   const originalTo = Array.isArray(to) ? to.join(", ") : to
+  const graphAtts = graphAttachments(attachments)
 
   const token = await getAccessToken()
 
@@ -61,6 +76,7 @@ export async function sendMail(to: string | string[], subject: string, html: str
             subject: `[MONITOR] ${subject}`,
             body: { contentType: "HTML", content: monitorHtml },
             toRecipients: [{ emailAddress: { address: override } }],
+            ...(graphAtts ? { attachments: graphAtts } : {}),
           },
           saveToSentItems: true,
         }),
@@ -88,6 +104,7 @@ export async function sendMail(to: string | string[], subject: string, html: str
           subject,
           body: { contentType: "HTML", content: html },
           toRecipients: recipients,
+          ...(graphAtts ? { attachments: graphAtts } : {}),
         },
         saveToSentItems: true,
       }),

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
-import { notifyStatusChange, notifyClaimNextPriority } from "@/lib/notify"
+import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 
@@ -127,6 +127,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
       }
     }
+    // "Save & Send" (data complete) → email the claimers the LG files + signed PDF (item 2).
+    if (body.lgComplete) await notifyLgFilesToClaimers(id).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -623,6 +625,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: nextStatus, comment }
     })
+    // "Save & Send" (data complete) → email the claimers the LG files + signed PDF (item 2).
+    if (body.lgComplete) await notifyLgFilesToClaimers(id).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

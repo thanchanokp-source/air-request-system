@@ -1,6 +1,8 @@
 import { prisma } from "./prisma"
 import { sendMail } from "./email"
 import { getSplits, claimEntryRoles, claimVpRoles } from "./claim"
+import { supabase, BUCKET } from "./supabase-storage"
+import { randomUUID } from "crypto"
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
@@ -909,4 +911,142 @@ export async function notifyAdminAddPerson(opts: {
   } catch (err) {
     console.error("[notify] add-person error:", err)
   }
+}
+
+// Item 2 — when Logistics finishes entering INV + HAWB (Actual Air) and hits "Save & Send",
+// email each claim department's claimer(s) for this doc with:
+//   (a) the LG-attached files (INV / AWB / Expense / Combine), and
+//   (b) the system-generated signed PDF (signatures captured so far → GM for GW / VP SCM for NYG).
+// Sent per-department (each dept's SOs), to whoever holds that dept's entry claim role
+// (COMMERCIAL → DVM MER, etc. via claimEntryRoles). Both BU.
+export async function notifyLgFilesToClaimers(requestId: string) {
+  try {
+    const req: any = await prisma.airRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        items: true,
+        createdBy: { select: { name: true, email: true } },
+        approvalLogs: { include: { user: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
+        attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
+        approvalSignatures: { orderBy: { signedAt: "asc" } },
+      } as any,
+    })
+    if (!req) return
+    const items = (req.items as any[]).filter(i => i.itemStatus !== "REJECTED")
+    if (!items.length) return
+
+    // (b) Combined signed PDF → base64. Signatures reflect whatever's captured now.
+    const fileAtts: { filename: string; contentBase64: string; contentType?: string }[] = []
+    try {
+      const { renderToBuffer } = await import("@react-pdf/renderer")
+      const { CombinedPdfDocument } = await import("@/components/request-pdf")
+      const React = await import("react")
+      const el = React.default.createElement(CombinedPdfDocument as any, { pages: items.map(item => ({ req, item })) })
+      const buf = await (renderToBuffer as any)(el)
+      fileAtts.push({ filename: `${req.documentNo}.pdf`, contentBase64: Buffer.from(buf).toString("base64"), contentType: "application/pdf" })
+    } catch (e) { console.error("[notify] claimer PDF render failed:", e) }
+
+    // (a) LG-attached files → base64.
+    const lgCats = ["INV", "AWB", "EXPENSE", "COMBINE"]
+    for (const a of (req.attachments || []).filter((x: any) => lgCats.includes(x.category))) {
+      try {
+        const { data } = await supabase.storage.from(BUCKET).download(a.filePath)
+        if (data) {
+          const ab = await (data as any).arrayBuffer()
+          fileAtts.push({ filename: a.fileName, contentBase64: Buffer.from(ab).toString("base64"), contentType: a.mimeType || "application/octet-stream" })
+        }
+      } catch (e) { console.error("[notify] LG file download failed:", a.filePath, e) }
+    }
+
+    // Group SOs by claim dept → email each dept's claimers.
+    const deptSOs = new Map<string, string[]>()
+    for (const it of items) for (const s of getSplits(it)) {
+      if (!s.dept) continue
+      if (!deptSOs.has(s.dept)) deptSOs.set(s.dept, [])
+      deptSOs.get(s.dept)!.push(it.so)
+    }
+    if (deptSOs.size === 0) return
+    const link = `${APP_URL}/requests/${requestId}`
+    for (const [dept, sos] of deptSOs) {
+      const deptRoles = claimEntryRoles(dept)
+      const users = await (prisma.user as any).findMany({
+        where: { isActive: true, bu: req.bu, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] },
+        select: { email: true },
+      })
+      const emails = [...new Set(users.map((u: any) => u.email).filter(Boolean))] as string[]
+      if (!emails.length) continue
+      const html = buildHtml(req, "PENDING_CLAIM", link)
+      await sendMail(emails, `[Claim – ${dept.replace(/_/g, " ")}] Logistics files ready — ${req.documentNo} (${sos.length} SO)`, html, fileAtts)
+    }
+  } catch (err) {
+    console.error("[notify] LG-files-to-claimers error:", err)
+  }
+}
+
+// Item 4 — weekly (Monday) reminder to Logistics: list documents that have reached a stage
+// where LG can enter data but still have SO with NO Actual Air Freight (not filled yet).
+// Emails the BU's LG role-holders a table with one-click Open-Document links.
+export async function notifyLgPendingReminder(): Promise<{ sent: number; docs: number }> {
+  const NYG_ST = ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"]
+  const GW_ST = ["PENDING_CLAIM_GW", "PENDING_LOGISTICS_GW", "PENDING_PRESIDENT_GW"]
+  const docs: any[] = await prisma.airRequest.findMany({
+    where: { status: { in: [...NYG_ST, ...GW_ST] } },
+    include: { items: { select: { itemStatus: true, actualAirFreight: true } } },
+    orderBy: { createdAt: "asc" },
+  })
+  const pending = docs.filter(d => d.items.some((i: any) => i.itemStatus !== "REJECTED" && i.actualAirFreight == null))
+  if (!pending.length) return { sent: 0, docs: 0 }
+
+  const byBu: Record<string, any[]> = { NYG: [], GW: [] }
+  for (const d of pending) byBu[d.bu === "GW" ? "GW" : "NYG"].push(d)
+
+  let sent = 0
+  for (const bu of ["NYG", "GW"] as const) {
+    const list = byBu[bu]
+    if (!list.length) continue
+    const lgRole = bu === "GW" ? "LOGISTICS_GW" : "LOGISTICS"
+    const lgUsers: any[] = await (prisma.user as any).findMany({ where: { isActive: true, role: lgRole }, select: { id: true, email: true } })
+    for (const u of lgUsers) {
+      if (!u.email) continue
+      // One personal login token (valid a week) reused across this user's doc links.
+      const token = randomUUID()
+      await (prisma.user as any).update({ where: { id: u.id }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } })
+      const rows = list.map(d => {
+        const missing = d.items.filter((i: any) => i.itemStatus !== "REJECTED" && i.actualAirFreight == null).length
+        const link = `${APP_URL}/api/magic-login?token=${token}&redirect=/requests/${d.id}`
+        return `<tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;font-weight:600">${d.documentNo}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;color:#b45309">${missing} SO ยังไม่มี Actual</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee"><a href="${link}" style="font-family:Arial,sans-serif;font-size:12px;color:#1e3a8a;font-weight:700;text-decoration:none">Open Document →</a></td>
+        </tr>`
+      }).join("")
+      const html = `
+<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0"><tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#1e3a8a;padding:20px;text-align:center">
+      <p style="margin:0;color:#bfdbfe;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif">⏰ LOGISTICS REMINDER (${bu})</p>
+      <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
+    </td></tr>
+    <tr><td style="padding:28px 32px">
+      <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 14px">มีเอกสาร <strong>${list.length}</strong> ใบที่ยังรอ Logistics กรอก INV / HAWB / Actual Air Freight — กรุณาเข้าไปกรอกให้ครบ</p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:#eff6ff">
+          <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#1e40af">DOC NO</th>
+          <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#1e40af">สถานะ</th>
+          <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#1e40af"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group · แจ้งเตือนอัตโนมัติทุกวันจันทร์</p>
+    </td></tr>
+  </table>
+</td></tr></table></body></html>`
+      await sendMail(u.email, `[Reminder] เอกสารรอ Logistics กรอกข้อมูล (${bu}) — ${list.length} ใบ`, html)
+      sent++
+    }
+  }
+  return { sent, docs: pending.length }
 }

@@ -889,12 +889,25 @@ export default function RequestDetailPage() {
   const LG_REQUIRED_FILES = [{ key: "INV", label: "INV" }, { key: "AWB", label: "AWB" }, { key: "EXPENSE", label: "Expense" }]
   const LG_FILE_CATS = ["INV", "AWB", "EXPENSE", "COMBINE"]
   const lgFileCount = (req?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).length
-  const saveLgHawb = async () => {
-    // Logistics (both GW & NYG) must attach AT LEAST ONE file (any of INV / AWB / Expense
-    // / Combine) before saving — no longer all 3 required.
-    if (showAwbEntry && lgFileCount === 0) {
-      alert("Please attach at least 1 file (INV / AWB / Expense / Combine) before Save")
-      return
+  // "Complete" = every LG SO has an INV assigned AND that INV sits in a HAWB group with a
+  // HAWB No. (so actual air freight is computed). Draft can be saved without this.
+  const lgComplete = allLgItems.length > 0 && allLgItems.every((it: any) => {
+    const inv = soInvMap[it.id]
+    return !!inv && hawbGroups.some(g => g.hawbNo && g.invNos.includes(inv))
+  })
+  // draft = save partial data, no gates, no forward, no claimer email.
+  // submit (draft=false) = requires complete data + ≥1 file → forward (GW) / advance (NYG)
+  // and (item 2) email the claimers with the files + signed PDF.
+  const saveLgHawb = async (draft = false) => {
+    if (!draft) {
+      if (showAwbEntry && lgFileCount === 0) {
+        alert("Please attach at least 1 file (INV / AWB / Expense / Combine) before sending")
+        return
+      }
+      if (!lgComplete) {
+        alert("ข้อมูลยังไม่ครบ — ทุก SO ต้องมี INV + HAWB (จะได้ Actual Air) ก่อนส่ง\nหากยังไม่ครบ กด \"Save Draft\" เก็บไว้ก่อนได้")
+        return
+      }
     }
     const itemLogisticsData: Record<string, { invoiceNo: string; hawbNo: string; bookingDate: string }> = {}
     const itemActualsData: Record<string, string> = {}
@@ -916,11 +929,21 @@ export default function RequestDetailPage() {
       })
     })
     setLgDraftSaving(true)
-    // GW: forward to Claim (approve). NYG parallel: save draft only (no status change).
-    const action = isLgGwEntry ? "approve" : "save_logistics_draft"
-    const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, itemLogistics: itemLogisticsData, itemActuals: itemActualsData }) })
+    // Draft → always just save (no status change, no email). Submit → GW forwards to Claim
+    // (approve); NYG saves the (now complete) data. `lgComplete` tells the server to email
+    // the claimers with the files + signed PDF (item 2).
+    const action = draft ? "save_logistics_draft" : (isLgGwEntry ? "approve" : "save_logistics_draft")
+    const res = await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, itemLogistics: itemLogisticsData, itemActuals: itemActualsData, lgComplete: !draft }),
+    })
     setLgDraftSaving(false)
-    if (isLgGwEntry && !res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Save failed"); return }
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Save failed"); return }
+    if (draft) {
+      const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json())
+      alert("บันทึกฉบับร่างแล้ว (ยังไม่ส่ง)")
+      return
+    }
     router.push("/approvals")
   }
   const uploadLgFile = async (file: File, category: string) => {
@@ -4118,9 +4141,14 @@ export default function RequestDetailPage() {
                     e.target.value = ""
                   }} />
               </label>
-              <button type="button" onClick={saveLgHawb} disabled={lgDraftSaving || hawbGroups.length === 0}
+              <button type="button" onClick={() => saveLgHawb(true)} disabled={lgDraftSaving}
+                className="bg-white border border-gray-300 text-gray-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+                {lgDraftSaving ? "..." : "Save Draft"}
+              </button>
+              <button type="button" onClick={() => saveLgHawb(false)} disabled={lgDraftSaving || hawbGroups.length === 0}
+                title={!lgComplete ? "ข้อมูลยังไม่ครบ (ต้องมี INV + HAWB ทุก SO)" : lgFileCount === 0 ? "ต้องแนบไฟล์อย่างน้อย 1" : ""}
                 className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50">
-                {lgDraftSaving ? "Saving..." : "Save"}
+                {lgDraftSaving ? "Saving..." : (isLgGwEntry ? "Save & Send to Claim" : "Save & Send")}
               </button>
             </div>
           </div>
