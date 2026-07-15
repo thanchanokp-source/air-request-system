@@ -128,7 +128,7 @@ export function expandClaimDept(dept: string): string[] {
 // free name search, but the position is enforced). The LAST position finishes
 // the process. Single-position depts (GW / SUPPLIER) finish immediately.
 //   SCM NYK keeps its own 3-role sub-flow (not a linear chain) — excluded here.
-export type ClaimPosition = { label: string; factoryBased?: boolean; branch?: boolean; role?: string }
+export type ClaimPosition = { label: string; factoryBased?: boolean; branch?: boolean; role?: string; priority?: number }
 export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
   // ── GW ── (roles map each position to the exact User.role so the person picker
   // can filter precisely; VP PROD appends the factory-group suffix _G1G3 / _G2G4.)
@@ -140,20 +140,24 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
   ],
   "GW": [{ label: "GW" }],
   "SUPPLIER": [{ label: "SUPPLIER" }],
-  // ── NYG ──
+  // ── NYG ── (roles map to master so the next-person dropdown filters precisely)
+  // Commercial is handled by MER's team: DVM MER (entry, auto) → VP MER (pick).
   "COMMERCIAL": [
-    { label: "Claim Commercial" },
-    { label: "VP Commercial" },
+    { label: "DVM MER", role: "DVM_MER" },
+    { label: "VP MER", role: "VP_MER" },
   ],
+  // Production: VP (entry, auto — by the SO's factory group G1/G3 or G2/G4) → EVP (pick).
+  // Both use role CLAIM_PRODUCTION; priority 1 = VP, 2 = EVP; claimDepartment = the G group.
   "PRODUCTION": [
-    { label: "Claim Production" },
-    { label: "VP PROD", factoryBased: true },
-    { label: "EVP" },
+    { label: "VP PROD", factoryBased: true, role: "CLAIM_PRODUCTION", priority: 1 },
+    { label: "EVP", factoryBased: true, role: "CLAIM_PRODUCTION", priority: 2 },
   ],
+  // Procurement: Purchasing (entry, auto) can approve itself OR forward to Sourcing;
+  // either way it then goes to VP Procurement. Purchasing/Sourcing = CLAIM_PROCUREMENT
+  // (procurementType), VP = VP_PROCUREMENT.
   "PROCUREMENT": [
-    { label: "Procurement DPM/DVM", branch: true }, // step 0: choose Purchasing / Sourcing
-    { label: "Approver" },                            // step 1: "<branch> Approver"
-    { label: "VP Procurement" },                      // step 2 → done
+    { label: "Purchasing / Sourcing", branch: true, role: "CLAIM_PROCUREMENT" },
+    { label: "VP Procurement", role: "VP_PROCUREMENT" },
   ],
 }
 
@@ -347,16 +351,18 @@ export function setDeptSplitStatus(splits: ClaimSplit[], dept: string, status: s
 }
 
 // Coarse NYG item.itemStatus derived from all splits (sequential: all DVM, then all VP).
-export function deriveNygItemStatus(splits: ClaimSplit[]): string {
+// `lgDone` = Logistics has entered Actual Air Freight. Claim runs in PARALLEL with LG:
+// even when every claim dept is fully approved, the SO only advances to President once
+// LG's Actual is in. If claim is done but LG isn't, the SO waits (CLAIM_PASSED = holding).
+export function deriveNygItemStatus(splits: ClaimSplit[], lgDone: boolean = true): string {
   if (splits.length === 0) return "LOG_PASSED"
   const st = splits.map(s => s.status)
-  // Claim fully approved → President's FINAL approval (President moved to the end).
-  if (st.every(s => s === NYG_SPLIT.COMPLETED)) return "PRESIDENT_PENDING"
   if (st.every(s => s === NYG_SPLIT.REJECTED)) return "REJECTED"
-  // Any split still waiting on its DVM (or NYK approver-done but EVP/CR incomplete)
-  // → whole item stays at the claim stage.
+  // Any split still waiting on its DVM/entry (or NYK approver-done but EVP/CR incomplete)
+  // → whole item stays at the claim (entry) stage.
   if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_NYK_APPROVER_PASSED)) return "LOG_PASSED"
-  // All DVMs done, at least one VP outstanding → VP stage.
+  // At least one VP/EVP step outstanding → VP stage.
   if (st.some(s => s === NYG_SPLIT.CLAIM_PASSED)) return "CLAIM_PASSED"
-  return "PRESIDENT_PENDING"
+  // Every claim dept fully approved → President ONLY if LG's Actual is in; else hold.
+  return lgDone ? "PRESIDENT_PENDING" : "CLAIM_PASSED"
 }

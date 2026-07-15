@@ -127,6 +127,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
       }
     }
+    // LG runs in PARALLEL with Claim. Now that Actual may be entered, re-derive any item
+    // whose claim is fully approved so it can advance to President (needs claim done AND
+    // Actual in). Items still mid-claim are unaffected.
+    {
+      const nygItems = await prisma.airRequestItem.findMany({ where: { requestId: id } })
+      for (const it of nygItems) {
+        if (!["LOG_PASSED", "CLAIM_PASSED"].includes(it.itemStatus)) continue
+        const ns = deriveNygItemStatus(getSplits(it), (it as any).actualAirFreight != null)
+        if (ns !== it.itemStatus) await prisma.airRequestItem.update({ where: { id: it.id }, data: { itemStatus: ns } })
+      }
+      const nd = await recalcDocStatus(id)
+      if (nd !== request.status) {
+        await prisma.airRequest.update({ where: { id }, data: { status: nd } })
+        await notifyStatusChange(id, nd).catch(() => {})
+      }
+    }
     // "Save & Send" (data complete) → email the claimers the LG files + signed PDF (item 2).
     if (body.lgComplete) await notifyLgFilesToClaimers(id).catch(() => {})
     return NextResponse.json(await getUpdated())
@@ -818,7 +834,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const hasEvp = appr.some((a: any) => a.role === "SCM_NYK_EVP")
       const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: true }, doneStatus)
       const updated = setGwSplitStatus(splits, [nykDept], splitStatus, cr)
-      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: isGW ? deriveGwItemStatus(updated, it.actualAirFreight != null) : deriveNygItemStatus(updated) } })
+      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: isGW ? deriveGwItemStatus(updated, it.actualAirFreight != null) : deriveNygItemStatus(updated, it.actualAirFreight != null) } })
       finalizedCount++
     }
     await prisma.approvalLog.create({
@@ -1124,7 +1140,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const it of items) {
       if (!selIds.includes(it.id) || !itemHasPendingDept(it, dept)) continue
       const updated = approveGwDeptSplits(getSplits(it), splitDepts, undefined, doneStatus)
-      const itemStatus = isGW ? deriveGwItemStatus(updated, (it as any).actualAirFreight != null) : deriveNygItemStatus(updated)
+      const itemStatus = isGW ? deriveGwItemStatus(updated, (it as any).actualAirFreight != null) : deriveNygItemStatus(updated, (it as any).actualAirFreight != null)
       await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus, itemComment: comment || (it as any).itemComment } })
       count++
     }
@@ -1193,7 +1209,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const crNo = (request as any).crNo || null
       const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: !!crNo }, "COMPLETED")
       const updated = setGwSplitStatus(getSplits(itemData), ["NYK"], splitStatus, crNo || undefined)
-      await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updated as any, itemStatus: deriveNygItemStatus(updated), itemComment: comment || null } })
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updated as any, itemStatus: deriveNygItemStatus(updated, itemData.actualAirFreight != null), itemComment: comment || null } })
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
       })
@@ -1279,7 +1295,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         splitStatus = vpExists ? "CLAIM_PASSED" : "COMPLETED"
       }
       const updatedSplits = setDeptSplitStatus(getSplits(itemData), dept, splitStatus)
-      const newItemStatus = deriveNygItemStatus(updatedSplits)
+      const newItemStatus = deriveNygItemStatus(updatedSplits, itemData.actualAirFreight != null)
       await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updatedSplits as any, itemStatus: newItemStatus, itemComment: comment || null } })
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — All ${dept}${actingIsVp ? " VP" : ""} approved${comment ? ` - ${comment}` : ""}` }
