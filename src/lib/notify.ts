@@ -935,28 +935,42 @@ export async function notifyLgFilesToClaimers(requestId: string) {
     const items = (req.items as any[]).filter(i => i.itemStatus !== "REJECTED")
     if (!items.length) return
 
-    // (b) Combined signed PDF → base64. Signatures reflect whatever's captured now.
+    // (b) Combined signed PDF → always attached inline (small). Signatures reflect what's captured now.
     const fileAtts: { filename: string; contentBase64: string; contentType?: string }[] = []
+    let pdfBytes = 0
     try {
       const { renderToBuffer } = await import("@react-pdf/renderer")
       const { CombinedPdfDocument } = await import("@/components/request-pdf")
       const React = await import("react")
       const el = React.default.createElement(CombinedPdfDocument as any, { pages: items.map(item => ({ req, item })) })
       const buf = await (renderToBuffer as any)(el)
+      pdfBytes = (buf as any).length || 0
       fileAtts.push({ filename: `${req.documentNo}.pdf`, contentBase64: Buffer.from(buf).toString("base64"), contentType: "application/pdf" })
     } catch (e) { console.error("[notify] claimer PDF render failed:", e) }
 
-    // (a) LG-attached files → base64.
+    // (a) LG-attached files. Graph caps a message at ~4 MB, so: if the total (PDF + files)
+    // fits under a safe budget → attach them inline; otherwise DON'T attach — put download
+    // links in the email body instead. File sizes come from the DB (no need to download first).
     const lgCats = ["INV", "AWB", "EXPENSE", "COMBINE"]
-    for (const a of (req.attachments || []).filter((x: any) => lgCats.includes(x.category))) {
-      try {
-        const { data } = await supabase.storage.from(BUCKET).download(a.filePath)
-        if (data) {
-          const ab = await (data as any).arrayBuffer()
-          fileAtts.push({ filename: a.fileName, contentBase64: Buffer.from(ab).toString("base64"), contentType: a.mimeType || "application/octet-stream" })
-        }
-      } catch (e) { console.error("[notify] LG file download failed:", a.filePath, e) }
+    const lgAtts = (req.attachments || []).filter((x: any) => lgCats.includes(x.category))
+    const MAX_INLINE = 3 * 1024 * 1024
+    const lgTotal = lgAtts.reduce((s: number, a: any) => s + (a.fileSize || 0), 0)
+    const inlineLg = pdfBytes + lgTotal <= MAX_INLINE
+    if (inlineLg) {
+      for (const a of lgAtts) {
+        try {
+          const { data } = await supabase.storage.from(BUCKET).download(a.filePath)
+          if (data) {
+            const ab = await (data as any).arrayBuffer()
+            fileAtts.push({ filename: a.fileName, contentBase64: Buffer.from(ab).toString("base64"), contentType: a.mimeType || "application/octet-stream" })
+          }
+        } catch (e) { console.error("[notify] LG file download failed:", a.filePath, e) }
+      }
     }
+    // Download links (shown when files are too big to attach) — the doc PDF is always attached.
+    const linksHtml = (!inlineLg && lgAtts.length)
+      ? `<div style="margin:0 0 14px"><p style="color:#334155;font-size:13px;font-family:Arial,sans-serif;margin:0 0 6px"><strong>ไฟล์แนบจาก Logistics</strong> (ไฟล์ใหญ่ — คลิกดาวน์โหลด):</p>${lgAtts.map((a: any) => `<a href="${APP_URL}/api/attachments/${a.id}" style="display:block;font-family:Arial,sans-serif;font-size:12px;color:#1e3a8a;text-decoration:none;padding:2px 0">📎 ${a.fileName}</a>`).join("")}</div>`
+      : ""
 
     // Group SOs by claim dept → email each dept's claimers.
     const deptSOs = new Map<string, string[]>()
@@ -975,7 +989,27 @@ export async function notifyLgFilesToClaimers(requestId: string) {
       })
       const emails = [...new Set(users.map((u: any) => u.email).filter(Boolean))] as string[]
       if (!emails.length) continue
-      const html = buildHtml(req, "PENDING_CLAIM", link)
+      const html = `
+<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0"><tr><td align="center">
+  <table width="500" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#1e3a8a;padding:20px;text-align:center">
+      <p style="margin:0;color:#bfdbfe;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif">CLAIM · ${dept.replace(/_/g, " ")}</p>
+      <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
+    </td></tr>
+    <tr><td style="padding:28px 32px">
+      <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 6px">เอกสาร <strong>${req.documentNo}</strong> — Logistics กรอกข้อมูลครบแล้ว (${sos.length} SO)</p>
+      <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 14px">แนบ: เอกสาร PDF (มีลายเซ็น) ${inlineLg && lgAtts.length ? "+ ไฟล์จาก Logistics" : ""}</p>
+      ${linksHtml}
+      <div style="text-align:center;margin-top:8px">
+        <a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Document →</a>
+      </div>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
+    </td></tr>
+  </table>
+</td></tr></table></body></html>`
       await sendMail(emails, `[Claim – ${dept.replace(/_/g, " ")}] Logistics files ready — ${req.documentNo} (${sos.length} SO)`, html, fileAtts)
     }
   } catch (err) {
