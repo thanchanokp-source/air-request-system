@@ -11,8 +11,8 @@ export default function MasterRatePage() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState("")
   const [editId, setEditId] = useState<string | null>(null)
-  const [editData, setEditData] = useState({ brand: "", country: "", ratePerKg: "" })
-  const [newData, setNewData] = useState({ brand: "", country: "", ratePerKg: "" })
+  const [editData, setEditData] = useState({ country: "", ratePerKg: "" })
+  const [newData, setNewData] = useState({ country: "", ratePerKg: "" })
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -27,10 +27,10 @@ export default function MasterRatePage() {
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
     if (!s) return rates
-    return rates.filter(r => `${r.brand} ${r.country}`.toLowerCase().includes(s))
+    return rates.filter(r => `${r.country}`.toLowerCase().includes(s))
   }, [rates, q])
 
-  const startEdit = (p: any) => { setEditId(p.id); setEditData({ brand: p.brand, country: p.country, ratePerKg: String(p.ratePerKg) }) }
+  const startEdit = (p: any) => { setEditId(p.id); setEditData({ country: p.country, ratePerKg: String(p.ratePerKg) }) }
 
   const saveEdit = async () => {
     setSaving(true)
@@ -44,7 +44,7 @@ export default function MasterRatePage() {
   const addRate = async () => {
     setSaving(true)
     await fetch("/api/master/port", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...newData, ratePerKg: Number(newData.ratePerKg) }) })
-    setSaving(false); setAdding(false); setNewData({ brand: "", country: "", ratePerKg: "" }); load()
+    setSaving(false); setAdding(false); setNewData({ country: "", ratePerKg: "" }); load()
   }
 
   // Import from the Rate-Country Excel (columns: CUSTOMER/BRAND · COUNTRY · RATE AIR FREIGHT).
@@ -62,11 +62,10 @@ export default function MasterRatePage() {
         return k ? row[k] : ""
       }
       const rows = raw.map(r => ({
-        brand: String(pick(r, ["brand", "customer"]) || "").trim(),
         country: String(pick(r, ["country"]) || "").trim(),
         ratePerKg: Number(String(pick(r, ["rate"]) || "0").replace(/[^0-9.]/g, "")) || 0,
-      })).filter(r => r.brand && r.country)
-      if (!rows.length) { alert("No valid rows found (need Brand, Country, Rate columns)"); setImporting(false); return }
+      })).filter(r => r.country)
+      if (!rows.length) { alert("No valid rows found (need Country, Rate columns)"); setImporting(false); return }
       const res = await fetch("/api/master/port", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) })
       const d = await res.json()
       alert(`Imported ${d.saved ?? 0} / ${d.total ?? rows.length} rows`)
@@ -83,7 +82,7 @@ export default function MasterRatePage() {
       <div className="flex justify-between items-center gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">MASTER RATE</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Air freight rate by Brand + Country (THB/KG) — Est. Air Freight = Gross Weight × Rate</p>
+          <p className="text-xs text-gray-400 mt-0.5">Air freight rate by Country (THB/KG) — Est. Air Freight = Gross Weight × Rate</p>
         </div>
         {canEdit ? (
           <div className="flex items-center gap-2">
@@ -99,14 +98,14 @@ export default function MasterRatePage() {
         )}
       </div>
 
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search brand or country…"
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search country…"
         className="w-full sm:w-80 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
 
       {adding && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
           <h3 className="font-semibold text-sm text-blue-800">NEW RATE</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {([["brand","CUSTOMER / BRAND"],["country","COUNTRY"],["ratePerKg","RATE/KG (THB)"]] as [string,string][]).map(([k,l]) => (
+          <div className="grid grid-cols-2 gap-3">
+            {([["country","COUNTRY"],["ratePerKg","RATE/KG (THB)"]] as [string,string][]).map(([k,l]) => (
               <div key={k}>
                 <label className="text-xs text-gray-500">{l}</label>
                 <input value={(newData as any)[k]} onChange={e => setNewData(p => ({...p,[k]:e.target.value}))}
@@ -115,7 +114,7 @@ export default function MasterRatePage() {
             ))}
           </div>
           <div className="flex gap-2">
-            <button onClick={addRate} disabled={saving || !newData.brand || !newData.country}
+            <button onClick={addRate} disabled={saving || !newData.country}
               className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">{saving ? "..." : "SAVE"}</button>
             <button onClick={() => setAdding(false)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">CANCEL</button>
           </div>
@@ -127,17 +126,16 @@ export default function MasterRatePage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {["CUSTOMER / BRAND","COUNTRY","RATE/KG (THB)",...(canEdit ? ["ACTIONS"] : [])].map(h =>
+              {["COUNTRY","RATE/KG (THB)",...(canEdit ? ["ACTIONS"] : [])].map(h =>
                 <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {loading && <tr><td colSpan={canEdit ? 4 : 3} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+            {loading && <tr><td colSpan={canEdit ? 3 : 2} className="text-center py-10 text-gray-400">Loading...</td></tr>}
             {!loading && filtered.map(p => (
               <tr key={p.id} className="hover:bg-gray-50">
                 {canEdit && editId === p.id ? (
                   <>
-                    <td className="px-4 py-2"><input value={editData.brand} onChange={e => setEditData(d => ({...d,brand:e.target.value}))} className="border rounded px-2 py-1 text-sm w-full" /></td>
                     <td className="px-4 py-2"><input value={editData.country} onChange={e => setEditData(d => ({...d,country:e.target.value}))} className="border rounded px-2 py-1 text-sm w-full" /></td>
                     <td className="px-4 py-2"><input type="number" step="0.01" value={editData.ratePerKg} onChange={e => setEditData(d => ({...d,ratePerKg:e.target.value}))} className="border rounded px-2 py-1 text-sm w-28" /></td>
                     <td className="px-4 py-2 flex gap-2">
@@ -147,8 +145,7 @@ export default function MasterRatePage() {
                   </>
                 ) : (
                   <>
-                    <td className="px-4 py-3 font-medium text-gray-900">{p.brand}</td>
-                    <td className="px-4 py-3 text-gray-700">{p.country}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{p.country}</td>
                     <td className="px-4 py-3 font-semibold text-gray-700">{p.ratePerKg.toLocaleString()}</td>
                     {canEdit && (
                       <td className="px-4 py-3 flex gap-2">
@@ -161,12 +158,12 @@ export default function MasterRatePage() {
               </tr>
             ))}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={canEdit ? 4 : 3} className="text-center py-10 text-gray-400">{rates.length ? "No match" : (canEdit ? "No rates — Import Excel or click + ADD" : "No rates yet")}</td></tr>
+              <tr><td colSpan={canEdit ? 3 : 2} className="text-center py-10 text-gray-400">{rates.length ? "No match" : (canEdit ? "No rates — Import Excel or click + ADD" : "No rates yet")}</td></tr>
             )}
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-400">* Import accepts columns: CUSTOMER/BRAND · COUNTRY · RATE AIR FREIGHT. Re-importing updates existing brand+country rates.</p>
+      <p className="text-xs text-gray-400">* Import accepts columns: COUNTRY · RATE AIR FREIGHT. Re-importing updates the existing country rate (last one wins).</p>
     </div>
   )
 }

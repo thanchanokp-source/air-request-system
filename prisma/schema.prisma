@@ -69,18 +69,15 @@ model MasterPort {
   updatedAt DateTime @updatedAt
 }
 
-// Freight rate keyed by BRAND + COUNTRY (destination). MER selects the country
-// (they may not know the exact port); the same country can have different rates
-// per brand. Est. Air Freight = grossWeight × rate.
+// Freight rate keyed by COUNTRY (destination) only. MER selects the country; the rate
+// is the same regardless of brand. Est. Air Freight = grossWeight × rate.
 model MasterFreightRate {
   id        String   @id @default(cuid())
-  brand     String
-  country   String
+  country   String   @unique
   ratePerKg Float    @default(0)
   isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
 
-  @@unique([brand, country])
   @@index([country])
 }
 

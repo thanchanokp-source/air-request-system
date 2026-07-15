@@ -7,7 +7,7 @@ import { releasePendingRateDocs } from "@/lib/freight"
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const rates = await (prisma as any).masterFreightRate.findMany({ orderBy: [{ brand: "asc" }, { country: "asc" }] })
+  const rates = await (prisma as any).masterFreightRate.findMany({ orderBy: [{ country: "asc" }] })
   return NextResponse.json(rates)
 }
 
@@ -18,20 +18,19 @@ export async function POST(req: NextRequest) {
   if (!["ADMIN", "LOGISTICS", "LOGISTICS_GW"].includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   const body = await req.json()
 
-  // Bulk import (from an uploaded Excel): { rows: [{ brand, country, ratePerKg }] }
-  // Upsert each row so re-importing updates existing brand+country rates.
+  // Bulk import (from an uploaded Excel): { rows: [{ country, ratePerKg }] }
+  // Upsert by COUNTRY so re-importing updates the existing rate (last one wins).
   if (Array.isArray(body?.rows)) {
     let saved = 0
     for (const r of body.rows) {
-      const brand = String(r.brand || "").trim()
       const country = String(r.country || "").trim()
-      if (!brand || !country) continue
+      if (!country) continue
       const rate = Number(r.ratePerKg) || 0
       try {
         await (prisma as any).masterFreightRate.upsert({
-          where: { brand_country: { brand, country } },
+          where: { country },
           update: { ratePerKg: rate },
-          create: { brand, country, ratePerKg: rate },
+          create: { country, ratePerKg: rate },
         })
         saved++
       } catch { /* skip bad row */ }
@@ -40,15 +39,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, saved, total: body.rows.length })
   }
 
-  const { brand, country, ratePerKg } = body
-  if (!brand || !country) return NextResponse.json({ error: "Missing brand or country" }, { status: 400 })
+  const { country, ratePerKg } = body
+  if (!country) return NextResponse.json({ error: "Missing country" }, { status: 400 })
   try {
     const rate = Number(ratePerKg) || 0
-    const item = await (prisma as any).masterFreightRate.create({
-      data: { brand: String(brand).trim(), country: String(country).trim(), ratePerKg: rate }
+    // Upsert by country — adding a country that already exists just updates its rate.
+    const item = await (prisma as any).masterFreightRate.upsert({
+      where: { country: String(country).trim() },
+      update: { ratePerKg: rate },
+      create: { country: String(country).trim(), ratePerKg: rate },
     })
-    // Auto-recalc: any open document with this brand+country now gets its
-    // Est. Air Freight filled in immediately (no manual Recalculate needed).
+    // Auto-recalc: any open document with this country now gets its Est. Air Freight.
     const recalculated = rate > 0 ? await recalcOpenItems(item.country, rate) : 0
     await releasePendingRateDocs()
     return NextResponse.json({ ...item, recalculated })

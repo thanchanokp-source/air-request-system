@@ -10,12 +10,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const role = (session.user as any).role
   if (!["ADMIN", "LOGISTICS", "LOGISTICS_GW"].includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   const { id } = await params
-  const { brand, country, ratePerKg } = await req.json()
+  const { country, ratePerKg } = await req.json()
   try {
     const rate = Number(ratePerKg) || 0
     const item = await (prisma as any).masterFreightRate.update({
       where: { id },
-      data: { brand: String(brand).trim(), country: String(country).trim(), ratePerKg: rate }
+      data: { country: String(country).trim(), ratePerKg: rate }
     })
     // Auto-recalc open documents matching this COUNTRY (rate keyed by country only).
     let recalculated = 0
