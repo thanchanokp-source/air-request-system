@@ -248,9 +248,11 @@ export default function RequestsPage() {
   // President is the final approver — once approved, the SO is at Accounting (a
   // terminal notify step), so count it as done, not pending.
   const DONE_ST = (s: string) => s === "COMPLETED" || s === "ACCOUNTING_PENDING"
-  const totalCompleted = allRows.filter(r => DONE_ST(r.itemStatus)).length
-  const totalRejected = allRows.filter(r => r.itemStatus === "REJECTED").length
-  const totalPending = allRows.filter(r => !DONE_ST(r.itemStatus) && r.itemStatus !== "REJECTED").length
+  // Count tiles follow the active filters (use `filtered`, not `allRows`) so the numbers
+  // match what's shown below when a filter is applied.
+  const totalCompleted = filtered.filter(r => DONE_ST(r.itemStatus)).length
+  const totalRejected = filtered.filter(r => r.itemStatus === "REJECTED").length
+  const totalPending = filtered.filter(r => !DONE_ST(r.itemStatus) && r.itemStatus !== "REJECTED").length
 
   return (
     <div className="space-y-4">
@@ -320,7 +322,7 @@ export default function RequestsPage() {
             PRESIDENT_PENDING: "PENDING_PRESIDENT", // claim + LG done → President (final)
             CLAIM_PASSED: "PENDING_CLAIM",
           }
-          const count = allRows.filter(r => {
+          const count = filtered.filter(r => {
             const st = r.itemStatus
             // Done (Completed / President-approved → Accounting) never counts in a pending stage.
             if (st === "REJECTED" || st === "COMPLETED" || st === "ACCOUNTING_PENDING") return false
@@ -408,6 +410,11 @@ export default function RequestsPage() {
                   const label = brands.length ? brands.join(", ") : dg.request.brandName
                   return <span className="text-xs text-gray-500 truncate" title={label}>{label} · {dg.request.buName}</span>
                 })()}
+                {(dg.request.createdBy?.name || dg.request.createdBy?.email) && (
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0" title="ผู้อัปโหลด / Requested by">
+                    👤 {dg.request.createdBy.name || dg.request.createdBy.email}
+                  </span>
+                )}
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
                   <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
                 )}

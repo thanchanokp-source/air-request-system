@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     where,
     orderBy: { createdAt: "desc" },
     include: {
-      createdBy: { select: { name: true } },
+      createdBy: { select: { name: true, email: true } },
       // claimApprovals (who approved which SO) so the approvals queue can hide a doc
       // from the OTHER SCM NYK approver once one of them has claimed it.
       items: { include: { claimApprovals: { select: { userId: true, role: true } } } },
