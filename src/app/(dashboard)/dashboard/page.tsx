@@ -452,7 +452,6 @@ export default function DashboardPage() {
   const allSOs = useMemo(()=>buRequests.flatMap(r=>(r.items||[]).map((item:any)=>({...item,request:r}))), [buRequests])
 
   const filtered = useMemo(()=>allSOs.filter(row=>{
-    const r = row.request
     const d = row.originalShipmentDate ? new Date(row.originalShipmentDate) : null
     const yr = d&&!isNaN(d.getTime()) ? String(d.getFullYear()) : ""
     const mo = d&&!isNaN(d.getTime()) ? String(d.getMonth()+1).padStart(2,"0") : ""
@@ -463,7 +462,7 @@ export default function DashboardPage() {
              statusFilter==="COMPLETED" ? (row.itemStatus === "COMPLETED" || row.itemStatus === "ACCOUNTING_PENDING") :
              statusFilter==="REJECTED"  ? row.itemStatus === "REJECTED" : true
            )) &&
-           (!brandFilter  || soBrand(r)===brandFilter) &&
+           (!brandFilter  || soBrand(row)===brandFilter) &&
            (!soF.length   || soF.includes(row.so)) &&
            (!cpF.length   || cpF.includes(row.customerPO)) &&
            (!portFilter   || row.port===portFilter) &&
