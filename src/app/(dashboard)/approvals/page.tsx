@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO } from "@/lib/claim"
+import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO, deptSplitStatus } from "@/lib/claim"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -51,9 +51,14 @@ export default function ApprovalsPage() {
   const heldClaimItems = (r: any) => {
     if (r.bu === "GW") return []
     return (r.items || []).filter((i: any) => {
+      if (["REJECTED", "COMPLETED", "ACCOUNTING_PENDING"].includes(i.itemStatus)) return false
       const act = actingClaimForSO(myRoles, getSplits(i).map((s: any) => s.dept))
       if (!act) return false
-      return act.isVp ? i.itemStatus === "CLAIM_PASSED" : i.itemStatus === "LOG_PASSED"
+      // Check the SPLIT status of the dept THIS user acts on (not the whole item) — so
+      // once they approve their dept, the SO drops from their queue even if OTHER depts
+      // on the same SO are still pending.
+      const ss = deptSplitStatus(i, act.dept)
+      return act.isVp ? ss === "CLAIM_PASSED" : (ss == null || ss === "CLAIM_PENDING")
     })
   }
 
