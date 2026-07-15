@@ -702,14 +702,16 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
               byGroup.get(g)!.push(it)
             }
             for (const [g, gItems] of byGroup) {
-              const us = await prisma.user.findMany({
+              const usAll = await prisma.user.findMany({
                 where: {
-                  isActive: true, bu: (req as any).bu, claimDepartment: g,
+                  isActive: true, bu: (req as any).bu,
                   OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }],
                 } as any,
-                select: { id: true, email: true, priority: true },
+                select: { id: true, email: true, priority: true, claimDepartment: true },
                 orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
               })
+              // Match by normalized G-group so "G1"/"G3"/"G1/G3" all resolve correctly.
+              const us = usAll.filter((u: any) => vpProdGroup(u.claimDepartment) === g)
               const withP = us.filter((u: any) => u.priority != null)
               const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : us.slice(0, 1)
               for (const u of firstBatch) {

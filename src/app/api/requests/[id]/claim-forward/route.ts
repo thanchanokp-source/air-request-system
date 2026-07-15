@@ -6,7 +6,7 @@ import { randomBytes } from "crypto"
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { notifyClaimNext, notifyClaimFinalToAccounting } from "@/lib/notify"
-import { ownerCanonicalDept, isLastPosition, nextPositionLabel, itemHasPendingDept } from "@/lib/claim"
+import { ownerCanonicalDept, isLastPosition, nextPositionLabel, itemHasPendingDept, chainFor } from "@/lib/claim"
 import { captureApprovalSignature, isSignatureData } from "@/lib/signature"
 
 async function generateAndSavePdfs(requestId: string) {
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const userId = (session.user as any).id
   const { id } = await params
   const body = await req.json()
-  const { final, nextEmail, nextName, branch, itemIds } = body
+  const { final, nextEmail, nextName, branch, itemIds, targetPos } = body
 
   // A person may hold several roles (User.roles[]); the session carries only the
   // primary. Treat them as holding ALL their roles so a multi-role person (e.g. VP
@@ -182,8 +182,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : ownedIds
     if (selIds.length === 0) return NextResponse.json({ error: "No SO to forward" }, { status: 400 })
 
-    const nextPos = currentPos + 1
-    // Branch (Procurement Purchasing/Sourcing) chosen at the branch step; carried forward.
+    // Normally advance one position; Procurement "approve-self" may skip Sourcing and
+    // jump straight to VP (targetPos), so honor an explicit forward target when it is
+    // ahead of the current position and within the chain.
+    const chainLen = chainFor(forwarderDept).length
+    const wantPos = Number.isInteger(targetPos) ? Number(targetPos) : currentPos + 1
+    const nextPos = wantPos > currentPos && wantPos < chainLen ? wantPos : currentPos + 1
+    // Branch (Procurement route) chosen at the branch step; carried forward.
     const branchVal = branch || ownerRow?.branch || null
     const token = randomBytes(32).toString("hex")
     // New forward row scoped to just this subset → its own next person + token.

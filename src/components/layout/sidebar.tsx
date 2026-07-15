@@ -9,7 +9,8 @@ const nav = [
   { href: "/files", label: "ALL FILES" },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
   { href: "/master/port", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "MER_USER", "MER_GW"] },
-  { href: "/master/description", label: "MASTER DESCRIPTION", roles: ["ADMIN", "LOGISTICS", "MER_USER"] }
+  { href: "/master/description", label: "MASTER DESCRIPTION", roles: ["ADMIN", "LOGISTICS", "MER_USER"] },
+  { href: "/settings", label: "SETTINGS", adminOnly: true }
 ]
 
 const ROLE_LABEL: Record<string, string> = {

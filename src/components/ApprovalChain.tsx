@@ -93,7 +93,7 @@ function entryPersonOf(dept: string, dir: any[] | undefined, bu?: string, factor
   let cands = dir.filter((u: any) =>
     (!bu || u.bu === bu) &&
     (roles.includes(u.role) || (Array.isArray(u.roles) && u.roles.some((r: string) => roles.includes(r)))))
-  if (dept === "PRODUCTION") { const g = vpProdGroup(factory); cands = cands.filter((u: any) => u.claimDepartment === g) }
+  if (dept === "PRODUCTION") { const g = vpProdGroup(factory); cands = cands.filter((u: any) => vpProdGroup(u.claimDepartment) === g) }
   if (dept === "PROCUREMENT") cands = cands.filter((u: any) => u.procurementType === "PURCHASING")
   cands.sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
   const u = cands[0]

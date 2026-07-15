@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const buParam = (req.nextUrl.searchParams.get("bu") || "").trim()
   if (!q && !listAll) return NextResponse.json([])
 
-  const results: { name: string; email: string | null; dept: string; bu: string; pos: string; role: string }[] = []
+  const results: { name: string; email: string | null; dept: string; bu: string; pos: string; role: string; roles?: string[]; priority?: number | null; claimDepartment?: string | null; procurementType?: string | null }[] = []
 
   // 1) App users (same DB — always reachable, incl. on Vercel/cloud).
   try {
@@ -28,12 +28,12 @@ export async function GET(req: NextRequest) {
           { email: { contains: q, mode: "insensitive" } },
         ] } : {}),
       },
-      select: { name: true, email: true, role: true, bu: true },
+      select: { name: true, email: true, role: true, roles: true, bu: true, priority: true, claimDepartment: true, procurementType: true } as any,
       orderBy: { name: "asc" },
       take: listAll ? 300 : 30,
     })
-    for (const u of users) {
-      results.push({ name: u.name || u.email, email: u.email, dept: (u as any).role || "", bu: (u as any).bu || "", pos: (u as any).role || "", role: (u as any).role || "" })
+    for (const u of users as any[]) {
+      results.push({ name: u.name || u.email, email: u.email, dept: u.role || "", bu: u.bu || "", pos: u.role || "", role: u.role || "", roles: Array.isArray(u.roles) ? u.roles : [], priority: u.priority ?? null, claimDepartment: u.claimDepartment ?? null, procurementType: u.procurementType ?? null })
     }
   } catch {
     // ignore — fall through to directory

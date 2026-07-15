@@ -17,6 +17,8 @@ async function getAccessToken(): Promise<string> {
   return data.access_token
 }
 
+import { getEmailOverride } from "./settings"
+
 export type MailAttachment = { filename: string; contentBase64: string; contentType?: string }
 
 // Build the Microsoft Graph fileAttachment array (base64 inline). Graph's simple sendMail
@@ -38,7 +40,8 @@ export async function sendMail(to: string | string[], subject: string, html: str
     return
   }
 
-  const override = process.env.TEST_EMAIL_OVERRIDE
+  // DB toggle (admin UI) wins; env var is the fallback. When set, ALL mail goes here.
+  const override = await getEmailOverride()
   const originalTo = Array.isArray(to) ? to.join(", ") : to
   const graphAtts = graphAttachments(attachments)
 

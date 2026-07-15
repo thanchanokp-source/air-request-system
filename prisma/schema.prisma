@@ -266,6 +266,13 @@ model ApprovalLog {
   user       User       @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
+// Global key-value app settings (test email override, maintenance mode, …).
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
 model RequestAttachment {
   id           String     @id @default(cuid())
   requestId    String

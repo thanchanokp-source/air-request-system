@@ -9,7 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, vpProdGroup, type PosSpec } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -161,13 +161,22 @@ const extractGs = (s?: string) => {
   for (const m of (s || "").toUpperCase().matchAll(/G\s*([1-4])/g)) set.add(m[1])
   return set
 }
-const posMatches = (p: any, position?: string, bu?: string, positionRole?: string | null) => {
+const posMatches = (p: any, position?: string, bu?: string, positionRole?: string | null, spec?: { priority?: number; group?: string | null; procurementType?: string | null } | null) => {
   // BU must match when both are known.
   if (bu && p.bu && String(p.bu).toUpperCase() !== String(bu).toUpperCase()) return false
-  // Precise: when the chain maps this position to an exact User.role, match that
-  // role exactly (this already encodes the VP PROD factory group, e.g. _G1G3).
+  // Precise: when the chain maps this position to a role, match role (primary OR roles[])
+  // plus the spec fields (priority level, factory G-group, procurementType) so e.g. the
+  // Production EVP of G1/G3 or the Procurement VP is filtered exactly.
   if (positionRole) {
-    return String(p.role || p.pos || "").toUpperCase() === positionRole.toUpperCase()
+    const up = (s: any) => String(s || "").toUpperCase()
+    const roleOk = up(p.role || p.pos) === up(positionRole) || (Array.isArray(p.roles) && p.roles.some((r: string) => up(r) === up(positionRole)))
+    if (!roleOk) return false
+    if (spec) {
+      if (spec.priority != null && Number(p.priority) !== Number(spec.priority)) return false
+      if (spec.group && vpProdGroup(p.claimDepartment) !== spec.group) return false
+      if (spec.procurementType && up(p.procurementType) !== up(spec.procurementType)) return false
+    }
+    return true
   }
   // Fallback (chains without a mapped role): loose token match.
   const need = posTokens(position)
@@ -185,7 +194,7 @@ const posMatches = (p: any, position?: string, bu?: string, positionRole?: strin
 // Inline person search/select. When `position` is given, results matching that
 // position are shown first with a badge; a footer lets the user ask ADMIN to add
 // a missing person for that position.
-function PersonPicker({ label, selected, onSelect, placeholder, position, positionRole, requestId, bu, onRequestAdd }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string; position?: string; positionRole?: string | null; requestId?: string; bu?: string; onRequestAdd?: (email: string, name: string) => Promise<{ ok: boolean; error?: string }> }) {
+function PersonPicker({ label, selected, onSelect, placeholder, position, positionRole, posSpec, requestId, bu, onRequestAdd }: { label: string; selected: { name: string; email: string } | null; onSelect: (p: { name: string; email: string } | null) => void; placeholder?: string; position?: string; positionRole?: string | null; posSpec?: { priority?: number; group?: string | null; procurementType?: string | null } | null; requestId?: string; bu?: string; onRequestAdd?: (email: string, name: string) => Promise<{ ok: boolean; error?: string }> }) {
   const [q, setQ] = useState(""); const [results, setResults] = useState<any[]>([]); const [open, setOpen] = useState(false); const [loading, setLoading] = useState(false)
   const [showAll, setShowAll] = useState(false); const [notifyState, setNotifyState] = useState<"idle" | "sending" | "sent">("idle")
   const [addOpen, setAddOpen] = useState(false); const [addEmail, setAddEmail] = useState(""); const [addName, setAddName] = useState(""); const [adding, setAdding] = useState(false)
@@ -214,7 +223,7 @@ function PersonPicker({ label, selected, onSelect, placeholder, position, positi
   }
   // Hard filter: with a required position, ONLY people matching that position (exact
   // role + BU) are selectable. "Show all" is an explicit override.
-  const matched = position ? results.filter(p => posMatches(p, position, bu, positionRole)) : results
+  const matched = position ? results.filter(p => posMatches(p, position, bu, positionRole, posSpec)) : results
   const shown = position && !showAll ? matched : results
   const notifyAdmin = async () => {
     setNotifyState("sending")
@@ -831,12 +840,18 @@ export default function RequestDetailPage() {
   const gwBranch: string | null = myFwdRow?.branch || null
   const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos) : true
   const gwNeedsBranch = gwFwdCanonicalDept ? positionHasBranch(gwFwdCanonicalDept, gwCurrentPos) : false
-  const gwNextPosLabel = gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFwdItems[0]?.factory, gwNeedsBranch ? gwBranchChoice : gwBranch) : null
-  // Exact role for the next position (drives precise person filtering). VP PROD uses
-  // the factory of the SELECTED SO so G1/G3 vs G2/G4 resolves correctly.
-  const gwNextPosRole = gwFwdCanonicalDept
-    ? nextPositionRole(gwFwdCanonicalDept, gwCurrentPos, (gwFwdItems.find((i: any) => claimSelIds.includes(i.id)) || gwFwdItems[0])?.factory)
-    : null
+  const gwFactory = (gwFwdItems.find((i: any) => claimSelIds.includes(i.id)) || gwFwdItems[0])?.factory
+  // Procurement Purchasing (branch step): choose "Sourcing" (→ pos 1) or "Self" (skip to
+  // VP, pos 2). Other positions just advance by one. gwBranchChoice holds the route.
+  const isProcRoute = gwFwdCanonicalDept === "PROCUREMENT" && gwNeedsBranch
+  const gwTargetPos = isProcRoute
+    ? (gwBranchChoice === "Sourcing" ? gwCurrentPos + 1 : gwBranchChoice === "Self" ? gwCurrentPos + 2 : null)
+    : gwCurrentPos + 1
+  const gwNextSpec: PosSpec | null = gwFwdCanonicalDept && gwTargetPos != null ? positionSpec(gwFwdCanonicalDept, gwTargetPos, gwFactory) : null
+  const gwNextPosLabel = isProcRoute
+    ? (gwNextSpec ? `Procurement ${gwNextSpec.label}` : "select route")
+    : (gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFactory, gwBranch) : null)
+  const gwNextPosRole = gwNextSpec?.role || null
   const myClaimItems = req?.items?.filter((i: any) => {
     const itemDeptList: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
       ? i.claimDepts.map((d: any) => d.dept)
@@ -1117,11 +1132,12 @@ export default function RequestDetailPage() {
         body: JSON.stringify({ action: "finalize_claim_dept", itemIds: ids, signatureData: sig })
       })
     } else {
-      // Forward the selected SO subset to the next forced position (person free, position fixed).
+      // Forward the selected SO subset to the next forced position (person free, position
+      // fixed). targetPos lets Procurement "approve-self" skip Sourcing and go to VP.
       res = await fetch(`/api/requests/${id}/claim-forward`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name, branch: gwNeedsBranch ? gwBranchChoice : undefined, itemIds: ids, signatureData: sig })
+        body: JSON.stringify({ nextEmail: claimFwdSelected?.email, nextName: claimFwdSelected?.name, branch: gwNeedsBranch ? gwBranchChoice : undefined, targetPos: gwTargetPos, itemIds: ids, signatureData: sig })
       })
     }
     if (res.ok) {
@@ -2952,25 +2968,28 @@ export default function RequestDetailPage() {
             </div>
             {!gwIsLastPos && (
               // Forced next position — must pick a person (name free, position fixed).
-              // Procurement step 0 also forces choosing a branch (Purchasing / Sourcing).
+              // Procurement Purchasing (entry) must first choose a route: forward to
+              // Sourcing, or approve-self and skip straight to VP.
               <div className="space-y-3">
                 {gwNeedsBranch && (
                   <div className="space-y-1.5">
-                    <p className="text-xs font-semibold text-gray-600">Route to <span className="text-red-500">*</span></p>
+                    <p className="text-xs font-semibold text-gray-600">Route <span className="text-red-500">*</span></p>
                     <div className="flex gap-2">
-                      {PROCUREMENT_BRANCHES.map((b: string) => (
-                        <button key={b} onClick={() => setGwBranchChoice(b)}
-                          className={`px-4 py-1.5 rounded-lg text-sm font-medium border ${gwBranchChoice === b ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
-                          {b}
-                        </button>
-                      ))}
+                      <button onClick={() => { setGwBranchChoice("Sourcing"); setClaimFwdSelected(null) }}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium border ${gwBranchChoice === "Sourcing" ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                        Forward to Sourcing
+                      </button>
+                      <button onClick={() => { setGwBranchChoice("Self"); setClaimFwdSelected(null) }}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium border ${gwBranchChoice === "Self" ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                        Approve self → VP
+                      </button>
                     </div>
                   </div>
                 )}
                 {(!gwNeedsBranch || gwBranchChoice) && (
                   <div className="space-y-2">
                     <p className="text-sm font-semibold text-blue-800">Please select <span className="text-blue-900 underline">{gwNextPosLabel}</span> for approve <span className="text-red-500">*</span></p>
-                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} position={gwNextPosLabel || undefined} positionRole={gwNextPosRole} requestId={String(id)} bu={req?.bu} onRequestAdd={requestNewApprover} />
+                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} position={gwNextPosLabel || undefined} positionRole={gwNextPosRole} posSpec={gwNextSpec ? { priority: gwNextSpec.priority, group: gwNextSpec.group, procurementType: gwNextSpec.procurementType } : null} requestId={String(id)} bu={req?.bu} onRequestAdd={requestNewApprover} />
                   </div>
                 )}
               </div>
