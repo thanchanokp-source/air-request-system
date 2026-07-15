@@ -833,9 +833,17 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td className="px-2.5 py-2 align-top">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold leading-tight ${roleBadgeColor}`}>
-                        {fullRoleLabel}
-                      </span>
+                      <div className="flex flex-col items-start gap-0.5">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold leading-tight ${roleBadgeColor}`}>
+                          {fullRoleLabel}
+                        </span>
+                        {/* Extra roles this person also holds (multi-role) */}
+                        {Array.isArray(u.roles) && u.roles.filter((r: string) => r && r !== u.role).map((r: string) => (
+                          <span key={r} className="inline-block px-2 py-0.5 rounded text-[9px] font-medium leading-tight bg-gray-100 text-gray-500 border border-gray-200">
+                            + {ROLE_LABEL[r] || r}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-2.5 py-2 align-top">
                       {u.procurementType
