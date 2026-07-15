@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost } from "@/lib/claim"
+import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO } from "@/lib/claim"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -45,17 +45,16 @@ export default function ApprovalsPage() {
   // (User.roles[]). Derive every NYG claim dept they can act on so a person who is
   // (e.g.) VP MER AND a claim approver sees the doc again at the claim step.
   const myRoles: string[] = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
-  const claimDeptsHeld = [...new Set(myRoles
-    .filter(r => (r.startsWith("DVM_") || r.startsWith("CLAIM_")) && !r.endsWith("_GW") && r !== "CLAIM_NEXT_APPROVER")
-    .map(r => r.replace(/^DVM_/, "").replace(/^CLAIM_/, "")))]
-  const vpClaimDeptsHeld = [...new Set(myRoles.filter(r => CLAIM_VP_ROLES.includes(r)).map(r => r.replace("VP_", "")))]
-  // Claim SO this person owns on a doc via any held role (NYG only; GW has its own roles).
+  // Claim SO this person can act on via any held role (NYG only; GW has its own roles).
+  // Forward-direction via actingClaimForSO so mapped depts work (e.g. COMMERCIAL → DVM MER
+  // sees it at the entry step, VP MER at the VP step).
   const heldClaimItems = (r: any) => {
     if (r.bu === "GW") return []
-    return (r.items || []).filter((i: any) =>
-      (claimDeptsHeld.length && i.itemStatus === "LOG_PASSED" && claimDeptsHeld.includes(i.claimDepartment)) ||
-      (vpClaimDeptsHeld.length && i.itemStatus === "CLAIM_PASSED" && vpClaimDeptsHeld.includes(i.claimDepartment))
-    )
+    return (r.items || []).filter((i: any) => {
+      const act = actingClaimForSO(myRoles, getSplits(i).map((s: any) => s.dept))
+      if (!act) return false
+      return act.isVp ? i.itemStatus === "CLAIM_PASSED" : i.itemStatus === "LOG_PASSED"
+    })
   }
 
   // SCM NYK has 2 approvers → whoever approves first "owns" the doc; hide it from

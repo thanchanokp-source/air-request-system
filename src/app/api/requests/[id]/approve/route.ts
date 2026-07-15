@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange, notifyClaimNextPriority } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
-import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition } from "@/lib/claim"
+import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 
 const getClaimDept = (role: string) => {
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
@@ -1205,25 +1205,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json(await getUpdated())
     }
 
-    // Determine which claim role this user is acting as for THIS SO. A person can hold
-    // several roles (roles[]); pick the claim role whose dept is a split on this SO.
-    // Handles DVM_/CLAIM_ (entry step) and VP_ (VP step) prefixes → multi-role aware.
+    // Determine which claim dept + step this user acts on for THIS SO. Forward-direction
+    // (dept → approver roles via claimEntryRoles/claimVpRoles) so a person holding several
+    // roles is matched correctly, AND special mappings work (e.g. COMMERCIAL → DVM MER / VP MER).
     const itemSplits = getSplits(itemData)
-    const deptOfRole = (r: string) =>
-      r.startsWith("DVM_") ? r.slice(4)
-      : (r.startsWith("CLAIM_") && r !== "CLAIM_NEXT_APPROVER") ? r.slice(6)
-      : CLAIM_VP_ROLES.includes(r) ? r.slice(3) : null
-    let actingRole = userRole
-    for (const r of [userRole, ...heldRoles.filter((x: string) => x !== userRole)]) {
-      const d = deptOfRole(r)
-      if (d && itemSplits.some(s => s.dept === d)) { actingRole = r; break }
-    }
-    const actingIsVp = CLAIM_VP_ROLES.includes(actingRole)
-    const dept = deptOfRole(actingRole) || actingRole.replace(/^(DVM_|CLAIM_|VP_)/, "")
-    // Everyone who can act at this step for this dept: the DVM/CLAIM entry role, or the
-    // VP role. Matched on primary role OR roles[] (multi-role aware).
-    const groupRoles = actingIsVp ? [`VP_${dept}`] : [`DVM_${dept}`, `CLAIM_${dept}`]
+    const acting = actingClaimForSO([userRole, ...heldRoles], itemSplits.map(s => s.dept))
+    if (!acting) return NextResponse.json({ error: "Your department is not part of the claim for this SO" }, { status: 403 })
+    const dept = acting.dept
+    const actingIsVp = acting.isVp
+    // Everyone who can act at this step for this dept, matched on role OR roles[].
+    const groupRoles = actingIsVp ? claimVpRoles(dept) : claimEntryRoles(dept)
     const groupWhere: any = { OR: [{ role: { in: groupRoles } }, { roles: { hasSome: groupRoles } }] }
+    const actingRole = [userRole, ...heldRoles].find((r: string) => groupRoles.includes(r)) || userRole
 
     // Guard: this approver's department must be one of the item's claim splits.
     if (itemSplits.length > 0 && !itemSplits.some(s => s.dept === dept)) {
@@ -1275,8 +1268,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       let splitStatus: string
       if (actingIsVp) splitStatus = "COMPLETED"
       else {
+        const vpRoles = claimVpRoles(dept)
         const vpExists = await (prisma.user as any).count({
-          where: { isActive: true, priority: { not: null }, OR: [{ role: `VP_${dept}` }, { roles: { has: `VP_${dept}` } }] },
+          where: { isActive: true, priority: { not: null }, OR: [{ role: { in: vpRoles } }, { roles: { hasSome: vpRoles } }] },
         }) > 0
         splitStatus = vpExists ? "CLAIM_PASSED" : "COMPLETED"
       }

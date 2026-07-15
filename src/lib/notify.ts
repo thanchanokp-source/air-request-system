@@ -1,6 +1,6 @@
 import { prisma } from "./prisma"
 import { sendMail } from "./email"
-import { getSplits } from "./claim"
+import { getSplits, claimEntryRoles, claimVpRoles } from "./claim"
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
@@ -680,7 +680,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       }
       if (deptItems.size === 0) return
       for (const [dept, items] of deptItems) {
-        const deptRoles = isVp ? [`VP_${dept}`] : [`DVM_${dept}`, `CLAIM_${dept}`]
+        const deptRoles = isVp ? claimVpRoles(dept) : claimEntryRoles(dept)
         const users = await prisma.user.findMany({
           where: {
             isActive: true, bu: (req as any).bu,

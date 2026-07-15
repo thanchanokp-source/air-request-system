@@ -159,6 +159,30 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
 
 export const PROCUREMENT_BRANCHES = ["Purchasing", "Sourcing"]
 
+// ── Claim dept → approver roles ────────────────────────────────────
+// Some NYG claim departments are approved by an EXISTING position instead of a dedicated
+// claim role. "COMMERCIAL" claims route to MER's DVM (entry) then VP (final) — the same
+// people who approve the MER upload — so there's no separate Claim-Commercial role.
+// Depts not listed fall back to the standard DVM_<dept>/CLAIM_<dept> (entry) + VP_<dept>.
+export const CLAIM_DEPT_ROLE_MAP: Record<string, { entry: string[]; vp: string[] }> = {
+  COMMERCIAL: { entry: ["DVM_MER"], vp: ["VP_MER"] },
+}
+export function claimEntryRoles(dept: string): string[] {
+  return CLAIM_DEPT_ROLE_MAP[dept]?.entry ?? [`DVM_${dept}`, `CLAIM_${dept}`]
+}
+export function claimVpRoles(dept: string): string[] {
+  return CLAIM_DEPT_ROLE_MAP[dept]?.vp ?? [`VP_${dept}`]
+}
+// Which claim dept + step (entry vs VP) can a person act on, given the roles they hold and
+// the SO's split depts? Forward-direction only (dept → roles) so DVM_MER (which also serves
+// the upload stage) is never mis-mapped. Prefers a dept still at the entry step.
+export function actingClaimForSO(heldRoles: string[], splitDepts: string[]): { dept: string; isVp: boolean } | null {
+  const held = new Set(heldRoles)
+  for (const d of splitDepts) if (claimEntryRoles(d).some(r => held.has(r))) return { dept: d, isVp: false }
+  for (const d of splitDepts) if (claimVpRoles(d).some(r => held.has(r))) return { dept: d, isVp: true }
+  return null
+}
+
 // Does the position at `pos` require choosing a branch (Purchasing / Sourcing)?
 export function positionHasBranch(dept: string, pos: number): boolean {
   return !!chainFor(dept)[pos]?.branch

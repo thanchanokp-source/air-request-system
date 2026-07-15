@@ -9,7 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -685,7 +685,13 @@ export default function RequestDetailPage() {
     }
     return role
   })()
-  const claimDept = claimRole.startsWith("DVM_") ? claimRole.replace("DVM_", "")
+  // NYG: which claim dept + step this person acts on (forward mapping — supports special
+  // routes like COMMERCIAL → DVM MER / VP MER). GW keeps its role-derived dept below.
+  const myAllRoles: string[] = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const docSplitDepts: string[] = [...new Set((req?.items || []).flatMap((i: any) => getSplits(i).map((s: any) => s.dept)))] as string[]
+  const nygActing = !isGWRequest ? actingClaimForSO(myAllRoles, docSplitDepts) : null
+  const claimDept = nygActing ? nygActing.dept
+    : claimRole.startsWith("DVM_") ? claimRole.replace("DVM_", "")
     : claimRole.startsWith("CLAIM_") ? claimRole.replace("CLAIM_", "")
     : claimRole === "SCM_NYK" ? "SCM NYK"
     : claimRole === "SCM_NYG" ? "SCM NYG"
@@ -706,16 +712,13 @@ export default function RequestDetailPage() {
     if (!list.includes(claimDept)) return undefined
     return deptSplitStatus(i, claimDept)
   }
-  const isDvmClaim = (claimRole.startsWith("DVM_") || claimRole.startsWith("CLAIM_") || isNykClaimRole || claimRole === "SCM_NYG") && (req?.items || []).some((i: any) => {
-    if (isGwClaimP1Role) {
-      // GW parallel (Logistics ∥ Claim): SO sits at PRES_PASSED; my dept has a split still awaiting approval.
-      return ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED")
-    }
-    // NYG DVM: my dept is on the SO and its split still awaits DVM approval.
-    return i.itemStatus === "LOG_PASSED" && mySplitStatus(i) === null
-  })
-  const isVpClaim = CLAIM_VP_ROLES_LOCAL.includes(claimRole) && (req?.items || []).some((i: any) =>
-    i.itemStatus === "CLAIM_PASSED" && mySplitStatus(i) === "CLAIM_PASSED"
+  const isDvmClaim = isGwClaimP1Role
+    // GW parallel (Logistics ∥ Claim): SO sits at PRES_PASSED; my dept has a split still awaiting approval.
+    ? (req?.items || []).some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED"))
+    // NYG entry step (DVM/DPM): I act on a dept whose split still awaits the entry approval.
+    : (!!nygActing && !nygActing.isVp && (req?.items || []).some((i: any) => i.itemStatus === "LOG_PASSED" && deptSplitStatus(i, nygActing!.dept) === null))
+  const isVpClaim = !isGWRequest && !!nygActing && nygActing.isVp && (req?.items || []).some((i: any) =>
+    i.itemStatus === "CLAIM_PASSED" && deptSplitStatus(i, nygActing!.dept) === "CLAIM_PASSED"
   )
   const isClaimApprover = isDvmClaim || isVpClaim
   // Forward-to-next-approver box is only for the legacy NYG DVM/CLAIM flow.
