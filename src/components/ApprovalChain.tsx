@@ -1,6 +1,6 @@
 "use client"
 
-import { getSplits } from "@/lib/claim"
+import { getSplits, chainFor } from "@/lib/claim"
 
 // Visual approval progress chain.
 //  - Doc-level (pass `items`): overall document stage + aggregated claim depts.
@@ -49,24 +49,76 @@ function Chip({ state, label, sm }: { state: "done" | "active" | "pending"; labe
 
 const Bar = ({ done }: { done: boolean }) => <span className={`w-4 h-px mx-0.5 shrink-0 ${done ? "bg-green-300" : "bg-gray-200"}`} />
 
-export function ApprovalChain({ status, bu, items, soItem, sm }: { status: string; bu: string; items?: any[]; soItem?: any; sm?: boolean }) {
+export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: { status: string; bu: string; items?: any[]; soItem?: any; sm?: boolean; claimForwards?: any[] }) {
   const rejected = soItem ? soItem.itemStatus === "REJECTED" : status === "REJECTED"
   const completed = soItem ? soItem.itemStatus === "COMPLETED" : status === "COMPLETED"
   const claimSource: any[] = soItem ? [soItem] : (Array.isArray(items) ? items : [])
 
-  // ── NYG: linear chain ──
+  // ── NYG: linear chain (Claim step expands into per-dept chips, like GW) ──
   if (bu !== "GW") {
     const cur = completed ? 99 : soItem ? nygItemOrd(soItem, status) : (NYG_STAGES.find(s => s.key === status)?.ord ?? -1)
+    const CLAIM_ORD = 5
+    // Per-department claim status from this SO's (or aggregate) splits.
+    const dmap: Record<string, { total: number; done: number }> = {}
+    for (const it of claimSource) for (const s of getSplits(it)) {
+      if (!dmap[s.dept]) dmap[s.dept] = { total: 0, done: 0 }
+      dmap[s.dept].total++
+      if (s.status === "COMPLETED" || s.status === "DEPT_APPROVED") dmap[s.dept].done++
+    }
+    const claimDepts = Object.entries(dmap).map(([dept, c]) => ({ dept, done: c.done === c.total }))
+    const claimReached = completed || cur >= CLAIM_ORD
+    // Who is each still-pending dept currently waiting on? Prefer the latest forward's
+    // person; else the chain's entry position (auto-notified, no name on client).
+    const soId = soItem?.id
+    const pendingWho = claimReached && !completed
+      ? claimDepts.filter(d => !d.done).map(d => {
+          const rows = (claimForwards || []).filter((f: any) => f.dept === d.dept &&
+            (!Array.isArray(f.itemIds) || f.itemIds.length === 0 || !soId || f.itemIds.includes(soId)))
+          const latest = rows.sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0))[0]
+          const who = latest?.nextName || latest?.nextEmail || (chainFor(d.dept)[0]?.label ?? d.dept)
+          return `${d.dept}: ${who}`
+        })
+      : []
     return (
-      <div className="flex items-center gap-0 overflow-x-auto py-1">
-        {NYG_STAGES.map((s, i) => (
-          <div key={s.key} className="flex items-center shrink-0">
-            <Chip sm={sm} state={rejected ? "pending" : completed || s.ord < cur ? "done" : s.ord === cur ? "active" : "pending"} label={s.label} />
-            {i < NYG_STAGES.length - 1 && <Bar done={completed || s.ord < cur} />}
+      <div className="py-1">
+        <div className="flex items-center gap-0 overflow-x-auto">
+          {NYG_STAGES.map((s, i) => {
+            const isClaim = s.key === "PENDING_CLAIM"
+            const chipState: "done" | "active" | "pending" = rejected ? "pending" : completed || s.ord < cur ? "done" : s.ord === cur ? "active" : "pending"
+            return (
+              <div key={s.key} className="flex items-center shrink-0">
+                {isClaim && claimDepts.length > 0 ? (
+                  // Expand the Claim step into per-department chips (GW-style).
+                  <span className="inline-flex items-center gap-1">
+                    {claimDepts.map(d => {
+                      const cls = d.done ? "bg-green-100 text-green-700 border-green-300"
+                        : claimReached ? "bg-amber-50 text-amber-700 border-amber-300"
+                        : "bg-gray-50 text-gray-400 border-gray-200"
+                      return (
+                        <span key={d.dept} className={`inline-flex items-center gap-1 ${sm ? "text-[10px] px-1.5" : "text-[11px] px-2"} py-0.5 rounded-full border whitespace-nowrap ${cls}`}>
+                          <span className="text-[9px] leading-none">{d.done ? "✓" : claimReached ? "●" : "○"}</span>{d.dept}
+                        </span>
+                      )
+                    })}
+                  </span>
+                ) : (
+                  <Chip sm={sm} state={chipState} label={s.label} />
+                )}
+                {i < NYG_STAGES.length - 1 && <Bar done={completed || s.ord < cur} />}
+              </div>
+            )
+          })}
+          {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected</span>}
+          {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
+        </div>
+        {pendingWho.length > 0 && (
+          <div className="mt-1 text-[10px] text-amber-700 flex items-center gap-1 flex-wrap">
+            <span>⏳ Waiting:</span>
+            {pendingWho.map((w, i) => (
+              <span key={i} className="bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">{w}</span>
+            ))}
           </div>
-        ))}
-        {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected</span>}
-        {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
+        )}
       </div>
     )
   }

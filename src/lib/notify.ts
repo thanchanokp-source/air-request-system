@@ -1,6 +1,6 @@
 import { prisma } from "./prisma"
 import { sendMail } from "./email"
-import { getSplits, claimEntryRoles, claimVpRoles } from "./claim"
+import { getSplits, claimEntryRoles, claimVpRoles, vpProdGroup } from "./claim"
 import { supabase, BUCKET } from "./supabase-storage"
 import { randomUUID } from "crypto"
 
@@ -342,7 +342,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 
     const req = await prisma.airRequest.findUnique({
       where: { id: requestId },
-      include: { items: { select: { claimDepartment: true, claimDepts: true, assignedDvm: true, itemStatus: true } } }
+      include: { items: { select: { id: true, factory: true, claimDepartment: true, claimDepts: true, assignedDvm: true, itemStatus: true } } }
     })
     if (!req) return
 
@@ -690,6 +690,36 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       if (deptItems.size > 0) {
         for (const [dept, items] of deptItems) {
           const deptRoles = isVp ? claimVpRoles(dept) : claimEntryRoles(dept)
+          // PRODUCTION entry: route by the SO's factory group. The entry VP is the
+          // priority-1 CLAIM_PRODUCTION person whose claimDepartment = that G-group
+          // (G1/G3 vs G2/G4). EVP (priority 2) is reached later via forward, not now.
+          if (!isVp && dept === "PRODUCTION") {
+            const byGroup = new Map<string, any[]>()
+            for (const it of items) {
+              const g = vpProdGroup((it as any).factory)
+              if (!g) continue
+              if (!byGroup.has(g)) byGroup.set(g, [])
+              byGroup.get(g)!.push(it)
+            }
+            for (const [g, gItems] of byGroup) {
+              const us = await prisma.user.findMany({
+                where: {
+                  isActive: true, bu: (req as any).bu, claimDepartment: g,
+                  OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }],
+                } as any,
+                select: { id: true, email: true, priority: true },
+                orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+              })
+              const withP = us.filter((u: any) => u.priority != null)
+              const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : us.slice(0, 1)
+              for (const u of firstBatch) {
+                if (!u.email) continue
+                const html = buildHtml(req, newStatus, docLink, undefined, undefined, await magicFor(u.id))
+                await sendMail(u.email, `[Claim – PRODUCTION ${g}] Pending Approval — ${gItems.length} SO — ${req.documentNo}`, html)
+              }
+            }
+            continue
+          }
           // Procurement entry goes to PURCHASING only (they decide: approve or forward to
           // Sourcing). Sourcing is reached later via forward, not the initial alert.
           const procEntryFilter = (!isVp && dept === "PROCUREMENT") ? { procurementType: "PURCHASING" } : {}

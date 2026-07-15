@@ -715,11 +715,11 @@ export default function RequestDetailPage() {
   const isDvmClaim = isGwClaimP1Role
     // GW parallel (Logistics ∥ Claim): SO sits at PRES_PASSED; my dept has a split still awaiting approval.
     ? (req?.items || []).some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED"))
-    // NYG entry step (DVM/DPM): I act on a dept whose split still awaits the entry approval.
-    : (!!nygActing && !nygActing.isVp && (req?.items || []).some((i: any) => i.itemStatus === "LOG_PASSED" && deptSplitStatus(i, nygActing!.dept) === null))
-  const isVpClaim = !isGWRequest && !!nygActing && nygActing.isVp && (req?.items || []).some((i: any) =>
-    i.itemStatus === "CLAIM_PASSED" && deptSplitStatus(i, nygActing!.dept) === "CLAIM_PASSED"
-  )
+    // NYG (non-NYK) now uses the forced-position forward UI (showGwFinishForward), not the
+    // priority approve panel — so this flag is off for NYG claim depts.
+    : false
+  // NYG VP step is reached via forward (CLAIM_NEXT_APPROVER token), not a direct VP panel.
+  const isVpClaim = false
   const isClaimApprover = isDvmClaim || isVpClaim
   // Forward-to-next-approver box is only for the legacy NYG DVM/CLAIM flow.
   // GW / SCM NYK / SCM NYG claim auto-route by master priority (no manual forward).
@@ -735,6 +735,8 @@ export default function RequestDetailPage() {
   //   plus a forwarded CLAIM_NEXT_APPROVER (scoped to dept + position via ClaimForward).
   const gwFwdCanonicalDept: string | null =
     claimRole === "CLAIM_NEXT_APPROVER" ? (myClaimDept || null)
+    // NYG entry approver → the dept they act on (forward-direction mapping).
+    : (!isGWRequest && nygActing && !nygActing.isVp) ? nygActing.dept
     : claimRole === "CLAIM_GW" ? (myClaimDept === "SUPPLIER" ? "SUPPLIER" : "GW")
     : claimRole === "SCM_NYG" ? "SCM NYG"
     : claimRole === "CLAIM_COMMERCIAL" ? "COMMERCIAL"
@@ -744,11 +746,12 @@ export default function RequestDetailPage() {
   const gwFwdSplitDepts = gwFwdCanonicalDept === "SUPPLIER"
     ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
     : gwFwdCanonicalDept ? [gwFwdCanonicalDept] : []
-  // Forced-position forward is GW-only now. NYG claim routes through the priority
-  // approve model (approve_so → auto-cascade), so NYG has no forward entry role.
+  // Forced-position forward for BOTH BU. GW entry = CLAIM_GW / SCM_NYG.
+  // NYG entry = the auto-notified position-0 approver (DVM MER / VP PROD / Purchasing)
+  // → approves & picks the next position (VP MER / EVP / VP Procurement) from a dropdown.
   const fwdEntryRole = isGWRequest
     ? (claimRole === "CLAIM_GW" || claimRole === "SCM_NYG")
-    : false
+    : (!!nygActing && !nygActing.isVp)
   const isGwForwardRole = req?.status === (isGWRequest ? "PENDING_CLAIM_GW" : "PENDING_CLAIM") &&
     (fwdEntryRole || claimRole === "CLAIM_NEXT_APPROVER")
   const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED"]

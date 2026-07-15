@@ -111,6 +111,9 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
   if (role === "CLAIM_GW") return claimDept === "SUPPLIER" ? "SUPPLIER" : "GW"
   if (role === "SCM_NYG") return "SCM NYG"
   if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return "SCM NYK"
+  // Commercial claims are approved by MER's team (DVM MER entry / VP MER) — its
+  // canonical claim dept is COMMERCIAL, not "MER". See CLAIM_CHAINS["COMMERCIAL"].
+  if (role === "DVM_MER" || role === "VP_MER") return "COMMERCIAL"
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
   if (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") return role.replace("CLAIM_", "")
   return null
@@ -152,11 +155,11 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
     { label: "VP PROD", factoryBased: true, role: "CLAIM_PRODUCTION", priority: 1 },
     { label: "EVP", factoryBased: true, role: "CLAIM_PRODUCTION", priority: 2 },
   ],
-  // Procurement: Purchasing (entry, auto) can approve itself OR forward to Sourcing;
-  // either way it then goes to VP Procurement. Purchasing/Sourcing = CLAIM_PROCUREMENT
-  // (procurementType), VP = VP_PROCUREMENT.
+  // Procurement: Purchasing (entry, auto) approves and forwards to VP Procurement.
+  // (Optional detour Purchasing → Sourcing → VP is a later enhancement.)
+  // Purchasing = CLAIM_PROCUREMENT (procurementType=PURCHASING), VP = VP_PROCUREMENT.
   "PROCUREMENT": [
-    { label: "Purchasing / Sourcing", branch: true, role: "CLAIM_PROCUREMENT" },
+    { label: "Purchasing", role: "CLAIM_PROCUREMENT" },
     { label: "VP Procurement", role: "VP_PROCUREMENT" },
   ],
 }
