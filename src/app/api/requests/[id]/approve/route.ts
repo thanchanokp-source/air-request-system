@@ -1267,7 +1267,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (everyoneApproved) {
       // Per-split: mark only THIS department's split (DVM done → CLAIM_PASSED, VP done → COMPLETED).
       // The item advances only when every split's department has cleared this level.
-      const splitStatus = actingIsVp ? "COMPLETED" : "CLAIM_PASSED"
+      // After the entry (DVM/DPM) priority chain finishes: if a SEPARATE VP approver
+      // exists for this dept (role VP_<dept>), advance to the VP stage (CLAIM_PASSED);
+      // otherwise this dept uses ONE CLAIM_<dept> priority chain where the top priority
+      // IS the VP — so the claim is fully done (COMPLETED). VP-role approvals always
+      // complete. This auto-supports both "priority-levels" and "separate VP role" setups.
+      let splitStatus: string
+      if (actingIsVp) splitStatus = "COMPLETED"
+      else {
+        const vpExists = await (prisma.user as any).count({
+          where: { isActive: true, priority: { not: null }, OR: [{ role: `VP_${dept}` }, { roles: { has: `VP_${dept}` } }] },
+        }) > 0
+        splitStatus = vpExists ? "CLAIM_PASSED" : "COMPLETED"
+      }
       const updatedSplits = setDeptSplitStatus(getSplits(itemData), dept, splitStatus)
       const newItemStatus = deriveNygItemStatus(updatedSplits)
       await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updatedSplits as any, itemStatus: newItemStatus, itemComment: comment || null } })
