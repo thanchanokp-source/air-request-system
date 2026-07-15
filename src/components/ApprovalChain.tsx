@@ -1,6 +1,6 @@
 "use client"
 
-import { getSplits, chainFor } from "@/lib/claim"
+import { getSplits, chainFor, deptLabel } from "@/lib/claim"
 
 // Visual approval progress chain.
 //  - Doc-level (pass `items`): overall document stage + aggregated claim depts.
@@ -60,8 +60,9 @@ function pendingWhoFor(depts: { dept: string; done: boolean }[], claimForwards: 
       (!Array.isArray(f.itemIds) || f.itemIds.length === 0 || !soId || f.itemIds.includes(soId)))
     const latest = rows.sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0))[0]
     const person = nameOf(latest?.nextName) || nameOf(latest?.nextEmail)
+    const dl = deptLabel(d.dept)
     const label = person || (chainFor(d.dept)[0]?.label ?? "")
-    return label && label !== d.dept ? `${d.dept}: ${label}` : d.dept
+    return label && label !== dl ? `${dl}: ${label}` : dl
   })
 }
 
@@ -113,7 +114,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: 
                         : "bg-gray-50 text-gray-400 border-gray-200"
                       return (
                         <span key={d.dept} className={`inline-flex items-center gap-1 ${sm ? "text-[10px] px-1.5" : "text-[11px] px-2"} py-0.5 rounded-full border whitespace-nowrap ${cls}`}>
-                          <span className="text-[9px] leading-none">{d.done ? "✓" : claimReached ? "●" : "○"}</span>{d.dept}
+                          <span className="text-[9px] leading-none">{d.done ? "✓" : claimReached ? "●" : "○"}</span>{deptLabel(d.dept)}
                         </span>
                       )
                     })}
@@ -175,7 +176,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: 
         return (
           <span key={d.dept}
             className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${cls}`}>
-            {icon} {d.dept}
+            {icon} {deptLabel(d.dept)}
           </span>
         )
       })}

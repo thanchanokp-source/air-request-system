@@ -119,6 +119,14 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
   return null
 }
 
+// Display label for a claim dept (UI only — the stored dept value is unchanged).
+// SCM NYK → "NYK" (both BU), SCM NYG → "NYG" (GW). Others shown as-is.
+export function deptLabel(dept: string): string {
+  if (dept === "SCM NYK") return "NYK"
+  if (dept === "SCM NYG") return "NYG"
+  return dept
+}
+
 // Split dept values covered by a canonical dept (SUPPLIER has sub-tags).
 export function expandClaimDept(dept: string): string[] {
   if (dept === "SUPPLIER") return ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]

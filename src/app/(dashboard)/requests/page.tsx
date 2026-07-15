@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, Fragment } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits } from "@/lib/claim"
+import { getSplits, deptLabel } from "@/lib/claim"
 import { ApprovalChain } from "@/components/ApprovalChain"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -355,7 +355,7 @@ export default function RequestsPage() {
                 <div className="mt-2 space-y-1 border-t border-blue-200 pt-2">
                   {Object.entries(claimByDept).map(([dept, n]) => (
                     <div key={dept} className="flex justify-between text-xs">
-                      <span className="text-blue-600">{dept}</span>
+                      <span className="text-blue-600">{deptLabel(dept)}</span>
                       <span className="font-semibold text-blue-700">{n}</span>
                     </div>
                   ))}
@@ -469,7 +469,7 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2 whitespace-nowrap">{row.country}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">
                                       {getSplits(row).length > 0
-                                        ? getSplits(row).map((s: any) => `${s.dept}${s.pct != null ? ` ${s.pct}%` : ""}`).join(" · ")
+                                        ? getSplits(row).map((s: any) => `${deptLabel(s.dept)}${s.pct != null ? ` ${s.pct}%` : ""}`).join(" · ")
                                         : "-"}
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.invoiceNo || "-"}</td>

@@ -9,7 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -2727,7 +2727,7 @@ export default function RequestDetailPage() {
         <div className="space-y-3 mb-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-gray-800">CLAIM — {gwFwdCanonicalDept}</h2>
+              <h2 className="font-semibold text-gray-800">CLAIM — {deptLabel(gwFwdCanonicalDept || "")}</h2>
             </div>
             {/* Actions (right, small — same as GM) */}
             <div className="flex items-center gap-3 flex-wrap">
@@ -2948,7 +2948,7 @@ export default function RequestDetailPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => !claimFwdSaving && setGwModalOpen(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div>
-              <h3 className="text-base font-bold text-gray-800">Approve — {gwFwdCanonicalDept} <span className="font-normal text-gray-400 text-sm">({claimActIds.length} SO)</span></h3>
+              <h3 className="text-base font-bold text-gray-800">Approve — {deptLabel(gwFwdCanonicalDept || "")} <span className="font-normal text-gray-400 text-sm">({claimActIds.length} SO)</span></h3>
             </div>
             {!gwIsLastPos && (
               // Forced next position — must pick a person (name free, position fixed).
