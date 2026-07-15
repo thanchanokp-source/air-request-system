@@ -783,9 +783,10 @@ export default function UsersPage() {
                 {displayed.map((u, idx) => {
                   const claimDept = u.claimDepartment
                   const p = u.priority
-                  // full display label combining role + position + dept
-                  const fullRoleLabel: string = (() => {
-                    const r = u.role
+                  // Full display label for ANY role this person holds (primary or extra),
+                  // combining role + position + dept. Used for the main badge AND the
+                  // multi-role badges so a second role shows e.g. "Claim-Commercial DPM/DVM".
+                  const labelFor = (r: string): string => {
                     if (r === "CLAIM_GW") {
                       const MAP: Record<string,string> = { GW:"Claim-GW", SUPPLIER:"Claim-SUPPLIER", NYG:"Claim-SCM NYG", NYK:"Claim-SCM NYK" }
                       return claimDept ? (MAP[claimDept] ?? `Claim-${claimDept}`) : "Claim-GW"
@@ -795,7 +796,7 @@ export default function UsersPage() {
                       const g = claimDept === "G1G3" ? "G1/G3" : claimDept === "G2G4" ? "G2/G4" : (claimDept || "")
                       return `Claim-Production ${level} ${g}`.trim()
                     }
-                    if (r === "CLAIM_COMMERCIAL") return p === 1 ? "Claim-Commercial DPM/DVM" : p === 2 ? "Claim-Commercial VP" : "Claim-Commercial"
+                    if (r === "CLAIM_COMMERCIAL") return p === 1 ? "Claim-Commercial DPM/DVM" : p === 2 ? "Claim-Commercial VP" : "Claim-Commercial DPM/DVM"
                     if (r === "CLAIM_NYG") return p === 1 ? "Claim-SCM NYG DPM/DVM" : p === 2 ? "Claim-SCM NYG VP" : "Claim-SCM NYG"
                     if (r === "CLAIM_NYK") return p === 1 ? "Claim-SCM NYK User" : p === 2 ? "Claim-SCM NYK EVP" : "Claim-SCM NYK"
                     if (r === "CLAIM_PROCUREMENT") {
@@ -803,8 +804,10 @@ export default function UsersPage() {
                       const sub = u.procurementType === "SOURCING" ? " (Sourcing)" : u.procurementType === "PURCHASING" ? " (Purchasing)" : ""
                       return `Claim-Procurement DPM/DVM${sub}`
                     }
+                    if (r === "DVM_MER") return "DVM MER"
                     return ROLE_LABEL[r] || r
-                  })()
+                  }
+                  const fullRoleLabel: string = labelFor(u.role)
                   const roleBadgeColor = (() => {
                     const r = u.role || ""
                     if (["PRESIDENT","PRESIDENT_GW"].includes(r)) return "bg-blue-100 text-blue-800 border border-blue-200"
@@ -839,8 +842,8 @@ export default function UsersPage() {
                         </span>
                         {/* Extra roles this person also holds (multi-role) */}
                         {Array.isArray(u.roles) && u.roles.filter((r: string) => r && r !== u.role).map((r: string) => (
-                          <span key={r} className="inline-block px-2 py-0.5 rounded text-[9px] font-medium leading-tight bg-gray-100 text-gray-500 border border-gray-200">
-                            + {ROLE_LABEL[r] || r}
+                          <span key={r} className="inline-block px-2 py-0.5 rounded text-[9px] font-medium leading-tight bg-gray-100 text-gray-600 border border-gray-200">
+                            + {labelFor(r)}
                           </span>
                         ))}
                       </div>
