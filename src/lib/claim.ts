@@ -119,6 +119,25 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
   return null
 }
 
+// Master roles that hold the ENTRY (auto-notified) position of a claim dept — used to
+// resolve WHO is currently pending at entry (before any forward). PRODUCTION also needs
+// the factory G-group, PROCUREMENT needs procurementType=PURCHASING (handled by caller).
+export function claimEntryDisplayRoles(dept: string): string[] {
+  switch (dept) {
+    case "COMMERCIAL": return ["DVM_MER"]
+    case "PRODUCTION": return ["CLAIM_PRODUCTION"]
+    case "PROCUREMENT": return ["CLAIM_PROCUREMENT"]
+    case "NYK":
+    case "SCM NYK": return ["SCM_NYK_APPROVER"]
+    case "SCM NYG": return ["SCM_NYG"]
+    case "GW":
+    case "SUPPLIER":
+    case "SUPPLIER_IN":
+    case "SUPPLIER_OUT": return ["CLAIM_GW"]
+    default: return [`DVM_${dept}`, `CLAIM_${dept}`]
+  }
+}
+
 // Display label for a claim dept (UI only — the stored dept value is unchanged).
 // SCM NYK → "NYK" (both BU), SCM NYG → "NYG" (GW). Others shown as-is.
 export function deptLabel(dept: string): string {

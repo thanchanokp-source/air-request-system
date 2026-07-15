@@ -129,9 +129,11 @@ export default function RequestsPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set())
   const [deletingAtt, setDeletingAtt] = useState<string | null>(null)
+  const [claimDir, setClaimDir] = useState<any[]>([])
 
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
+    fetch("/api/users/claim-directory").then(r => r.json()).then(d => setClaimDir(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
 
   const buRequests = requests.filter(r => activeBu === "GW" ? r.bu === "GW" : (r.bu === "NYG" || !r.bu))
@@ -478,7 +480,7 @@ export default function RequestsPage() {
                                   </tr>
                                   <tr className="bg-gray-50/40">
                                     <td colSpan={20} className="px-6 py-1.5">
-                                      <ApprovalChain status={row.request.status} bu={dg.request.bu === "GW" ? "GW" : "NYG"} soItem={row} claimForwards={dg.request.claimForwards} sm />
+                                      <ApprovalChain status={row.request.status} bu={dg.request.bu === "GW" ? "GW" : "NYG"} soItem={row} claimForwards={dg.request.claimForwards} approvers={claimDir} sm />
                                     </td>
                                   </tr>
                                   </Fragment>

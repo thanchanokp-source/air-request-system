@@ -1,6 +1,6 @@
 "use client"
 
-import { getSplits, chainFor, deptLabel } from "@/lib/claim"
+import { getSplits, chainFor, deptLabel, claimEntryDisplayRoles, vpProdGroup } from "@/lib/claim"
 
 // Visual approval progress chain.
 //  - Doc-level (pass `items`): overall document stage + aggregated claim depts.
@@ -52,14 +52,31 @@ const Bar = ({ done }: { done: boolean }) => <span className={`w-4 h-px mx-0.5 s
 // Display name for an approver: prefer a real name, else the email's local part (before @).
 const nameOf = (s?: string | null) => (s ? (s.includes("@") ? s.split("@")[0] : s) : "")
 
-// Per-dept "who are we waiting on now?" — the latest forward's person (name or email
-// local-part), scoped to this SO; falls back to the chain's entry position label.
-function pendingWhoFor(depts: { dept: string; done: boolean }[], claimForwards: any[] | undefined, soId?: string) {
+// Resolve the ENTRY (auto-notified) approver's email name for a dept from the directory.
+// PRODUCTION filters by the SO's factory G-group; PROCUREMENT by procurementType=PURCHASING.
+function entryPersonOf(dept: string, dir: any[] | undefined, bu?: string, factory?: string | null): string {
+  if (!dir || !dir.length) return ""
+  const roles = claimEntryDisplayRoles(dept)
+  let cands = dir.filter((u: any) =>
+    (!bu || u.bu === bu) &&
+    (roles.includes(u.role) || (Array.isArray(u.roles) && u.roles.some((r: string) => roles.includes(r)))))
+  if (dept === "PRODUCTION") { const g = vpProdGroup(factory); cands = cands.filter((u: any) => u.claimDepartment === g) }
+  if (dept === "PROCUREMENT") cands = cands.filter((u: any) => u.procurementType === "PURCHASING")
+  cands.sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
+  const u = cands[0]
+  return u ? nameOf(u.email) || nameOf(u.name) : ""
+}
+
+// Per-dept "who are we waiting on now?" — the latest forward's person (name/email local-part),
+// scoped to this SO; else the resolved ENTRY approver's email; else the position label.
+function pendingWhoFor(depts: { dept: string; done: boolean }[], claimForwards: any[] | undefined, soId?: string,
+  opts?: { dir?: any[]; bu?: string; factory?: string | null }) {
   return depts.filter(d => !d.done).map(d => {
     const rows = (claimForwards || []).filter((f: any) => f.dept === d.dept &&
       (!Array.isArray(f.itemIds) || f.itemIds.length === 0 || !soId || f.itemIds.includes(soId)))
     const latest = rows.sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0))[0]
     const person = nameOf(latest?.nextName) || nameOf(latest?.nextEmail)
+      || entryPersonOf(d.dept, opts?.dir, opts?.bu, opts?.factory)
     const dl = deptLabel(d.dept)
     const label = person || (chainFor(d.dept)[0]?.label ?? "")
     return label && label !== dl ? `${dl}: ${label}` : dl
@@ -76,7 +93,7 @@ function WaitingLine({ items }: { items: string[] }) {
   )
 }
 
-export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: { status: string; bu: string; items?: any[]; soItem?: any; sm?: boolean; claimForwards?: any[] }) {
+export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, approvers }: { status: string; bu: string; items?: any[]; soItem?: any; sm?: boolean; claimForwards?: any[]; approvers?: any[] }) {
   const rejected = soItem ? soItem.itemStatus === "REJECTED" : status === "REJECTED"
   const completed = soItem ? soItem.itemStatus === "COMPLETED" : status === "COMPLETED"
   const claimSource: any[] = soItem ? [soItem] : (Array.isArray(items) ? items : [])
@@ -96,7 +113,9 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: 
     const claimReached = completed || cur >= CLAIM_ORD
     // Who is each still-pending dept currently waiting on?
     const soId = soItem?.id
-    const pendingWho = claimReached && !completed ? pendingWhoFor(claimDepts, claimForwards, soId) : []
+    const pendingWho = claimReached && !completed
+      ? pendingWhoFor(claimDepts, claimForwards, soId, { dir: approvers, bu, factory: soItem?.factory })
+      : []
     return (
       <div className="py-1">
         <div className="flex items-center gap-0 overflow-x-auto">
@@ -154,7 +173,9 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: 
   // "Claim" turns green when ALL claim depts approved; "Logistics" when data filled.
   const claimChip: "done" | "active" | "pending" = completed || claimDone ? "done" : parallelReached ? "active" : "pending"
   const lgChip: "done" | "active" | "pending" = completed || lgDone ? "done" : parallelReached ? "active" : "pending"
-  const gwPendingWho = parallelReached && !completed && !rejected ? pendingWhoFor(claimDepts, claimForwards, soItem?.id) : []
+  const gwPendingWho = parallelReached && !completed && !rejected
+    ? pendingWhoFor(claimDepts, claimForwards, soItem?.id, { dir: approvers, bu, factory: soItem?.factory })
+    : []
 
   return (
     <div className="py-1">
