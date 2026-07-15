@@ -49,6 +49,32 @@ function Chip({ state, label, sm }: { state: "done" | "active" | "pending"; labe
 
 const Bar = ({ done }: { done: boolean }) => <span className={`w-4 h-px mx-0.5 shrink-0 ${done ? "bg-green-300" : "bg-gray-200"}`} />
 
+// Display name for an approver: prefer a real name, else the email's local part (before @).
+const nameOf = (s?: string | null) => (s ? (s.includes("@") ? s.split("@")[0] : s) : "")
+
+// Per-dept "who are we waiting on now?" — the latest forward's person (name or email
+// local-part), scoped to this SO; falls back to the chain's entry position label.
+function pendingWhoFor(depts: { dept: string; done: boolean }[], claimForwards: any[] | undefined, soId?: string) {
+  return depts.filter(d => !d.done).map(d => {
+    const rows = (claimForwards || []).filter((f: any) => f.dept === d.dept &&
+      (!Array.isArray(f.itemIds) || f.itemIds.length === 0 || !soId || f.itemIds.includes(soId)))
+    const latest = rows.sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0))[0]
+    const person = nameOf(latest?.nextName) || nameOf(latest?.nextEmail)
+    const label = person || (chainFor(d.dept)[0]?.label ?? "")
+    return label && label !== d.dept ? `${d.dept}: ${label}` : d.dept
+  })
+}
+
+function WaitingLine({ items }: { items: string[] }) {
+  if (!items.length) return null
+  return (
+    <div className="mt-1 text-[10px] text-amber-700 flex items-center gap-1 flex-wrap">
+      <span>⏳ Waiting:</span>
+      {items.map((w, i) => <span key={i} className="bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">{w}</span>)}
+    </div>
+  )
+}
+
 export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: { status: string; bu: string; items?: any[]; soItem?: any; sm?: boolean; claimForwards?: any[] }) {
   const rejected = soItem ? soItem.itemStatus === "REJECTED" : status === "REJECTED"
   const completed = soItem ? soItem.itemStatus === "COMPLETED" : status === "COMPLETED"
@@ -67,18 +93,9 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: 
     }
     const claimDepts = Object.entries(dmap).map(([dept, c]) => ({ dept, done: c.done === c.total }))
     const claimReached = completed || cur >= CLAIM_ORD
-    // Who is each still-pending dept currently waiting on? Prefer the latest forward's
-    // person; else the chain's entry position (auto-notified, no name on client).
+    // Who is each still-pending dept currently waiting on?
     const soId = soItem?.id
-    const pendingWho = claimReached && !completed
-      ? claimDepts.filter(d => !d.done).map(d => {
-          const rows = (claimForwards || []).filter((f: any) => f.dept === d.dept &&
-            (!Array.isArray(f.itemIds) || f.itemIds.length === 0 || !soId || f.itemIds.includes(soId)))
-          const latest = rows.sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0))[0]
-          const who = latest?.nextName || latest?.nextEmail || (chainFor(d.dept)[0]?.label ?? d.dept)
-          return `${d.dept}: ${who}`
-        })
-      : []
+    const pendingWho = claimReached && !completed ? pendingWhoFor(claimDepts, claimForwards, soId) : []
     return (
       <div className="py-1">
         <div className="flex items-center gap-0 overflow-x-auto">
@@ -111,14 +128,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: 
           {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected</span>}
           {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
         </div>
-        {pendingWho.length > 0 && (
-          <div className="mt-1 text-[10px] text-amber-700 flex items-center gap-1 flex-wrap">
-            <span>⏳ Waiting:</span>
-            {pendingWho.map((w, i) => (
-              <span key={i} className="bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">{w}</span>
-            ))}
-          </div>
-        )}
+        <WaitingLine items={pendingWho} />
       </div>
     )
   }
@@ -143,9 +153,11 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: 
   // "Claim" turns green when ALL claim depts approved; "Logistics" when data filled.
   const claimChip: "done" | "active" | "pending" = completed || claimDone ? "done" : parallelReached ? "active" : "pending"
   const lgChip: "done" | "active" | "pending" = completed || lgDone ? "done" : parallelReached ? "active" : "pending"
+  const gwPendingWho = parallelReached && !completed && !rejected ? pendingWhoFor(claimDepts, claimForwards, soItem?.id) : []
 
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto py-1">
+    <div className="py-1">
+    <div className="flex items-center gap-1.5 overflow-x-auto">
       {GW_PRE.map(s => (
         <div key={s.key} className="flex items-center shrink-0">
           <Chip sm={sm} state={rejected ? "pending" : stateFor(s.ord)} label={s.label} />
@@ -172,6 +184,8 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards }: 
       <Chip sm={sm} state={rejected ? "pending" : stateFor(3)} label="President" />
       {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected</span>}
       {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
+    </div>
+    <WaitingLine items={gwPendingWho} />
     </div>
   )
 }
