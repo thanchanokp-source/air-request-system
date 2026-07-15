@@ -690,9 +690,12 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       if (deptItems.size > 0) {
         for (const [dept, items] of deptItems) {
           const deptRoles = isVp ? claimVpRoles(dept) : claimEntryRoles(dept)
+          // Procurement entry goes to PURCHASING only (they decide: approve or forward to
+          // Sourcing). Sourcing is reached later via forward, not the initial alert.
+          const procEntryFilter = (!isVp && dept === "PROCUREMENT") ? { procurementType: "PURCHASING" } : {}
           const users = await prisma.user.findMany({
             where: {
-              isActive: true, bu: (req as any).bu,
+              isActive: true, bu: (req as any).bu, ...procEntryFilter,
               OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }],
             },
             select: { id: true, email: true, priority: true },
