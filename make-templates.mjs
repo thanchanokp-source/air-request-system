@@ -33,7 +33,7 @@ const BASE_COLS = [
   { header: "SO",                           color: "white",  width: 14 },
   { header: "CUSTOMER PO",                  color: "white",  width: 14 },
   { header: "DESCRIPTION",                  color: "green",  width: 28, ref: "descriptions" },
-  { header: "WEIGHT(KG)",                   color: "white",  width: 12 },
+  // WEIGHT(KG) removed — Gross is computed from the DESCRIPTION's WT Charge/pc (Master Description).
   { header: "Original Shipment Date",       color: "white",  width: 22 },
   { header: "Plan Shipment Date",           color: "white",  width: 22 },
   { header: "QTY Original Shipment (pcs)",  color: "white",  width: 24 },
