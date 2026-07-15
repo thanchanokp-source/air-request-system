@@ -9,7 +9,7 @@ const NYG_REQUIRED = [
   "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
   "Original Shipment Date", "Plan Shipment Date",
   "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
-  "Factory", "Country", "WEIGHT(KG)",
+  "Factory", "Country",
   "Brand name", "BU",
 ]
 
@@ -17,7 +17,7 @@ const GW_REQUIRED = [
   "STYLE", "SO", "CUSTOMER PO", "DESCRIPTION",
   "Original Shipment Date", "Plan Shipment Date",
   "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)",
-  "Factory", "Country", "WEIGHT(KG)",
+  "Factory", "Country",
   "Brand name", "BU",
 ]
 
@@ -128,7 +128,7 @@ export default function NewRequestPage() {
     const isEmpty = (v: any) => v == null || String(v).trim() === ""
     // Fields required in EVERY row (Brand/BU are doc-level → checked via columns only).
     const perRowRequired = required.filter(f => !["Brand name", "BU"].includes(f))
-    const numFields = ["QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "WEIGHT(KG)"]
+    const numFields = ["QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)"]
     const dateFields = ["Original Shipment Date", "Plan Shipment Date"]
     const validDepts = (isGW
       ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]

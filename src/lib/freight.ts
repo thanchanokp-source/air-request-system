@@ -14,27 +14,47 @@ export function canonCountry(c: string): string {
 
 const rateKey = (country: string) => canonCountry(country)
 
-// Release any document HELD for a missing freight rate once every COUNTRY on it has
-// a rate (rate is keyed by country only). On release the doc is finally sent
-// (notified) to VP MER. Call after adding/editing a MasterFreightRate.
-export async function releasePendingRateDocs() {
-  const held = await (prisma.airRequest as any).findMany({ where: { pendingRate: true }, include: { items: true } })
+const descKey = (s: string) => String(s || "").trim().toUpperCase()
+
+// Release documents HELD for missing master data. A doc is held while any COUNTRY has
+// no freight rate (pendingRate) OR any DESCRIPTION has no WT Charge (pendingWeight).
+// On each call we recompute Gross (= QTY Air × WT Charge) and Est. Air Freight (= Gross ×
+// rate) as data becomes available, clear whichever hold is now satisfied, and — once BOTH
+// are satisfied — notify the current first approver. Call after adding/editing a
+// MasterFreightRate (rate) or a MasterDescription WT Charge (weight).
+export async function releaseHeldDocs() {
+  const held = await (prisma.airRequest as any).findMany({
+    where: { OR: [{ pendingRate: true }, { pendingWeight: true }] },
+    include: { items: true },
+  })
   if (!held.length) return
 
   const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
-  const have = new Set<string>(rateList.map((r: any) => rateKey(r.country)))
+  const rates: Record<string, number> = {}
+  for (const r of rateList) rates[rateKey(r.country)] = r.ratePerKg
+  const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
+  const wts: Record<string, number> = {}
+  for (const d of descList) wts[descKey(d.name)] = d.weightPerUnit || 0
 
   for (const doc of held) {
-    const combos = (doc.items as any[])
-      .map((i) => String(i.country || "").trim())
-      .filter((c) => c)
-      .map((c) => rateKey(c))
-    const allCovered = combos.length > 0 && combos.every((k) => have.has(k))
-    if (!allCovered) continue
-
-    await (prisma.airRequest as any).update({ where: { id: doc.id }, data: { pendingRate: false } })
-    // Status is unchanged (PENDING_DVM_MER / PENDING_VP_MER / PENDING_VP_MER_GW) —
-    // now notify the current first approver for that stage.
-    await notifyStatusChange(doc.id, doc.status).catch(() => {})
+    const items = doc.items as any[]
+    const rateOk = items.filter(i => i.country).every(i => (rates[rateKey(i.country)] || 0) > 0)
+    const wtOk = items.filter(i => i.description).every(i => (wts[descKey(i.description)] || 0) > 0)
+    // Recompute Gross + Est. for every item now that data may have been added.
+    for (const it of items) {
+      const wt = wts[descKey(it.description)] || 0
+      const rate = rates[rateKey(it.country)] || 0
+      const gross = (it.qtyRequestAir || 0) * wt
+      await prisma.airRequestItem.update({
+        where: { id: it.id },
+        data: { grossWeight: gross, airFreight: gross * rate, marketRatePerKg: rate > 0 ? rate : null },
+      }).catch(() => {})
+    }
+    await (prisma.airRequest as any).update({ where: { id: doc.id }, data: { pendingRate: !rateOk, pendingWeight: !wtOk } })
+    // Both holds cleared → send to the current first approver (status unchanged).
+    if (rateOk && wtOk) await notifyStatusChange(doc.id, doc.status).catch(() => {})
   }
 }
+
+// Back-compat alias (older call sites). Both rate and weight releases run the same pass.
+export const releasePendingRateDocs = releaseHeldDocs

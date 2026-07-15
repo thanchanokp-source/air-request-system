@@ -123,6 +123,18 @@ export async function POST(req: NextRequest) {
     const missingRates = combos.filter(x => !(rateKey(x.country) in freightRates))
     const missingCountryInfo = missingRates
 
+    // Gross Weight = QTY Air × WT Charge/pc of the DESCRIPTION (MER no longer types weight).
+    // The description must exist in Master Description with a WT Charge > 0. Any description
+    // that's missing / has no WT Charge → the doc is HELD (pendingWeight) until LG adds it.
+    const descKey = (s: string) => String(s || "").trim().toUpperCase()
+    const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
+    const descWeights: Record<string, number> = {}
+    for (const d of descList) descWeights[descKey(d.name)] = d.weightPerUnit || 0
+    const wtChargeFor = (desc: string) => descWeights[descKey(desc)] ?? 0
+    const missingDescriptions = [...new Set(items
+      .map((i: any) => String(col(i, "DESCRIPTION") || "").trim())
+      .filter((d: string) => d && wtChargeFor(d) <= 0))] as string[]
+
     const first = items[0]
     const docNo = await generateDocumentNo()
 
@@ -143,8 +155,10 @@ export async function POST(req: NextRequest) {
         status: initialStatus,
         createdById: userId,
         assignedVpMer,
-        // Hold from VP MER until every Country has a freight rate.
+        // Hold from the first approver until every Country has a rate AND every
+        // description has a WT Charge (so Gross/Est. Air Freight can be computed).
         pendingRate: missingRates.length > 0,
+        pendingWeight: missingDescriptions.length > 0,
         vpMerToken: crypto.randomUUID(),
         ...(isGW ? {
           gmToken: crypto.randomUUID(),
@@ -165,7 +179,9 @@ export async function POST(req: NextRequest) {
             const itemBrand = String(col(item, "Brand name") || col(item, "BRAND") || "").trim()
             const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
             const rate = freightRates[rateKey(country)] || 0
-            const gw = parseFloat(String(col(item, "WEIGHT(KG)") || "0")) || 0
+            // Gross = QTY Air × WT Charge/pc of the description (from Master Description).
+            // MER no longer enters weight. 0 if the description has no WT Charge yet (held).
+            const gw = qty * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
             // GW: read up to 3 claim splits from Excel (CLAIM DEPT 1/2/3 + %CLAIM + REASON)
             // airCost is computed at display time from actualAirFreight so it stays accurate.
             let claimDepts: any = null
@@ -211,10 +227,10 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // Only notify VP MER when the rate is complete. If any Brand+Country pair has
-    // no rate, the doc is HELD (pendingRate) — VP MER is notified later, once LG
-    // adds the rate (see releasePendingRateDocs in lib/freight.ts).
-    if (missingRates.length === 0) {
+    // Only notify the first approver when BOTH the rate AND all WT Charges are complete.
+    // If a country rate or a description WT Charge is missing, the doc is HELD and the
+    // approver is notified later, once LG adds them (see releaseHeldDocs in lib/freight.ts).
+    if (missingRates.length === 0 && missingDescriptions.length === 0) {
       try {
         await notifyStatusChange(request.id, initialStatus)
       } catch (err) {
@@ -285,7 +301,67 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ id: request.id, missingRates })
+    // WT Charge missing for one or more descriptions → alert LG + jariya to add them in
+    // Master Description. The doc is HELD (pendingWeight) and reaches the approver only
+    // after the WT Charge is entered (releaseHeldDocs recomputes Gross + releases).
+    if (missingDescriptions.length > 0) {
+      try {
+        const APP_URL = process.env.APP_URL || "http://localhost:3000"
+        const rowsHtml = missingDescriptions.map(d => `<tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;font-weight:600">${d}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;color:#b45309">— add WT Charge —</td>
+        </tr>`).join("")
+        const html = `
+<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0"><tr><td align="center">
+  <table width="460" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#b45309;padding:20px;text-align:center">
+      <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif">⚠ WT CHARGE MISSING</p>
+      <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
+    </td></tr>
+    <tr><td style="padding:28px 32px">
+      <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 8px">Document <strong>${docNo}</strong> has description(s) with no <strong>WT Charge</strong> in Master Description — Gross Weight / Est. Air Freight cannot be computed, and the document is <strong>on hold</strong> until you add them.</p>
+      <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 12px"><strong>Please add WT Charge for these in Master &gt; Description</strong>:</p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 18px">
+        <thead><tr style="background:#fef3c7">
+          <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">DESCRIPTION</th>
+          <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#92400e">WT CHARGE/PC (KG)</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 20px">Once added, the document is released automatically to the next approver.</p>
+      <div style="text-align:center">
+        <a href="__LINK__" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Master Description →</a>
+      </div>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
+    </td></tr>
+  </table>
+</td></tr></table></body></html>`
+        const subject = `[WT Charge Missing] ${docNo} — no WT Charge for (${missingDescriptions.join(", ")})`
+        const lgRoles = isGW ? ["LOGISTICS_GW"] : ["LOGISTICS"]
+        const EXTRA_EMAIL = "jariya.t@nanyangtextile.com"
+        const recips = await (prisma.user as any).findMany({
+          where: { isActive: true, OR: [{ role: { in: [...lgRoles, "ADMIN"] } }, { email: EXTRA_EMAIL }] },
+          select: { id: true, email: true },
+        })
+        for (const u of recips) {
+          if (!u.email) continue
+          const token = crypto.randomUUID()
+          await (prisma.user as any).update({ where: { id: u.id }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000) } })
+          const link = `${APP_URL}/api/magic-login?token=${token}&redirect=/master/description`
+          await sendMail(u.email, subject, html.replace("__LINK__", link))
+        }
+        if (!recips.some((u: any) => (u.email || "").toLowerCase() === EXTRA_EMAIL)) {
+          await sendMail(EXTRA_EMAIL, subject, html.replace("__LINK__", `${APP_URL}/master/description`))
+        }
+      } catch (err) {
+        console.error("[notify] missing WT-charge email failed:", err)
+      }
+    }
+
+    return NextResponse.json({ id: request.id, missingRates, missingDescriptions })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

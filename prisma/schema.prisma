@@ -118,7 +118,8 @@ model AirRequest {
   claimNextToken   String?
   claimNextName    String?
   bu               String              @default("NYG")
-  pendingRate      Boolean             @default(false)  // held: Brand+Country rate missing, not yet sent to VP MER
+  pendingRate      Boolean             @default(false)  // held: Country rate missing, not yet sent to first approver
+  pendingWeight    Boolean             @default(false)  // held: a DESCRIPTION has no WT Charge in Master, not yet sent
   createdBy        User                @relation(fields: [createdById], references: [id])
   items            AirRequestItem[]
   approvalLogs     ApprovalLog[]
