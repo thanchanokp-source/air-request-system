@@ -52,6 +52,39 @@ const Bar = ({ done }: { done: boolean }) => <span className={`w-4 h-px mx-0.5 s
 // Display name for an approver: prefer a real name, else the email's local part (before @).
 const nameOf = (s?: string | null) => (s ? (s.includes("@") ? s.split("@")[0] : s) : "")
 
+// Lowest-priority active person holding any of `roles` in this BU → email name.
+function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string): string {
+  if (!dir || !dir.length) return ""
+  const cands = dir.filter((u: any) =>
+    (!bu || u.bu === bu) &&
+    (roles.includes(u.role) || (Array.isArray(u.roles) && u.roles.some((r: string) => roles.includes(r)))))
+  cands.sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
+  return cands[0] ? nameOf(cands[0].email) || nameOf(cands[0].name) : ""
+}
+
+// Current linear-stage → {label, roles, assigned-email getter}. Claim stages are handled
+// separately (per-department). assigned email (chosen at upload) wins over role lookup.
+const STAGE_INFO: Record<string, { label: string; roles: string[]; assigned?: (req: any, soItem: any) => string | null | undefined }> = {
+  PENDING_DVM_MER:    { label: "DVM MER",  roles: ["DVM_MER"],     assigned: (_r, s) => s?.assignedDvm },
+  PENDING_VP_MER:     { label: "VP MER",   roles: ["VP_MER"],      assigned: (r) => r?.assignedVpMer },
+  PENDING_SCM:        { label: "SCM",      roles: ["SCM_USER"] },
+  PENDING_VP_SCM:     { label: "VP SCM",   roles: ["VP_SCM"],      assigned: (r) => r?.assignedVpScm },
+  PENDING_LOGISTICS:  { label: "Logistics",roles: ["LOGISTICS"] },
+  PENDING_PRESIDENT:  { label: "President",roles: ["PRESIDENT"] },
+  PENDING_VP_MER_GW:  { label: "DPM",      roles: ["VP_MER_GW"],   assigned: (r) => r?.assignedVpMer },
+  PENDING_GM_GW:      { label: "GM",       roles: ["GM_GW"] },
+  PENDING_LOGISTICS_GW:{ label: "Logistics",roles: ["LOGISTICS_GW"] },
+  PENDING_PRESIDENT_GW:{ label: "President",roles: ["PRESIDENT_GW"] },
+}
+
+// "Stage: who" for the current linear stage (empty for claim stages / terminal states).
+function currentStageWho(status: string, bu: string, soItem: any, req: any, dir?: any[]): string {
+  const info = STAGE_INFO[status]
+  if (!info) return ""
+  const who = nameOf(info.assigned?.(req, soItem)) || resolveRoleEmail(dir, info.roles, bu)
+  return who ? `${info.label}: ${who}` : ""
+}
+
 // Resolve the ENTRY (auto-notified) approver's email name for a dept from the directory.
 // PRODUCTION filters by the SO's factory G-group; PROCUREMENT by procurementType=PURCHASING.
 function entryPersonOf(dept: string, dir: any[] | undefined, bu?: string, factory?: string | null): string {
@@ -93,7 +126,7 @@ function WaitingLine({ items }: { items: string[] }) {
   )
 }
 
-export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, approvers }: { status: string; bu: string; items?: any[]; soItem?: any; sm?: boolean; claimForwards?: any[]; approvers?: any[] }) {
+export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, approvers, req }: { status: string; bu: string; items?: any[]; soItem?: any; sm?: boolean; claimForwards?: any[]; approvers?: any[]; req?: any }) {
   const rejected = soItem ? soItem.itemStatus === "REJECTED" : status === "REJECTED"
   const completed = soItem ? soItem.itemStatus === "COMPLETED" : status === "COMPLETED"
   const claimSource: any[] = soItem ? [soItem] : (Array.isArray(items) ? items : [])
@@ -113,9 +146,11 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     const claimReached = completed || cur >= CLAIM_ORD
     // Who is each still-pending dept currently waiting on?
     const soId = soItem?.id
-    const pendingWho = claimReached && !completed
+    const claimWho = claimReached && !completed
       ? pendingWhoFor(claimDepts, claimForwards, soId, { dir: approvers, bu, factory: soItem?.factory })
       : []
+    const stageWho = !completed && !rejected ? currentStageWho(status, "NYG", soItem, req, approvers) : ""
+    const pendingWho = [...(stageWho ? [stageWho] : []), ...claimWho]
     return (
       <div className="py-1">
         <div className="flex items-center gap-0 overflow-x-auto">
@@ -173,9 +208,11 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   // "Claim" turns green when ALL claim depts approved; "Logistics" when data filled.
   const claimChip: "done" | "active" | "pending" = completed || claimDone ? "done" : parallelReached ? "active" : "pending"
   const lgChip: "done" | "active" | "pending" = completed || lgDone ? "done" : parallelReached ? "active" : "pending"
-  const gwPendingWho = parallelReached && !completed && !rejected
+  const gwClaimWho = parallelReached && !completed && !rejected
     ? pendingWhoFor(claimDepts, claimForwards, soItem?.id, { dir: approvers, bu, factory: soItem?.factory })
     : []
+  const gwStageWho = !completed && !rejected ? currentStageWho(status, "GW", soItem, req, approvers) : ""
+  const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwClaimWho]
 
   return (
     <div className="py-1">

@@ -480,7 +480,7 @@ export default function RequestsPage() {
                                   </tr>
                                   <tr className="bg-gray-50/40">
                                     <td colSpan={20} className="px-6 py-1.5">
-                                      <ApprovalChain status={row.request.status} bu={dg.request.bu === "GW" ? "GW" : "NYG"} soItem={row} claimForwards={dg.request.claimForwards} approvers={claimDir} sm />
+                                      <ApprovalChain status={row.request.status} bu={dg.request.bu === "GW" ? "GW" : "NYG"} soItem={row} claimForwards={dg.request.claimForwards} approvers={claimDir} req={dg.request} sm />
                                     </td>
                                   </tr>
                                   </Fragment>
