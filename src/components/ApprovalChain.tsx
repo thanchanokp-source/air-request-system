@@ -144,19 +144,30 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     }
     const claimDepts = Object.entries(dmap).map(([dept, c]) => ({ dept, done: c.done === c.total }))
     const claimReached = completed || cur >= CLAIM_ORD
+    // Logistics runs IN PARALLEL with Claim (not a linear step): it's only "done" when
+    // the Actual Air Freight is actually entered — never by merely reaching the stage.
+    const lgDone = claimSource.length > 0 && claimSource.every((i: any) => i.actualAirFreight != null)
     // Who is each still-pending dept currently waiting on?
     const soId = soItem?.id
     const claimWho = claimReached && !completed
       ? pendingWhoFor(claimDepts, claimForwards, soId, { dir: approvers, bu, factory: soItem?.factory })
       : []
     const stageWho = !completed && !rejected ? currentStageWho(status, "NYG", soItem, req, approvers) : ""
-    const pendingWho = [...(stageWho ? [stageWho] : []), ...claimWho]
+    // LG runs parallel with Claim → surface it as pending until Actual is entered.
+    const lgName = resolveRoleEmail(approvers, ["LOGISTICS"], "NYG")
+    const lgWho = !completed && !rejected && claimReached && !lgDone ? `Logistics${lgName ? `: ${lgName}` : ""}` : ""
+    const pendingWho = [...(stageWho ? [stageWho] : []), ...(lgWho ? [lgWho] : []), ...claimWho]
     return (
       <div className="py-1">
         <div className="flex items-center gap-0 overflow-x-auto">
           {NYG_STAGES.map((s, i) => {
             const isClaim = s.key === "PENDING_CLAIM"
-            const chipState: "done" | "active" | "pending" = rejected ? "pending" : completed || s.ord < cur ? "done" : s.ord === cur ? "active" : "pending"
+            const isLg = s.key === "PENDING_LOGISTICS"
+            let chipState: "done" | "active" | "pending" = rejected ? "pending" : completed || s.ord < cur ? "done" : s.ord === cur ? "active" : "pending"
+            // Logistics is data-driven (not ordinal): green only once Actual is entered.
+            if (isLg) chipState = rejected ? "pending" : (completed || lgDone) ? "done" : (cur >= s.ord ? "active" : "pending")
+            // Logistics ∥ Claim are parallel → no connecting line between them.
+            const showBar = i < NYG_STAGES.length - 1 && !isLg
             return (
               <div key={s.key} className="flex items-center shrink-0">
                 {isClaim && claimDepts.length > 0 ? (
@@ -176,7 +187,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
                 ) : (
                   <Chip sm={sm} state={chipState} label={s.label} />
                 )}
-                {i < NYG_STAGES.length - 1 && <Bar done={completed || s.ord < cur} />}
+                {showBar && <Bar done={completed || s.ord < cur} />}
               </div>
             )
           })}
