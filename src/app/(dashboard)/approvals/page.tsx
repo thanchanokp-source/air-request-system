@@ -81,8 +81,8 @@ export default function ApprovalsPage() {
   // Filter documents by item-status (per-style forwarding — each role acts on specific itemStatus)
   const matchesPrimary = (r: any) => {
     const items = r.items || []
-    if (role === "DVM_MER") return r.status === "PENDING_DVM_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")
-    if (role === "VP_MER") return r.status === "PENDING_VP_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)
+    if (myRoles.includes("DVM_MER") && r.status === "PENDING_DVM_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
+    if (myRoles.includes("VP_MER") && r.status === "PENDING_VP_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)) return true
     // Match via held roles so one person can be SCM User in NYG AND another role in GW.
     if (myRoles.includes("SCM_USER")) {
       if ((r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||
@@ -92,7 +92,7 @@ export default function ApprovalsPage() {
     // President (NYG) — FINAL approver (items at PRESIDENT_PENDING). Match via held roles
     // so one person who is President of BOTH BUs sees NYG docs here.
     if (myRoles.includes("PRESIDENT") && r.status === "PENDING_PRESIDENT") return items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
-    if (role === "LOGISTICS") return r.bu !== "GW" && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)
+    if (myRoles.includes("LOGISTICS") && r.bu !== "GW" && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }
