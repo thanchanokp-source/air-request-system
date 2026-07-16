@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/renderer"
-import { getSplits } from "@/lib/claim"
+import { getSplits, deptLabel } from "@/lib/claim"
 
 // Thai-capable font (Sarabun) so Thai text (reasons, names, remarks) renders.
 // Registered as two families to keep the existing regular/bold style split.
@@ -105,7 +105,9 @@ const s = StyleSheet.create({
   // Signatures pinned near the bottom
   sigWrap: { position: "absolute", bottom: 34, left: 34, right: 34, flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   // Flowing variants (Combined / All-SO: SOs run continuously, not one page each)
-  sigWrapFlow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 12 },
+  // marginTop:auto sinks the signatures to the BOTTOM of the (last) page instead of
+  // sitting right under the table. paddingTop keeps a gap when the page is nearly full.
+  sigWrapFlow: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: "auto", paddingTop: 18 },
   pageFlow: { fontFamily: "Sarabun", fontSize: 8.5, paddingHorizontal: 22, paddingTop: 26, paddingBottom: 44, color: "#1a1a1a" },
   soBlockFlow: { marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: "#D1D5DB" },
   sigCol: { width: "19%", alignItems: "center", marginBottom: 6 },
@@ -335,6 +337,16 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
   const anyActual = rows.some(i => i.actualAirFreight != null)
   const totActual = rows.reduce((n, i) => n + (Number(i.actualAirFreight) || 0), 0)
   const grand = anyActual ? totActual : totEst
+  // Claim split by department (across all SO): amount = (Actual, else Est) × claim %.
+  const claimByDept: Record<string, number> = {}
+  for (const it of rows) {
+    const base = it.actualAirFreight != null ? Number(it.actualAirFreight) : (Number(it.airFreight) || 0)
+    for (const sp of getSplits(it)) {
+      if (!sp.dept) continue
+      claimByDept[sp.dept] = (claimByDept[sp.dept] || 0) + Math.round(base * (Number(sp.pct) || 0) / 100)
+    }
+  }
+  const claimDeptRows = Object.entries(claimByDept)
   // Portrait A4 (usable ~551pt). REASON takes the remaining width (flex) and wraps.
   const C = { no: 14, so: 42, style: 36, sub: 18, desc: 16, fac: 34, ctry: 46, hawb: 38, inv: 40, qty: 26, gross: 30, est: 38, act: 38, claim: 46 }
   return (
@@ -367,6 +379,7 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
             ["Brand", req.brandName || "-"],
             ["BU", req.buName || dept],
             ...(hawbNo ? [["HAWB No.", hawbNo]] as [string, string][] : []),
+            ...(req.crNo ? [["CR No.", req.crNo]] as [string, string][] : []),
           ] as [string, string][]).map(([l, v]) => (
             <View key={l} style={s.gcell}>
               <Text style={s.glabel}>{l} :</Text>
@@ -447,6 +460,22 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
             </View>
           </View>
         </View>
+
+        {/* Claim breakdown by department — how much each dept claims */}
+        {claimDeptRows.length > 0 && (
+          <View style={{ marginTop: 8, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 3, borderStyle: "solid", maxWidth: 260 }} wrap={false}>
+            <View style={{ flexDirection: "row", backgroundColor: "#1e3a8a", paddingVertical: 3, paddingHorizontal: 8 }}>
+              <Text style={{ color: "#fff", fontSize: 8, flex: 1 }}>CLAIM BY DEPARTMENT</Text>
+              <Text style={{ color: "#fff", fontSize: 8, textAlign: "right", width: 90 }}>CLAIM (THB)</Text>
+            </View>
+            {claimDeptRows.map(([d, amt], i) => (
+              <View key={d} style={{ flexDirection: "row", paddingVertical: 2.5, paddingHorizontal: 8, borderTopWidth: i === 0 ? 0 : 0.5, borderTopColor: "#e2e8f0", borderStyle: "solid" }}>
+                <Text style={{ fontSize: 8, flex: 1 }}>{deptLabel(d)}</Text>
+                <Text style={{ fontSize: 8, textAlign: "right", width: 90 }}>{fmtNum(amt)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Signature — ONCE, at the end */}
         <SignatureRow signers={signers} flow />

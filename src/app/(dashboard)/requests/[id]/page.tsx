@@ -932,6 +932,12 @@ export default function RequestDetailPage() {
         alert("ข้อมูลยังไม่ครบ — ทุก SO ต้องมี INV + HAWB (จะได้ Actual Air) ก่อนส่ง\nหากยังไม่ครบ กด \"Save Draft\" เก็บไว้ก่อนได้")
         return
       }
+      // Booking Date is required on every HAWB group before sending.
+      const missingBooking = hawbGroups.filter(g => !g.bookingDate)
+      if (missingBooking.length > 0) {
+        alert(`กรุณากรอก Booking Date ให้ครบทุก HAWB ก่อนส่ง (ขาด ${missingBooking.length} HAWB)`)
+        return
+      }
     }
     const itemLogisticsData: Record<string, { invoiceNo: string; hawbNo: string; bookingDate: string }> = {}
     const itemActualsData: Record<string, string> = {}

@@ -599,6 +599,7 @@ export default function FilesPage() {
                               <span className="font-semibold text-blue-700 text-sm">{req.documentNo}</span>
                               <span className="text-xs text-gray-400">{req.brandName}</span>
                               <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${req.bu === "GW" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{req.bu}</span>
+                              {req.crNo && <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium whitespace-nowrap">CR: {req.crNo}</span>}
                               {(() => {
                                 const stage = docStage(req)
                                 const ap = bookApproval(req)
@@ -686,7 +687,7 @@ export default function FilesPage() {
                                               </span>
                                             </td>
                                             <td className="py-1.5 pr-3">{item.invoiceNo || "-"}</td>
-                                            <td className="py-1.5 pr-3">{item.qtyActualShip ?? "-"}</td>
+                                            <td className="py-1.5 pr-3">{item.qtyActualShip ?? item.qtyRequestAir ?? "-"}</td>
                                             <td className="py-1.5 pr-3 text-green-700 font-semibold">{fmtNum(item.actualAirFreight)}</td>
                                             <td className="py-1.5 pr-3 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                                             <td className="py-1.5 text-right">
