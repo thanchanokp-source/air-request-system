@@ -67,6 +67,21 @@ const ALL_ROLES = [
 // leaks into the NYG tab (and vice-versa).
 const NYG_ROLE_SET = new Set<string>(MASTER_ROLES_NYG.map(r => r.role))
 const GW_ROLE_SET = new Set<string>(MASTER_ROLES_GW.map(r => r.role))
+// BU-EXCLUSIVE roles (SCM_NYK_* live in both → excluded). Holding an exclusive role from
+// BOTH BUs means the person genuinely spans both → show BU badge as "ALL".
+const NYG_ONLY_ROLES = new Set<string>([...NYG_ROLE_SET].filter(r => !GW_ROLE_SET.has(r)))
+const GW_ONLY_ROLES = new Set<string>([...GW_ROLE_SET].filter(r => !NYG_ROLE_SET.has(r)))
+// Effective BU for display: "ALL" when the person holds exclusive roles of both BUs
+// (or bu is already ALL); otherwise the stored bu. MER is BU-specific via its bu field.
+function effectiveBu(u: any): string {
+  const held: string[] = [u.role, ...(Array.isArray(u.roles) ? u.roles : [])].filter(Boolean)
+  const inNyg = u.bu === "NYG" || u.bu === "ALL" || u.role === "MER_USER" || held.some(r => NYG_ONLY_ROLES.has(r))
+  const inGw = u.bu === "GW" || u.bu === "ALL" || u.role === "MER_GW" || held.some(r => GW_ONLY_ROLES.has(r))
+  if (inNyg && inGw) return "ALL"
+  if (inGw) return "GW"
+  if (inNyg) return "NYG"
+  return u.bu || "NYG"
+}
 
 // Role order by approval flow (NYG then GW)
 const FLOW_ORDER: string[] = [
@@ -927,9 +942,11 @@ export default function UsersPage() {
                     <td className="px-2.5 py-2 align-top font-semibold text-gray-800 break-words">{u.name || <span className="text-gray-300 font-normal">—</span>}</td>
                     <td className="px-2.5 py-2 align-top text-gray-500 text-xs break-all">{u.email}</td>
                     <td className="px-2.5 py-2 align-top">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${u.bu === "GW" ? "bg-amber-100 text-amber-800 border border-amber-200" : u.bu === "ALL" ? "bg-purple-100 text-purple-700 border border-purple-200" : "bg-teal-100 text-teal-800 border border-teal-200"}`}>
-                        {u.bu || "NYG"}
+                      {(() => { const dbu = effectiveBu(u); return (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${dbu === "GW" ? "bg-amber-100 text-amber-800 border border-amber-200" : dbu === "ALL" ? "bg-purple-100 text-purple-700 border border-purple-200" : "bg-teal-100 text-teal-800 border border-teal-200"}`}>
+                        {dbu}
                       </span>
+                      ) })()}
                     </td>
                     <td className="px-2.5 py-2 align-top">
                       <div className="flex flex-col items-start gap-0.5">
