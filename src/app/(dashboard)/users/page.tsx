@@ -6,13 +6,11 @@ import { useRouter } from "next/navigation"
 // Roles that must be set by Admin (master)
 const MASTER_ROLES_NYG = [
   // Flow: MER → DVM MER → VP MER (finder) → President → SCM User → VP SCM (finder) → Claim → Logistics → Accounting
-  { role: "DVM_MER",              label: "DVM MER",               hint: "Approves FIRST after MER upload (before VP MER)", needsPriority: false, bu: "NYG" },
-  { role: "VP_MER",               label: "VP MER",                hint: "Approves after DVM MER (also selectable by MER at upload)", needsPriority: false, bu: "NYG" },
+  { role: "DVM_MER",              label: "DVM MER",               hint: "Approves after MER upload + handles Commercial claim (P1)", needsPriority: false, bu: "NYG" },
+  { role: "VP_MER",               label: "VP MER",                hint: "Approves after DVM MER + handles Commercial claim (P2)", needsPriority: false, bu: "NYG" },
   { role: "PRESIDENT",            label: "President",             hint: "Approves all requests after VP MER",         needsPriority: false, bu: "NYG" },
   { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
   { role: "VP_SCM",               label: "VP SCM",                hint: "Approves after SCM User (set up in master)", needsPriority: false, bu: "NYG" },
-  { role: "CLAIM_COMMERCIAL",     label: "Claim – Commercial",    hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
-  { role: "VP_COMMERCIAL",        label: "VP Claim – Commercial", hint: "Approves after Claim Commercial (Priority 1 first)", needsPriority: true, bu: "NYG" },
   { role: "CLAIM_PRODUCTION",     label: "Claim – Production",    hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
   { role: "VP_PRODUCTION",        label: "VP Claim – Production", hint: "Approves after Claim Production (Priority 1 first)", needsPriority: true, bu: "NYG" },
   { role: "CLAIM_PROCUREMENT",    label: "Claim – Procurement",   hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
