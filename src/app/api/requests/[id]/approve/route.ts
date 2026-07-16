@@ -998,7 +998,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
       // Approver picks the specific CR-entry person + VP/EVP approver (one per doc).
       if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
-        await prisma.airRequest.update({ where: { id }, data: { assignedScmNykEvp: body.evpEmail || null, assignedScmNykCr: body.crEmail || null } as any })
+        // Store the chosen people + a UNIQUE magic-login token each, so their email
+        // link logs in AS them (via assignedScmNyk* in auth) — not as whoever's already
+        // logged in. Without a token the email is a plain link → opens as the approver.
+        await prisma.airRequest.update({
+          where: { id },
+          data: {
+            assignedScmNykEvp: body.evpEmail || null,
+            assignedScmNykCr: body.crEmail || null,
+            ...(body.evpEmail ? { scmNykEvpToken: crypto.randomUUID() } : {}),
+            ...(body.crEmail ? { scmNykToken: crypto.randomUUID() } : {}),
+          } as any,
+        })
       }
       // Approver's approval → alert the chosen EVP + CR user (with LG data) in parallel.
       if (userRole === "SCM_NYK_APPROVER") await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
@@ -1255,7 +1266,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
       })
       if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
-        await prisma.airRequest.update({ where: { id }, data: { assignedScmNykEvp: body.evpEmail || null, assignedScmNykCr: body.crEmail || null } as any })
+        // Store the chosen people + a UNIQUE magic-login token each, so their email
+        // link logs in AS them (via assignedScmNyk* in auth) — not as whoever's already
+        // logged in. Without a token the email is a plain link → opens as the approver.
+        await prisma.airRequest.update({
+          where: { id },
+          data: {
+            assignedScmNykEvp: body.evpEmail || null,
+            assignedScmNykCr: body.crEmail || null,
+            ...(body.evpEmail ? { scmNykEvpToken: crypto.randomUUID() } : {}),
+            ...(body.crEmail ? { scmNykToken: crypto.randomUUID() } : {}),
+          } as any,
+        })
       }
       if (userRole === "SCM_NYK_APPROVER") await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
       const newStatus = await recalcDocStatus(id)

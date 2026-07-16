@@ -3252,20 +3252,23 @@ export default function RequestDetailPage() {
             )
           })()}
 
-          {/* Priority order reference */}
-          {claimApproversList.length > 1 && (
-            <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-              <span className="font-medium text-gray-600">Approval order:</span>
-              {claimApproversList.map((u: any, idx: number) => (
-                <span key={u.id} className="flex items-center gap-1">
-                  {idx > 0 && <span className="text-gray-300">→</span>}
-                  <span className={`px-2 py-0.5 rounded-full font-medium ${u.id === myUserId ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
-                    {u.priority != null ? `${u.priority}. ` : ""}{u.name || u.email}
+          {/* Approver reference — same priority = alternatives (OR); different = order (→) */}
+          {claimApproversList.length > 1 && (() => {
+            const allSame = claimApproversList.every((u: any) => u.priority === claimApproversList[0].priority)
+            return (
+              <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                <span className="font-medium text-gray-600">{allSame ? "Approvers (any one):" : "Approval order:"}</span>
+                {claimApproversList.map((u: any, idx: number) => (
+                  <span key={u.id} className="flex items-center gap-1">
+                    {idx > 0 && <span className="text-gray-300">{claimApproversList[idx - 1].priority === u.priority ? "or" : "→"}</span>}
+                    <span className={`px-2 py-0.5 rounded-full font-medium ${u.id === myUserId ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
+                      {!allSame && u.priority != null ? `${u.priority}. ` : ""}{u.name || u.email}
+                    </span>
                   </span>
-                </span>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )
+          })()}
 
           {/* Quick-select: type the full SO + Enter to tick it */}
           {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").length > 0 && (
@@ -3541,20 +3544,23 @@ export default function RequestDetailPage() {
             )
           })()}
 
-          {/* Priority order reference */}
-          {claimApproversList.length > 1 && (
-            <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-              <span className="font-medium text-gray-600">Approval order:</span>
-              {claimApproversList.map((u: any, idx: number) => (
-                <span key={u.id} className="flex items-center gap-1">
-                  {idx > 0 && <span className="text-gray-300">→</span>}
-                  <span className={`px-2 py-0.5 rounded-full font-medium ${u.id === myUserId ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
-                    {u.priority != null ? `${u.priority}. ` : ""}{u.name || u.email}
+          {/* Approver reference — same priority = alternatives (OR); different = order (→) */}
+          {claimApproversList.length > 1 && (() => {
+            const allSame = claimApproversList.every((u: any) => u.priority === claimApproversList[0].priority)
+            return (
+              <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                <span className="font-medium text-gray-600">{allSame ? "Approvers (any one):" : "Approval order:"}</span>
+                {claimApproversList.map((u: any, idx: number) => (
+                  <span key={u.id} className="flex items-center gap-1">
+                    {idx > 0 && <span className="text-gray-300">{claimApproversList[idx - 1].priority === u.priority ? "or" : "→"}</span>}
+                    <span className={`px-2 py-0.5 rounded-full font-medium ${u.id === myUserId ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
+                      {!allSame && u.priority != null ? `${u.priority}. ` : ""}{u.name || u.email}
+                    </span>
                   </span>
-                </span>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )
+          })()}
 
           {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").map((item: any) => {
             const isSub = submitting === item.id
