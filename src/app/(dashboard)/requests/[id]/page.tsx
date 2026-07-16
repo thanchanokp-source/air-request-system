@@ -1101,6 +1101,24 @@ export default function RequestDetailPage() {
     setSubmitting(null); setBackToScmStyleOpen(null); setBackToScmStyleComment("")
   }
 
+  // Batch "Back to SCM" for all selected styles (one shared reason).
+  const backToScmSelectedStyles = async () => {
+    const toBack = styleGroups.filter(g => (g.status === "PENDING" || g.status === "PASSED" || (presidentNewFlow && g.status === "VP_MER_PASSED")) && selectedStyles.has(g.style)).map(g => g.style)
+    if (toBack.length === 0) return
+    const reason = window.prompt(`เหตุผลในการส่งกลับ SCM (${toBack.length} style):`)
+    if (reason == null || !reason.trim()) return
+    for (const style of toBack) {
+      setSubmitting(style)
+      const res = await fetch(`/api/requests/${id}/approve`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "back_to_scm_style", style, comment: reason.trim() })
+      })
+      if (res.ok) setReq(await res.json())
+      else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
+    }
+    setSubmitting(null); setSelectedStyles(new Set())
+  }
+
   const attachFileFn = async (file: File, itemId?: string) => {
     setUploadingItem(itemId || "_req")
     try {
@@ -1418,6 +1436,12 @@ export default function RequestDetailPage() {
                   className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
                   {submitting ? "..." : `Approve Selected (${selectedStyles.size})`}
                 </button>
+                {role === "VP_SCM" && (
+                <button onClick={backToScmSelectedStyles} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
+                  {submitting ? "..." : `Back to SCM (${selectedStyles.size})`}
+                </button>
+                )}
                 {role !== "VP_SCM" && (
                 <button onClick={rejectSelectedStyles} disabled={!!submitting}
                   className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
@@ -1573,6 +1597,12 @@ export default function RequestDetailPage() {
                   className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
                   {submitting ? "..." : `Approve Selected (${selectedStyles.size})`}
                 </button>
+                {role === "VP_SCM" && (
+                <button onClick={backToScmSelectedStyles} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
+                  {submitting ? "..." : `Back to SCM (${selectedStyles.size})`}
+                </button>
+                )}
                 {role !== "VP_SCM" && (
                 <button onClick={rejectSelectedStyles} disabled={!!submitting}
                   className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
@@ -1838,6 +1868,12 @@ export default function RequestDetailPage() {
                   className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
                   {submitting ? "..." : `Approve Selected (${selectedStyles.size})`}
                 </button>
+                {role === "VP_SCM" && (
+                <button onClick={backToScmSelectedStyles} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
+                  {submitting ? "..." : `Back to SCM (${selectedStyles.size})`}
+                </button>
+                )}
                 {role !== "VP_SCM" && (
                 <button onClick={rejectSelectedStyles} disabled={!!submitting}
                   className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
