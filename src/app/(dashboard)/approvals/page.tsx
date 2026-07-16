@@ -50,6 +50,7 @@ export default function ApprovalsPage() {
   // sees it at the entry step, VP MER at the VP step).
   const heldClaimItems = (r: any) => {
     if (r.bu === "GW") return []
+    const fwds: any[] = Array.isArray(r.claimForwards) ? r.claimForwards : []
     return (r.items || []).filter((i: any) => {
       if (["REJECTED", "COMPLETED", "ACCOUNTING_PENDING"].includes(i.itemStatus)) return false
       const act = actingClaimForSO(myRoles, getSplits(i).map((s: any) => s.dept))
@@ -58,7 +59,17 @@ export default function ApprovalsPage() {
       // once they approve their dept, the SO drops from their queue even if OTHER depts
       // on the same SO are still pending.
       const ss = deptSplitStatus(i, act.dept)
-      return act.isVp ? ss === "CLAIM_PASSED" : (ss == null || ss === "CLAIM_PENDING")
+      const statusOk = act.isVp ? ss === "CLAIM_PASSED" : (ss == null || ss === "CLAIM_PENDING")
+      if (!statusOk) return false
+      // Forced-position forward: if this SO was forwarded within my dept, only the CURRENT
+      // holder (the latest forward's recipient) keeps it in queue — whoever forwarded it
+      // away no longer sees it. Not-yet-forwarded SO stay with the entry owner.
+      const mine = fwds.filter((f: any) => f.dept === act.dept && Array.isArray(f.itemIds) && f.itemIds.includes(i.id))
+      if (mine.length) {
+        const latest = mine.sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0))[0]
+        return String(latest.nextEmail || "").toLowerCase() === String(userEmail || "").toLowerCase()
+      }
+      return true
     })
   }
 
