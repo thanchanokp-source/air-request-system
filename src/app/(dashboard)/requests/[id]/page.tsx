@@ -3137,18 +3137,18 @@ export default function RequestDetailPage() {
                       const ids = [...dvmSelected]
                       const sig = await askSignature(); if (!sig) return
                       setSubmitting("_batch")
-                      if (isGwClaimP1Role) {
-                        // GW: one batch request → server approves all + notifies once (fast).
+                      if (isGwClaimP1Role && isGWRequest) {
+                        // GW only: one batch request → server approves all + notifies once (fast).
                         const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ action: "batch_approve_claim_gw", itemIds: ids, evpEmail: nykEvp?.email, crEmail: nykCr?.email, signatureData: sig }) })
                         if (res.ok) { window.location.href = "/requests"; return }
                         const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null)
                       } else {
-                        // NYG DVM: per-SO approve.
+                        // NYG per-SO approve (incl. NYG NYK 3-role → pass EVP/CR assignment).
                         let ok = true
                         for (const itemId of ids) {
                           const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "approve_so", itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, signatureData: sig }) })
+                            body: JSON.stringify({ action: "approve_so", itemId, crNo: role === "SCM_NYK" ? (crNoInput.trim() || req.crNo || undefined) : undefined, evpEmail: nykEvp?.email, crEmail: nykCr?.email, signatureData: sig }) })
                           if (!res.ok) { const e = await res.json(); alert(e.error || "Error"); ok = false; break }
                         }
                         if (ok) { window.location.href = "/requests"; return }
