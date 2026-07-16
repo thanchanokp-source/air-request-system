@@ -1005,6 +1005,11 @@ export default function RequestDetailPage() {
   const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
 
   const presidentNewFlow = role === "PRESIDENT" && req?.status === "PENDING_PRESIDENT"
+  // Style-level Reject exists ONLY at the NYG pre-claim upload approvals (DVM MER / VP MER).
+  // Every later stage (VP SCM, President) and ALL of GW use Approve + Back to … instead.
+  const showStyleReject = role === "DVM_MER" || role === "VP_MER"
+  // President approves only — no Reject, no Back-to-SCM.
+  const isPresidentStage = role === "PRESIDENT" || role === "PRESIDENT_GW"
 
   const styleGroups = useMemo(() => {
     if (!req?.items) return []
@@ -1442,7 +1447,7 @@ export default function RequestDetailPage() {
                   {submitting ? "..." : `Back to SCM (${selectedStyles.size})`}
                 </button>
                 )}
-                {role !== "VP_SCM" && (
+                {showStyleReject && (
                 <button onClick={rejectSelectedStyles} disabled={!!submitting}
                   className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
                   {submitting ? "..." : `Reject Selected (${selectedStyles.size})`}
@@ -1487,7 +1492,7 @@ export default function RequestDetailPage() {
                   {(g.status === "PENDING" || (presidentNewFlow && g.status === "VP_MER_PASSED")) && (
                     <div className="flex gap-2">
                       <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">{isSub && !isRej ? "..." : "Approve"}</button>
-                      <button onClick={() => { setRejectingStyle(isRej ? null : g.style); setRejectComment("") }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>
+                      {showStyleReject && <button onClick={() => { setRejectingStyle(isRej ? null : g.style); setRejectComment("") }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
                       {req.status === "PENDING_VP_SCM" && (
                         <button onClick={() => { setBackToScmStyleOpen(isBackScm ? null : g.style); setBackToScmComment(""); setRejectingStyle(null) }} disabled={isSub || submitting === "_"}
                           className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
@@ -1603,7 +1608,7 @@ export default function RequestDetailPage() {
                   {submitting ? "..." : `Back to SCM (${selectedStyles.size})`}
                 </button>
                 )}
-                {role !== "VP_SCM" && (
+                {showStyleReject && (
                 <button onClick={rejectSelectedStyles} disabled={!!submitting}
                   className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
                   {submitting ? "..." : `Reject Selected (${selectedStyles.size})`}
@@ -1649,8 +1654,8 @@ export default function RequestDetailPage() {
                   {isReady && !isRej && !isBackScm && (
                     <div className="flex gap-2">
                       <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">{isSub ? "..." : "Approve"}</button>
-                      {role !== "VP_SCM" && <button onClick={() => { setRejectingStyle(g.style); setRejectComment(""); setBackToScmStyleOpen(null) }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
-                      <button onClick={() => { setBackToScmStyleOpen(g.style); setBackToScmStyleComment(""); setRejectingStyle(null) }} disabled={isSub} className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to SCM</button>
+                      {showStyleReject && <button onClick={() => { setRejectingStyle(g.style); setRejectComment(""); setBackToScmStyleOpen(null) }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
+                      {!isPresidentStage && <button onClick={() => { setBackToScmStyleOpen(g.style); setBackToScmStyleComment(""); setRejectingStyle(null) }} disabled={isSub} className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to SCM</button>}
                     </div>
                   )}
                 </div>
@@ -1766,8 +1771,8 @@ export default function RequestDetailPage() {
                   {isReady && !isRej && !isBackScm && (
                     <div className="flex gap-2">
                       <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">{isSub ? "..." : "Approve"}</button>
-                      {role !== "VP_SCM" && <button onClick={() => { setRejectingStyle(g.style); setRejectComment(""); setBackToScmStyleOpen(null) }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
-                      <button onClick={() => { setBackToScmStyleOpen(g.style); setBackToScmStyleComment(""); setRejectingStyle(null) }} disabled={isSub} className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to SCM</button>
+                      {showStyleReject && <button onClick={() => { setRejectingStyle(g.style); setRejectComment(""); setBackToScmStyleOpen(null) }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
+                      {!isPresidentStage && <button onClick={() => { setBackToScmStyleOpen(g.style); setBackToScmStyleComment(""); setRejectingStyle(null) }} disabled={isSub} className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to SCM</button>}
                     </div>
                   )}
                 </div>
@@ -1874,7 +1879,7 @@ export default function RequestDetailPage() {
                   {submitting ? "..." : `Back to SCM (${selectedStyles.size})`}
                 </button>
                 )}
-                {role !== "VP_SCM" && (
+                {showStyleReject && (
                 <button onClick={rejectSelectedStyles} disabled={!!submitting}
                   className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
                   {submitting ? "..." : `Reject Selected (${selectedStyles.size})`}
@@ -1912,7 +1917,7 @@ export default function RequestDetailPage() {
                   {g.status === "PENDING" && !isRej && (
                     <div className="flex gap-2">
                       <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">{isSub ? "..." : "Approve"}</button>
-                      <button onClick={() => { setRejectingStyle(isRej ? null : g.style); setRejectComment("") }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>
+                      {showStyleReject && <button onClick={() => { setRejectingStyle(isRej ? null : g.style); setRejectComment("") }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
                     </div>
                   )}
                 </div>
