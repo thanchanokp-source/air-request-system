@@ -237,11 +237,26 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   // "Claim" turns green when ALL claim depts approved; "Logistics" when data filled.
   const claimChip: "done" | "active" | "pending" = completed || claimDone ? "done" : parallelReached ? "active" : "pending"
   const lgChip: "done" | "active" | "pending" = completed || lgDone ? "done" : parallelReached ? "active" : "pending"
+  const gwNonNyk = claimDepts.filter(d => d.dept !== "NYK" && d.dept !== "SCM NYK")
   const gwClaimWho = parallelReached && !completed && !rejected
-    ? pendingWhoFor(claimDepts, claimForwards, soItem?.id, { dir: approvers, bu, factory: soItem?.factory })
+    ? pendingWhoFor(gwNonNyk, claimForwards, soItem?.id, { dir: approvers, bu, factory: soItem?.factory })
     : []
+  // NYK 3-role state (same as NYG): Approver → EVP + CR user.
+  const gwNyk = claimDepts.find(d => (d.dept === "NYK" || d.dept === "SCM NYK") && !d.done)
+  let gwNykWho = ""
+  if (gwNyk && parallelReached && !completed && !rejected) {
+    const appr: any[] = soItem?.claimApprovals || []
+    if (!appr.some((a: any) => a.role === "SCM_NYK_APPROVER")) {
+      gwNykWho = "NYK: Approver"
+    } else {
+      const parts: string[] = []
+      if (!appr.some((a: any) => a.role === "SCM_NYK_EVP")) parts.push(`EVP ${nameOf(req?.assignedScmNykEvp)}`.trim())
+      if (!req?.crNo) parts.push(`CR ${nameOf(req?.assignedScmNykCr)}`.trim())
+      gwNykWho = `NYK: ${parts.join(" + ") || "finalizing"}`
+    }
+  }
   const gwStageWho = !completed && !rejected ? currentStageWho(status, "GW", soItem, req, approvers) : ""
-  const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwClaimWho]
+  const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwClaimWho, ...(gwNykWho ? [gwNykWho] : [])]
 
   return (
     <div className="py-1">

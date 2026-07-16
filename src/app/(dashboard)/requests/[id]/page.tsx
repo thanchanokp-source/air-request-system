@@ -5216,8 +5216,10 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* Logistics edit — upload Excel to update data after PENDING_LOGISTICS */}
-      {role === "LOGISTICS" && (req.status === "PENDING_CLAIM" || req.status === "PENDING_VP_CLAIM" || req.status === "PENDING_VP_NYK") && (
+      {/* Legacy LG bulk-edit via Excel re-upload — superseded by the Air Waybill Entry
+          form above (INV/HAWB/Actual/Booking all editable inline). Hidden to avoid a
+          confusing duplicate; flip to `true` to bring it back if bulk re-upload is needed. */}
+      {false && role === "LOGISTICS" && (req.status === "PENDING_CLAIM" || req.status === "PENDING_VP_CLAIM" || req.status === "PENDING_VP_NYK") && (
         <div className="bg-white rounded-xl border p-5 space-y-3">
           <h2 className="font-semibold text-gray-800 border-b pb-2">LOGISTICS DATA <span className="text-xs font-normal text-gray-400 ml-1">(editable by re-upload)</span></h2>
           <div className="border-2 border-dashed border-blue-200 rounded-xl p-4 bg-blue-50 text-center space-y-2">
