@@ -61,9 +61,12 @@ const ALL_ROLES = [
   "MER_USER", "MER_GW", "ADMIN",
 ]
 
-// Which BU each role belongs to (SCM_NYK_* appear in BOTH master lists → land in both sets).
-const NYG_ROLE_SET = new Set<string>([...MASTER_ROLES_NYG.map(r => r.role), ...FINDER_ROLES_NYG.map(r => r.role), "MER_USER"])
-const GW_ROLE_SET = new Set<string>([...MASTER_ROLES_GW.map(r => r.role), ...FINDER_ROLES_GW.map(r => r.role), "MER_GW"])
+// Which BU each APPROVER role belongs to (SCM_NYK_* appear in BOTH master lists → both sets).
+// Used ONLY to surface a cross-BU approver in the other BU's tab. MER (MER_USER / MER_GW)
+// is a requester role governed purely by the `bu` field — excluded here so a GW MER never
+// leaks into the NYG tab (and vice-versa).
+const NYG_ROLE_SET = new Set<string>(MASTER_ROLES_NYG.map(r => r.role))
+const GW_ROLE_SET = new Set<string>(MASTER_ROLES_GW.map(r => r.role))
 
 // Role order by approval flow (NYG then GW)
 const FLOW_ORDER: string[] = [
