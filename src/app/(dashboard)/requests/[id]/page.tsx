@@ -784,7 +784,8 @@ export default function RequestDetailPage() {
   const gwFwdItems = (() => {
     if (!isGwForwardRole) return []
     if (role === "CLAIM_NEXT_APPROVER") {
-      const ids = Array.isArray(myClaimFwdRow?.itemIds) ? myClaimFwdRow.itemIds : null
+      // Empty itemIds = whole-department (legacy/older rows stored []), NOT "no SO".
+      const ids = Array.isArray(myClaimFwdRow?.itemIds) && myClaimFwdRow.itemIds.length ? myClaimFwdRow.itemIds : null
       return ids ? gwFwdBase.filter((i: any) => ids.includes(i.id)) : gwFwdBase
     }
     const covered = new Set<string>((req?.claimForwards || [])

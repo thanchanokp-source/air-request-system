@@ -132,11 +132,15 @@ export default function ApprovalsPage() {
     const mine = fwds.filter((f: any) => String(f.nextEmail || "").toLowerCase() === String(userEmail || "").toLowerCase())
     if (!mine.length) return []
     const myIds = new Set<string>(mine.flatMap((f: any) => Array.isArray(f.itemIds) ? f.itemIds : []))
+    // Empty itemIds across my rows = whole-department scope (legacy rows stored []).
+    const wholeDept = myIds.size === 0
     const dept = (session?.user as any)?.claimDepartment || null
     return (r.items || []).filter((i: any) => {
       if (["REJECTED", "COMPLETED", "ACCOUNTING_PENDING"].includes(i.itemStatus)) return false
-      if (!myIds.has(i.id)) return false
-      if (!dept) return true
+      if (!wholeDept && !myIds.has(i.id)) return false
+      if (!dept) return !wholeDept
+      const onDept = getSplits(i).some((s: any) => s.dept === dept)
+      if (wholeDept && !onDept) return false
       const ss = deptSplitStatus(i, dept)
       return ss == null || ss === "CLAIM_PENDING" || ss === "CLAIM_PASSED" // not yet finalized
     })
