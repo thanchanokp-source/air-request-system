@@ -351,10 +351,12 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     if (newStatus === "NYK_APPROVER_DONE") {
       const items = await prisma.airRequestItem.findMany({
         where: { requestId, itemStatus: { not: "REJECTED" } },
-        select: { so: true, invoiceNo: true, hawbNo: true, actualAirFreight: true, claimDepts: true, claimDepartment: true, claimPercentage: true }
+        select: { so: true, brand: true, invoiceNo: true, hawbNo: true, actualAirFreight: true, claimDepts: true, claimDepartment: true, claimPercentage: true }
       })
       const nykItems = items.filter((i: any) => getSplits(i).some(s => s.dept === "SCM NYK" || s.dept === "NYK"))
       if (nykItems.length === 0) return
+      const nykBrands = [...new Set(nykItems.map((i: any) => i.brand).filter(Boolean))].join(", ")
+      const brandTag = nykBrands ? ` [${nykBrands}]` : ""
       const link = `${APP_URL}/requests/${requestId}`
       const rows = nykItems.map((i: any) => {
         const nyk = getSplits(i).find(s => s.dept === "SCM NYK" || s.dept === "NYK")
@@ -399,8 +401,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 </td></tr></table></body></html>`
         await sendMail(emails, `${subject} — ${(req as any).documentNo}`, html)
       }
-      await sendNyk("SCM_NYK_EVP", "scmNykEvpToken", "[Claim – SCM NYK EVP] Pending Approval", "The SCM NYK Approver has approved. Please review and approve.", (req as any).assignedScmNykEvp)
-      await sendNyk("SCM_NYK", "scmNykToken", "[Claim – SCM NYK] Please enter CR NO", "The SCM NYK Approver has approved. Please enter the CR NO for this document.", (req as any).assignedScmNykCr)
+      await sendNyk("SCM_NYK_EVP", "scmNykEvpToken", `[Claim – NYK EVP]${brandTag} Pending Approval`, "The NYK Approver has approved. Please review and approve.", (req as any).assignedScmNykEvp)
+      await sendNyk("SCM_NYK", "scmNykToken", `[Claim – NYK]${brandTag} Please enter CR NO`, "The NYK Approver has approved. Please enter the CR NO for this document.", (req as any).assignedScmNykCr)
       return
     }
 
@@ -1060,9 +1062,13 @@ export async function notifyLgFilesToClaimers(requestId: string) {
     const items = (req.items as any[]).filter(i => i.itemStatus !== "REJECTED")
     if (!items.length) return
 
-    // (b) Combined signed PDF → always attached inline (small). Signatures reflect what's captured now.
+    // (b) Combined signed PDF. Graph caps a whole message at ~4 MB — a big PDF would make
+    // Graph REJECT the entire email (→ claimers get nothing). So attach the PDF only when
+    // it's small enough; otherwise skip it and rely on the "Open Document" link.
+    const MAX_INLINE = 3 * 1024 * 1024
     const fileAtts: { filename: string; contentBase64: string; contentType?: string }[] = []
     let pdfBytes = 0
+    let pdfB64: string | null = null
     try {
       const { renderToBuffer } = await import("@react-pdf/renderer")
       const { CombinedPdfDocument } = await import("@/components/request-pdf")
@@ -1070,17 +1076,16 @@ export async function notifyLgFilesToClaimers(requestId: string) {
       const el = React.default.createElement(CombinedPdfDocument as any, { pages: items.map(item => ({ req, item })) })
       const buf = await (renderToBuffer as any)(el)
       pdfBytes = (buf as any).length || 0
-      fileAtts.push({ filename: `${req.documentNo}.pdf`, contentBase64: Buffer.from(buf).toString("base64"), contentType: "application/pdf" })
+      pdfB64 = Buffer.from(buf).toString("base64")
     } catch (e) { console.error("[notify] claimer PDF render failed:", e) }
+    const attachPdf = !!pdfB64 && pdfBytes <= MAX_INLINE
+    if (attachPdf) fileAtts.push({ filename: `${req.documentNo}.pdf`, contentBase64: pdfB64!, contentType: "application/pdf" })
 
-    // (a) LG-attached files. Graph caps a message at ~4 MB, so: if the total (PDF + files)
-    // fits under a safe budget → attach them inline; otherwise DON'T attach — put download
-    // links in the email body instead. File sizes come from the DB (no need to download first).
+    // (a) LG-attached files — inline only if the running total stays under the budget.
     const lgCats = ["INV", "AWB", "EXPENSE", "COMBINE"]
     const lgAtts = (req.attachments || []).filter((x: any) => lgCats.includes(x.category))
-    const MAX_INLINE = 3 * 1024 * 1024
     const lgTotal = lgAtts.reduce((s: number, a: any) => s + (a.fileSize || 0), 0)
-    const inlineLg = pdfBytes + lgTotal <= MAX_INLINE
+    const inlineLg = attachPdf && (pdfBytes + lgTotal <= MAX_INLINE)
     if (inlineLg) {
       for (const a of lgAtts) {
         try {
