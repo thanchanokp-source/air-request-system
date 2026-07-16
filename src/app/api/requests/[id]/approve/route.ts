@@ -598,7 +598,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { itemStatus: "LOG_PASSED" }
         })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_CLAIM" } })
+        // Parallel branches both start now → alert Claim AND Logistics (mirrors GW,
+        // which fires PENDING_LOGISTICS_GW + PENDING_CLAIM_GW after President).
         await notifyStatusChange(id, "PENDING_CLAIM").catch(() => {})
+        await notifyStatusChange(id, "PENDING_LOGISTICS").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
