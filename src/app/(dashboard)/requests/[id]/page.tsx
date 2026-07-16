@@ -1120,7 +1120,11 @@ export default function RequestDetailPage() {
   }
 
   const claimForward = async (final: boolean, ids?: string[]) => {
-    const sig = await askSignature(); if (!sig) return
+    // Procurement Purchasing → Sourcing is a pure routing step (Purchasing hasn't
+    // approved yet — Sourcing will), so NO signature. Every other forward/finish signs.
+    const skipSign = !final && isProcRoute && gwBranchChoice === "Sourcing"
+    let sig: string | null = null
+    if (!skipSign) { sig = await askSignature(); if (!sig) return }
     setClaimFwdSaving(true)
     // Finalize/forward only the selected SO (per-SO forward). When nothing is
     // ticked, `ids` is undefined → the backend acts on all SO this actor owns.
@@ -3006,7 +3010,7 @@ export default function RequestDetailPage() {
                 <button onClick={async () => { await claimForward(false, claimActIds); setGwModalOpen(false) }} disabled={!claimFwdSelected || (gwNeedsBranch && !gwBranchChoice) || claimFwdSaving}
                   title={!claimFwdSelected ? `Select a person for ${gwNextPosLabel}` : ""}
                   className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
-                  {claimFwdSaving ? "..." : `Forward →${claimSelIds.length ? ` (${claimSelIds.length})` : ""}`}
+                  {claimFwdSaving ? "..." : (isProcRoute && gwBranchChoice === "Sourcing" ? `Send to Sourcing →${claimSelIds.length ? ` (${claimSelIds.length})` : ""}` : `Forward →${claimSelIds.length ? ` (${claimSelIds.length})` : ""}`)}
                 </button>
               )}
             </div>
