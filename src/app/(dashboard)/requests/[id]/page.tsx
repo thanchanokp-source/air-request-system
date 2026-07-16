@@ -4512,6 +4512,12 @@ export default function RequestDetailPage() {
                             className="border border-orange-300 rounded-lg px-2.5 py-1 text-xs w-36 focus:ring-1 focus:ring-orange-400 focus:outline-none" />
                         </div>
                         <div className="flex items-center gap-1.5">
+                          <label className="text-xs text-gray-500 shrink-0">Booking Date <span className="text-red-500">*</span></label>
+                          <input type="date" value={group.bookingDate}
+                            onChange={e => updateHawb(group.id, { bookingDate: e.target.value })}
+                            className={`border rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-orange-400 focus:outline-none ${group.bookingDate ? "border-orange-300" : "border-red-300 bg-red-50"}`} />
+                        </div>
+                        <div className="flex items-center gap-1.5">
                           <label className="text-xs text-gray-500 shrink-0">Total Cost (THB)</label>
                           <input type="number" value={group.totalCost} placeholder="0" min="0"
                             onChange={e => updateHawb(group.id, { totalCost: e.target.value })}
