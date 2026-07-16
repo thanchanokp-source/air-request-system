@@ -46,6 +46,16 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const { id } = await params
-  await prisma.user.delete({ where: { id } })
-  return NextResponse.json({ ok: true })
+  try {
+    await prisma.user.delete({ where: { id } })
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    // P2003 = foreign-key constraint: the user is referenced by existing documents
+    // (created / approved / uploaded). Deleting would orphan those rows.
+    if (e?.code === "P2003" || e?.code === "P2014") {
+      return NextResponse.json({ error: "ผู้ใช้นี้ผูกกับเอกสารเดิมอยู่ (เคยสร้าง/อนุมัติ/อัปโหลด) จึงลบไม่ได้ — แนะนำให้ปิด Status แทน" }, { status: 409 })
+    }
+    console.error("[users DELETE] error:", e)
+    return NextResponse.json({ error: e?.message || "Delete failed" }, { status: 500 })
+  }
 }

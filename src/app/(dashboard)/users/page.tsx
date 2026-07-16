@@ -297,9 +297,16 @@ export default function UsersPage() {
   }
 
   const del = async (id: string, name: string) => {
-    if (!confirm(`Delete user "${name}"?`)) return
-    await fetch(`/api/users/${id}`, { method: "DELETE" })
-    setUsers(prev => prev.filter(u => u.id !== id))
+    if (!confirm(`ลบผู้ใช้ "${name}" ?\n(ถ้าเคยอนุมัติ/สร้างเอกสารมาก่อน อาจลบไม่ได้ — ให้ปิด Status แทน)`)) return
+    const res = await fetch(`/api/users/${id}`, { method: "DELETE" })
+    if (res.ok) {
+      setUsers(prev => prev.filter(u => u.id !== id))
+      return
+    }
+    // FK constraint / other error → the account is referenced by existing documents.
+    let msg = "ลบไม่ได้"
+    try { const d = await res.json(); if (d?.error) msg = d.error } catch {}
+    alert(`ลบไม่สำเร็จ: ${name}\n${msg}\n\nสาเหตุที่พบบ่อย: ผู้ใช้นี้ผูกกับเอกสารเดิมอยู่ → แนะนำให้ "ปิด Status" แทนการลบ`)
   }
 
   const searchPeople = async () => {
@@ -845,6 +852,7 @@ export default function UsersPage() {
                               </button>
                               <button onClick={() => openEdit(u)} className="text-xs text-blue-600 hover:underline">Edit</button>
                               <button onClick={() => sendReset(u.id, u.email)} className="text-xs text-amber-600 hover:underline">Send Link</button>
+                              <button onClick={() => del(u.id, u.name || u.email)} className="text-xs text-red-500 hover:text-red-700 hover:underline">Delete</button>
                             </div>
                           </div>
                           )
