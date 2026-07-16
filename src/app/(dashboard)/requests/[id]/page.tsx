@@ -1005,9 +1005,10 @@ export default function RequestDetailPage() {
   const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
 
   const presidentNewFlow = role === "PRESIDENT" && req?.status === "PENDING_PRESIDENT"
-  // Style-level Reject exists ONLY at the NYG pre-claim upload approvals (DVM MER / VP MER).
-  // Every later stage (VP SCM, President) and ALL of GW use Approve + Back to … instead.
-  const showStyleReject = role === "DVM_MER" || role === "VP_MER"
+  // Style-level Reject exists at the UPLOAD approvals — NYG (DVM MER / VP MER) and GW
+  // (DPM / GM) — where it sends the style back to MER with a reason + email. Later stages
+  // (VP SCM, President) have no Reject (use Back to SCM / approve-only).
+  const showStyleReject = ["DVM_MER", "VP_MER", "VP_MER_GW", "DPM_GW", "GM_GW"].includes(role)
   // President approves only — no Reject, no Back-to-SCM.
   const isPresidentStage = role === "PRESIDENT" || role === "PRESIDENT_GW"
 

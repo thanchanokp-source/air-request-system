@@ -207,6 +207,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const vpMerPassedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "VP_MER_PASSED" } })
       if (vpMerPassedCount === 0) {
         await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED", rejectionReason: comment || "Rejected by VP MER GW" } })
+        await notifyStatusChange(id, "REJECTED").catch(() => {})
       } else {
         await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PENDING" } })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_GM_GW" } })
@@ -233,6 +234,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const passedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "VP_MER_PASSED" } })
       if (passedCount === 0) {
         await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED", rejectionReason: comment || "Rejected by GM GW" } })
+        await notifyStatusChange(id, "REJECTED").catch(() => {})
       } else {
         // President moved to the END: after GM, go straight into the parallel
         // stage (Logistics ∥ Claim). President approves last, before Accounting.

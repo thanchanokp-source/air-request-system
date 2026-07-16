@@ -28,8 +28,14 @@ function qualifies(req: any): boolean {
 }
 
 // Pipeline stage of a document (all in one folder, distinguished by a badge).
+// "Done" = the workflow has finished. GW ends at COMPLETED; NYG ends at the Accounting
+// step (President approved → PENDING_ACCOUNTING is terminal), so treat both as complete.
+function isDone(req: any): boolean {
+  return req.status === "COMPLETED" || req.status === "PENDING_ACCOUNTING"
+}
+
 function docStage(req: any): "BOOKING" | "LOGISTICS" | "FINAL" {
-  if (req.status === "COMPLETED") return "FINAL"
+  if (isDone(req)) return "FINAL"
   if ((req.items || []).some((i: any) => itemBooked(i))) return "LOGISTICS"
   return "BOOKING"
 }
@@ -37,10 +43,10 @@ function docStage(req: any): "BOOKING" | "LOGISTICS" | "FINAL" {
 // Does this document match the selected status chip?
 function matchesStatus(req: any, f: StatusFilter): boolean {
   if (f === "ALL") return true
-  if (f === "COMPLETED") return req.status === "COMPLETED"
-  // A COMPLETED doc is done — never show it in To-book / Booked (e.g. imported history).
-  if (f === "TOBOOK") return req.status !== "COMPLETED" && unbookedCount(req) > 0
-  if (f === "BOOKED") return isBooked(req) && req.status !== "COMPLETED"
+  if (f === "COMPLETED") return isDone(req)
+  // A done doc is finished — never show it in To-book / Booked (e.g. imported history).
+  if (f === "TOBOOK") return !isDone(req) && unbookedCount(req) > 0
+  if (f === "BOOKED") return isBooked(req) && !isDone(req)
   return true
 }
 
