@@ -1265,21 +1265,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
       })
+      let nykFirstAssign = false
       if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
         // Store the chosen people + a UNIQUE magic-login token each, so their email
         // link logs in AS them (via assignedScmNyk* in auth) — not as whoever's already
-        // logged in. Without a token the email is a plain link → opens as the approver.
+        // logged in. Tokens are created ONCE (first SO approved); later SOs reuse them,
+        // so EVP/CR are emailed a single time (not once per SO).
+        const cur = await prisma.airRequest.findUnique({ where: { id }, select: { scmNykEvpToken: true, scmNykToken: true } as any })
+        const setEvp = !!body.evpEmail && !(cur as any)?.scmNykEvpToken
+        const setCr = !!body.crEmail && !(cur as any)?.scmNykToken
+        nykFirstAssign = setEvp || setCr
         await prisma.airRequest.update({
           where: { id },
           data: {
             assignedScmNykEvp: body.evpEmail || null,
             assignedScmNykCr: body.crEmail || null,
-            ...(body.evpEmail ? { scmNykEvpToken: crypto.randomUUID() } : {}),
-            ...(body.crEmail ? { scmNykToken: crypto.randomUUID() } : {}),
+            ...(setEvp ? { scmNykEvpToken: crypto.randomUUID() } : {}),
+            ...(setCr ? { scmNykToken: crypto.randomUUID() } : {}),
           } as any,
         })
       }
-      if (userRole === "SCM_NYK_APPROVER") await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+      // Alert EVP + CR user ONCE — when the assignment is first made, not per SO.
+      if (userRole === "SCM_NYK_APPROVER" && nykFirstAssign) await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
       const newStatus = await recalcDocStatus(id)
       if (newStatus !== request.status) {
         await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })

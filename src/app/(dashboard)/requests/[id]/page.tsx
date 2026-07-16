@@ -3209,7 +3209,8 @@ export default function RequestDetailPage() {
               user (in parallel with the EVP) enters the CR NO. Locked until the
               Approver has approved every SCM NYK SO. */}
           {role === "SCM_NYK" && (() => {
-            const nykSOs = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && getSplits(i).some((s: any) => s.dept === "SCM NYK" && s.status !== "REJECTED"))
+            // NYK split dept is "SCM NYK" in GW but "NYK" in NYG — accept both.
+            const nykSOs = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && getSplits(i).some((s: any) => (s.dept === "SCM NYK" || s.dept === "NYK") && s.status !== "REJECTED"))
             const approverAllDone = nykSOs.length > 0 && nykSOs.every((i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER"))
             const awaitingCount = nykSOs.filter((i: any) => !(i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER")).length
             const crLocked = !approverAllDone && !req.crNo
