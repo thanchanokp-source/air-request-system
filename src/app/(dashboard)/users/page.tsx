@@ -10,6 +10,7 @@ const MASTER_ROLES_NYG = [
   { role: "VP_MER",               label: "VP MER",                hint: "Approves after DVM MER (also selectable by MER at upload)", needsPriority: false, bu: "NYG" },
   { role: "PRESIDENT",            label: "President",             hint: "Approves all requests after VP MER",         needsPriority: false, bu: "NYG" },
   { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
+  { role: "VP_SCM",               label: "VP SCM",                hint: "Approves after SCM User (set up in master)", needsPriority: false, bu: "NYG" },
   { role: "CLAIM_COMMERCIAL",     label: "Claim – Commercial",    hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
   { role: "VP_COMMERCIAL",        label: "VP Claim – Commercial", hint: "Approves after Claim Commercial (Priority 1 first)", needsPriority: true, bu: "NYG" },
   { role: "CLAIM_PRODUCTION",     label: "Claim – Production",    hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
@@ -49,8 +50,7 @@ const MASTER_ROLES = MASTER_ROLES_NYG
 
 // Roles via People Finder (no master needed)
 const FINDER_ROLES_NYG = [
-  { role: "VP_SCM",       label: "VP SCM",             who: "Selected by SCM User" },
-  { role: "CLAIM_*_P2+",  label: "Claim Priority ≥ 2 (All Depts)", who: "Forwarded by Claim P1 in request" },
+  { role: "CLAIM_*_P2+",  label: "Claim Priority ≥ 2 (All Depts)", who: "Set in master; forwarded by Claim P1 in request" },
 ]
 
 const FINDER_ROLES_GW = [
@@ -401,7 +401,6 @@ export default function UsersPage() {
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <optgroup label="── NYG Master">
               {MASTER_ROLES.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
-              <option value="VP_SCM">VP SCM (also pickable by SCM User)</option>
             </optgroup>
             <optgroup label="── GW Master">
               {MASTER_ROLES_GW.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}

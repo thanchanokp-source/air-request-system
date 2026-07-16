@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { fetchPeopleList } from "@/lib/people"
 import { prisma } from "@/lib/prisma"
 
 export async function GET(req: NextRequest) {
@@ -39,21 +38,10 @@ export async function GET(req: NextRequest) {
     // ignore — fall through to directory
   }
 
-  // 2) Nan Yang People Directory (LAN-only host — best-effort; unreachable from cloud).
-  // Only for name search; the list-all mode returns app users only.
-  if (q) try {
-    const all = await fetchPeopleList()
-    for (const p of all) {
-      const name = (p.NA_EN || p.NA_TH || "").toLowerCase()
-      const mail = (p.MAIL || "").toLowerCase()
-      const dept = (p.DEPT || "").toLowerCase()
-      if (name.includes(q) || mail.includes(q) || dept.includes(q)) {
-        results.push({ name: p.NA_EN || p.NA_TH || "", email: p.MAIL || null, dept: p.DEPT || "", bu: p.BU || "", pos: p.POS_EN || "", role: "" })
-      }
-    }
-  } catch {
-    // directory unreachable (e.g. on Vercel) — app users above still returned
-  }
+  // 2) Nan Yang People Directory (LAN People Finder) — DISABLED by decision:
+  // every approver must be set up in master, and all pickers search master ONLY.
+  // (Kept import/branch off so we can re-enable later if needed.)
+  // if (q) try { ... fetchPeopleList() ... } catch {}
 
   // Dedupe by email (fallback to name), cap at 30.
   const seen = new Set<string>()
