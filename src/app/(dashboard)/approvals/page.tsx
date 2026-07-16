@@ -133,6 +133,8 @@ export default function ApprovalsPage() {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }
+    // MER GW: a claim dept sent an SO back → MER must re-select the claim dept + resubmit.
+    if (role === "MER_GW") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
     return false
   }
   // Forced-position forward recipient (logged in via a ClaimForward magic link →
@@ -182,6 +184,7 @@ export default function ApprovalsPage() {
       return items.filter((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
     }
     if (role === "DPM_GW" || role === "VP_MER_GW" || role === "GM_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
+    if (role === "MER_GW") return items.filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
     if (role === "PRESIDENT_GW") return items.filter((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     if (role === "LOGISTICS_GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED" && i.actualAirFreight == null)
     if (role === "SCM_NYK_APPROVER") {
