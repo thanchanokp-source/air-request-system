@@ -1107,7 +1107,8 @@ export async function notifyLgFilesToClaimers(requestId: string) {
     if (deptSOs.size === 0) return
     const link = `${APP_URL}/requests/${requestId}`
     for (const [dept, sos] of deptSOs) {
-      const deptRoles = claimEntryRoles(dept)
+      // NYK uses the 3-role flow (Action Approver), not DVM_/CLAIM_ — alert the Approver.
+      const deptRoles = (dept === "NYK" || dept === "SCM NYK") ? ["SCM_NYK_APPROVER"] : claimEntryRoles(dept)
       const users = await (prisma.user as any).findMany({
         where: { isActive: true, bu: req.bu, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] },
         select: { email: true },
