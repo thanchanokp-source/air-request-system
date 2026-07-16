@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
-import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers } from "@/lib/notify"
+import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 
@@ -1158,6 +1158,47 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (next !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: next } })
       await notifyStatusChange(id, next).catch(() => {})
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // Forced-position claim: a forwarded approver sends the SO BACK to the previous
+  // position (e.g. Commercial VP → DPM/DVM). Removes their forward row so ownership
+  // returns to the prior holder (or the entry owner) + re-alerts them.
+  if (action === "claim_back_to_prev" && userRole === "CLAIM_NEXT_APPROVER") {
+    if (!comment) return NextResponse.json({ error: "Please provide a reason before sending back" }, { status: 400 })
+    const email = session.user?.email || ""
+    const tok = (session.user as any).claimNextToken || null
+    const ownerRow = tok
+      ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, token: tok } })
+      : (email ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: email } }) : null)
+    if (!ownerRow) return NextResponse.json({ error: "You are not the current approver for any department here" }, { status: 403 })
+    const dept = ownerRow.dept
+    const items = await prisma.airRequestItem.findMany({ where: { requestId: id } })
+    const deptPendingIds = items.filter((it: any) => itemHasPendingDept(it, dept)).map((it: any) => it.id)
+    const myIds = Array.isArray(ownerRow.itemIds) && ownerRow.itemIds.length
+      ? (ownerRow.itemIds as string[]).filter((x) => deptPendingIds.includes(x))
+      : deptPendingIds
+    const selIds = Array.isArray(itemIds) && itemIds.length ? (itemIds as string[]).filter((x) => myIds.includes(x)) : myIds
+    if (!selIds.length) return NextResponse.json({ error: "No SO to send back" }, { status: 400 })
+    // Drop the sent-back SO from my forward row.
+    const remaining = (Array.isArray(ownerRow.itemIds) ? ownerRow.itemIds : []).filter((x: string) => !selIds.includes(x))
+    await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } })
+    // Previous holder = highest-position forward row below mine (else the entry owner).
+    const rows = await (prisma as any).claimForward.findMany({ where: { requestId: id, dept } })
+    const prior = rows
+      .filter((r: any) => r.id !== ownerRow.id && (r.position ?? 0) < (ownerRow.position ?? 0))
+      .sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0))[0]
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "BACK", fromStatus: request.status, toStatus: request.status, comment: `Claim ${dept} sent back to previous: ${comment}` }
+    })
+    if (prior) {
+      const priorIds = Array.from(new Set([...(Array.isArray(prior.itemIds) ? prior.itemIds : []), ...selIds]))
+      await (prisma as any).claimForward.update({ where: { id: prior.id }, data: { itemIds: priorIds } })
+      await notifyClaimNext(id, prior.nextEmail, prior.nextName || prior.nextEmail, (session.user as any).name || "", prior.token, `${dept} — sent back (${selIds.length} SO)`).catch(() => {})
+    } else {
+      // Back to the entry owner (position 0) — they regain the SO in their queue.
+      await notifyClaimEntry(id, dept).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }

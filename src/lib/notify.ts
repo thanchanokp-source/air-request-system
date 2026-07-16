@@ -806,6 +806,58 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
   }
 }
 
+// Re-alert the ENTRY approver(s) of ONE claim dept — used when a later position sends the
+// claim back to the previous/entry position. Mirrors the PENDING_CLAIM entry resolution:
+// NYK → Action Approver; PRODUCTION → priority-1 VP by factory G-group; PROCUREMENT →
+// Purchasing; others → priority-1 of the dept.
+export async function notifyClaimEntry(requestId: string, dept: string) {
+  try {
+    const req = await prisma.airRequest.findUnique({
+      where: { id: requestId },
+      include: { items: { select: { id: true, factory: true, claimDepts: true, claimDepartment: true, itemStatus: true } } },
+    })
+    if (!req) return
+    const bu = (req as any).bu
+    const docLink = `${APP_URL}/requests/${requestId}`
+    const magicFor = async (uid: string) => {
+      const token = randomUUID()
+      await (prisma.user as any).update({ where: { id: uid }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } }).catch(() => {})
+      return `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals`
+    }
+    const deptItems = (req.items as any[]).filter(it => it.itemStatus !== "REJECTED" && getSplits(it).some((s: any) => s.dept === dept))
+    if (!deptItems.length) return
+    const sendTo = async (uid: string, email: string | null, label: string) => {
+      if (!email) return
+      const html = buildHtml(req, "PENDING_CLAIM", docLink, undefined, undefined, await magicFor(uid))
+      await sendMail(email, `[Claim – ${label}] Sent back — Pending Approval — ${deptItems.length} SO — ${req.documentNo}`, html)
+    }
+    if (dept === "NYK") {
+      const us = await prisma.user.findMany({ where: { isActive: true, bu, role: "SCM_NYK_APPROVER" } as any, select: { id: true, email: true } })
+      for (const u of us) await sendTo(u.id, u.email, "NYK")
+      return
+    }
+    if (dept === "PRODUCTION") {
+      const groups = new Set(deptItems.map(it => vpProdGroup(it.factory)).filter(Boolean) as string[])
+      const usAll = await prisma.user.findMany({ where: { isActive: true, bu, OR: [{ role: "CLAIM_PRODUCTION" }, { roles: { has: "CLAIM_PRODUCTION" } }] } as any, select: { id: true, email: true, priority: true, claimDepartment: true } })
+      for (const g of groups) {
+        const us = usAll.filter((u: any) => vpProdGroup(u.claimDepartment) === g)
+        const withP = us.filter((u: any) => u.priority != null).sort((a: any, b: any) => a.priority - b.priority)
+        const first = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : us.slice(0, 1)
+        for (const u of first) await sendTo(u.id, (u as any).email, `PRODUCTION ${g}`)
+      }
+      return
+    }
+    const roles = claimEntryRoles(dept)
+    const procFilter = dept === "PROCUREMENT" ? { procurementType: "PURCHASING" } : {}
+    const us = await prisma.user.findMany({ where: { isActive: true, bu, ...procFilter, OR: [{ role: { in: roles } }, { roles: { hasSome: roles } }] } as any, select: { id: true, email: true, priority: true }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }] })
+    const withP = us.filter((u: any) => u.priority != null)
+    const first = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : us.slice(0, 1)
+    for (const u of first) await sendTo(u.id, u.email, dept.replace(/_/g, " "))
+  } catch (e) {
+    console.error("[notify] claim-entry error:", e)
+  }
+}
+
 export async function notifyClaimNext(
   requestId: string,
   toEmail: string,

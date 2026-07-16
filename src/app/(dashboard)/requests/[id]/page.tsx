@@ -2778,7 +2778,7 @@ export default function RequestDetailPage() {
               </button>
               <button onClick={() => { setBackReason(""); setBackModalOpen(true) }} disabled={claimFwdSaving}
                 className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-40">
-                ↩ {isGWRequest ? "Back to MER" : "Back to SCM"}{claimSelIds.length ? ` (${claimSelIds.length})` : ""}
+                ↩ {isGWRequest ? "Back to MER" : (role === "CLAIM_NEXT_APPROVER" ? "Back to previous" : "Back to SCM")}{claimSelIds.length ? ` (${claimSelIds.length})` : ""}
               </button>
             </div>
           </div>
@@ -3031,8 +3031,12 @@ export default function RequestDetailPage() {
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-lg">↩</div>
               <div>
-                <h3 className="text-base font-bold text-gray-800">Send back to {isGWRequest ? "MER" : "SCM"}</h3>
-                <p className="text-xs text-gray-400">{claimActIds.length} SO · will re-assign the claim department</p>
+                <h3 className="text-base font-bold text-gray-800">
+                  {(!isGWRequest && role === "CLAIM_NEXT_APPROVER") ? "Send back to previous approver" : `Send back to ${isGWRequest ? "MER" : "SCM"}`}
+                </h3>
+                <p className="text-xs text-gray-400">
+                  {claimActIds.length} SO · {(!isGWRequest && role === "CLAIM_NEXT_APPROVER") ? "returns to the previous claim position" : "will re-assign the claim department"}
+                </p>
               </div>
             </div>
             <div className="space-y-1">
@@ -3048,14 +3052,23 @@ export default function RequestDetailPage() {
                 onClick={async () => {
                   const reason = backReason.trim(); if (!reason) return
                   setClaimFwdSaving(true)
-                  const backAction = isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so"
                   let ok = true
-                  for (const iid of claimActIds) {
+                  if (!isGWRequest && role === "CLAIM_NEXT_APPROVER") {
+                    // Forced-position: bounce back to the previous position in ONE call.
                     const res = await fetch(`/api/requests/${id}/approve`, {
                       method: "POST", headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ action: backAction, itemId: iid, comment: reason }),
+                      body: JSON.stringify({ action: "claim_back_to_prev", itemIds: claimActIds, comment: reason }),
                     })
-                    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); ok = false; break }
+                    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); ok = false }
+                  } else {
+                    const backAction = isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so"
+                    for (const iid of claimActIds) {
+                      const res = await fetch(`/api/requests/${id}/approve`, {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: backAction, itemId: iid, comment: reason }),
+                      })
+                      if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); ok = false; break }
+                    }
                   }
                   if (ok) window.location.href = "/requests"
                   else setClaimFwdSaving(false)
