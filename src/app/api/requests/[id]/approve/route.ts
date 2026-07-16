@@ -338,7 +338,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // NYG PRESIDENT — FINAL approval (whole document, no reject). Reached only when
   // all claim departments are approved AND Logistics data is filled (PRESIDENT_PENDING).
-  if (request.status === "PENDING_PRESIDENT" && action === "president_approve" && userRole === "PRESIDENT") {
+  if (request.status === "PENDING_PRESIDENT" && action === "president_approve" && heldRoles.includes("PRESIDENT")) {
     await prisma.airRequestItem.updateMany({
       where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
       data: { itemStatus: "ACCOUNTING_PENDING" },

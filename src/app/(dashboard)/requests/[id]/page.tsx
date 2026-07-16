@@ -885,7 +885,7 @@ export default function RequestDetailPage() {
   const logPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "LOG_PASSED")
   const claimPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "CLAIM_PASSED")
   // President (NYG) = FINAL approver: doc at PENDING_PRESIDENT, items PRESIDENT_PENDING.
-  const isPresidentRole = role === "PRESIDENT" && req?.status === "PENDING_PRESIDENT" && (req?.items || []).some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
+  const isPresidentRole = myAllRoles.includes("PRESIDENT") && req?.status === "PENDING_PRESIDENT" && (req?.items || []).some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
   const isLogisticsRole = role === "LOGISTICS" && presPassedItems.length > 0 && !isGWRequest
   const isLgParallelAtScm = role === "LOGISTICS" && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(req?.status) && !isGWRequest
   // GW Logistics uses the same Air Waybill Entry UI (at its own PENDING_LOGISTICS_GW stage).
@@ -987,7 +987,7 @@ export default function RequestDetailPage() {
   }
   const isVpMerGW = (role === "DPM_GW" || role === "VP_MER_GW") && req?.status === "PENDING_VP_MER_GW" && isGWRequest
   const isGmGW = role === "GM_GW" && req?.status === "PENDING_GM_GW" && isGWRequest
-  const isPresidentGW = role === "PRESIDENT_GW" && req?.status === "PENDING_PRESIDENT_GW" && isGWRequest
+  const isPresidentGW = myAllRoles.includes("PRESIDENT_GW") && req?.status === "PENDING_PRESIDENT_GW" && isGWRequest
   // Logistics ∥ Claim run in parallel after President → the doc sits at
   // PENDING_CLAIM_GW while LG enters HAWB data. Include it so HawbSection renders.
   const isLogisticsGW = role === "LOGISTICS_GW" && (req?.status === "PENDING_CLAIM_GW" || req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && presPassedItems.length > 0 && isGWRequest

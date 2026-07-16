@@ -515,9 +515,10 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       return
     }
 
-    // PENDING_PRESIDENT_GW — magic link to President (GW)
+    // PENDING_PRESIDENT_GW — magic link to President (GW). Match roles[] too so one person
+    // can be President of both BUs (holds PRESIDENT + PRESIDENT_GW).
     if (newStatus === "PENDING_PRESIDENT_GW") {
-      const users = await (prisma.user as any).findMany({ where: { role: "PRESIDENT_GW", isActive: true }, select: { email: true } })
+      const users = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "PRESIDENT_GW" }, { roles: { has: "PRESIDENT_GW" } }] }, select: { email: true } })
       const recipients = users.map((u: any) => u.email).filter(Boolean)
       console.log(`[notify] PENDING_PRESIDENT_GW → PRESIDENT_GW active recipients: ${recipients.length ? recipients.join(", ") : "NONE (no active PRESIDENT_GW user)"}`)
       if (!recipients.length) return
@@ -581,9 +582,10 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       return
     }
 
-    // PENDING_PRESIDENT — send magic link to President
+    // PENDING_PRESIDENT — send magic link to President (roles[] too → one person can be
+    // President of both BUs).
     if (newStatus === "PENDING_PRESIDENT") {
-      const presidentUser = await (prisma.user as any).findFirst({ where: { role: "PRESIDENT", isActive: true }, select: { email: true } })
+      const presidentUser = await (prisma.user as any).findFirst({ where: { isActive: true, OR: [{ role: "PRESIDENT" }, { roles: { has: "PRESIDENT" } }] }, select: { email: true } })
       if (!presidentUser) return
       const token = (req as any).presidentToken
       const link = `${APP_URL}/requests/${req.id}`
