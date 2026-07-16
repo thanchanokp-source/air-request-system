@@ -111,6 +111,8 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
   if (role === "CLAIM_GW") return claimDept === "SUPPLIER" ? "SUPPLIER" : "GW"
   if (role === "SCM_NYG") return "SCM NYG"
   if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return "SCM NYK"
+  // Commercial claim = MER's team (DVM MER / VP MER) → canonical dept COMMERCIAL.
+  if (role === "DVM_MER" || role === "VP_MER") return "COMMERCIAL"
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
   if (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") return role.replace("CLAIM_", "")
   return null
@@ -121,7 +123,7 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
 // the factory G-group, PROCUREMENT needs procurementType=PURCHASING (handled by caller).
 export function claimEntryDisplayRoles(dept: string): string[] {
   switch (dept) {
-    case "COMMERCIAL": return ["CLAIM_COMMERCIAL"]
+    case "COMMERCIAL": return ["DVM_MER"]
     case "PRODUCTION": return ["CLAIM_PRODUCTION"]
     case "PROCUREMENT": return ["CLAIM_PROCUREMENT"]
     case "NYK":
@@ -172,9 +174,11 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
   //   Commercial  = CLAIM_COMMERCIAL  (priority 1 = DPM/DVM entry, 2 = VP)
   //   Production   = CLAIM_PRODUCTION  (priority 1 = VP, 2 = EVP) × claimDept G1G3/G2G4
   //   Procurement  = CLAIM_PROCUREMENT (priority 1 = DPM/DVM ×Purchasing/Sourcing, 2 = VP)
+  // Commercial claim reuses MER's team (no dedicated Claim-Commercial role, so one
+  // person needn't hold two roles): DVM MER (entry, the upload approver) → VP MER.
   "COMMERCIAL": [
-    { label: "DPM/DVM", role: "CLAIM_COMMERCIAL", priority: 1 },
-    { label: "VP", role: "CLAIM_COMMERCIAL", priority: 2 },
+    { label: "DVM MER", role: "DVM_MER" },
+    { label: "VP MER", role: "VP_MER" },
   ],
   "PRODUCTION": [
     { label: "VP PROD", factoryBased: true, role: "CLAIM_PRODUCTION", priority: 1 },
@@ -197,9 +201,11 @@ export const PROCUREMENT_BRANCHES = ["Purchasing", "Sourcing"]
 // people who approve the MER upload — so there's no separate Claim-Commercial role.
 // Depts not listed fall back to the standard DVM_<dept>/CLAIM_<dept> (entry) + VP_<dept>.
 // Overrides for depts whose approver roles differ from the default DVM_/CLAIM_/VP_
-// naming. NYG Commercial/Production/Procurement all use CLAIM_<dept> (matched by the
-// default below), so no override is needed here.
-export const CLAIM_DEPT_ROLE_MAP: Record<string, { entry: string[]; vp: string[] }> = {}
+// naming. Commercial claim is handled by MER's team (DVM MER entry / VP MER) so the
+// same people who approve the upload approve the claim — no extra role per person.
+export const CLAIM_DEPT_ROLE_MAP: Record<string, { entry: string[]; vp: string[] }> = {
+  COMMERCIAL: { entry: ["DVM_MER"], vp: ["VP_MER"] },
+}
 export function claimEntryRoles(dept: string): string[] {
   return CLAIM_DEPT_ROLE_MAP[dept]?.entry ?? [`DVM_${dept}`, `CLAIM_${dept}`]
 }
