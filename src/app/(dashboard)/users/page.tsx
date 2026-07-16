@@ -154,7 +154,7 @@ function roleDisplayName(
   }
   if (r === "CLAIM_PRODUCTION") {
     const level = p === 1 ? "VP" : p === 2 ? "EVP" : p ? `P${p}` : ""
-    const g = claimDept === "G1G3" ? "G1/G3" : claimDept === "G2G4" ? "G2/G4" : (claimDept || "")
+    const g = claimDept === "G1G3" ? "G1/G3" : claimDept === "G2G4" ? "G2/G4" : String(claimDept || "").toUpperCase() === "ALL" ? "ทุก G" : (claimDept || "")
     return `Claim-Production ${level} ${g}`.trim()
   }
   if (r === "CLAIM_COMMERCIAL") return p === 2 ? "Claim-Commercial VP" : "Claim-Commercial DPM/DVM"
@@ -464,6 +464,7 @@ export default function UsersPage() {
               <option value="">-- Select G-group --</option>
               <option value="G1G3">G1 / G3</option>
               <option value="G2G4">G2 / G4</option>
+              <option value="ALL">ทุก G (G1/G3 + G2/G4)</option>
             </select>
           </div>
         )}
@@ -815,6 +816,7 @@ export default function UsersPage() {
                           const detail = (() => {
                             if (mr.role === "CLAIM_PRODUCTION") {
                               const d = String(u.claimDepartment || "")
+                              if (d.toUpperCase() === "ALL" || (/[13]/.test(d) && /[24]/.test(d))) return { text: "ทุก G", missing: false }
                               if (/G1|G3/i.test(d)) return { text: "G1/G3", missing: false }
                               if (/G2|G4/i.test(d)) return { text: "G2/G4", missing: false }
                               return { text: "⚠ ยังไม่ตั้ง G", missing: true }

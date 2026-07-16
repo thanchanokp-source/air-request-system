@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { vpProdGroup } from "@/lib/claim"
+import { prodGroupCovers } from "@/lib/claim"
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -29,6 +29,6 @@ export async function GET(req: NextRequest) {
     select: { id: true, name: true, email: true, role: true, priority: true, claimDepartment: true },
     orderBy: [{ priority: "asc" }, { createdAt: "asc" }]
   })
-  if (groupFilter) users = users.filter((u: any) => vpProdGroup(u.claimDepartment) === groupFilter)
+  if (groupFilter) users = users.filter((u: any) => prodGroupCovers(u.claimDepartment, groupFilter))
   return NextResponse.json(users)
 }

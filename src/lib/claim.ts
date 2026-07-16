@@ -241,6 +241,19 @@ export function vpProdGroup(factory: string | null | undefined): string | null {
   return null // unknown or mixed
 }
 
+// Does a person's claimDepartment COVER the target factory G-group? A value of "ALL"
+// (or one that carries both a 1/3 and a 2/4 digit) means the person handles EVERY
+// factory group — e.g. one EVP responsible for both G1/G3 and G2/G4. Otherwise the
+// group must match exactly. Use this instead of `vpProdGroup(x) === g` everywhere.
+export function prodGroupCovers(userDept: string | null | undefined, target: string | null | undefined): boolean {
+  if (!target) return true
+  const s = String(userDept || "").toUpperCase()
+  if (!s) return false
+  if (s === "ALL") return true
+  if (/[13]/.test(s) && /[24]/.test(s)) return true // covers both groups
+  return vpProdGroup(userDept) === target
+}
+
 // Precise selection spec for a position: the master fields the person picker must
 // match (role + priority + factory G group + procurementType). Used to filter the
 // next-approver dropdown to exactly the right people.

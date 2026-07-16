@@ -1,6 +1,6 @@
 import { prisma } from "./prisma"
 import { sendMail } from "./email"
-import { getSplits, claimEntryRoles, claimVpRoles, vpProdGroup } from "./claim"
+import { getSplits, claimEntryRoles, claimVpRoles, vpProdGroup, prodGroupCovers } from "./claim"
 import { supabase, BUCKET } from "./supabase-storage"
 import { randomUUID } from "crypto"
 
@@ -729,8 +729,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
                 select: { id: true, email: true, priority: true, claimDepartment: true },
                 orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
               })
-              // Match by normalized G-group so "G1"/"G3"/"G1/G3" all resolve correctly.
-              const us = usAll.filter((u: any) => vpProdGroup(u.claimDepartment) === g)
+              // Match by normalized G-group ("G1"/"G3"/"G1/G3") — or "ALL" covers every group.
+              const us = usAll.filter((u: any) => prodGroupCovers(u.claimDepartment, g))
               const withP = us.filter((u: any) => u.priority != null)
               const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : us.slice(0, 1)
               for (const u of firstBatch) {
@@ -860,7 +860,7 @@ export async function notifyClaimEntry(requestId: string, dept: string) {
       const groups = new Set(deptItems.map(it => vpProdGroup(it.factory)).filter(Boolean) as string[])
       const usAll = await prisma.user.findMany({ where: { isActive: true, bu, OR: [{ role: "CLAIM_PRODUCTION" }, { roles: { has: "CLAIM_PRODUCTION" } }] } as any, select: { id: true, email: true, priority: true, claimDepartment: true } })
       for (const g of groups) {
-        const us = usAll.filter((u: any) => vpProdGroup(u.claimDepartment) === g)
+        const us = usAll.filter((u: any) => prodGroupCovers(u.claimDepartment, g))
         const withP = us.filter((u: any) => u.priority != null).sort((a: any, b: any) => a.priority - b.priority)
         const first = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : us.slice(0, 1)
         for (const u of first) await sendTo(u.id, (u as any).email, `PRODUCTION ${g}`)

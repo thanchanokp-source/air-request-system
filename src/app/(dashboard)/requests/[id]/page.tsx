@@ -9,7 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, vpProdGroup, type PosSpec } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, type PosSpec } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -173,7 +173,7 @@ const posMatches = (p: any, position?: string, bu?: string, positionRole?: strin
     if (!roleOk) return false
     if (spec) {
       if (spec.priority != null && Number(p.priority) !== Number(spec.priority)) return false
-      if (spec.group && vpProdGroup(p.claimDepartment) !== spec.group) return false
+      if (spec.group && !prodGroupCovers(p.claimDepartment, spec.group)) return false
       if (spec.procurementType && up(p.procurementType) !== up(spec.procurementType)) return false
     }
     return true
