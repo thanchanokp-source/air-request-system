@@ -685,7 +685,11 @@ export default function UsersPage() {
                   }
 
                   // Normal roles
-                  const done = mr.needsPriority ? isClaimP1Setup(mr.role) : isRoleSetup(mr.role)
+                  // VP-claim roles are the SECOND step of a claim chain (priority 2 by
+                  // design) → they never have a Priority-1 person, so "done" = any active
+                  // holder. Entry claim roles still require a Priority-1 (first handler).
+                  const isVpClaimRole = ["VP_COMMERCIAL", "VP_PRODUCTION", "VP_PROCUREMENT"].includes(mr.role)
+                  const done = (mr.needsPriority && !isVpClaimRole) ? isClaimP1Setup(mr.role) : isRoleSetup(mr.role)
                   const count = users.filter(u => hasRole(u, mr.role) && u.isActive).length
                   return (
                     <div key={mr.role}
