@@ -135,6 +135,38 @@ const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
 }
 
+// SINGLE SOURCE OF TRUTH for role display names across the whole app.
+// Base name = ROLE_LABEL; claim roles append position/dept/procurement from the
+// person's own fields (priority / claimDepartment / procurementType).
+// Change a name here → All Users, Setup Guide, and badges all update together.
+function roleDisplayName(
+  r: string,
+  opts?: { priority?: number | null; claimDepartment?: string | null; procurementType?: string | null }
+): string {
+  const p = opts?.priority ?? null
+  const claimDept = opts?.claimDepartment ?? null
+  const procurementType = opts?.procurementType ?? null
+  if (r === "CLAIM_GW") {
+    const MAP: Record<string, string> = { GW: "Claim-GW", SUPPLIER: "Claim-SUPPLIER", NYG: "Claim-SCM NYG", NYK: "Claim-SCM NYK" }
+    return claimDept ? (MAP[claimDept] ?? `Claim-${claimDept}`) : "Claim-GW"
+  }
+  if (r === "CLAIM_PRODUCTION") {
+    const level = p === 1 ? "VP" : p === 2 ? "EVP" : p ? `P${p}` : ""
+    const g = claimDept === "G1G3" ? "G1/G3" : claimDept === "G2G4" ? "G2/G4" : (claimDept || "")
+    return `Claim-Production ${level} ${g}`.trim()
+  }
+  if (r === "CLAIM_COMMERCIAL") return p === 2 ? "Claim-Commercial VP" : "Claim-Commercial DPM/DVM"
+  if (r === "CLAIM_NYG") return p === 1 ? "Claim-SCM NYG DPM/DVM" : p === 2 ? "Claim-SCM NYG VP" : "Claim-SCM NYG"
+  if (r === "CLAIM_NYK") return p === 1 ? "Claim-SCM NYK User" : p === 2 ? "Claim-SCM NYK EVP" : "Claim-SCM NYK"
+  if (r === "CLAIM_PROCUREMENT") {
+    if (p === 2) return "Claim-Procurement VP"
+    const sub = procurementType === "SOURCING" ? " (Sourcing)" : procurementType === "PURCHASING" ? " (Purchasing)" : ""
+    return `Claim-Procurement DPM/DVM${sub}`
+  }
+  if (r === "DVM_MER") return "DVM MER"
+  return ROLE_LABEL[r] || r
+}
+
 const CLAIM_ROLES = ALL_MASTER_ROLES.filter(r => r.needsPriority).map(r => r.role)
 const CLAIM_GW_DEPTS = ["NYK", "GW", "SUPPLIER", "NYG"]
 
@@ -355,6 +387,7 @@ export default function UsersPage() {
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <optgroup label="── NYG Master">
               {MASTER_ROLES.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
+              <option value="VP_SCM">VP SCM (also pickable by SCM User)</option>
             </optgroup>
             <optgroup label="── GW Master">
               {MASTER_ROLES_GW.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
@@ -619,7 +652,7 @@ export default function UsersPage() {
                         {done ? "✓" : "!"}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800">{mr.label}</p>
+                        <p className="text-sm font-medium text-gray-800">{roleDisplayName(mr.role)}</p>
                         <p className="text-xs text-gray-400">{mr.hint}</p>
                         {count > 0 && <p className="text-xs text-green-600 mt-0.5">{count} active</p>}
                       </div>
@@ -639,7 +672,7 @@ export default function UsersPage() {
                   <div key={fr.role} className="flex items-start gap-3 px-4 py-3">
                     <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-xs flex-shrink-0 text-blue-500">→</span>
                     <div>
-                      <p className="text-sm font-medium text-gray-700">{fr.label}</p>
+                      <p className="text-sm font-medium text-gray-700">{ROLE_LABEL[fr.role] ? roleDisplayName(fr.role) : fr.label}</p>
                       <p className="text-xs text-gray-400">{fr.who}</p>
                     </div>
                   </div>
@@ -781,32 +814,10 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {displayed.map((u, idx) => {
-                  const claimDept = u.claimDepartment
-                  const p = u.priority
-                  // Full display label for ANY role this person holds (primary or extra),
-                  // combining role + position + dept. Used for the main badge AND the
-                  // multi-role badges so a second role shows e.g. "Claim-Commercial DPM/DVM".
-                  const labelFor = (r: string): string => {
-                    if (r === "CLAIM_GW") {
-                      const MAP: Record<string,string> = { GW:"Claim-GW", SUPPLIER:"Claim-SUPPLIER", NYG:"Claim-SCM NYG", NYK:"Claim-SCM NYK" }
-                      return claimDept ? (MAP[claimDept] ?? `Claim-${claimDept}`) : "Claim-GW"
-                    }
-                    if (r === "CLAIM_PRODUCTION") {
-                      const level = p === 1 ? "VP" : p === 2 ? "EVP" : `P${p}`
-                      const g = claimDept === "G1G3" ? "G1/G3" : claimDept === "G2G4" ? "G2/G4" : (claimDept || "")
-                      return `Claim-Production ${level} ${g}`.trim()
-                    }
-                    if (r === "CLAIM_COMMERCIAL") return p === 1 ? "Claim-Commercial DPM/DVM" : p === 2 ? "Claim-Commercial VP" : "Claim-Commercial DPM/DVM"
-                    if (r === "CLAIM_NYG") return p === 1 ? "Claim-SCM NYG DPM/DVM" : p === 2 ? "Claim-SCM NYG VP" : "Claim-SCM NYG"
-                    if (r === "CLAIM_NYK") return p === 1 ? "Claim-SCM NYK User" : p === 2 ? "Claim-SCM NYK EVP" : "Claim-SCM NYK"
-                    if (r === "CLAIM_PROCUREMENT") {
-                      if (p === 2) return "Claim-Procurement VP"
-                      const sub = u.procurementType === "SOURCING" ? " (Sourcing)" : u.procurementType === "PURCHASING" ? " (Purchasing)" : ""
-                      return `Claim-Procurement DPM/DVM${sub}`
-                    }
-                    if (r === "DVM_MER") return "DVM MER"
-                    return ROLE_LABEL[r] || r
-                  }
+                  // Full display label for ANY role this person holds (primary or extra).
+                  // Uses the shared roleDisplayName() so All Users / Setup Guide / badges match.
+                  const labelFor = (r: string): string =>
+                    roleDisplayName(r, { priority: u.priority, claimDepartment: u.claimDepartment, procurementType: u.procurementType })
                   const fullRoleLabel: string = labelFor(u.role)
                   const roleBadgeColor = (() => {
                     const r = u.role || ""
