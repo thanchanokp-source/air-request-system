@@ -279,6 +279,8 @@ export default function ApprovalsPage() {
             deptSums[s.dept] = (deptSums[s.dept] || 0) + splitAirCost(i, s)
           }))
           const myDocTotal = reqItems.reduce((s: number, i: any) => s + myClaimForItem(i), 0)
+          // Show a CR NO column when this doc has an NYK claim (CR is a NYK-only field).
+          const hasNyk = reqItems.some((i: any) => getSplits(i).some((s: any) => s.dept === "NYK" || s.dept === "SCM NYK"))
           return (
             <div key={req.id} className="bg-white rounded-xl border overflow-hidden">
               <div className="px-4 py-3 bg-gray-50 border-b flex flex-wrap items-center gap-2">
@@ -302,7 +304,7 @@ export default function ApprovalsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b">
-                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["MY CLAIM (THB)"] : []),"FACTORY","COUNTRY","CLAIM DEPT","INVOICE NO","HAWB#"].map(h =>
+                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["MY CLAIM (THB)"] : []),"FACTORY","COUNTRY","CLAIM DEPT",...(hasNyk ? ["CR NO"] : []),"INVOICE NO","HAWB#"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
@@ -325,6 +327,7 @@ export default function ApprovalsPage() {
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.factory}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.country}</td>
                         <td className="px-3 py-1.5"><ClaimSplitBadges item={item} /></td>
+                        {hasNyk && <td className="px-3 py-1.5 whitespace-nowrap font-medium text-indigo-700">{req.crNo || "-"}</td>}
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.invoiceNo || "-"}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.hawbNo || "-"}</td>
                       </tr>
