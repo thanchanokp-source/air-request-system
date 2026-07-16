@@ -109,11 +109,11 @@ export default function ApprovalsPage() {
     // if Claim is still running in parallel.
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED" && i.actualAirFreight == null)
     // SCM NYK 3-role claim works in BOTH BU (dept "SCM NYK" in GW, "NYK" in NYG).
+    // TWO approvers split work BY BRAND — both see the doc; each approves their own
+    // brand's SO. An SO drops (for everyone) once ANY approver approves it. So we do NOT
+    // lock the whole doc to the first approver — show while ANY SO still awaits an approver.
     if (role === "SCM_NYK_APPROVER") {
-      // Another SCM NYK approver already claimed this doc → hide from me.
-      if (nykOwnedByOther(r) && !nykOwnedByMe(r)) return false
       const myDepts = gwDeptsForRole(role, userClaimDept)
-      // Show only while a NYK SO still AWAITS the approver (drops once approved).
       return items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts))
     }
     // CR user: once they've entered the CR NO for the doc, their job is done → drop it.

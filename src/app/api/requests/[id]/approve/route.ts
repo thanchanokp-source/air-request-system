@@ -906,7 +906,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const crNo = (request as any).crNo || null
 
     // NYK Approver assigns the CR-entry person + EVP once for the whole document.
+    // Notify EVP/CR only on the FIRST assignment (null → set), not every batch/SO.
+    let gwNykFirstAssign = false
     if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
+      const cur = await (prisma.airRequest as any).findUnique({ where: { id }, select: { assignedScmNykEvp: true, assignedScmNykCr: true } })
+      gwNykFirstAssign = (!!body.evpEmail && !cur?.assignedScmNykEvp) || (!!body.crEmail && !cur?.assignedScmNykCr)
       await prisma.airRequest.update({ where: { id }, data: { assignedScmNykEvp: body.evpEmail || null, assignedScmNykCr: body.crEmail || null } as any })
     }
 
@@ -958,7 +962,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (count === 0) return NextResponse.json({ error: "No SO to approve (already handled or not your turn)" }, { status: 400 })
 
     await prisma.approvalLog.create({ data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Batch approve ${count} SO — ${userRole}` } })
-    if (userRole === "SCM_NYK_APPROVER") await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+    if (userRole === "SCM_NYK_APPROVER" && gwNykFirstAssign) await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
@@ -1001,22 +1005,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
       })
       // Approver picks the specific CR-entry person + VP/EVP approver (one per doc).
+      // Alert them only on the FIRST assignment (null → set), not per SO/brand.
+      let nykFirstAssignGwSo = false
       if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
-        // Store the chosen people + a UNIQUE magic-login token each, so their email
-        // link logs in AS them (via assignedScmNyk* in auth) — not as whoever's already
-        // logged in. Without a token the email is a plain link → opens as the approver.
+        const cur = await (prisma.airRequest as any).findUnique({ where: { id }, select: { assignedScmNykEvp: true, assignedScmNykCr: true, scmNykEvpToken: true, scmNykToken: true } })
+        nykFirstAssignGwSo = (!!body.evpEmail && !cur?.assignedScmNykEvp) || (!!body.crEmail && !cur?.assignedScmNykCr)
         await prisma.airRequest.update({
           where: { id },
           data: {
             assignedScmNykEvp: body.evpEmail || null,
             assignedScmNykCr: body.crEmail || null,
-            ...(body.evpEmail ? { scmNykEvpToken: crypto.randomUUID() } : {}),
-            ...(body.crEmail ? { scmNykToken: crypto.randomUUID() } : {}),
+            ...(body.evpEmail && !cur?.scmNykEvpToken ? { scmNykEvpToken: crypto.randomUUID() } : {}),
+            ...(body.crEmail && !cur?.scmNykToken ? { scmNykToken: crypto.randomUUID() } : {}),
           } as any,
         })
       }
-      // Approver's approval → alert the chosen EVP + CR user (with LG data) in parallel.
-      if (userRole === "SCM_NYK_APPROVER") await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+      // Approver's approval → alert the chosen EVP + CR user (once, with LG data).
+      if (userRole === "SCM_NYK_APPROVER" && nykFirstAssignGwSo) await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
       const nextDocStatus = await recalcDocStatusGW(id)
       if (nextDocStatus !== request.status) {
         await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })

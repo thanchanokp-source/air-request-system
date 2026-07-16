@@ -3347,7 +3347,16 @@ export default function RequestDetailPage() {
               {soPickMsg && <span className={`text-xs font-medium ${soPickMsg.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>{soPickMsg}</span>}
             </div>
           )}
-          {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").map((item: any) => {
+          {myClaimItems.filter((i: any) => {
+            if (i.itemStatus === "REJECTED") return false
+            // NYK is split BY BRAND across 2 approvers: once an SO is approver-approved it
+            // DROPS for every approver (the other approver keeps only their remaining SO).
+            const ap: any[] = i.claimApprovals || []
+            if (role === "SCM_NYK_APPROVER") return !ap.some((a: any) => a.role === "SCM_NYK_APPROVER")
+            // EVP sees only SO the approver has cleared but the EVP hasn't approved yet.
+            if (role === "SCM_NYK_EVP") return ap.some((a: any) => a.role === "SCM_NYK_APPROVER") && !ap.some((a: any) => a.role === "SCM_NYK_EVP")
+            return true
+          }).map((item: any) => {
             const isSub = submitting === item.id
             const itemAttachments = (req.attachments || []).filter((a: any) => a.itemId === item.id)
             const isUploading = uploadingItem === item.id
@@ -3619,7 +3628,16 @@ export default function RequestDetailPage() {
             )
           })()}
 
-          {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").map((item: any) => {
+          {myClaimItems.filter((i: any) => {
+            if (i.itemStatus === "REJECTED") return false
+            // NYK is split BY BRAND across 2 approvers: once an SO is approver-approved it
+            // DROPS for every approver (the other approver keeps only their remaining SO).
+            const ap: any[] = i.claimApprovals || []
+            if (role === "SCM_NYK_APPROVER") return !ap.some((a: any) => a.role === "SCM_NYK_APPROVER")
+            // EVP sees only SO the approver has cleared but the EVP hasn't approved yet.
+            if (role === "SCM_NYK_EVP") return ap.some((a: any) => a.role === "SCM_NYK_APPROVER") && !ap.some((a: any) => a.role === "SCM_NYK_EVP")
+            return true
+          }).map((item: any) => {
             const isSub = submitting === item.id
             const itemAttachments = (req.attachments || []).filter((a: any) => a.itemId === item.id)
             const isUploading = uploadingItem === item.id
