@@ -147,16 +147,34 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     // Logistics runs IN PARALLEL with Claim (not a linear step): it's only "done" when
     // the Actual Air Freight is actually entered — never by merely reaching the stage.
     const lgDone = claimSource.length > 0 && claimSource.every((i: any) => i.actualAirFreight != null)
-    // Who is each still-pending dept currently waiting on?
+    // Who is each still-pending dept currently waiting on? NYK is handled separately
+    // (3-role sub-flow: Approver → EVP + CR user), so exclude it from the generic resolver.
     const soId = soItem?.id
+    const nonNyk = claimDepts.filter(d => d.dept !== "NYK" && d.dept !== "SCM NYK")
     const claimWho = claimReached && !completed
-      ? pendingWhoFor(claimDepts, claimForwards, soId, { dir: approvers, bu, factory: soItem?.factory })
+      ? pendingWhoFor(nonNyk, claimForwards, soId, { dir: approvers, bu, factory: soItem?.factory })
       : []
+    // NYK 3-role state: before the Action Approver approves → "NYK: Approver" (either of
+    // the 2 can act, so don't name one); after → waiting on the EVP and/or CR user.
+    const nykDept = claimDepts.find(d => (d.dept === "NYK" || d.dept === "SCM NYK") && !d.done)
+    let nykWho = ""
+    if (nykDept && claimReached && !completed) {
+      const appr: any[] = soItem?.claimApprovals || []
+      const approverDone = appr.some((a: any) => a.role === "SCM_NYK_APPROVER")
+      if (!approverDone) {
+        nykWho = "NYK: Approver"
+      } else {
+        const parts: string[] = []
+        if (!appr.some((a: any) => a.role === "SCM_NYK_EVP")) parts.push(`EVP ${nameOf(req?.assignedScmNykEvp)}`.trim())
+        if (!req?.crNo) parts.push(`CR ${nameOf(req?.assignedScmNykCr)}`.trim())
+        nykWho = `NYK: ${parts.join(" + ") || "finalizing"}`
+      }
+    }
     const stageWho = !completed && !rejected ? currentStageWho(status, "NYG", soItem, req, approvers) : ""
     // LG runs parallel with Claim → surface it as pending until Actual is entered.
     const lgName = resolveRoleEmail(approvers, ["LOGISTICS"], "NYG")
     const lgWho = !completed && !rejected && claimReached && !lgDone ? `Logistics${lgName ? `: ${lgName}` : ""}` : ""
-    const pendingWho = [...(stageWho ? [stageWho] : []), ...(lgWho ? [lgWho] : []), ...claimWho]
+    const pendingWho = [...(stageWho ? [stageWho] : []), ...(lgWho ? [lgWho] : []), ...claimWho, ...(nykWho ? [nykWho] : [])]
     return (
       <div className="py-1">
         <div className="flex items-center gap-0 overflow-x-auto">
