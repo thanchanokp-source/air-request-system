@@ -358,7 +358,9 @@ export default function UsersPage() {
   const inBuTab = (u: any, bu: string): boolean => {
     if (u.bu === "ALL") return true
     if ((u.bu || "NYG") === bu) return true
-    const set = bu === "GW" ? GW_ROLE_SET : NYG_ROLE_SET
+    // Only BU-EXCLUSIVE roles cross tabs. SCM_NYK_* exist in BOTH BUs (same role name)
+    // → their BU is decided by the `bu` field, so they must NOT leak into the other tab.
+    const set = bu === "GW" ? GW_ONLY_ROLES : NYG_ONLY_ROLES
     return heldRolesOf(u).some(r => set.has(r))
   }
   const filtered = users.filter(u =>
