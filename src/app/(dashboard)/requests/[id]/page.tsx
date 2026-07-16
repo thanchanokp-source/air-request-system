@@ -3259,8 +3259,9 @@ export default function RequestDetailPage() {
             )
           })()}
 
-          {/* Approver reference — same priority = alternatives (OR); different = order (→) */}
-          {claimApproversList.length > 1 && (() => {
+          {/* Approver reference hidden — the next approver is assigned explicitly (picker),
+              so listing "any one" candidates was confusing. */}
+          {false && claimApproversList.length > 1 && (() => {
             const allSame = claimApproversList.every((u: any) => u.priority === claimApproversList[0].priority)
             return (
               <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
@@ -3551,8 +3552,9 @@ export default function RequestDetailPage() {
             )
           })()}
 
-          {/* Approver reference — same priority = alternatives (OR); different = order (→) */}
-          {claimApproversList.length > 1 && (() => {
+          {/* Approver reference hidden — the next approver is assigned explicitly (picker),
+              so listing "any one" candidates was confusing. */}
+          {false && claimApproversList.length > 1 && (() => {
             const allSame = claimApproversList.every((u: any) => u.priority === claimApproversList[0].priority)
             return (
               <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
