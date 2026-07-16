@@ -1081,8 +1081,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // independent). Works for both BU. SCM NYK keeps its own CR flow (excluded).
   if (action === "finalize_claim_dept" && heldRoles.some(r => ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER"].includes(r))) {
     const isGW = request.bu === "GW"
-    const expected = isGW ? "PENDING_CLAIM_GW" : "PENDING_CLAIM"
-    if (request.status !== expected) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
+    const expected = isGW ? ["PENDING_CLAIM_GW"] : ["PENDING_CLAIM", "PENDING_VP_CLAIM"]
+    if (!expected.includes(request.status)) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
 
     // Which department does this actor own + their position in the chain?
     let dept: string | null = null

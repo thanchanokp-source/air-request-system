@@ -735,7 +735,7 @@ export default function RequestDetailPage() {
   // NYG claim now uses the GW-style PRIORITY model (auto-cascade), NOT manual forward.
   // Keep manual-forward only for GW (this flag gates the NYG forward box → always off).
   const isClaimP1ForForward = false && ((claimRole.startsWith("CLAIM_") && claimRole !== "CLAIM_NEXT_APPROVER") || claimRole.startsWith("DVM_")) && req?.status === "PENDING_CLAIM"
-  const isClaimNextApprover = role === "CLAIM_NEXT_APPROVER" && (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_CLAIM_GW")
+  const isClaimNextApprover = role === "CLAIM_NEXT_APPROVER" && ["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_CLAIM_GW"].includes(req?.status)
   // ── GW per-department forward model: each dept finishes OR forwards its own
   // splits independently. Owner = CLAIM_GW / SCM_NYG (NOT NYK — CR flow). Next =
   // a forwarded CLAIM_NEXT_APPROVER scoped to a dept via its session dept.
@@ -761,9 +761,14 @@ export default function RequestDetailPage() {
   const fwdEntryRole = isGWRequest
     ? (claimRole === "CLAIM_GW" || claimRole === "SCM_NYG")
     : (!!nygActing && !nygActing.isVp)
-  const isGwForwardRole = req?.status === (isGWRequest ? "PENDING_CLAIM_GW" : "PENDING_CLAIM") &&
-    (fwdEntryRole || claimRole === "CLAIM_NEXT_APPROVER")
-  const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED"]
+  // Claim stage spans PENDING_CLAIM and PENDING_VP_CLAIM for NYG (the doc rolls to
+  // VP_CLAIM once every SO left is at the VP/EVP step) — the forced-position UI must
+  // stay visible across both so a forwarded approver can always finish.
+  const isClaimStageStatus = isGWRequest
+    ? req?.status === "PENDING_CLAIM_GW"
+    : (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_VP_CLAIM")
+  const isGwForwardRole = isClaimStageStatus && (fwdEntryRole || claimRole === "CLAIM_NEXT_APPROVER")
+  const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED"]
   // My forward row (CLAIM_NEXT_APPROVER = the row I logged in with, by token).
   const myClaimToken = (session?.user as any)?.claimNextToken || null
   const myClaimFwdRow = role === "CLAIM_NEXT_APPROVER"

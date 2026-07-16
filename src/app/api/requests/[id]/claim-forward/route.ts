@@ -76,7 +76,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  if (request.status !== "PENDING_CLAIM" && request.status !== "PENDING_CLAIM_GW") {
+  if (!["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_CLAIM_GW"].includes(request.status)) {
     return NextResponse.json({ error: "The document is not in the Claim stage" }, { status: 400 })
   }
 
