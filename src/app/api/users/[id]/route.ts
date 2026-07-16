@@ -28,7 +28,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const existing = await (prisma.user as any).findUnique({ where: { id }, select: { roles: true } })
     const baseRoles: string[] = Array.isArray(roles) ? roles : ((existing?.roles && existing.roles.length) ? existing.roles : [])
     data.roles = Array.from(new Set([role, ...baseRoles]))
-    const needsDept = ["CLAIM_GW","SCM_NYK","SCM_NYG"].includes(role)
+    const needsDept = ["CLAIM_GW","SCM_NYK","SCM_NYG","CLAIM_PRODUCTION","VP_PRODUCTION"].includes(role)
     data.claimDepartment = needsDept ? (claimDepartment || null) : null
     const isProcurement = role === "CLAIM_PROCUREMENT" || role === "DVM_PROCUREMENT"
     data.procurementType = isProcurement ? (procurementType || null) : null

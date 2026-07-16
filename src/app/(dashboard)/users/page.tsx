@@ -322,6 +322,8 @@ export default function UsersPage() {
   const isMasterRole = CLAIM_ROLES.includes(form.role)
   const isGWClaim = form.role === "CLAIM_GW"
   const isProcurementRole = form.role === "CLAIM_PROCUREMENT" || form.role === "DVM_PROCUREMENT"
+  // NYG Production claim routes by factory G-group, stored in claimDepartment (G1G3 / G2G4).
+  const isProductionClaim = form.role === "CLAIM_PRODUCTION" || form.role === "VP_PRODUCTION"
 
   const visibleMasterRoles = buFilter === "NYG" ? MASTER_ROLES_NYG : buFilter === "GW" ? MASTER_ROLES_GW : ALL_MASTER_ROLES
   const visibleFinderRoles = buFilter === "GW" ? FINDER_ROLES_GW : buFilter === "NYG" ? FINDER_ROLES_NYG : [...FINDER_ROLES_NYG, ...FINDER_ROLES_GW]
@@ -444,6 +446,19 @@ export default function UsersPage() {
               <option value="">-- Select --</option>
               <option value="PURCHASING">Purchasing</option>
               <option value="SOURCING">Sourcing</option>
+            </select>
+          </div>
+        )}
+
+        {isProductionClaim && (
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Factory G-group *</label>
+            <select value={form.claimDepartment}
+              onChange={e => setForm(p => ({ ...p, claimDepartment: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">-- Select G-group --</option>
+              <option value="G1G3">G1 / G3</option>
+              <option value="G2G4">G2 / G4</option>
             </select>
           </div>
         )}
@@ -598,13 +613,28 @@ export default function UsersPage() {
       {tab === "setup" && (
         <div className="grid grid-cols-3 gap-5">
 
+          {/* How-to banner (full width) */}
+          <div className="col-span-3 bg-blue-50 border border-blue-200 rounded-xl px-5 py-4">
+            <p className="text-sm font-semibold text-blue-900 mb-2">วิธีตั้งค่าผู้อนุมัติในระบบ (Master) — ทำ 3 ขั้นตอน</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-blue-800">
+              <span><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-bold mr-1.5">1</span>เลือก <b>ตำแหน่ง (role)</b> จากรายการทางซ้าย</span>
+              <span><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-bold mr-1.5">2</span>กรอก <b>ชื่อ + อีเมล</b> (และ Priority / G-group ถ้ามี)</span>
+              <span><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-bold mr-1.5">3</span>กด <b>Save</b> → คนนี้จะรับหน้าที่ในตำแหน่งนั้นทันที</span>
+            </div>
+            <p className="text-xs text-blue-600 mt-2">💡 1 คนถือได้หลายตำแหน่ง/ข้าม BU — ใช้อีเมลเดิมเพิ่ม role ได้เลย · ทุกคนต้องตั้งใน master (ไม่ดึงจากที่อื่น)</p>
+          </div>
+
           {/* Left: Checklist */}
           <div className="col-span-1 space-y-4">
 
             {/* Must-setup checklist */}
             <div className="bg-white rounded-xl border overflow-hidden">
-              <div className="bg-slate-800 text-white px-4 py-3 text-sm font-semibold">
-                ✅ Must Setup in Master
+              <div className="bg-slate-800 text-white px-4 py-3">
+                <p className="text-sm font-semibold">ตำแหน่งที่ต้องตั้งค่า (คลิกเพื่อเลือก)</p>
+                <div className="flex gap-3 mt-1.5 text-[11px] text-slate-300">
+                  <span className="flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-green-500 text-white flex items-center justify-center text-[9px] font-bold">✓</span> ตั้งแล้ว</span>
+                  <span className="flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-gray-400 text-white flex items-center justify-center text-[9px] font-bold">!</span> ยังไม่ได้ตั้ง</span>
+                </div>
               </div>
               <div className="divide-y">
                 {visibleMasterRoles.map(mr => {
@@ -702,13 +732,13 @@ export default function UsersPage() {
           {/* Right: Form */}
           <div className="col-span-2 space-y-4">
 
-            {/* People Finder search */}
+            {/* Search existing master users (optional) */}
             <div className="bg-white rounded-xl border p-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Search from People Directory</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ค้นหาคนที่มีในระบบแล้ว <span className="normal-case text-gray-400 font-normal">(ไม่บังคับ — ใช้เพื่อเพิ่มตำแหน่งให้คนเดิม)</span></p>
               <div className="flex gap-2">
                 <input value={peopleQ} onChange={e => setPeopleQ(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && searchPeople()}
-                  placeholder="Type name or email, then press Enter..."
+                  placeholder="พิมพ์ชื่อหรืออีเมล แล้วกด Enter..."
                   className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <button onClick={searchPeople} disabled={peopleLoading || !peopleQ.trim()}
                   className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
@@ -758,7 +788,7 @@ export default function UsersPage() {
                   if (group.length === 0) return (
                     <div key={mr.role} className="px-4 py-3 flex items-center justify-between">
                       <div>
-                        <span className="text-sm text-gray-500">{mr.label}</span>
+                        <span className="text-sm text-gray-500">{roleDisplayName(mr.role)}</span>
                         <span className="ml-2 text-xs text-red-400">None yet</span>
                       </div>
                       <button onClick={() => setForm(p => ({ ...p, role: mr.role, priority: mr.needsPriority ? "1" : "" }))}
@@ -767,9 +797,30 @@ export default function UsersPage() {
                   )
                   return (
                     <div key={mr.role} className="px-4 py-2">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-1 pb-1.5">{mr.label}</p>
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-1 pb-1.5">{roleDisplayName(mr.role)}</p>
                       <div className="space-y-1">
-                        {group.map(u => (
+                        {group.map(u => {
+                          // What distinguishes people within the SAME role: factory G-group
+                          // (Production), procurement type, or claim dept — so you can tell
+                          // "who handles which G". Red if a required detail is not set yet.
+                          const detail = (() => {
+                            if (mr.role === "CLAIM_PRODUCTION") {
+                              const d = String(u.claimDepartment || "")
+                              if (/G1|G3/i.test(d)) return { text: "G1/G3", missing: false }
+                              if (/G2|G4/i.test(d)) return { text: "G2/G4", missing: false }
+                              return { text: "⚠ ยังไม่ตั้ง G", missing: true }
+                            }
+                            if (mr.role === "CLAIM_PROCUREMENT" && u.priority === 1) {
+                              if (u.procurementType === "SOURCING") return { text: "Sourcing", missing: false }
+                              if (u.procurementType === "PURCHASING") return { text: "Purchasing", missing: false }
+                              return { text: "⚠ ยังไม่ตั้งประเภท", missing: true }
+                            }
+                            if (["CLAIM_GW", "SCM_NYK", "SCM_NYG"].includes(mr.role) && u.claimDepartment) {
+                              return { text: u.claimDepartment, missing: false }
+                            }
+                            return null
+                          })()
+                          return (
                           <div key={u.id} className={`flex items-center justify-between rounded-lg px-3 py-1.5 ${u.isActive ? "bg-gray-50" : "bg-gray-50 opacity-40"}`}>
                             <div className="flex items-center gap-2">
                               {mr.needsPriority && (
@@ -778,6 +829,11 @@ export default function UsersPage() {
                                 </span>
                               )}
                               <span className="text-sm font-medium">{u.name || u.email}</span>
+                              {detail && (
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${detail.missing ? "bg-red-100 text-red-600 border border-red-200" : "bg-purple-100 text-purple-700 border border-purple-200"}`}>
+                                  {detail.text}
+                                </span>
+                              )}
                               <span className="text-xs text-gray-400">{u.email}</span>
                             </div>
                             <div className="flex items-center gap-2">
@@ -789,7 +845,8 @@ export default function UsersPage() {
                               <button onClick={() => sendReset(u.id, u.email)} className="text-xs text-amber-600 hover:underline">Send Link</button>
                             </div>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )

@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       // primary role/BU stay unchanged — this only ADDS a position.
       const upd: any = { roles }
       if (priority != null) upd.priority = priority
-      if ((role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") && claimDepartment) upd.claimDepartment = claimDepartment
+      if (["CLAIM_GW", "SCM_NYK", "SCM_NYG", "CLAIM_PRODUCTION", "VP_PRODUCTION"].includes(role) && claimDepartment) upd.claimDepartment = claimDepartment
       if (isProcurement && procurementType) upd.procurementType = procurementType
       await (prisma.user as any).update({ where: { id: existing.id }, data: upd })
       if (current.includes(role)) return NextResponse.json({ id: existing.id, alreadyHadRole: true, updated: true })
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       data: {
         name, email: emailLc, password: null,
         role, roles: [role], bu: resolvedBu,
-        claimDepartment: (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYG") ? (claimDepartment || null) : null,
+        claimDepartment: ["CLAIM_GW", "SCM_NYK", "SCM_NYG", "CLAIM_PRODUCTION", "VP_PRODUCTION"].includes(role) ? (claimDepartment || null) : null,
         procurementType: isProcurement ? (procurementType || null) : null,
         priority: priority ?? null,
         isActive: false,
