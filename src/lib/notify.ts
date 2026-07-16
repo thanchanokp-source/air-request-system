@@ -342,7 +342,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 
     const req = await prisma.airRequest.findUnique({
       where: { id: requestId },
-      include: { items: { select: { id: true, factory: true, claimDepartment: true, claimDepts: true, assignedDvm: true, itemStatus: true } } }
+      include: { items: { select: { id: true, so: true, brand: true, factory: true, claimDepartment: true, claimDepts: true, assignedDvm: true, itemStatus: true } } }
     })
     if (!req) return
 
@@ -725,6 +725,9 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
           // NYK claim uses the 3-role sub-flow (Action Approver → EVP + CR user), NOT the
           // forced-position chain. Alert the Action Approver(s); they pick EVP + CR next.
           if (!isVp && dept === "NYK") {
+            // Include the brand(s) so each NYK approver can tell if it's their brand.
+            const brands = [...new Set((items as any[]).map(it => it.brand).filter(Boolean))].join(", ")
+            const brandTag = brands ? ` [${brands}]` : ""
             const us = await prisma.user.findMany({
               where: { isActive: true, bu: (req as any).bu, role: "SCM_NYK_APPROVER" } as any,
               select: { id: true, email: true },
@@ -733,7 +736,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
             for (const u of us) {
               if (!u.email) continue
               const html = buildHtml(req, newStatus, docLink, undefined, undefined, await magicFor(u.id))
-              await sendMail(u.email, `[Claim – NYK] Pending Approval — ${items.length} SO — ${req.documentNo}`, html)
+              await sendMail(u.email, `[Claim – NYK]${brandTag} Pending Approval — ${items.length} SO — ${req.documentNo}`, html)
             }
             continue
           }

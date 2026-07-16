@@ -192,9 +192,18 @@ export async function POST(req: NextRequest) {
             let claimDept: string | null = null
             let claimPct: number | null = null
             if (isGW) {
+              // Template may show short labels (NYK / NYG); store the canonical GW dept
+              // values the app matches on (SCM NYK / SCM NYG). GW / SUPPLIER unchanged.
+              const normGwDept = (raw: string) => {
+                const s = raw.trim()
+                const u = s.toUpperCase()
+                if (u === "NYK") return "SCM NYK"
+                if (u === "NYG") return "SCM NYG"
+                return s
+              }
               const splits = [1, 2, 3]
                 .map(n => ({
-                  dept: String(col(item, `CLAIM DEPT ${n}`) || "").trim(),
+                  dept: normGwDept(String(col(item, `CLAIM DEPT ${n}`) || "")),
                   pct: parseFloat(String(col(item, `%CLAIM${n}`) ?? "")) || 0,
                   reason: String(col(item, `REASON ${n}`) || "").trim() || null,
                 }))
