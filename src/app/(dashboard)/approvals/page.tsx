@@ -122,9 +122,29 @@ export default function ApprovalsPage() {
     }
     return false
   }
+  // Forced-position forward recipient (logged in via a ClaimForward magic link →
+  // role CLAIM_NEXT_APPROVER, session email = the recipient's real email). Show the
+  // SO forwarded TO them that still await their action, scoped by email match.
+  const myClaimToken = (session?.user as any)?.claimNextToken || null
+  const claimNextItems = (r: any) => {
+    if (role !== "CLAIM_NEXT_APPROVER") return []
+    const fwds: any[] = Array.isArray(r.claimForwards) ? r.claimForwards : []
+    const mine = fwds.filter((f: any) => String(f.nextEmail || "").toLowerCase() === String(userEmail || "").toLowerCase())
+    if (!mine.length) return []
+    const myIds = new Set<string>(mine.flatMap((f: any) => Array.isArray(f.itemIds) ? f.itemIds : []))
+    const dept = (session?.user as any)?.claimDepartment || null
+    return (r.items || []).filter((i: any) => {
+      if (["REJECTED", "COMPLETED", "ACCOUNTING_PENDING"].includes(i.itemStatus)) return false
+      if (!myIds.has(i.id)) return false
+      if (!dept) return true
+      const ss = deptSplitStatus(i, dept)
+      return ss == null || ss === "CLAIM_PENDING" || ss === "CLAIM_PASSED" // not yet finalized
+    })
+  }
+
   // Show a doc if the primary role's stage matches OR the person owns claim SO on it
-  // via any held role (multi-role: e.g. VP MER who is also a claim approver).
-  const myRequests = requests.filter(r => matchesPrimary(r) || heldClaimItems(r).length > 0)
+  // via any held role (multi-role) OR they are the current forward recipient.
+  const myRequests = requests.filter(r => matchesPrimary(r) || heldClaimItems(r).length > 0 || claimNextItems(r).length > 0)
 
   // Show only items relevant to this role
   const primaryItems = (r: any) => {
@@ -162,7 +182,11 @@ export default function ApprovalsPage() {
   const getRelevantItems = (r: any) => {
     const prim = primaryItems(r)
     const seen = new Set(prim.map((i: any) => i.id))
-    return [...prim, ...heldClaimItems(r).filter((i: any) => !seen.has(i.id))]
+    const extra = [...heldClaimItems(r), ...claimNextItems(r)].filter((i: any) => {
+      if (seen.has(i.id)) return false
+      seen.add(i.id); return true
+    })
+    return [...prim, ...extra]
   }
 
   const allRows = myRequests.flatMap(r =>
