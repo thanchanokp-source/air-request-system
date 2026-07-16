@@ -797,15 +797,17 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     // For claim statuses, filter by depts that actually have items
     const activeDepts = new Set(req.items.map((i:any) => i.claimDepartment).filter(Boolean))
 
-    const users = await prisma.user.findMany({
-      // Scope to THIS document's BU — never email the other BU's role-holders.
-      where: { role: { in: rolesToNotify }, isActive: true, bu: (req as any).bu },
-      select: { email: true, role: true }
+    // Match the primary role OR any held role (roles[]), so ONE person can serve a role
+    // in both BUs (e.g. SCM User in NYG + Claim-SCM NYG in GW). rolesToNotify is already
+    // BU-specific by name (e.g. SCM_USER = NYG only), so no separate BU filter is needed.
+    const users = await (prisma.user as any).findMany({
+      where: { isActive: true, OR: [{ role: { in: rolesToNotify } }, { roles: { hasSome: rolesToNotify } }] },
+      select: { email: true, role: true, roles: true }
     })
 
     // Filter: for PENDING_CLAIM / PENDING_VP_CLAIM, only notify users whose dept has items
     const recipients = users
-      .filter(u => {
+      .filter((u: any) => {
         const dept = deptFromRole(u.role)
         if (!dept) return true
         if (newStatus === "PENDING_CLAIM" || newStatus === "PENDING_VP_CLAIM") {
@@ -813,7 +815,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         }
         return true
       })
-      .map(u => u.email)
+      .map((u: any) => u.email)
 
     if (!recipients.length) return
 

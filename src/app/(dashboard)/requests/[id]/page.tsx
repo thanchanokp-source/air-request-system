@@ -877,9 +877,10 @@ export default function RequestDetailPage() {
     if (isVpClaim) return ["CLAIM_PASSED", "COMPLETED"].includes(i.itemStatus)
     return false
   }) || []
-  const isVpScmAtScm = role === "VP_SCM" && req?.status === "PENDING_SCM"
-  const isScmAtVpMer = role === "SCM_USER" && req?.status === "PENDING_VP_MER"
-  const isScmAtPendingScm = role === "SCM_USER" && req?.status === "PENDING_SCM"
+  // Held-role aware so one account can be SCM User (NYG) + another role in GW.
+  const isVpScmAtScm = myAllRoles.includes("VP_SCM") && req?.status === "PENDING_SCM"
+  const isScmAtVpMer = myAllRoles.includes("SCM_USER") && req?.status === "PENDING_VP_MER"
+  const isScmAtPendingScm = myAllRoles.includes("SCM_USER") && req?.status === "PENDING_SCM"
   const vpPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "VP_PASSED")
   const presPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "PRES_PASSED")
   const logPassedItems = (req?.items || []).filter((i: any) => i.itemStatus === "LOG_PASSED")

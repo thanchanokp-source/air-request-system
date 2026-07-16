@@ -83,11 +83,12 @@ export default function ApprovalsPage() {
     const items = r.items || []
     if (role === "DVM_MER") return r.status === "PENDING_DVM_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")
     if (role === "VP_MER") return r.status === "PENDING_VP_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)
-    if (role === "SCM_USER") {
-      return (r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||
-             (r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PENDING"))
+    // Match via held roles so one person can be SCM User in NYG AND another role in GW.
+    if (myRoles.includes("SCM_USER")) {
+      if ((r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||
+          (r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PENDING"))) return true
     }
-    if (role === "VP_SCM") return r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PASSED")
+    if (myRoles.includes("VP_SCM") && r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PASSED")) return true
     // President (NYG) — FINAL approver (items at PRESIDENT_PENDING). Match via held roles
     // so one person who is President of BOTH BUs sees NYG docs here.
     if (myRoles.includes("PRESIDENT") && r.status === "PENDING_PRESIDENT") return items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
@@ -129,10 +130,12 @@ export default function ApprovalsPage() {
       return items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts)
         && !(i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_EVP"))
     }
-    // CLAIM_GW / SCM_NYG are GW-only claim roles.
-    if (role === "CLAIM_GW" || role === "SCM_NYG") {
-      const myDepts = gwDeptsForRole(role, userClaimDept)
-      return r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
+    // CLAIM_GW / SCM_NYG are GW-only claim roles. Match via held roles so a person who is
+    // (e.g.) SCM User in NYG can ALSO be Claim-SCM NYG in GW on the same account.
+    const gwClaimRole = myRoles.find((rr: string) => rr === "CLAIM_GW" || rr === "SCM_NYG")
+    if (gwClaimRole) {
+      const myDepts = gwDeptsForRole(gwClaimRole, userClaimDept)
+      if (r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))) return true
     }
     // MER GW: a claim dept sent an SO back → MER must re-select the claim dept + resubmit.
     if (role === "MER_GW") return r.bu === "GW" && items.some((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
@@ -171,11 +174,11 @@ export default function ApprovalsPage() {
     const items = r.items || []
     if (role === "DVM_MER") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (role === "VP_MER") return items.filter((i: any) => i.itemStatus === "PENDING")
-    if (role === "SCM_USER") {
+    if (myRoles.includes("SCM_USER") && r.bu !== "GW" && (r.status === "PENDING_SCM" || r.status === "PENDING_VP_MER")) {
       if (r.status === "PENDING_VP_MER") return items.filter((i: any) => i.itemStatus === "VP_MER_PASSED")
       return items.filter((i: any) => i.itemStatus === "PENDING")
     }
-    if (role === "VP_SCM") return items.filter((i: any) => i.itemStatus === "PASSED")
+    if (myRoles.includes("VP_SCM") && r.status === "PENDING_SCM") return items.filter((i: any) => i.itemStatus === "PASSED")
     if (myRoles.includes("PRESIDENT") || myRoles.includes("PRESIDENT_GW")) return items.filter((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     if (role === "LOGISTICS") return items.filter((i: any) => i.itemStatus !== "REJECTED")
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
@@ -192,8 +195,9 @@ export default function ApprovalsPage() {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts))
     }
-    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
-      const myDepts = gwDeptsForRole(role, userClaimDept)
+    const gwClaimRoleP = myRoles.find((rr: string) => ["CLAIM_GW", "SCM_NYK", "SCM_NYK_EVP", "SCM_NYG"].includes(rr))
+    if (gwClaimRoleP && r.bu === "GW") {
+      const myDepts = gwDeptsForRole(gwClaimRoleP, userClaimDept)
       return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }
     return items.filter((i: any) => i.itemStatus !== "REJECTED")
