@@ -108,15 +108,20 @@ export default function ApprovalsPage() {
     // Once LG has entered actuals for all SO, the doc drops from their queue even
     // if Claim is still running in parallel.
     if (role === "LOGISTICS_GW") return (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED" && i.actualAirFreight == null)
+    // SCM NYK 3-role claim works in BOTH BU (dept "SCM NYK" in GW, "NYK" in NYG).
     if (role === "SCM_NYK_APPROVER") {
-      if (r.bu !== "GW") return false
       // Another SCM NYK approver already claimed this doc → hide from me.
       if (nykOwnedByOther(r) && !nykOwnedByMe(r)) return false
       const myDepts = gwDeptsForRole(role, userClaimDept)
       // Show only while a NYK SO still AWAITS the approver (drops once approved).
       return items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts))
     }
-    if (role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_EVP" || role === "SCM_NYG") {
+    if (role === "SCM_NYK" || role === "SCM_NYK_EVP") {
+      const myDepts = gwDeptsForRole(role, userClaimDept)
+      return items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
+    }
+    // CLAIM_GW / SCM_NYG are GW-only claim roles.
+    if (role === "CLAIM_GW" || role === "SCM_NYG") {
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return r.bu === "GW" && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
     }

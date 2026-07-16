@@ -722,6 +722,21 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
             }
             continue
           }
+          // NYK claim uses the 3-role sub-flow (Action Approver → EVP + CR user), NOT the
+          // forced-position chain. Alert the Action Approver(s); they pick EVP + CR next.
+          if (!isVp && dept === "NYK") {
+            const us = await prisma.user.findMany({
+              where: { isActive: true, bu: (req as any).bu, role: "SCM_NYK_APPROVER" } as any,
+              select: { id: true, email: true },
+              orderBy: [{ createdAt: "asc" }],
+            })
+            for (const u of us) {
+              if (!u.email) continue
+              const html = buildHtml(req, newStatus, docLink, undefined, undefined, await magicFor(u.id))
+              await sendMail(u.email, `[Claim – NYK] Pending Approval — ${items.length} SO — ${req.documentNo}`, html)
+            }
+            continue
+          }
           // Procurement entry goes to PURCHASING only (they decide: approve or forward to
           // Sourcing). Sourcing is reached later via forward, not the initial alert.
           const procEntryFilter = (!isVp && dept === "PROCUREMENT") ? { procurementType: "PURCHASING" } : {}
