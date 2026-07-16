@@ -559,6 +559,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (newStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
     }
+    // Alert the SCM user that a style has been sent back for re-work.
+    await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
