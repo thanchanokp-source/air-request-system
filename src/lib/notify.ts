@@ -1127,10 +1127,14 @@ export async function notifyLgFilesToClaimers(requestId: string) {
       const deptRoles = (dept === "NYK" || dept === "SCM NYK") ? ["SCM_NYK_APPROVER"] : claimEntryRoles(dept)
       const users = await (prisma.user as any).findMany({
         where: { isActive: true, bu: req.bu, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] },
-        select: { email: true },
+        select: { id: true, email: true },
       })
-      const emails = [...new Set(users.map((u: any) => u.email).filter(Boolean))] as string[]
-      if (!emails.length) continue
+      const recipients = users.filter((u: any) => u.email)
+      if (!recipients.length) continue
+      // Each claimer gets a magic-login link straight to the document (where the generated
+      // PDF is always downloadable) — so even if the PDF is too big to inline, they can get it.
+      for (const u of recipients) {
+      const openLink = await magicLoginFor(u.id, `/requests/${requestId}`)
       const html = `
 <!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0"><tr><td align="center">
@@ -1141,10 +1145,10 @@ export async function notifyLgFilesToClaimers(requestId: string) {
     </td></tr>
     <tr><td style="padding:28px 32px">
       <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 6px">เอกสาร <strong>${req.documentNo}</strong> — Logistics กรอกข้อมูลครบแล้ว (${sos.length} SO)</p>
-      <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 14px">แนบ: เอกสาร PDF (มีลายเซ็น) ${inlineLg && lgAtts.length ? "+ ไฟล์จาก Logistics" : ""}</p>
+      <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 14px">${attachPdf ? "แนบ: เอกสาร PDF (มีลายเซ็น) มากับเมลล์นี้" : "เอกสาร PDF: กดปุ่มด้านล่างเพื่อเปิด/ดาวน์โหลด (ไฟล์ใหญ่จึงไม่แนบมา)"} ${inlineLg && lgAtts.length ? "+ ไฟล์จาก Logistics" : ""}</p>
       ${linksHtml}
       <div style="text-align:center;margin-top:8px">
-        <a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Document →</a>
+        <a href="${openLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">เปิดเอกสาร / ดาวน์โหลด PDF →</a>
       </div>
     </td></tr>
     <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
@@ -1152,7 +1156,8 @@ export async function notifyLgFilesToClaimers(requestId: string) {
     </td></tr>
   </table>
 </td></tr></table></body></html>`
-      await sendMail(emails, `[Claim – ${dept.replace(/_/g, " ")}] Logistics files ready — ${req.documentNo} (${sos.length} SO)`, html, fileAtts)
+      await sendMail(u.email, `[Claim – ${dept.replace(/_/g, " ")}] Logistics files ready — ${req.documentNo} (${sos.length} SO)`, html, fileAtts)
+      }
     }
   } catch (err) {
     console.error("[notify] LG-files-to-claimers error:", err)
