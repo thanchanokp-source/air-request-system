@@ -116,9 +116,17 @@ export default function ApprovalsPage() {
       // Show only while a NYK SO still AWAITS the approver (drops once approved).
       return items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts))
     }
-    if (role === "SCM_NYK" || role === "SCM_NYK_EVP") {
+    // CR user: once they've entered the CR NO for the doc, their job is done → drop it.
+    if (role === "SCM_NYK") {
+      if (r.crNo) return false
       const myDepts = gwDeptsForRole(role, userClaimDept)
       return items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
+    }
+    // EVP: drops once they've approved the NYK split (even if CR still pending).
+    if (role === "SCM_NYK_EVP") {
+      const myDepts = gwDeptsForRole(role, userClaimDept)
+      return items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts)
+        && !(i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_EVP"))
     }
     // CLAIM_GW / SCM_NYG are GW-only claim roles.
     if (role === "CLAIM_GW" || role === "SCM_NYG") {
