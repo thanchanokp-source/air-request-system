@@ -891,8 +891,9 @@ export default function UsersPage() {
         </div>
         {/* Edit-in-place: clicking Edit on this tab opens the form in a modal (no tab switch). */}
         {editId && (
-          <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-10" onClick={reset}>
-            <div className="w-full max-w-2xl my-auto" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-10"
+            onMouseDown={e => { if (e.target === e.currentTarget) reset() }}>
+            <div className="w-full max-w-2xl my-auto">
               {userForm}
             </div>
           </div>
