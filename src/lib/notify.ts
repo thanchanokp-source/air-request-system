@@ -6,6 +6,25 @@ import { randomUUID } from "crypto"
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
+// Personal magic-login link for a user. REUSES the existing loginToken while it's still
+// valid instead of minting a new one each time — otherwise a later notify would rotate the
+// per-user token and silently invalidate every earlier email link (e.g. LG reopening the
+// link after entering Actual would be forced to log in). New token only if missing/expired.
+async function getLoginToken(uid: string): Promise<string | null> {
+  try {
+    const u = await (prisma.user as any).findUnique({ where: { id: uid }, select: { loginToken: true, loginTokenExpiry: true } })
+    const valid = u?.loginToken && u?.loginTokenExpiry && new Date(u.loginTokenExpiry).getTime() > Date.now()
+    if (valid) return u.loginToken
+    const token = randomUUID()
+    await (prisma.user as any).update({ where: { id: uid }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } })
+    return token
+  } catch { return null }
+}
+async function magicLoginFor(uid: string, redirect = "/approvals"): Promise<string> {
+  const token = await getLoginToken(uid)
+  return `${APP_URL}/api/magic-login?token=${token}&redirect=${encodeURIComponent(redirect)}`
+}
+
 // Format: [ROLE] action — DOC
 const STATUS_SUBJECT: Record<string, string> = {
   // NYG
@@ -684,11 +703,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const docLink = `${APP_URL}/requests/${requestId}`
       // Personal magic-login so clicking the email logs the approver in as THEMSELVES and
       // lands on /approvals (the doc then shows in their queue). Reused for LG below.
-      const magicFor = async (uid: string) => {
-        const token = randomUUID()
-        await (prisma.user as any).update({ where: { id: uid }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } }).catch(() => {})
-        return `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals`
-      }
+      const magicFor = (uid: string) => magicLoginFor(uid)
       if (deptItems.size > 0) {
         for (const [dept, items] of deptItems) {
           const deptRoles = isVp ? claimVpRoles(dept) : claimEntryRoles(dept)
@@ -824,11 +839,7 @@ export async function notifyClaimEntry(requestId: string, dept: string) {
     if (!req) return
     const bu = (req as any).bu
     const docLink = `${APP_URL}/requests/${requestId}`
-    const magicFor = async (uid: string) => {
-      const token = randomUUID()
-      await (prisma.user as any).update({ where: { id: uid }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } }).catch(() => {})
-      return `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals`
-    }
+    const magicFor = (uid: string) => magicLoginFor(uid)
     const deptItems = (req.items as any[]).filter(it => it.itemStatus !== "REJECTED" && getSplits(it).some((s: any) => s.dept === dept))
     if (!deptItems.length) return
     const sendTo = async (uid: string, email: string | null, label: string) => {
@@ -1173,9 +1184,9 @@ export async function notifyLgPendingReminder(): Promise<{ sent: number; docs: n
     const lgUsers: any[] = await (prisma.user as any).findMany({ where: { isActive: true, role: lgRole }, select: { id: true, email: true } })
     for (const u of lgUsers) {
       if (!u.email) continue
-      // One personal login token (valid a week) reused across this user's doc links.
-      const token = randomUUID()
-      await (prisma.user as any).update({ where: { id: u.id }, data: { loginToken: token, loginTokenExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } })
+      // One personal login token reused across this user's doc links (persists so older
+      // email links keep working — not rotated on every notify).
+      const token = await getLoginToken(u.id)
       const rows = list.map(d => {
         const missing = d.items.filter((i: any) => i.itemStatus !== "REJECTED" && i.actualAirFreight == null).length
         const link = `${APP_URL}/api/magic-login?token=${token}&redirect=/requests/${d.id}`
