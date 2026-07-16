@@ -63,6 +63,10 @@ const ALL_ROLES = [
   "MER_USER", "MER_GW", "ADMIN",
 ]
 
+// Which BU each role belongs to (SCM_NYK_* appear in BOTH master lists → land in both sets).
+const NYG_ROLE_SET = new Set<string>([...MASTER_ROLES_NYG.map(r => r.role), ...FINDER_ROLES_NYG.map(r => r.role), "MER_USER"])
+const GW_ROLE_SET = new Set<string>([...MASTER_ROLES_GW.map(r => r.role), ...FINDER_ROLES_GW.map(r => r.role), "MER_GW"])
+
 // Role order by approval flow (NYG then GW)
 const FLOW_ORDER: string[] = [
   // NYG flow
@@ -322,9 +326,19 @@ export default function UsersPage() {
   const visibleMasterRoles = buFilter === "NYG" ? MASTER_ROLES_NYG : buFilter === "GW" ? MASTER_ROLES_GW : ALL_MASTER_ROLES
   const visibleFinderRoles = buFilter === "GW" ? FINDER_ROLES_GW : buFilter === "NYG" ? FINDER_ROLES_NYG : [...FINDER_ROLES_NYG, ...FINDER_ROLES_GW]
 
+  // A person belongs to a BU tab if: their primary bu matches, bu = ALL, OR they hold
+  // ANY role that lives in that BU (role names encode BU). So a cross-BU person
+  // (e.g. President of both) shows in BOTH tabs even with a single primary bu.
+  const heldRolesOf = (u: any): string[] => [u.role, ...(Array.isArray(u.roles) ? u.roles : [])].filter(Boolean)
+  const inBuTab = (u: any, bu: string): boolean => {
+    if (u.bu === "ALL") return true
+    if ((u.bu || "NYG") === bu) return true
+    const set = bu === "GW" ? GW_ROLE_SET : NYG_ROLE_SET
+    return heldRolesOf(u).some(r => set.has(r))
+  }
   const filtered = users.filter(u =>
-    (!roleFilter || u.role === roleFilter) &&
-    (!buFilter || (u.bu || "NYG") === buFilter)
+    (!roleFilter || heldRolesOf(u).includes(roleFilter)) &&
+    (!buFilter || inBuTab(u, buFilter))
   )
 
   // Sync orderedIds when filter changes — default sort by approval flow then priority
