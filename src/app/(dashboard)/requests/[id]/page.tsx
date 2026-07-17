@@ -1421,8 +1421,8 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* Style Accordion */}
-      {canAct && isStyleApprover && !isScmAtVpMer && !isPresidentRole && (
+      {/* Style Accordion — hidden for Logistics: LG only enters data (no per-SO approve). */}
+      {canAct && isStyleApprover && !isScmAtVpMer && !isPresidentRole && !showAwbEntry && (
         <div className="space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="font-semibold text-gray-800">STYLES ({styleGroups.length})</h2>

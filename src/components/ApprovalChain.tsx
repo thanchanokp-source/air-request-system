@@ -144,9 +144,9 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     }
     const claimDepts = Object.entries(dmap).map(([dept, c]) => ({ dept, done: c.done === c.total }))
     const claimReached = completed || cur >= CLAIM_ORD
-    // Logistics runs IN PARALLEL with Claim (not a linear step): it's only "done" when
-    // the Actual Air Freight is actually entered — never by merely reaching the stage.
-    const lgDone = claimSource.length > 0 && claimSource.every((i: any) => i.actualAirFreight != null)
+    // Logistics runs IN PARALLEL with Claim (not a linear step): green ONLY after LG presses
+    // "Save & Send" (req.logisticsSent) — NOT on Save Draft (which also fills Actual freight).
+    const lgDone = !!req?.logisticsSent
     // Who is each still-pending dept currently waiting on? NYK is handled separately
     // (3-role sub-flow: Approver → EVP + CR user), so exclude it from the generic resolver.
     const soId = soItem?.id
@@ -233,8 +233,8 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   const claimDepts = Object.entries(map).map(([dept, c]) => ({ dept, done: c.done === c.total }))
   const allSplits = claimSource.flatMap(it => getSplits(it))
   const claimDone = allSplits.length > 0 && allSplits.every(s => s.status === "DEPT_APPROVED" || s.status === "COMPLETED")
-  const lgDone = claimSource.length > 0 && claimSource.every((i: any) => i.actualAirFreight != null)
-  // "Claim" turns green when ALL claim depts approved; "Logistics" when data filled.
+  const lgDone = !!req?.logisticsSent
+  // "Claim" turns green when ALL claim depts approved; "Logistics" only after LG Save & Send.
   const claimChip: "done" | "active" | "pending" = completed || claimDone ? "done" : parallelReached ? "active" : "pending"
   const lgChip: "done" | "active" | "pending" = completed || lgDone ? "done" : parallelReached ? "active" : "pending"
   const gwNonNyk = claimDepts.filter(d => d.dept !== "NYK" && d.dept !== "SCM NYK")

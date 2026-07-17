@@ -143,8 +143,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         await notifyStatusChange(id, nd).catch(() => {})
       }
     }
-    // "Save & Send" (data complete) → email the claimers the LG files + signed PDF (item 2).
-    if (body.lgComplete) await notifyLgFilesToClaimers(id).catch(() => {})
+    // "Save & Send" (data complete) → mark LG as sent (chip turns green only now, not on
+    // draft) + email the claimers the LG files + signed PDF (item 2).
+    if (body.lgComplete) {
+      await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
+      await notifyLgFilesToClaimers(id).catch(() => {})
+    }
     return NextResponse.json(await getUpdated())
   }
 
@@ -650,8 +654,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: nextStatus, comment }
     })
-    // "Save & Send" (data complete) → email the claimers the LG files + signed PDF (item 2).
-    if (body.lgComplete) await notifyLgFilesToClaimers(id).catch(() => {})
+    // "Save & Send" (data complete) → mark LG as sent (chip turns green only now, not on
+    // draft) + email the claimers the LG files + signed PDF (item 2).
+    if (body.lgComplete) {
+      await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
+      await notifyLgFilesToClaimers(id).catch(() => {})
+    }
     return NextResponse.json(await getUpdated())
   }
 
