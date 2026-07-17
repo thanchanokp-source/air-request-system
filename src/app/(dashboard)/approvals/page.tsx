@@ -6,6 +6,7 @@ import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO, deptSplitStatus } from "@/lib/claim"
+import { canViewBothBu } from "@/lib/master-access"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -51,7 +52,7 @@ export default function ApprovalsPage() {
   const isCrossBu = (() => {
     const roleBuOf = (r: string) => r.startsWith("SCM_NYK") ? "BOTH" : (r.endsWith("_GW") || r.startsWith("SCM_NYG")) ? "GW" : "NYG"
     const s = new Set(myRoles.map(roleBuOf).filter(b => b !== "BOTH"))
-    return (session?.user as any)?.bu === "ALL" || (s.has("NYG") && s.has("GW"))
+    return (session?.user as any)?.bu === "ALL" || (s.has("NYG") && s.has("GW")) || canViewBothBu(session?.user)
   })()
   // Claim SO this person can act on via any held role (NYG only; GW has its own roles).
   // Forward-direction via actingClaimForSO so mapped depts work (e.g. COMMERCIAL → DVM MER
@@ -172,9 +173,11 @@ export default function ApprovalsPage() {
     })
   }
 
-  // Show a doc if the primary role's stage matches OR the person owns claim SO on it
-  // via any held role (multi-role) OR they are the current forward recipient.
-  const myRequests = requests.filter(r => matchesPrimary(r) || heldClaimItems(r).length > 0 || claimNextItems(r).length > 0)
+  // Admin-like viewer (canViewBothBu allowlist) sees EVERY document in the queue (read-only
+  // for docs that aren't theirs to act on). Everyone else: only docs they can act on.
+  const isViewAll = canViewBothBu(session?.user)
+  const isMyDoc = (r: any) => matchesPrimary(r) || heldClaimItems(r).length > 0 || claimNextItems(r).length > 0
+  const myRequests = requests.filter(r => isViewAll || isMyDoc(r))
 
   // Show only items relevant to this role
   const primaryItems = (r: any) => {
@@ -212,6 +215,8 @@ export default function ApprovalsPage() {
 
   // Union of primary-role items + claim SO owned via any held role (multi-role).
   const getRelevantItems = (r: any) => {
+    // View-all: for docs the viewer can't act on, show ALL items (read-only).
+    if (isViewAll && !isMyDoc(r)) return (r.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
     const prim = primaryItems(r)
     const seen = new Set(prim.map((i: any) => i.id))
     const extra = [...heldClaimItems(r), ...claimNextItems(r)].filter((i: any) => {

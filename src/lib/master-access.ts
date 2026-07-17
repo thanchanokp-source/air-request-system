@@ -8,3 +8,10 @@ export function canEditMaster(user: any): boolean {
   const email = String(user?.email || "").toLowerCase()
   return ["ADMIN", "LOGISTICS", "LOGISTICS_GW"].includes(role) || MASTER_EDITOR_EMAILS.includes(email)
 }
+
+// People granted an admin-like cross-BU VIEW (the NYG/GW toggle on Air Requests + Approvals)
+// without being ADMIN. Email allowlist — edit here to add/remove.
+export const CROSS_BU_VIEW_EMAILS = ["jariya.t@nanyangtextile.com"]
+export function canViewBothBu(user: any): boolean {
+  return CROSS_BU_VIEW_EMAILS.includes(String(user?.email || "").toLowerCase())
+}

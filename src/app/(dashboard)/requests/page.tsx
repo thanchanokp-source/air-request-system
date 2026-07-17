@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits, deptLabel } from "@/lib/claim"
+import { canViewBothBu } from "@/lib/master-access"
 import { ApprovalChain } from "@/components/ApprovalChain"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -109,7 +110,7 @@ export default function RequestsPage() {
   const myRolesAll: string[] = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const roleBuOf = (r: string) => r.startsWith("SCM_NYK") ? "BOTH" : (r.endsWith("_GW") || r.startsWith("SCM_NYG")) ? "GW" : "NYG"
   const buSet = new Set(myRolesAll.map(roleBuOf).filter(b => b !== "BOTH"))
-  const isCrossBu = userBu === "ALL" || (buSet.has("NYG") && buSet.has("GW"))
+  const isCrossBu = userBu === "ALL" || (buSet.has("NYG") && buSet.has("GW")) || canViewBothBu(session?.user)
   const [activeBu, setActiveBu] = useState<string>(userBu === "ALL" ? "NYG" : userBu)
   // Session loads after first render — sync the active BU tab to the user's BU once it's known.
   const buInit = useRef(false)
