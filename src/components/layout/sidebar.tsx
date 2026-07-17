@@ -1,6 +1,8 @@
 "use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useSession } from "next-auth/react"
+import { MASTER_EDITOR_EMAILS } from "@/lib/master-access"
 
 const nav = [
   { href: "/dashboard", label: "DASHBOARD" },
@@ -8,8 +10,8 @@ const nav = [
   { href: "/approvals", label: "APPROVALS" },
   { href: "/files", label: "ALL FILES" },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
-  { href: "/master/port", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "MER_USER", "MER_GW"] },
-  { href: "/master/description", label: "MASTER DESCRIPTION", roles: ["ADMIN", "LOGISTICS", "MER_USER"] },
+  { href: "/master/port", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "MER_USER", "MER_GW"], masterEdit: true },
+  { href: "/master/description", label: "MASTER DESCRIPTION", roles: ["ADMIN", "LOGISTICS", "MER_USER"], masterEdit: true },
   { href: "/settings", label: "SETTINGS", adminOnly: true }
 ]
 
@@ -21,9 +23,13 @@ const ROLE_LABEL: Record<string, string> = {
 
 export default function Sidebar({ role, onClose }: { role: string; onClose?: () => void }) {
   const path = usePathname()
+  const { data: session } = useSession()
+  const email = String((session?.user as any)?.email || "").toLowerCase()
+  const isMasterEditor = MASTER_EDITOR_EMAILS.includes(email)
   const isAdmin = role === "ADMIN"
   const visible = nav.filter(item => {
-    if (item.roles) return item.roles.includes(role)
+    // Master pages: show for the allowed roles OR anyone explicitly granted (email allowlist).
+    if (item.roles) return item.roles.includes(role) || ((item as any).masterEdit && isMasterEditor)
     return !item.adminOnly || isAdmin
   })
   return (
