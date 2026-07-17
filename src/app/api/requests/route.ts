@@ -145,8 +145,10 @@ export async function POST(req: NextRequest) {
     // NYG now has a DVM MER approval step BEFORE VP MER. Only route there if a DVM MER
     // user is actually configured (role or roles[]); otherwise skip straight to VP MER
     // so documents never get stuck at an unstaffed stage.
+    // DVM_MER is an NYG-only role; count active holders regardless of a bu="ALL" cross-BU
+    // setting (strict bu:"NYG" would miss an ALL-BU DVM MER → wrongly skip the DVM step).
     const hasDvmMer = !isGW && (await prisma.user.count({
-      where: { isActive: true, bu: "NYG", OR: [{ role: "DVM_MER" }, { roles: { has: "DVM_MER" } }] } as any,
+      where: { isActive: true, bu: { in: ["NYG", "ALL"] }, OR: [{ role: "DVM_MER" }, { roles: { has: "DVM_MER" } }] } as any,
     })) > 0
     const initialStatus = isGW ? "PENDING_VP_MER_GW" : (hasDvmMer ? "PENDING_DVM_MER" : "PENDING_VP_MER")
 
