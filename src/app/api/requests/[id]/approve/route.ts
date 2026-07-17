@@ -598,10 +598,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { itemStatus: "LOG_PASSED" }
         })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_CLAIM" } })
-        // Parallel branches both start now → alert Claim + Logistics + Accounting
-        // (per requirement: VP SCM approval notifies LG, Claim, AND Accounting).
+        // Parallel branches start now. notifyStatusChange(PENDING_CLAIM) already alerts
+        // BOTH the claim depts AND Logistics (the PENDING_CLAIM block emails LG "Ready for
+        // HAWB / Actual" for NYG). So only add the Accounting alert here — do NOT fire
+        // PENDING_LOGISTICS too, or LG gets a duplicate email.
         await notifyStatusChange(id, "PENDING_CLAIM").catch(() => {})
-        await notifyStatusChange(id, "PENDING_LOGISTICS").catch(() => {})
         await notifyStatusChange(id, "PENDING_ACCOUNTING").catch(() => {})
       }
     }
