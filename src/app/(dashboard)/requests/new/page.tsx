@@ -48,10 +48,13 @@ export default function NewRequestPage() {
   }
 
   useEffect(() => {
-    // GW first approver may be role DPM_GW or legacy VP_MER_GW — fetch both.
-    // Scope by BU so a NYG VP MER never shows up for a GW document (and vice versa).
-    const roles = isGW ? ["DPM_GW", "VP_MER_GW"] : ["VP_MER"]
-    Promise.all(roles.map(r => fetch(`/api/users/by-role?role=${r}&bu=${userBu}`).then(res => res.json()).catch(() => [])))
+    // GW: MER picks the first approver (DPM_GW / legacy VP_MER_GW) — scope by BU.
+    // NYG: no pick — the first approver is DVM MER (auto). Fetch DVM MER just to DISPLAY who
+    // it will route to (DVM_MER is an NYG-only role, so no bu scoping needed).
+    const fetches = isGW
+      ? ["DPM_GW", "VP_MER_GW"].map(r => fetch(`/api/users/by-role?role=${r}&bu=${userBu}`).then(res => res.json()).catch(() => []))
+      : [fetch(`/api/users/by-role?role=DVM_MER`).then(res => res.json()).catch(() => [])]
+    Promise.all(fetches)
       .then(results => {
         const seen = new Set<string>()
         const list: any[] = []
@@ -60,7 +63,7 @@ export default function NewRequestPage() {
           for (const u of res) { if (u?.email && !seen.has(u.email)) { seen.add(u.email); list.push(u) } }
         }
         setVpMerUsers(list)
-        if (list.length === 1) setVpMerSelected({ name: list[0].name, email: list[0].email })
+        if (isGW && list.length === 1) setVpMerSelected({ name: list[0].name, email: list[0].email })
       })
   }, [isGW, userBu])
 
@@ -267,6 +270,21 @@ export default function NewRequestPage() {
             </select>
           )}
         </div>
+        )}
+
+        {/* NYG: read-only info — who this auto-routes to (first approver = DVM MER) */}
+        {!isGW && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-2">
+            <p className="text-sm font-semibold text-blue-900">📍 ส่งอนุมัติอัตโนมัติ — ไม่ต้องเลือก</p>
+            <div className="flex items-center gap-2 flex-wrap text-sm text-blue-800">
+              <span className="inline-block bg-blue-700 text-white text-xs font-bold px-2 py-0.5 rounded">DVM MER</span>
+              <span className="text-blue-600">(ผู้อนุมัติคนแรก) →</span>
+              {vpMerUsers.length > 0
+                ? vpMerUsers.map(u => <span key={u.id} className="bg-white border border-blue-200 rounded px-2 py-0.5 text-xs">{u.name || u.email}</span>)
+                : <span className="text-red-500 text-xs">⚠ ยังไม่มี DVM MER ในระบบ — จะข้ามไป VP MER</span>}
+            </div>
+            <p className="text-[11px] text-blue-500">ลำดับ: DVM MER → VP MER → SCM → VP SCM → Claim/Logistics → President → Accounting (แจ้งทุกคนในตำแหน่งอัตโนมัติ)</p>
+          </div>
         )}
 
         {/* Upload Excel */}
