@@ -189,7 +189,9 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
   "PROCUREMENT": [
     { label: "DPM/DVM", role: "CLAIM_PROCUREMENT", priority: 1, branch: true, procurementType: "PURCHASING" },
     { label: "Sourcing", role: "CLAIM_PROCUREMENT", priority: 1, procurementType: "SOURCING" },
-    { label: "VP", role: "CLAIM_PROCUREMENT", priority: 2 },
+    // VP procurement = the dedicated VP_PROCUREMENT role (matches the auto-forward boss
+    // lookup + PENDING_VP_CLAIM notify). NOT CLAIM_PROCUREMENT priority 2.
+    { label: "VP", role: "VP_PROCUREMENT" },
   ],
 }
 
