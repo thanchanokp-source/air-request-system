@@ -604,8 +604,8 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const acMagicLink = acToken ? `${APP_URL}/api/magic-login?token=${acToken}&redirect=/approvals` : undefined
       const lgHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, lgMagicLink)
       const acHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, acMagicLink)
-      const lgUsers = await (prisma.user as any).findMany({ where: { role: "LOGISTICS", isActive: true }, select: { email: true } })
-      const acUsers = await (prisma.user as any).findMany({ where: { role: "ACCOUNTING", isActive: true }, select: { email: true } })
+      const lgUsers = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "LOGISTICS" }, { roles: { has: "LOGISTICS" } }] }, select: { email: true } })
+      const acUsers = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "ACCOUNTING" }, { roles: { has: "ACCOUNTING" } }] }, select: { email: true } })
       const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
       const documentNo = (req as any).documentNo
@@ -617,7 +617,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
     // PENDING_SCM — send magic link to SCM user
     if (newStatus === "PENDING_SCM") {
       const scmToken = (req as any).scmToken
-      const scmUsers = await (prisma.user as any).findMany({ where: { role: "SCM_USER", isActive: true }, select: { email: true } })
+      const scmUsers = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "SCM_USER" }, { roles: { has: "SCM_USER" } }] }, select: { email: true } })
       const scmEmails = scmUsers.map((u: any) => u.email).filter(Boolean)
       if (!scmEmails.length) return
       const link = `${APP_URL}/requests/${requestId}`

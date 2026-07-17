@@ -75,7 +75,7 @@ export const authOptions: NextAuthOptions = {
           // Try scmToken
           const scmReq = await (prisma.airRequest as any).findFirst({ where: { scmToken: token } })
           if (scmReq) {
-            const scmUser = await (prisma.user as any).findFirst({ where: { role: "SCM_USER", isActive: true } })
+            const scmUser = await (prisma.user as any).findFirst({ where: { isActive: true, OR: [{ role: "SCM_USER" }, { roles: { has: "SCM_USER" } }] } })
             if (scmUser) return { id: scmUser.id, email: scmUser.email, name: scmUser.name, role: "SCM_USER", bu: scmUser.bu || "NYG", claimDepartment: null, priority: null }
             return null
           }
@@ -85,7 +85,7 @@ export const authOptions: NextAuthOptions = {
             const assignedEmail = (vpScmReq as any).assignedVpScm
             const vpScmUser = assignedEmail
               ? await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
-              : await (prisma.user as any).findFirst({ where: { role: "VP_SCM", isActive: true } })
+              : await (prisma.user as any).findFirst({ where: { isActive: true, OR: [{ role: "VP_SCM" }, { roles: { has: "VP_SCM" } }] } })
             if (vpScmUser) return { id: vpScmUser.id, email: vpScmUser.email, name: vpScmUser.name, role: "VP_SCM", bu: vpScmUser.bu || "NYG", claimDepartment: null, priority: null }
             return null
           }
@@ -94,7 +94,7 @@ export const authOptions: NextAuthOptions = {
           if (logReq) {
             const isGW = logReq.bu === "GW"
             const logRole = isGW ? "LOGISTICS_GW" : "LOGISTICS"
-            const logUser = await (prisma.user as any).findFirst({ where: { role: logRole, isActive: true } })
+            const logUser = await (prisma.user as any).findFirst({ where: { isActive: true, OR: [{ role: logRole }, { roles: { has: logRole } }] } })
             if (logUser) return { id: logUser.id, email: logUser.email, name: logUser.name, role: logRole, bu: isGW ? "GW" : (logUser.bu || "NYG"), claimDepartment: null, priority: null }
             return null
           }
