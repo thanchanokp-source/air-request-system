@@ -846,6 +846,14 @@ export default function RequestDetailPage() {
   const gwBranch: string | null = myFwdRow?.branch || null
   const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos) : true
   const gwNeedsBranch = gwFwdCanonicalDept ? positionHasBranch(gwFwdCanonicalDept, gwCurrentPos) : false
+  // Last position in the chain (e.g. Commercial VP MER) has nothing after it → no forward.
+  // Skip the "Send to next / Done" popup and finish directly.
+  useEffect(() => {
+    if (role === "CLAIM_NEXT_APPROVER" && gwIsLastPos && nextInitialModal) {
+      setNextInitialModal(false)
+      setNextIntent("done")
+    }
+  }, [role, gwIsLastPos, nextInitialModal])
   const gwFactory = (gwFwdItems.find((i: any) => claimSelIds.includes(i.id)) || gwFwdItems[0])?.factory
   // Procurement Purchasing (branch step): choose "Sourcing" (→ pos 1) or "Self" (skip to
   // VP, pos 2). Other positions just advance by one. gwBranchChoice holds the route.
@@ -2716,7 +2724,7 @@ export default function RequestDetailPage() {
       })()}
 
       {/* Initial decision popup for CLAIM_NEXT_APPROVER (non-PROCUREMENT depts) — shown once on page load */}
-      {isClaimNextApprover && nextInitialModal && (
+      {isClaimNextApprover && nextInitialModal && !gwIsLastPos && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4 space-y-4">
             <div>
