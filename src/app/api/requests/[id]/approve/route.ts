@@ -134,7 +134,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const nygItems = await prisma.airRequestItem.findMany({ where: { requestId: id } })
       for (const it of nygItems) {
         if (!["LOG_PASSED", "CLAIM_PASSED"].includes(it.itemStatus)) continue
-        const ns = deriveNygItemStatus(getSplits(it), (it as any).actualAirFreight != null)
+        // Advance to President only after LG "Save & Send" (lgComplete now, or logisticsSent
+        // already set) — NOT on Save Draft even though Draft fills Actual freight.
+        const ns = deriveNygItemStatus(getSplits(it), !!body.lgComplete || !!(request as any).logisticsSent)
         if (ns !== it.itemStatus) await prisma.airRequestItem.update({ where: { id: it.id }, data: { itemStatus: ns } })
       }
       const nd = await recalcDocStatus(id)
@@ -715,6 +717,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const item of readyItems) {
       await prisma.airRequestItem.update({ where: { id: item.id }, data: { itemStatus: "LOG_PASSED" } })
     }
+    // LG confirmed/sent → chip turns green + gate President on this (not on draft).
+    await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
     const newStatus = await recalcDocStatus(id)
     if (newStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
@@ -851,7 +855,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const hasEvp = appr.some((a: any) => a.role === "SCM_NYK_EVP")
       const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: true }, doneStatus)
       const updated = setGwSplitStatus(splits, [nykDept], splitStatus, cr)
-      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: isGW ? deriveGwItemStatus(updated, it.actualAirFreight != null) : deriveNygItemStatus(updated, it.actualAirFreight != null) } })
+      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: isGW ? deriveGwItemStatus(updated, !!(request as any).logisticsSent) : deriveNygItemStatus(updated, !!(request as any).logisticsSent) } })
       finalizedCount++
     }
     await prisma.approvalLog.create({
@@ -1173,7 +1177,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const it of items) {
       if (!selIds.includes(it.id) || !itemHasPendingDept(it, dept)) continue
       const updated = approveGwDeptSplits(getSplits(it), splitDepts, undefined, doneStatus)
-      const itemStatus = isGW ? deriveGwItemStatus(updated, (it as any).actualAirFreight != null) : deriveNygItemStatus(updated, (it as any).actualAirFreight != null)
+      const itemStatus = isGW ? deriveGwItemStatus(updated, !!(request as any).logisticsSent) : deriveNygItemStatus(updated, !!(request as any).logisticsSent)
       await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus, itemComment: comment || (it as any).itemComment } })
       count++
     }
@@ -1283,7 +1287,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const crNo = (request as any).crNo || null
       const splitStatus = nykSplitStatus({ approver: hasApprover, evp: hasEvp, cr: !!crNo }, "COMPLETED")
       const updated = setGwSplitStatus(getSplits(itemData), ["NYK"], splitStatus, crNo || undefined)
-      await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updated as any, itemStatus: deriveNygItemStatus(updated, itemData.actualAirFreight != null), itemComment: comment || null } })
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updated as any, itemStatus: deriveNygItemStatus(updated, !!(request as any).logisticsSent), itemComment: comment || null } })
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
       })
@@ -1387,7 +1391,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         splitStatus = vpExists ? "CLAIM_PASSED" : "COMPLETED"
       }
       const updatedSplits = setDeptSplitStatus(getSplits(itemData), dept, splitStatus)
-      const newItemStatus = deriveNygItemStatus(updatedSplits, itemData.actualAirFreight != null)
+      const newItemStatus = deriveNygItemStatus(updatedSplits, !!(request as any).logisticsSent)
       await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: updatedSplits as any, itemStatus: newItemStatus, itemComment: comment || null } })
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — All ${dept}${actingIsVp ? " VP" : ""} approved${comment ? ` - ${comment}` : ""}` }
