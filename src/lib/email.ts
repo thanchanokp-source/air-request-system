@@ -48,8 +48,12 @@ export async function sendMail(to: string | string[], subject: string, html: str
   const token = await getAccessToken()
 
   if (override) {
-    // TEST MODE: skip real recipients (may be fake), send monitor-only copy
-    console.log(`[email][TEST] intercept → ${override}  (meant for: ${originalTo})`)
+    // TEST MODE: skip real recipients (may be fake), send monitor-only copy.
+    // Pull the position/role tag from the subject (e.g. "[VP SCM] ..." → "VP SCM") so the
+    // tester can tell WHICH stage each intercepted mail is for — vital when several arrive
+    // at once (e.g. Claim + Logistics + Accounting all fire when VP SCM approves).
+    const posTag = (subject.match(/^\s*\[([^\]]+)\]/)?.[1] || "").trim()
+    console.log(`[email][TEST] intercept → ${override}  [${posTag}] (meant for: ${originalTo})`)
     const monitorHtml = `
 <!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0">
@@ -57,11 +61,14 @@ export async function sendMail(to: string | string[], subject: string, html: str
     <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;border:2px solid #f59e0b;overflow:hidden">
       <tr><td style="background:#f59e0b;padding:12px 20px">
         <p style="margin:0;color:#fff;font-size:12px;font-weight:700;font-family:Arial,sans-serif">
-          📋 MONITORING COPY — Sent to: ${originalTo}
+          🧪 TEST — MONITORING COPY
         </p>
       </td></tr>
-      <tr><td style="padding:20px;font-family:Arial,sans-serif;font-size:13px;color:#374151">
-        <p style="margin:0 0 16px;color:#6b7280;font-size:12px">⚠️ TEST — meant for: <strong>${originalTo}</strong></p>
+      <tr><td style="padding:16px 20px 4px;font-family:Arial,sans-serif">
+        ${posTag ? `<p style="margin:0 0 8px"><span style="display:inline-block;background:#1e293b;color:#fff;font-size:13px;font-weight:700;padding:4px 12px;border-radius:6px">📍 ${posTag}</span></p>` : ""}
+        <p style="margin:0;color:#6b7280;font-size:12px">ปกติจะส่งหา (meant for): <strong style="color:#b45309">${originalTo}</strong></p>
+      </td></tr>
+      <tr><td style="padding:8px 20px 20px;font-family:Arial,sans-serif;font-size:13px;color:#374151">
         ${html}
       </td></tr>
     </table>
@@ -76,7 +83,9 @@ export async function sendMail(to: string | string[], subject: string, html: str
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           message: {
-            subject: `[MONITOR] ${subject}`,
+            // Prepend the intended recipient (name before @) so several parallel test
+            // mails are distinguishable straight from the inbox list, without opening.
+            subject: `[TEST→${(Array.isArray(to) ? to[0] : to || "").split("@")[0]}] ${subject}`,
             body: { contentType: "HTML", content: monitorHtml },
             toRecipients: [{ emailAddress: { address: override } }],
             ...(graphAtts ? { attachments: graphAtts } : {}),
