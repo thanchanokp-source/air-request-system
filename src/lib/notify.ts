@@ -1127,8 +1127,15 @@ export async function notifyLgFilesToClaimers(requestId: string) {
     if (deptSOs.size === 0) return
     const link = `${APP_URL}/requests/${requestId}`
     for (const [dept, sos] of deptSOs) {
-      // NYK uses the 3-role flow (Action Approver), not DVM_/CLAIM_ — alert the Approver.
-      const deptRoles = (dept === "NYK" || dept === "SCM NYK") ? ["SCM_NYK_APPROVER"] : claimEntryRoles(dept)
+      // Which role approves this dept's claim? NYK = 3-role Action Approver. In GW the claim
+      // roles differ from NYG (SCM_NYG, not CLAIM_NYG); GW + SUPPLIER auto-approve so they
+      // have no claimer to notify — skip them.
+      let deptRoles: string[]
+      if (dept === "NYK" || dept === "SCM NYK") deptRoles = ["SCM_NYK_APPROVER"]
+      else if (req.bu === "GW") {
+        if (dept === "SCM NYG" || dept === "NYG") deptRoles = ["SCM_NYG"]
+        else continue // GW / SUPPLIER = NO_APPROVAL_GW_DEPTS → auto-approve, nobody to email
+      } else deptRoles = claimEntryRoles(dept)
       const users = await (prisma.user as any).findMany({
         where: { isActive: true, bu: req.bu, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] },
         select: { id: true, email: true },
