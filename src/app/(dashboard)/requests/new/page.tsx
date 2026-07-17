@@ -272,18 +272,20 @@ export default function NewRequestPage() {
         </div>
         )}
 
-        {/* NYG: read-only info — who this auto-routes to (first approver = DVM MER) */}
+        {/* NYG: read-only info — auto-routes to DVM MER (first approver) */}
         {!isGW && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-2">
-            <p className="text-sm font-semibold text-blue-900">📍 ส่งอนุมัติอัตโนมัติ — ไม่ต้องเลือก</p>
-            <div className="flex items-center gap-2 flex-wrap text-sm text-blue-800">
-              <span className="inline-block bg-blue-700 text-white text-xs font-bold px-2 py-0.5 rounded">DVM MER</span>
-              <span className="text-blue-600">(ผู้อนุมัติคนแรก) →</span>
-              {vpMerUsers.length > 0
-                ? vpMerUsers.map(u => <span key={u.id} className="bg-white border border-blue-200 rounded px-2 py-0.5 text-xs">{u.name || u.email}</span>)
-                : <span className="text-red-500 text-xs">⚠ ยังไม่มี DVM MER ในระบบ — จะข้ามไป VP MER</span>}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-green-800">Auto-select to DVM MER</p>
+                <p className="text-xs text-green-600">
+                  {vpMerUsers.length > 0
+                    ? vpMerUsers.map(u => u.name || u.email).join(", ")
+                    : "⚠ ยังไม่มี DVM MER — จะข้ามไป VP MER"}
+                </p>
+              </div>
+              <span className="ml-auto text-xs text-green-500 font-medium">Auto</span>
             </div>
-            <p className="text-[11px] text-blue-500">ลำดับ: DVM MER → VP MER → SCM → VP SCM → Claim/Logistics → President → Accounting (แจ้งทุกคนในตำแหน่งอัตโนมัติ)</p>
           </div>
         )}
 
