@@ -183,7 +183,8 @@ export default function NewRequestPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file || preview.length === 0) return
-    if (!vpMerSelected) { setError(`Please select a ${isGW ? "DPM GW" : "VP MER"} before submitting`); return }
+    // GW: MER must pick the first approver (DPM GW). NYG: no pick — DVM MER auto-notifies all.
+    if (isGW && !vpMerSelected) { setError("Please select a DPM GW before submitting"); return }
     setLoading(true)
     setError("")
     const res = await fetch("/api/requests", {
@@ -191,7 +192,7 @@ export default function NewRequestPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         items: preview,
-        assignedVpMer: vpMerSelected.email,
+        assignedVpMer: isGW ? vpMerSelected?.email : null,
         bu: userBu,
       })
     })
@@ -234,10 +235,11 @@ export default function NewRequestPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
 
-        {/* Select VP MER */}
+        {/* Select first approver — GW only (picks DPM GW). NYG auto-routes to DVM MER. */}
+        {isGW && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
           <h2 className="font-semibold text-gray-800">
-            Select {isGW ? "DPM GW" : "VP MER"} <span className="text-red-500">*</span>
+            Select DPM GW <span className="text-red-500">*</span>
           </h2>
 
           {vpMerUsers.length === 0 ? (
@@ -265,6 +267,7 @@ export default function NewRequestPage() {
             </select>
           )}
         </div>
+        )}
 
         {/* Upload Excel */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -374,7 +377,7 @@ export default function NewRequestPage() {
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={loading || preview.length === 0 || !vpMerSelected}
+            disabled={loading || preview.length === 0 || (isGW && !vpMerSelected)}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {loading ? "Submitting..." : "Submit Request"}
           </button>

@@ -25,6 +25,10 @@ async function magicLoginFor(uid: string, redirect = "/approvals"): Promise<stri
   return `${APP_URL}/api/magic-login?token=${token}&redirect=${encodeURIComponent(redirect)}`
 }
 
+// Read-only FYI recipients CC'd on the SCM NYK claim step (both BU). They are informed
+// only — no approval action. Edit this list to add/remove FYI watchers.
+const NYK_CLAIM_READONLY_CC = ["patchareewan.a@nanyangtextile.com", "stacy.h@nanyangtextile.com"]
+
 // Format: [ROLE] action — DOC
 const STATUS_SUBJECT: Record<string, string> = {
   // NYG
@@ -394,7 +398,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         if (assignedEmail) {
           emails = [assignedEmail]
         } else {
-          const users = await (prisma.user as any).findMany({ where: { role, isActive: true, bu: (req as any).bu }, select: { email: true } })
+          const users = await (prisma.user as any).findMany({ where: { role, isActive: true, bu: { in: [(req as any).bu, "ALL"] } }, select: { email: true } })
           emails = users.map((u: any) => u.email).filter(Boolean)
         }
         if (!emails.length) return
@@ -422,6 +426,27 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       }
       await sendNyk("SCM_NYK_EVP", "scmNykEvpToken", `[Claim – NYK EVP]${brandTag} Pending Approval`, "The NYK Approver has approved. Please review and approve.", (req as any).assignedScmNykEvp)
       await sendNyk("SCM_NYK", "scmNykToken", `[Claim – NYK]${brandTag} Please enter CR NO`, "The NYK Approver has approved. Please enter the CR NO for this document.", (req as any).assignedScmNykCr)
+      // Read-only FYI copy — CC watchers who are informed but take NO action (both BU).
+      if (NYK_CLAIM_READONLY_CC.length) {
+        const fyiHtml = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0"><tr><td align="center">
+  <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#475569;padding:20px;text-align:center">
+      <p style="margin:0;color:#cbd5e1;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif;text-transform:uppercase">Nan Yang Textile · FYI</p>
+      <h1 style="margin:6px 0 0;color:#fff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
+    </td></tr>
+    <tr><td style="padding:28px 32px">
+      <p style="color:#1e3a8a;font-size:15px;font-weight:700;font-family:Arial,sans-serif;margin:0 0 4px">${(req as any).documentNo}</p>
+      <p style="color:#64748b;font-size:13px;font-family:Arial,sans-serif;margin:0 0 4px">📄 <b>FYI (read only)</b> — SCM NYK claim reached. No action needed from you.</p>
+      ${lgTable}
+      <div style="text-align:center;margin-top:22px">${emailButton(link, "View Document →", "#475569")}</div>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p></td></tr>
+  </table>
+</td></tr></table></body></html>`
+        await sendMail(NYK_CLAIM_READONLY_CC, `[Claim – NYK · FYI]${brandTag} ${(req as any).documentNo}`, fyiHtml).catch(() => {})
+      }
       return
     }
 
@@ -473,16 +498,24 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       return
     }
 
-    // For PENDING_VP_MER — send magic link to open in web (no email approve/reject buttons)
+    // For PENDING_VP_MER — send magic link to open in web (no email approve/reject buttons).
+    // NYG: MER doesn't pick a VP MER → assignedVpMer is null → notify ALL active VP MER.
     if (newStatus === "PENDING_VP_MER") {
       const assignedEmail = (req as any).assignedVpMer
       const token = (req as any).vpMerToken
-      if (!assignedEmail) return
+      let emails: string[]
+      if (assignedEmail) {
+        emails = [assignedEmail]
+      } else {
+        const users = await (prisma.user as any).findMany({ where: { isActive: true, bu: { in: ["NYG", "ALL"] }, OR: [{ role: "VP_MER" }, { roles: { has: "VP_MER" } }] }, select: { email: true } })
+        emails = users.map((u: any) => u.email).filter(Boolean)
+      }
+      if (!emails.length) return
       const link = `${APP_URL}/requests/${requestId}`
       const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
       const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
-      await sendMail([assignedEmail], `${subject} — ${req.documentNo}`, html)
+      await sendMail(emails, `${subject} — ${req.documentNo}`, html)
       return
     }
 

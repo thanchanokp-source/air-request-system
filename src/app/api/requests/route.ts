@@ -98,8 +98,10 @@ export async function POST(req: NextRequest) {
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "No items" }, { status: 400 })
     }
-    if (!assignedVpMer) {
-      return NextResponse.json({ error: "Please select a VP MER" }, { status: 400 })
+    // GW: MER picks the first approver (DPM GW). NYG: no pick — DVM MER auto-notifies all
+    // active DVM MER, then VP MER auto-notifies all VP MER (assignedVpMer stays null).
+    if (!assignedVpMer && bu === "GW") {
+      return NextResponse.json({ error: "Please select a DPM (GW)" }, { status: 400 })
     }
     const isGW = bu === "GW"
 

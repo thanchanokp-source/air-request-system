@@ -36,22 +36,27 @@ export const authOptions: NextAuthOptions = {
             // token resolves to VP MER below.
             if (!isGW && airReq.status === "PENDING_DVM_MER") {
               const dvm = await (prisma.user as any).findFirst({
-                where: { isActive: true, bu: "NYG", OR: [{ role: "DVM_MER" }, { roles: { has: "DVM_MER" } }] },
+                where: { isActive: true, bu: { in: ["NYG", "ALL"] }, OR: [{ role: "DVM_MER" }, { roles: { has: "DVM_MER" } }] },
                 orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
               })
               if (dvm) return { id: dvm.id, email: dvm.email, name: dvm.name, role: "DVM_MER", bu: "NYG", claimDepartment: null, priority: dvm.priority ?? null }
               return null
             }
             const assignedEmail = airReq.assignedVpMer
-            if (!assignedEmail) return null
-            const user = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
             const vpRole = isGW ? "VP_MER_GW" : "VP_MER"
-            if (user) {
+            if (assignedEmail) {
+              const user = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
               // Always grant VP_MER role for this session — they are the designated approver
-              return { id: user.id, email: user.email, name: user.name, role: vpRole, bu: isGW ? "GW" : (user.bu || "NYG"), claimDepartment: null, priority: null }
+              if (user) return { id: user.id, email: user.email, name: user.name, role: vpRole, bu: isGW ? "GW" : (user.bu || "NYG"), claimDepartment: null, priority: null }
+              return { id: `vp_mer_guest_${token}`, email: assignedEmail, name: assignedEmail, role: vpRole, bu: isGW ? "GW" : "NYG", claimDepartment: null, priority: null }
             }
-            // Guest VP MER session
-            return { id: `vp_mer_guest_${token}`, email: assignedEmail, name: assignedEmail, role: vpRole, bu: isGW ? "GW" : "NYG", claimDepartment: null, priority: null }
+            // NYG auto — no specific VP MER picked → resolve to any active VP MER (role-based).
+            const vp = await (prisma.user as any).findFirst({
+              where: { isActive: true, bu: { in: ["NYG", "ALL"] }, OR: [{ role: "VP_MER" }, { roles: { has: "VP_MER" } }] },
+              orderBy: [{ createdAt: "asc" }],
+            })
+            if (vp) return { id: vp.id, email: vp.email, name: vp.name, role: vpRole, bu: vp.bu === "GW" ? "GW" : "NYG", claimDepartment: null, priority: null }
+            return null
           }
           // GM (GW) — dedicated token, always resolves to a GM_GW session
           const gmReq = await (prisma.airRequest as any).findFirst({ where: { gmToken: token } })
