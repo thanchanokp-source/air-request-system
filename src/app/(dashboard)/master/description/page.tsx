@@ -1,11 +1,11 @@
 "use client"
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
+import { canEditMaster } from "@/lib/master-access"
 
 export default function MasterDescriptionPage() {
   const { data: session } = useSession()
-  const role = (session?.user as any)?.role
-  const canEdit = role === "ADMIN" || role === "LOGISTICS"  // MER = read-only
+  const canEdit = canEditMaster(session?.user)  // Admin/Logistics + granted emails; MER = read-only
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)

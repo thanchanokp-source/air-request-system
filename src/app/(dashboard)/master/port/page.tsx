@@ -2,11 +2,11 @@
 import { useEffect, useState, useMemo, useRef } from "react"
 import { useSession } from "next-auth/react"
 import * as XLSX from "xlsx"
+import { canEditMaster } from "@/lib/master-access"
 
 export default function MasterRatePage() {
   const { data: session } = useSession()
-  const role = (session?.user as any)?.role
-  const canEdit = ["ADMIN", "LOGISTICS", "LOGISTICS_GW"].includes(role)   // MER = read-only
+  const canEdit = canEditMaster(session?.user)   // Admin/Logistics + granted emails; MER = read-only
   const [rates, setRates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState("")

@@ -3,12 +3,12 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { releasePendingRateDocs } from "@/lib/freight"
+import { canEditMaster } from "@/lib/master-access"
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const role = (session.user as any).role
-  if (!["ADMIN", "LOGISTICS", "LOGISTICS_GW"].includes(role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!canEditMaster(session.user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   const { id } = await params
   const { country, ratePerKg } = await req.json()
   try {
@@ -42,8 +42,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const role = (session.user as any).role
-  if (role !== "ADMIN" && role !== "LOGISTICS") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  if (!canEditMaster(session.user)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   const { id } = await params
   try {
     await (prisma as any).masterFreightRate.delete({ where: { id } })
