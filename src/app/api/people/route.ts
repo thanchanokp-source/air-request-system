@@ -21,7 +21,9 @@ export async function GET(req: NextRequest) {
     const users = await prisma.user.findMany({
       where: {
         isActive: true,
-        ...(buParam ? { bu: buParam } : {}),
+        // Match the requested BU OR a cross-BU (ALL) person — so people who serve both
+        // BUs (e.g. the shared SCM NYK team set bu=ALL) appear in either BU's picker.
+        ...(buParam ? { bu: { in: [buParam, "ALL"] } } : {}),
         ...(q ? { OR: [
           { name: { contains: q, mode: "insensitive" } },
           { email: { contains: q, mode: "insensitive" } },
