@@ -29,6 +29,7 @@ export default function ApprovalsPage() {
   const [claimF, setClaimF] = useState<string[]>([])
   const [invoiceF, setInvoiceF] = useState<string[]>([])
   const [hawbF, setHawbF] = useState<string[]>([])
+  const [buApprovalView, setBuApprovalView] = useState<string>("ALL")
 
   useEffect(() => {
     fetch("/api/requests?mine=true").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
@@ -45,6 +46,13 @@ export default function ApprovalsPage() {
   // (User.roles[]). Derive every NYG claim dept they can act on so a person who is
   // (e.g.) VP MER AND a claim approver sees the doc again at the claim step.
   const myRoles: string[] = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  // Cross-BU person = holds exclusive roles of BOTH BUs (SCM_NYK_* count for neither).
+  // They get a NYG/GW toggle so a normal login (not magic link) can filter the queue by BU.
+  const isCrossBu = (() => {
+    const roleBuOf = (r: string) => r.startsWith("SCM_NYK") ? "BOTH" : (r.endsWith("_GW") || r.startsWith("SCM_NYG")) ? "GW" : "NYG"
+    const s = new Set(myRoles.map(roleBuOf).filter(b => b !== "BOTH"))
+    return (session?.user as any)?.bu === "ALL" || (s.has("NYG") && s.has("GW"))
+  })()
   // Claim SO this person can act on via any held role (NYG only; GW has its own roles).
   // Forward-direction via actingClaimForSO so mapped depts work (e.g. COMMERCIAL → DVM MER
   // sees it at the entry step, VP MER at the VP step).
@@ -239,7 +247,10 @@ export default function ApprovalsPage() {
       (!hawbF.length || hawbF.includes(row.hawbNo))
   })
 
-  const docGroups = myRequests.filter(r => filtered.some(f => f.request.id === r.id))
+  const docGroups = myRequests
+    .filter(r => filtered.some(f => f.request.id === r.id))
+    // Cross-BU person can filter the queue by BU via the toggle (ALL = both).
+    .filter(r => !isCrossBu || buApprovalView === "ALL" || (buApprovalView === "GW" ? r.bu === "GW" : r.bu !== "GW"))
 
   const isClaimRole = role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG"
   const myDepts = isClaimRole ? gwDeptsForRole(role, userClaimDept) : []
@@ -250,9 +261,21 @@ export default function ApprovalsPage() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">APPROVALS</h1>
-          <p className="text-xs text-gray-400 mt-0.5">{docGroups.length} document(s) pending your action</p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">APPROVALS</h1>
+            <p className="text-xs text-gray-400 mt-0.5">{docGroups.length} document(s) pending your action</p>
+          </div>
+          {isCrossBu && (
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold self-start">
+              {["ALL", "NYG", "GW"].map(bu => (
+                <button key={bu} onClick={() => setBuApprovalView(bu)}
+                  className={`px-3 py-1.5 transition-colors ${buApprovalView === bu ? (bu === "GW" ? "bg-emerald-600 text-white" : bu === "NYG" ? "bg-blue-600 text-white" : "bg-gray-700 text-white") : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                  {bu === "ALL" ? "All BU" : bu}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
