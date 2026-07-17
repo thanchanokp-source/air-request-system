@@ -104,6 +104,12 @@ export default function RequestsPage() {
   const role = (session?.user as any)?.role || ""
   const userId = (session?.user as any)?.id || ""
   const userBu = (session?.user as any)?.bu || "NYG"
+  // Cross-BU person = holds exclusive roles of BOTH BUs (SCM_NYK_* count for neither — they
+  // exist in both). They get the NYG/GW toggle so a normal login (not magic link) sees both BUs.
+  const myRolesAll: string[] = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const roleBuOf = (r: string) => r.startsWith("SCM_NYK") ? "BOTH" : (r.endsWith("_GW") || r.startsWith("SCM_NYG")) ? "GW" : "NYG"
+  const buSet = new Set(myRolesAll.map(roleBuOf).filter(b => b !== "BOTH"))
+  const isCrossBu = userBu === "ALL" || (buSet.has("NYG") && buSet.has("GW"))
   const [activeBu, setActiveBu] = useState<string>(userBu === "ALL" ? "NYG" : userBu)
   // Session loads after first render — sync the active BU tab to the user's BU once it's known.
   const buInit = useRef(false)
@@ -261,7 +267,7 @@ export default function RequestsPage() {
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900">AIR REQUESTS</h1>
-          {(userBu === "ALL" || role === "ADMIN") ? (
+          {(isCrossBu || role === "ADMIN") ? (
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
               {["NYG","GW"].map(bu => (
                 <button key={bu} onClick={() => setActiveBu(bu)}
