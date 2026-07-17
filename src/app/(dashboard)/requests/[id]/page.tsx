@@ -162,8 +162,8 @@ const extractGs = (s?: string) => {
   return set
 }
 const posMatches = (p: any, position?: string, bu?: string, positionRole?: string | null, spec?: { priority?: number; group?: string | null; procurementType?: string | null } | null) => {
-  // BU must match when both are known.
-  if (bu && p.bu && String(p.bu).toUpperCase() !== String(bu).toUpperCase()) return false
+  // BU must match when both are known — but a cross-BU person (bu="ALL") matches any BU.
+  if (bu && p.bu && String(p.bu).toUpperCase() !== "ALL" && String(p.bu).toUpperCase() !== String(bu).toUpperCase()) return false
   // Precise: when the chain maps this position to a role, match role (primary OR roles[])
   // plus the spec fields (priority level, factory G-group, procurementType) so e.g. the
   // Production EVP of G1/G3 or the Procurement VP is filtered exactly.
