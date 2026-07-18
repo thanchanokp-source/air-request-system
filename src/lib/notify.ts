@@ -1094,6 +1094,121 @@ export async function notifyAdminAddPerson(opts: {
 //   (b) the system-generated signed PDF (signatures captured so far → GM for GW / VP SCM for NYG).
 // Sent per-department (each dept's SOs), to whoever holds that dept's entry claim role
 // (COMMERCIAL → DVM MER, etc. via claimEntryRoles). Both BU.
+// Forward a REJECTION (NYG, before SCM claim) to a manually-typed email — the rejecter
+// types any address (NOT looked up from the company directory). Sends the rejected style's
+// SO data + the reject reason. Recipient just reads it (no login / no action).
+export async function notifyRejectionForward(requestId: string, toEmail: string, style: string, reason: string, rejectedBy?: string) {
+  try {
+    const req: any = await prisma.airRequest.findUnique({
+      where: { id: requestId },
+      include: { items: true, createdBy: { select: { name: true, email: true } } },
+    })
+    if (!req) return
+    const items = (req.items as any[]).filter(i => i.style === style)
+    const cell = (v: any, right = false) => `<td style="padding:6px 10px;border-bottom:1px solid #eee${right ? ";text-align:right" : ""}">${v}</td>`
+    const rows = items.map(i => `<tr>${cell(i.so)}${cell(i.style)}${cell(i.customerPO || "-")}${cell(i.description || "-")}${cell((i.qtyRequestAir || 0).toLocaleString(), true)}${cell(i.reasonDelay || "-")}</tr>`).join("")
+    const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
+  <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#dc2626;padding:18px 24px">
+      <p style="margin:0;color:#fecaca;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Rejected</p>
+      <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo} — Style ${style}</h1>
+    </td></tr>
+    <tr><td style="padding:20px 24px">
+      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0 0 4px">Requested by: <strong>${req.createdBy?.name || req.createdBy?.email || "-"}</strong>${rejectedBy ? ` · Rejected by: <strong>${rejectedBy}</strong>` : ""}</p>
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;margin:10px 0">
+        <p style="margin:0;color:#991b1b;font-size:12px;font-weight:700;font-family:Arial">เหตุผลที่ Reject:</p>
+        <p style="margin:4px 0 0;color:#7f1d1d;font-size:13px;font-family:Arial">${reason || "-"}</p>
+      </div>
+      <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial;margin-top:8px">
+        <thead><tr style="background:#f1f5f9">
+          <th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">STYLE</th>
+          <th style="padding:6px 10px;text-align:left">CUSTOMER PO</th><th style="padding:6px 10px;text-align:left">DESCRIPTION</th>
+          <th style="padding:6px 10px;text-align:right">QTY AIR</th><th style="padding:6px 10px;text-align:left">REASON DELAY</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group</p></td></tr>
+  </table>
+</td></tr></table></body></html>`
+    await sendMail([toEmail], `[Air Request · Rejected] ${req.documentNo} — ${style}`, html)
+  } catch (e) { console.error("[notify] rejection forward failed:", e) }
+}
+
+// ── Weekly "stuck document" reminder (Mon 08:00 ICT via Vercel Cron) ─────────────────
+// Emails each approver a DIGEST of documents waiting on THEM, with how many days each has
+// been sitting at the current stage + days since it was first submitted.
+export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSent: number }> {
+  const ACTIVE_STATUSES = [
+    "PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_SCM", "PENDING_VP_SCM", "PENDING_PRESIDENT",
+    "PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_LOGISTICS",
+    "PENDING_VP_MER_GW", "PENDING_DPM_GW", "PENDING_GM_GW", "PENDING_PRESIDENT_GW",
+    "PENDING_CLAIM_GW", "PENDING_LOGISTICS_GW",
+  ]
+  const docs = await (prisma.airRequest as any).findMany({
+    where: { status: { in: ACTIVE_STATUSES } },
+    include: { approvalLogs: { orderBy: { createdAt: "desc" }, take: 1 } },
+  })
+  if (!docs.length) return { docs: 0, emailsSent: 0 }
+  const now = Date.now()
+  const daysAgo = (d: any) => Math.floor((now - new Date(d).getTime()) / 86400000)
+
+  const digest = new Map<string, { docNo: string; stage: string; daysStage: number; daysTotal: number; bu: string }[]>()
+  for (const doc of docs) {
+    const rolesToNotify: string[] | undefined = STATUS_ROLES[doc.status]
+    if (!rolesToNotify || !rolesToNotify.length) continue
+    const users = await (prisma.user as any).findMany({
+      where: { isActive: true, OR: [{ role: { in: rolesToNotify } }, { roles: { hasSome: rolesToNotify } }] },
+      select: { email: true, bu: true },
+    })
+    const docBu = doc.bu || "NYG"
+    const recips = users.filter((u: any) => !u.bu || u.bu === "ALL" || u.bu === docBu).map((u: any) => u.email).filter(Boolean)
+    if (!recips.length) continue
+    const lastAction = doc.approvalLogs?.[0]?.createdAt || doc.createdAt
+    const row = {
+      docNo: doc.documentNo, bu: docBu,
+      stage: (STATUS_SUBJECT[doc.status] || doc.status).replace(/^\[/, "").replace(/\].*$/, ""),
+      daysStage: daysAgo(lastAction), daysTotal: daysAgo(doc.createdAt),
+    }
+    for (const email of recips) {
+      if (!digest.has(email)) digest.set(email, [])
+      digest.get(email)!.push(row)
+    }
+  }
+
+  let emailsSent = 0
+  for (const [email, rows] of digest) {
+    rows.sort((a, b) => b.daysStage - a.daysStage)
+    const trs = rows.map(r => `<tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee">${r.docNo}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee">${r.bu}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee">${r.stage}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;${r.daysStage >= 7 ? "color:#dc2626;font-weight:700" : ""}">${r.daysStage} วัน</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:#64748b">${r.daysTotal} วัน</td></tr>`).join("")
+    const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
+  <table width="620" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#b45309;padding:18px 24px">
+      <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Weekly Reminder</p>
+      <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">เอกสารรอดำเนินการ (${rows.length})</h1>
+    </td></tr>
+    <tr><td style="padding:20px 24px">
+      <p style="color:#64748b;font-size:13px;font-family:Arial;margin:0 0 12px">เอกสารด้านล่างยังรอการดำเนินการจากคุณ (แดง = ค้างเกิน 7 วัน) กรุณาเข้าระบบเพื่ออนุมัติ/กรอกข้อมูล</p>
+      <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial">
+        <thead><tr style="background:#f1f5f9">
+          <th style="padding:6px 10px;text-align:left">เอกสาร</th><th style="padding:6px 10px;text-align:left">BU</th>
+          <th style="padding:6px 10px;text-align:left">ขั้นตอน</th><th style="padding:6px 10px;text-align:right">ค้างที่ขั้นนี้</th>
+          <th style="padding:6px 10px;text-align:right">รวมตั้งแต่สร้าง</th></tr></thead>
+        <tbody>${trs}</tbody></table>
+      <div style="text-align:center;margin-top:18px">${emailButton(`${APP_URL}/approvals`, "เปิดคิวอนุมัติ →", "#b45309")}</div>
+    </td></tr></table>
+</td></tr></table></body></html>`
+    await sendMail([email], `[แจ้งเตือน] เอกสารรอดำเนินการ ${rows.length} ฉบับ`, html).catch(() => {})
+    emailsSent++
+  }
+  return { docs: docs.length, emailsSent }
+}
+
 export async function notifyLgFilesToClaimers(requestId: string) {
   try {
     const req: any = await prisma.airRequest.findUnique({

@@ -416,6 +416,7 @@ export default function RequestDetailPage() {
   const [selectedStyles, setSelectedStyles] = useState<Set<string>>(new Set())
   const [rejectingStyle, setRejectingStyle] = useState<string | null>(null)
   const [rejectComment, setRejectComment] = useState("")
+  const [rejectForwardEmail, setRejectForwardEmail] = useState("")
   const [rejectingSo, setRejectingSo] = useState<string | null>(null)
   const [rejectSoComment, setRejectSoComment] = useState("")
   const [backToScmSo, setBackToScmSo] = useState<string | null>(null)
@@ -1102,10 +1103,11 @@ export default function RequestDetailPage() {
     setSubmitting(style)
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "reject_style", style, comment: rejectComment })
+      // NYG DVM/VP Merchandise reject → optionally forward the rejection to a typed email.
+      body: JSON.stringify({ action: "reject_style", style, comment: rejectComment, forwardEmail: (!isGWRequest && rejectForwardEmail.trim()) ? rejectForwardEmail.trim() : undefined })
     })
     if (res.ok) setReq(await res.json())
-    setSubmitting(null); setRejectingStyle(null); setRejectComment("")
+    setSubmitting(null); setRejectingStyle(null); setRejectComment(""); setRejectForwardEmail("")
   }
 
   const backToScmStyleFn = async (style: string) => {
@@ -1518,6 +1520,12 @@ export default function RequestDetailPage() {
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
                     <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                    {!isGWRequest && (
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — พิมพ์อีเมลเอง, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <button onClick={() => rejectStyle(g.style)} disabled={isSub || !rejectComment.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">{isSub ? "..." : "Confirm Reject"}</button>
                       <button onClick={() => { setRejectingStyle(null); setRejectComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
@@ -1675,6 +1683,12 @@ export default function RequestDetailPage() {
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
                     <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                    {!isGWRequest && (
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — พิมพ์อีเมลเอง, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <button onClick={() => rejectStyle(g.style)} disabled={isSub || !rejectComment.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">{isSub ? "..." : "Confirm Reject"}</button>
                       <button onClick={() => { setRejectingStyle(null); setRejectComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
@@ -1792,6 +1806,12 @@ export default function RequestDetailPage() {
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
                     <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                    {!isGWRequest && (
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — พิมพ์อีเมลเอง, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <button onClick={() => rejectStyle(g.style)} disabled={isSub || !rejectComment.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">{isSub ? "..." : "Confirm Reject"}</button>
                       <button onClick={() => { setRejectingStyle(null); setRejectComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
@@ -1937,6 +1957,12 @@ export default function RequestDetailPage() {
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
                     <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                    {!isGWRequest && (
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — พิมพ์อีเมลเอง, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <button onClick={() => rejectStyle(g.style)} disabled={isSub || !rejectComment.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">{isSub ? "..." : "Confirm Reject"}</button>
                       <button onClick={() => { setRejectingStyle(null); setRejectComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>

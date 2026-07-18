@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
-import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry } from "@/lib/notify"
+import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 import { recomputeRequestFreight } from "@/lib/freight"
@@ -303,6 +303,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         comment: `Style: ${style}${comment ? ` - ${comment}` : ""}`
       }
     })
+    // NYG reject → optionally forward the rejection (data + reason) to a typed email.
+    if (action === "reject_style" && body.forwardEmail && String(body.forwardEmail).includes("@")) {
+      await notifyRejectionForward(id, String(body.forwardEmail).trim(), style, comment || "", session.user?.name || session.user?.email || undefined).catch(() => {})
+    }
 
     // When DVM MER is done (no PENDING left) → reset approved items to PENDING and
     // advance to VP MER (which is unchanged from here on).
@@ -339,6 +343,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         comment: `Style: ${style}${comment ? ` - ${comment}` : ""}`
       }
     })
+    // NYG reject → optionally forward the rejection (data + reason) to a typed email.
+    if (action === "reject_style" && body.forwardEmail && String(body.forwardEmail).includes("@")) {
+      await notifyRejectionForward(id, String(body.forwardEmail).trim(), style, comment || "", session.user?.name || session.user?.email || undefined).catch(() => {})
+    }
 
     // Advance to PENDING_PRESIDENT when VP MER done (no PENDING left)
     const pendingCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
