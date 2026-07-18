@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation"
 // Roles that must be set by Admin (master)
 const MASTER_ROLES_NYG = [
   // Flow: MER → DVM MER → VP MER (finder) → President → SCM User → VP SCM (finder) → Claim → Logistics → Accounting
-  { role: "DVM_MER",              label: "DVM MER",               hint: "Approves after MER upload + handles Commercial claim (P1)", needsPriority: false, bu: "NYG" },
-  { role: "VP_MER",               label: "VP MER",                hint: "Approves after DVM MER + handles Commercial claim (P2)", needsPriority: false, bu: "NYG" },
+  { role: "DVM_MER",              label: "DVM Merchandise",       hint: "Approves after Merchandise upload + handles Commercial claim (P1)", needsPriority: false, bu: "NYG" },
+  { role: "VP_MER",               label: "VP Merchandise",        hint: "Approves after DVM Merchandise + handles Commercial claim (P2)", needsPriority: false, bu: "NYG" },
   { role: "PRESIDENT",            label: "President",             hint: "Approves all requests after VP MER",         needsPriority: false, bu: "NYG" },
   { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
   { role: "VP_SCM",               label: "VP SCM",                hint: "Approves after SCM User (set up in master)", needsPriority: false, bu: "NYG" },
@@ -52,7 +52,7 @@ const FINDER_ROLES_NYG = [
 ]
 
 const FINDER_ROLES_GW = [
-  { role: "MER_GW", label: "MER (GW)", who: "Self-registers (Priority 1, no setup needed)" },
+  { role: "MER_GW", label: "Merchandise (GW)", who: "Self-registers (Priority 1, no setup needed)" },
 ]
 
 const ALL_ROLES = [
@@ -125,7 +125,7 @@ const ACTION_STYLE: Record<ActionType, string> = {
 
 const ROLE_LABEL: Record<string, string> = {
   // NYG
-  DVM_MER: "DVM MER", VP_MER: "VP MER", PRESIDENT: "President", LOGISTICS: "Logistics", ACCOUNTING: "Accounting",
+  DVM_MER: "DVM Merchandise", VP_MER: "VP Merchandise", PRESIDENT: "President", LOGISTICS: "Logistics", ACCOUNTING: "Accounting",
   SCM_USER: "SCM User", VP_SCM: "VP SCM",
   CLAIM_COMMERCIAL:  "Claim-Commercial",
   CLAIM_PRODUCTION:  "Claim-Production",
@@ -136,9 +136,9 @@ const ROLE_LABEL: Record<string, string> = {
   VP_PRODUCTION:     "VP Claim-Production",
   VP_PROCUREMENT:    "VP Claim-Procurement",
   VP_NYK:            "VP Claim-NYK",
-  MER_USER: "MER User",
+  MER_USER: "Merchandise User",
   // GW
-  MER_GW: "MER (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)",
+  MER_GW: "Merchandise (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)",
   PRESIDENT_GW: "President (GW)", LOGISTICS_GW: "Logistics (GW)", ACCOUNTING_GW: "Account (GW)",
   CLAIM_GW: "Claim-GW",
   // GW SCM NYK chain
@@ -183,7 +183,7 @@ function roleDisplayName(
     const sub = procurementType === "SOURCING" ? " (Sourcing)" : procurementType === "PURCHASING" ? " (Purchasing)" : ""
     return `Claim-Procurement DPM/DVM${sub}`
   }
-  if (r === "DVM_MER") return "DVM MER"
+  if (r === "DVM_MER") return "DVM Merchandise"
   return ROLE_LABEL[r] || r
 }
 
@@ -433,8 +433,8 @@ export default function UsersPage() {
               {MASTER_ROLES_GW.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
             </optgroup>
             <optgroup label="── General">
-              <option value="MER_USER">MER User (NYG)</option>
-              <option value="MER_GW">MER (GW)</option>
+              <option value="MER_USER">Merchandise User (NYG)</option>
+              <option value="MER_GW">Merchandise (GW)</option>
               <option value="ADMIN">Admin</option>
             </optgroup>
           </select>
@@ -755,7 +755,7 @@ export default function UsersPage() {
 
             {/* MER free */}
             <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
-              <span className="font-semibold">MER User</span> — self-registers, no setup needed
+              <span className="font-semibold">Merchandise User</span> — self-registers, no setup needed
             </div>
           </div>
 

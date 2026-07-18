@@ -37,7 +37,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
   const request = await prisma.airRequest.findUnique({ where: { id } })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
-  return NextResponse.json({ error: "Deleting a Document is not allowed. Please have the VP MER Reject it instead" }, { status: 403 })
+  return NextResponse.json({ error: "Deleting a Document is not allowed. Please have the VP Merchandise Reject it instead" }, { status: 403 })
   await prisma.airRequest.delete({ where: { id } })
   return NextResponse.json({ ok: true })
 }

@@ -138,7 +138,7 @@ function computeSigners(req: any): Signer[] {
   } else {
     const chain: [string, string][] = isGW
       ? [["PENDING_VP_MER_GW", "DPM"], ["PENDING_GM_GW", "GM"], ["PENDING_PRESIDENT_GW", "President"]]
-      : [["PENDING_VP_MER", "VP Merchandising"], ["PENDING_SCM", "SCM"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
+      : [["PENDING_VP_MER", "VP Merchandise"], ["PENDING_SCM", "SCM"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
     for (const [status, label] of chain) {
       const log = approveLogs.find((l: any) => l.fromStatus === status)
       signers.push({ title: label, name: log?.user?.name || "", date: log?.createdAt, verb: log ? "Approved" : "" })
@@ -215,7 +215,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           ["Date", fmtDate(req.createdAt)],
           ["Brand", req.brandName || "-"],
           ["BU", req.buName || dept],
-          ["Request By (MER)", (() => {
+          ["Request By (Merchandise)", (() => {
             const base = String(req.createdBy?.name || req.createdBy?.email || "").split("@")[0]
             return base ? base.split(".")[0] : "-"
           })()],
@@ -450,7 +450,7 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
         {/* Request By (left) + Grand total (right), same row */}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
           <View style={{ flexDirection: "row", flex: 1, paddingRight: 12 }}>
-            <Text style={s.glabel}>Request By (MER) : </Text>
+            <Text style={s.glabel}>Request By (Merchandise) : </Text>
             <Text style={[s.gval, { flex: 1 }]}>{requestBy}</Text>
           </View>
           <View style={s.totalBox}>

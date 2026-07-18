@@ -177,8 +177,8 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
   // Commercial claim reuses MER's team (no dedicated Claim-Commercial role, so one
   // person needn't hold two roles): DVM MER (entry, the upload approver) → VP MER.
   "COMMERCIAL": [
-    { label: "DVM MER", role: "DVM_MER" },
-    { label: "VP MER", role: "VP_MER" },
+    { label: "DVM Merchandise", role: "DVM_MER" },
+    { label: "VP Merchandise", role: "VP_MER" },
   ],
   "PRODUCTION": [
     { label: "VP PROD", factoryBased: true, role: "CLAIM_PRODUCTION", priority: 1 },

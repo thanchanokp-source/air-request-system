@@ -80,7 +80,7 @@ export default function ImportHistoryPage() {
     <div className="space-y-5 max-w-5xl">
       <div>
         <h1 className="text-xl font-bold text-gray-800">Import History (Completed)</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Admin only — backfill old, already-complete documents using the MER template. Creates it as <strong>COMPLETED</strong> (no approval, no email). <strong>One uploaded file = one document</strong> — every row becomes an SO of that document, with a newly generated Document No.</p>
+        <p className="text-sm text-gray-500 mt-0.5">Admin only — backfill old, already-complete documents using the Merchandise template. Creates it as <strong>COMPLETED</strong> (no approval, no email). <strong>One uploaded file = one document</strong> — every row becomes an SO of that document, with a newly generated Document No.</p>
       </div>
 
       <div className="bg-white rounded-xl border p-5 space-y-4">

@@ -32,8 +32,8 @@ const NYK_CLAIM_READONLY_CC = ["patchareewan.a@nanyangtextile.com", "stacy.h@nan
 // Format: [ROLE] action — DOC
 const STATUS_SUBJECT: Record<string, string> = {
   // NYG
-  PENDING_DVM_MER:     "[DVM MER] Pending Approval",
-  PENDING_VP_MER:      "[VP MER] Pending Approval",
+  PENDING_DVM_MER:     "[DVM Merchandise] Pending Approval",
+  PENDING_VP_MER:      "[VP Merchandise] Pending Approval",
   PENDING_SCM:         "[SCM User] Pending Claim Assignment",
   PENDING_VP_SCM:      "[VP SCM] Pending Approval",
   PENDING_PRESIDENT:   "[President] Pending Approval",
@@ -111,8 +111,8 @@ const EMAIL_HEAD = `<head>
 
 function buildHtml(req: any, newStatus: string, link: string, approveUrl?: string, rejectUrl?: string, magicLink?: string) {
   const statusLabel: Record<string,string> = {
-    PENDING_DVM_MER:"Pending DVM MER",
-    PENDING_VP_MER:"Pending VP MER", PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
+    PENDING_DVM_MER:"Pending DVM Merchandise",
+    PENDING_VP_MER:"Pending VP Merchandise", PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
     PENDING_PRESIDENT:"Pending President", PENDING_LOGISTICS:"Pending Logistics",
     PENDING_CLAIM:"Pending Claim (DVM)", PENDING_VP_CLAIM:"Pending VP Claim",
     PENDING_VP_NYK:"Pending VP NYK", COMPLETED:"Completed", REJECTED:"Rejected",
@@ -469,7 +469,7 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
         <div style="text-align:center;margin-top:20px"><a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 30px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Open Document →</a></div>
         ${loginLinkBlock()}
       </div>`
-      await sendMail(recipients, `[MER – GW] Claim Rejected — please re-assign — ${(req as any).documentNo}`, html)
+      await sendMail(recipients, `[Merchandise – GW] Claim Rejected — please re-assign — ${(req as any).documentNo}`, html)
       return
     }
 

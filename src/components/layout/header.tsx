@@ -5,8 +5,8 @@ import Link from "next/link"
 import { deptLabel } from "@/lib/claim"
 
 const ROLE_LABEL: Record<string, string> = {
-  ADMIN: "Admin", MER_USER: "MER", MER_GW: "MER (GW)",
-  DVM_MER: "DVM MER", VP_MER: "VP MER", SCM_USER: "SCM", VP_SCM: "VP SCM",
+  ADMIN: "Admin", MER_USER: "Merchandise", MER_GW: "Merchandise (GW)",
+  DVM_MER: "DVM Merchandise", VP_MER: "VP Merchandise", SCM_USER: "SCM", VP_SCM: "VP SCM",
   LOGISTICS: "Logistics", PRESIDENT: "President", ACCOUNTING: "Accounting",
   VP_MER_GW: "DPM (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)", PRESIDENT_GW: "President (GW)",
   LOGISTICS_GW: "Logistics (GW)", CLAIM_GW: "Claim (GW)", SCM_NYK: "SCM NYK", SCM_NYG: "SCM NYG",

@@ -34,7 +34,7 @@ const fmtPct = (v: number, sign = true) => isFinite(v) ? `${sign && v>0 ? "+" : 
 // ─── Constants ─────────────────────────────────────────────────────────────
 const STATUS_OPTIONS = ["PENDING_VP_MER","PENDING_SCM","PENDING_VP_SCM","PENDING_PRESIDENT","PENDING_LOGISTICS","PENDING_CLAIM","PENDING_VP_CLAIM","COMPLETED","REJECTED"]
 const STATUS_LABELS: Record<string,string> = {
-  PENDING_VP_MER:"VP MER", PENDING_SCM:"SCM", PENDING_VP_SCM:"VP SCM",
+  PENDING_VP_MER:"VP Merchandise", PENDING_SCM:"SCM", PENDING_VP_SCM:"VP SCM",
   PENDING_PRESIDENT:"President", PENDING_LOGISTICS:"Logistics",
   PENDING_CLAIM:"Claim", PENDING_VP_CLAIM:"VP Claim", COMPLETED:"Completed", REJECTED:"Rejected"
 }

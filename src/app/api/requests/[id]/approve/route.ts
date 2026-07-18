@@ -212,7 +212,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (pendingCount === 0) {
       const vpMerPassedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "VP_MER_PASSED" } })
       if (vpMerPassedCount === 0) {
-        await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED", rejectionReason: comment || "Rejected by VP MER GW" } })
+        await prisma.airRequest.update({ where: { id }, data: { status: "REJECTED", rejectionReason: comment || "Rejected by DPM (GW)" } })
         await notifyStatusChange(id, "REJECTED").catch(() => {})
       } else {
         await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PENDING" } })
@@ -881,7 +881,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await (prisma as any).claimApproval.deleteMany({ where: { itemId } })
     await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "CLAIM_REJECT_GW", itemComment: comment } as any })
     await prisma.approvalLog.create({
-      data: { requestId: id, userId, action: "BACK_TO_SCM", fromStatus: request.status, toStatus: "PENDING_CLAIM_REJECT_GW", comment: `SO: ${itemData.so} — Claim rejected, back to MER: ${comment}` }
+      data: { requestId: id, userId, action: "BACK_TO_SCM", fromStatus: request.status, toStatus: "PENDING_CLAIM_REJECT_GW", comment: `SO: ${itemData.so} — Claim rejected, back to Merchandise: ${comment}` }
     })
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })

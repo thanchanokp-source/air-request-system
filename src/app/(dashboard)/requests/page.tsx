@@ -8,8 +8,8 @@ import { canViewBothBu } from "@/lib/master-access"
 import { ApprovalChain } from "@/components/ApprovalChain"
 
 const STATUS_LABELS: Record<string, string> = {
-  PENDING_DVM_MER: "Pending DVM MER",
-  PENDING_VP_MER: "Pending VP MER", PENDING_SCM: "Pending SCM",
+  PENDING_DVM_MER: "Pending DVM Merchandise",
+  PENDING_VP_MER: "Pending VP Merchandise", PENDING_SCM: "Pending SCM",
   PENDING_VP_SCM: "Pending VP SCM", PENDING_PRESIDENT: "Pending President",
   PENDING_LOGISTICS: "Pending Logistics", PENDING_CLAIM: "Pending Claim",
   PENDING_VP_CLAIM: "Pending VP Claim",
@@ -41,8 +41,8 @@ const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
     if (docStatus === "PENDING_LOGISTICS") return "Logistics"
     if (docStatus === "PENDING_VP_MER_GW") return "DPM GW"
     if (docStatus === "PENDING_GM_GW") return "GM GW"
-    if (docStatus === "PENDING_DVM_MER") return "DVM MER"
-    return "VP MER"
+    if (docStatus === "PENDING_DVM_MER") return "DVM Merchandise"
+    return "VP Merchandise"
   }
   if (itemStatus === "VP_MER_PASSED") return "President"
   if (itemStatus === "PASSED") return "VP SCM"
@@ -66,7 +66,7 @@ function soAggBadge(rows: any[]): { label: string; cls: string } | null {
   if (!rows || rows.length === 0) return null
   const st = rows.map(r => r.itemStatus)
   if (st.some(s => s === "REJECTED")) return { label: "Rejected", cls: "bg-red-100 text-red-700 border-red-200" }
-  if (st.some(s => s === "CLAIM_REJECT_GW")) return { label: "Back to MER", cls: "bg-orange-100 text-orange-700 border-orange-200" }
+  if (st.some(s => s === "CLAIM_REJECT_GW")) return { label: "Back to Merchandise", cls: "bg-orange-100 text-orange-700 border-orange-200" }
   if (st.every(s => s === "COMPLETED" || s === "ACCOUNTING_PENDING")) return { label: "Done", cls: "bg-green-100 text-green-700 border-green-200" }
   return { label: "Pending", cls: "bg-yellow-100 text-yellow-700 border-yellow-200" }
 }
@@ -79,7 +79,8 @@ const AggBadge = ({ rows }: { rows: any[] }) => {
 const STEP_COLORS: Record<string, string> = {
   "DPM GW": "bg-yellow-100 text-yellow-700",
   "GM GW": "bg-orange-100 text-orange-700",
-  "VP MER": "bg-yellow-100 text-yellow-700",
+  "VP Merchandise": "bg-yellow-100 text-yellow-700",
+  "DVM Merchandise": "bg-yellow-100 text-yellow-700",
   "SCM": "bg-orange-100 text-orange-700",
   "VP SCM": "bg-amber-100 text-amber-700",
   "President": "bg-purple-100 text-purple-700",
@@ -225,8 +226,8 @@ export default function RequestsPage() {
     { key: "PENDING_CLAIM_GW", label: "CLAIM" },
     { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
   ] : [
-    { key: "PENDING_DVM_MER", label: "DVM MER" },
-    { key: "PENDING_VP_MER", label: "VP MER" },
+    { key: "PENDING_DVM_MER", label: "DVM Merchandise" },
+    { key: "PENDING_VP_MER", label: "VP Merchandise" },
     { key: "PENDING_SCM", label: "SCM" },
     { key: "PENDING_VP_SCM", label: "VP SCM" },
     { key: "PENDING_LOGISTICS", label: "LOGISTICS" },

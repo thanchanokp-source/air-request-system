@@ -18,7 +18,7 @@ const nav = [
 const ROLE_LABEL: Record<string, string> = {
   VP_MER_GW: "DPM (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)", PRESIDENT_GW: "President (GW)",
   LOGISTICS_GW: "Logistics (GW)", CLAIM_GW: "Claim (GW)", SCM_NYK: "SCM NYK", SCM_NYG: "SCM NYG",
-  ACCOUNTING: "Accounting", MER_USER: "MER", MER_GW: "MER (GW)",
+  ACCOUNTING: "Accounting", MER_USER: "Merchandise", MER_GW: "Merchandise (GW)",
 }
 
 export default function Sidebar({ role, onClose }: { role: string; onClose?: () => void }) {

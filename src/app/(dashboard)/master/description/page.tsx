@@ -142,7 +142,7 @@ export default function MasterDescriptionPage() {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-400">* The Description name must match the DESCRIPTION column in the Excel uploaded by MER</p>
+      <p className="text-xs text-gray-400">* The Description name must match the DESCRIPTION column in the Excel uploaded by Merchandise</p>
     </div>
   )
 }

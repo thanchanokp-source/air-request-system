@@ -26,8 +26,8 @@ const GW_ITEM_ORD: Record<string, number> = {
 
 // New order: DVM MER → VP MER → SCM → VP SCM → Logistics → Claim → President (final).
 const NYG_STAGES: Node[] = [
-  { key: "PENDING_DVM_MER", label: "DVM MER", ord: 0 },
-  { key: "PENDING_VP_MER", label: "VP MER", ord: 1 },
+  { key: "PENDING_DVM_MER", label: "DVM Merchandise", ord: 0 },
+  { key: "PENDING_VP_MER", label: "VP Merchandise", ord: 1 },
   { key: "PENDING_SCM", label: "SCM", ord: 2 },
   { key: "PENDING_VP_SCM", label: "VP SCM", ord: 3 },
   { key: "PENDING_LOGISTICS", label: "Logistics", ord: 4 },
@@ -65,8 +65,8 @@ function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string):
 // Current linear-stage → {label, roles, assigned-email getter}. Claim stages are handled
 // separately (per-department). assigned email (chosen at upload) wins over role lookup.
 const STAGE_INFO: Record<string, { label: string; roles: string[]; assigned?: (req: any, soItem: any) => string | null | undefined }> = {
-  PENDING_DVM_MER:    { label: "DVM MER",  roles: ["DVM_MER"],     assigned: (_r, s) => s?.assignedDvm },
-  PENDING_VP_MER:     { label: "VP MER",   roles: ["VP_MER"],      assigned: (r) => r?.assignedVpMer },
+  PENDING_DVM_MER:    { label: "DVM Merchandise",  roles: ["DVM_MER"],     assigned: (_r, s) => s?.assignedDvm },
+  PENDING_VP_MER:     { label: "VP Merchandise",   roles: ["VP_MER"],      assigned: (r) => r?.assignedVpMer },
   PENDING_SCM:        { label: "SCM",      roles: ["SCM_USER"] },
   PENDING_VP_SCM:     { label: "VP SCM",   roles: ["VP_SCM"],      assigned: (r) => r?.assignedVpScm },
   PENDING_LOGISTICS:  { label: "Logistics",roles: ["LOGISTICS"] },

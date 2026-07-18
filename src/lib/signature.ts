@@ -9,7 +9,7 @@ export const SIG_APPROVE_ACTIONS = new Set([
 
 // Human-readable signatory label per role (used on the stamped PDF).
 export const SIG_ROLE_LABEL: Record<string, string> = {
-  VP_MER: "VP MER", VP_MER_GW: "DPM (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)",
+  VP_MER: "VP Merchandise", DVM_MER: "DVM Merchandise", VP_MER_GW: "DPM (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)",
   PRESIDENT: "President", PRESIDENT_GW: "President (GW)", VP_SCM: "VP SCM", SCM_USER: "SCM",
   CLAIM_GW: "Claim (GW)", SCM_NYK: "SCM NYK", SCM_NYK_APPROVER: "SCM NYK Approver", SCM_NYK_EVP: "SCM NYK EVP",
   SCM_NYG: "SCM NYG", CLAIM_COMMERCIAL: "Commercial", CLAIM_PRODUCTION: "Production", CLAIM_PROCUREMENT: "Procurement",

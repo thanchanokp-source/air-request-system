@@ -460,7 +460,7 @@ export default function RequestDetailPage() {
   const [claimTableView, setClaimTableView] = useState(false)
   const [soPick, setSoPick] = useState("")        // quick-select: type SO + Enter
   const [soPickMsg, setSoPickMsg] = useState("")
-  const [backModalOpen, setBackModalOpen] = useState(false) // Back to MER/SCM reason modal
+  const [backModalOpen, setBackModalOpen] = useState(false) // Back to Merchandise/SCM reason modal
   const [backReason, setBackReason] = useState("")
   // Claim approver (NYG/GW/Supplier) action popup: forward to next person, or finish.
   const [gwModalOpen, setGwModalOpen] = useState(false)
@@ -1348,7 +1348,7 @@ export default function RequestDetailPage() {
           }
           return (
             <span className="flex items-center gap-1 text-xs bg-gray-100 border border-gray-200 text-gray-400 px-2 py-0.5 rounded-full cursor-not-allowed select-none">
-              📎 MER file
+              📎 Merchandise file
             </span>
           )
         })()}
@@ -1496,7 +1496,7 @@ export default function RequestDetailPage() {
                   </div>
                   <span className="text-xs text-gray-400 shrink-0">{g.items.length} SO(s)</span>
                   {g.status === "PASSED" && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Approved — Forwarded</span>}
-                  {g.status === "VP_MER_PASSED" && !presidentNewFlow && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">VP MER Approved — Pending President</span>}
+                  {g.status === "VP_MER_PASSED" && !presidentNewFlow && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">VP Merchandise Approved — Pending President</span>}
                   {g.status === "PRES_PASSED" && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">President Approved</span>}
                   {g.status === "REJECTED" && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Rejected</span>}
                   {(g.status === "PENDING" || (presidentNewFlow && g.status === "VP_MER_PASSED")) && (
@@ -2081,7 +2081,7 @@ export default function RequestDetailPage() {
 
           {/* Flat table */}
           {vpMerPassedItems.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">No style has been approved by VP MER yet</p>
+            <p className="text-sm text-gray-400 text-center py-6">No style has been approved by VP Merchandise yet</p>
           ) : (
             <div className="bg-white rounded-xl border border-blue-100 overflow-hidden">
               <div className="overflow-x-auto">
@@ -2841,7 +2841,7 @@ export default function RequestDetailPage() {
               </button>
               <button onClick={() => { setBackReason(""); setBackModalOpen(true) }} disabled={claimFwdSaving}
                 className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-40">
-                ↩ {isGWRequest ? "Back to MER" : (role === "CLAIM_NEXT_APPROVER" ? "Back to previous" : "Back to SCM")}{claimSelIds.length ? ` (${claimSelIds.length})` : ""}
+                ↩ {isGWRequest ? "Back to Merchandise" : (role === "CLAIM_NEXT_APPROVER" ? "Back to previous" : "Back to SCM")}{claimSelIds.length ? ` (${claimSelIds.length})` : ""}
               </button>
             </div>
           </div>
@@ -3087,7 +3087,7 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* Back to MER / SCM — reason modal (replaces window.prompt) */}
+      {/* Back to Merchandise / SCM — reason modal (replaces window.prompt) */}
       {backModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={() => !claimFwdSaving && setBackModalOpen(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
@@ -3095,7 +3095,7 @@ export default function RequestDetailPage() {
               <div className="w-9 h-9 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-lg">↩</div>
               <div>
                 <h3 className="text-base font-bold text-gray-800">
-                  {(!isGWRequest && role === "CLAIM_NEXT_APPROVER") ? "Send back to previous approver" : `Send back to ${isGWRequest ? "MER" : "SCM"}`}
+                  {(!isGWRequest && role === "CLAIM_NEXT_APPROVER") ? "Send back to previous approver" : `Send back to ${isGWRequest ? "Merchandise" : "SCM"}`}
                 </h3>
                 <p className="text-xs text-gray-400">
                   {claimActIds.length} SO · {(!isGWRequest && role === "CLAIM_NEXT_APPROVER") ? "returns to the previous claim position" : "will re-assign the claim department"}
@@ -3223,7 +3223,7 @@ export default function RequestDetailPage() {
                   </button>
                   <button disabled={submitting !== null}
                     onClick={async () => {
-                      const reason = window.prompt(`Reason for sending ${dvmSelected.size} SO back${isGWRequest ? " to MER" : " to SCM"}:`)
+                      const reason = window.prompt(`Reason for sending ${dvmSelected.size} SO back${isGWRequest ? " to Merchandise" : " to SCM"}:`)
                       if (reason == null || !reason.trim()) return
                       const ids = [...dvmSelected]
                       setSubmitting("_batch")
@@ -3238,7 +3238,7 @@ export default function RequestDetailPage() {
                       setDvmSelected(new Set()); setSubmitting(null)
                     }}
                     className="px-3 py-1.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50">
-                    {isGWRequest ? `↩ Back to MER (${dvmSelected.size})` : `↩ Back to SCM (${dvmSelected.size})`}
+                    {isGWRequest ? `↩ Back to Merchandise (${dvmSelected.size})` : `↩ Back to SCM (${dvmSelected.size})`}
                   </button>
                 </>
               )}
@@ -3465,7 +3465,7 @@ export default function RequestDetailPage() {
                       )}
                       {isGwClaimP1Role && (
                         <button onClick={() => { setRejectingSo(rejectingSo === item.id ? null : item.id); setRejectSoComment("") }} disabled={isSub}
-                          className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{isGWRequest ? "Back to MER" : "Back to SCM"}</button>
+                          className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{isGWRequest ? "Back to Merchandise" : "Back to SCM"}</button>
                       )}
                     </div>
                   )}
@@ -3484,7 +3484,7 @@ export default function RequestDetailPage() {
                 )}
                 {rejectingSo === item.id && (
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
-                    <label className="text-xs font-medium text-red-700">{isGwClaimP1Role ? (isGWRequest ? "Reason for sending back to MER *" : "Reason for sending back to SCM *") : "Reject reason *"}</label>
+                    <label className="text-xs font-medium text-red-700">{isGwClaimP1Role ? (isGWRequest ? "Reason for sending back to Merchandise *" : "Reason for sending back to SCM *") : "Reject reason *"}</label>
                     <textarea value={rejectSoComment} onChange={e => setRejectSoComment(e.target.value)} rows={2}
                       placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     <div className="flex gap-2">
@@ -3499,7 +3499,7 @@ export default function RequestDetailPage() {
                           setSubmitting(null); setRejectingSo(null); setRejectSoComment("")
                         }}
                         className="px-4 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-40">
-                        {isSub ? "..." : (isGwClaimP1Role ? (isGWRequest ? "Confirm — Back to MER" : "Confirm — Back to SCM") : "Confirm Reject")}
+                        {isSub ? "..." : (isGwClaimP1Role ? (isGWRequest ? "Confirm — Back to Merchandise" : "Confirm — Back to SCM") : "Confirm Reject")}
                       </button>
                       <button onClick={() => setRejectingSo(null)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                     </div>
@@ -5368,7 +5368,7 @@ export default function RequestDetailPage() {
                       {(() => {
                         const pendingLabel = isGWRequest
                           ? (req.status === "PENDING_PRESIDENT_GW" ? "President GW" : "DPM GW")
-                          : "VP MER"
+                          : "VP Merchandise"
                         const SD: Record<string, [string, string]> = {
                           PENDING: [pendingLabel, "bg-yellow-100 text-yellow-700"],
                           VP_MER_PASSED: ["SCM", "bg-blue-100 text-blue-700"],

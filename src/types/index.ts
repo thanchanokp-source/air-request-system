@@ -1,7 +1,7 @@
 export const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
-  PENDING_DVM_MER: "Pending DVM MER",
-  PENDING_VP_MER: "Pending VP MER",
+  PENDING_DVM_MER: "Pending DVM Merchandise",
+  PENDING_VP_MER: "Pending VP Merchandise",
   PENDING_SCM: "Pending SCM",
   PENDING_VP_SCM: "Pending VP SCM",
   PENDING_PRESIDENT: "Pending President",
@@ -15,7 +15,7 @@ export const STATUS_LABELS: Record<string, string> = {
   PENDING_PRESIDENT_GW: "Pending President (GW)",
   PENDING_LOGISTICS_GW: "Pending Logistics (GW)",
   PENDING_CLAIM_GW: "Pending Claim (GW)",
-  PENDING_CLAIM_REJECT_GW: "Claim Rejected — Re-assign (MER)",
+  PENDING_CLAIM_REJECT_GW: "Claim Rejected — Re-assign (Merchandise)",
   PENDING_SCM_GW: "Pending SCM (GW)",
   PENDING_ACCOUNTING: "Pending Accounting",
   COMPLETED: "Completed",
