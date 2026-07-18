@@ -130,7 +130,10 @@ export default function NewRequestPage() {
     }
     const isEmpty = (v: any) => v == null || String(v).trim() === ""
     // Fields required in EVERY row (Brand/BU are doc-level → checked via columns only).
-    const perRowRequired = required.filter(f => !["Brand name", "BU"].includes(f))
+    // Plan Shipment Date + QTY Request ship Air are OPTIONAL for Merchandise — Logistics may
+    // fill them after upload (MER sometimes doesn't know them). Column must still exist.
+    const MER_OPTIONAL = ["Plan Shipment Date", "QTY Request ship Air (pcs)"]
+    const perRowRequired = required.filter(f => !["Brand name", "BU", ...MER_OPTIONAL].includes(f))
     const numFields = ["QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)"]
     const dateFields = ["Original Shipment Date", "Plan Shipment Date"]
     const validDepts = (isGW

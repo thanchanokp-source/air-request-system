@@ -59,3 +59,25 @@ export async function releaseHeldDocs() {
 
 // Back-compat alias (older call sites). Both rate and weight releases run the same pass.
 export const releasePendingRateDocs = releaseHeldDocs
+
+// Recompute Gross (= QTY Air × WT Charge) + Est. Air Freight (= Gross × rate) for EVERY item
+// of a request. Call after Logistics fills in a QTY that Merchandise left blank at upload.
+export async function recomputeRequestFreight(requestId: string): Promise<void> {
+  const items = await (prisma.airRequestItem as any).findMany({ where: { requestId } })
+  if (!items.length) return
+  const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
+  const rates: Record<string, number> = {}
+  for (const r of rateList) rates[rateKey(r.country)] = r.ratePerKg
+  const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
+  const wts: Record<string, number> = {}
+  for (const d of descList) wts[descKey(d.name)] = d.weightPerUnit || 0
+  for (const it of items) {
+    const wt = wts[descKey(it.description)] || 0
+    const rate = rates[rateKey(it.country)] || 0
+    const gross = (it.qtyRequestAir || 0) * wt
+    await prisma.airRequestItem.update({
+      where: { id: it.id },
+      data: { grossWeight: gross, airFreight: gross * rate, marketRatePerKg: rate > 0 ? rate : null },
+    }).catch(() => {})
+  }
+}

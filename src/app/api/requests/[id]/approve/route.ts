@@ -6,6 +6,7 @@ import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
+import { recomputeRequestFreight } from "@/lib/freight"
 
 const getClaimDept = (role: string) => {
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
@@ -126,6 +127,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           } catch { /* hawbNo not yet in Prisma client — skip */ }
         }
       }
+    }
+    // Logistics fills the QTY Air / Plan Ship Date that Merchandise left blank at upload.
+    // After updating QTY, recompute Gross + Est. Air Freight for the whole request.
+    if (body.itemShipData && typeof body.itemShipData === "object") {
+      let qtyChanged = false
+      for (const [iid, val] of Object.entries(body.itemShipData)) {
+        const d = val as any
+        const upd: any = {}
+        if (d.qtyRequestAir != null && String(d.qtyRequestAir).trim() !== "") {
+          const q = Number(String(d.qtyRequestAir).replace(/,/g, ""))
+          if (!isNaN(q)) { upd.qtyRequestAir = q; qtyChanged = true }
+        }
+        if (d.planShipmentDate) upd.planShipmentDate = new Date(d.planShipmentDate)
+        if (Object.keys(upd).length) await prisma.airRequestItem.update({ where: { id: iid }, data: upd })
+      }
+      if (qtyChanged) await recomputeRequestFreight(id).catch(() => {})
     }
     // LG runs in PARALLEL with Claim. Now that Actual may be entered, re-derive any item
     // whose claim is fully approved so it can advance to President (needs claim done AND
@@ -637,6 +654,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { invoiceNo: d.invoiceNo || null, hawbNo: d.hawbNo || null, bookingDate: d.bookingDate ? new Date(d.bookingDate) : null } as any
         })
       }
+    }
+    // GW Logistics may also fill QTY Air / Plan Ship Date that Merchandise left blank → recompute.
+    if (body.itemShipData && typeof body.itemShipData === "object") {
+      let qtyChanged = false
+      for (const [iid, val] of Object.entries(body.itemShipData)) {
+        const d = val as any
+        const upd: any = {}
+        if (d.qtyRequestAir != null && String(d.qtyRequestAir).trim() !== "") {
+          const q = Number(String(d.qtyRequestAir).replace(/,/g, "")); if (!isNaN(q)) { upd.qtyRequestAir = q; qtyChanged = true }
+        }
+        if (d.planShipmentDate) upd.planShipmentDate = new Date(d.planShipmentDate)
+        if (Object.keys(upd).length) await prisma.airRequestItem.update({ where: { id: iid }, data: upd })
+      }
+      if (qtyChanged) await recomputeRequestFreight(id).catch(() => {})
     }
     // Parallel-stage items (PRES_PASSED). Ready = has actual air freight.
     const freshItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: { in: ["PRES_PASSED", "LOG_PASSED"] } } })

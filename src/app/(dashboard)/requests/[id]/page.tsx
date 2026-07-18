@@ -406,6 +406,8 @@ export default function RequestDetailPage() {
   const [lgQuickInv, setLgQuickInv] = useState("")
   const [lgQuickSo, setLgQuickSo] = useState("")
   const [soActualOverride, setSoActualOverride] = useState<Record<string, string>>({})
+  // Logistics fills QTY Air / Plan Ship Date that Merchandise left blank at upload.
+  const [soShipData, setSoShipData] = useState<Record<string, { qty?: string; date?: string }>>({})
   const [crNoInput, setCrNoInput] = useState("")
   const [savingCr, setSavingCr] = useState(false)
   const [reassign, setReassign] = useState<Record<string, { dept: string; pct: string; reason: string }[]>>({})
@@ -974,7 +976,7 @@ export default function RequestDetailPage() {
     const action = draft ? "save_logistics_draft" : (isLgGwEntry ? "approve" : "save_logistics_draft")
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, itemLogistics: itemLogisticsData, itemActuals: itemActualsData, lgComplete: !draft }),
+      body: JSON.stringify({ action, itemLogistics: itemLogisticsData, itemActuals: itemActualsData, itemShipData: Object.fromEntries(Object.entries(soShipData).map(([id, v]) => [id, { qtyRequestAir: v.qty, planShipmentDate: v.date }])), lgComplete: !draft }),
     })
     setLgDraftSaving(false)
     if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Save failed"); return }
@@ -4340,6 +4342,47 @@ export default function RequestDetailPage() {
             )
           })()}
 
+          {/* Ship Date & QTY Air — Logistics fills what Merchandise left blank at upload */}
+          {showAwbEntry && allLgItems.length > 0 && (
+            <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
+              <p className="text-xs font-semibold text-orange-800">
+                Ship Date &amp; QTY Air <span className="font-normal text-gray-500">(กรอกเฉพาะที่ Merchandise เว้นว่าง — แถวแดง = ยังไม่มี QTY, Est. Air Freight จะคำนวณให้เมื่อใส่)</span>
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50"><tr>
+                    <th className="px-2 py-1 text-left">SO</th>
+                    <th className="px-2 py-1 text-left">STYLE</th>
+                    <th className="px-2 py-1 text-right">QTY Air</th>
+                    <th className="px-2 py-1 text-left">Plan Ship Date</th>
+                  </tr></thead>
+                  <tbody>
+                    {allLgItems.map((it: any) => {
+                      const missingQty = !(it.qtyRequestAir > 0)
+                      return (
+                        <tr key={it.id} className={`border-t border-gray-100 ${missingQty ? "bg-red-50" : ""}`}>
+                          <td className="px-2 py-1 font-medium">{it.so}</td>
+                          <td className="px-2 py-1 text-gray-500">{it.style}</td>
+                          <td className="px-2 py-1">
+                            <input type="number" min="0" disabled={lgDraftSaving}
+                              className="w-24 border border-gray-300 rounded px-2 py-1 text-right"
+                              value={soShipData[it.id]?.qty ?? (it.qtyRequestAir || "")}
+                              onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], qty: e.target.value } }))} />
+                          </td>
+                          <td className="px-2 py-1">
+                            <input type="date" disabled={lgDraftSaving}
+                              className="border border-gray-300 rounded px-2 py-1"
+                              value={soShipData[it.id]?.date ?? (it.planShipmentDate ? new Date(it.planShipmentDate).toISOString().slice(0, 10) : "")}
+                              onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], date: e.target.value } }))} />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* INV Assignment Table */}
           <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
