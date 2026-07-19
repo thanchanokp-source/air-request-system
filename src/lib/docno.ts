@@ -13,15 +13,15 @@ export async function generateDocumentNo(bu: string = "NYG"): Promise<string> {
   const buCode = bu === "GW" ? "GW" : bu || "NYG"
 
   const newPrefix = `AIR_${buCode}_${yymm}_`  // new per-BU format
-  const oldPrefix = `AIR-${yymm}-`            // legacy shared format (needs bu filter)
-  const buWhere = buCode === "GW" ? { bu: "GW" } : { OR: [{ bu: "NYG" }, { bu: null }] }
+  const oldPrefix = `AIR-${yymm}-`            // legacy shared format (disambiguated by bu column)
 
   const seqOf = (doc: { documentNo: string } | null) => (doc ? parseInt(doc.documentNo.slice(-4)) || 0 : 0)
 
-  // Highest sequence this BU has used this month, across BOTH formats.
+  // Highest sequence this BU has used this month, across BOTH formats. bu is a non-nullable
+  // String column (default "NYG"), so a plain equality is correct (no null branch needed).
   const [lastNew, lastOld] = await Promise.all([
     prisma.airRequest.findFirst({ where: { documentNo: { startsWith: newPrefix } }, orderBy: { documentNo: "desc" } }),
-    prisma.airRequest.findFirst({ where: { AND: [{ documentNo: { startsWith: oldPrefix } }, buWhere] } as any, orderBy: { documentNo: "desc" } }),
+    prisma.airRequest.findFirst({ where: { documentNo: { startsWith: oldPrefix }, bu: buCode }, orderBy: { documentNo: "desc" } }),
   ])
 
   const seq = Math.max(seqOf(lastNew), seqOf(lastOld)) + 1
