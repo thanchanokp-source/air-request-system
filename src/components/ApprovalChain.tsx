@@ -142,21 +142,22 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
 
   // Which stage rejected? Pull it from the REJECT approval log's fromStatus. When we have a
   // specific SO, match the log by "Style: <style>" in its comment; else take the latest REJECT.
-  const STAGE_LABEL: Record<string, string> = {
-    PENDING_DVM_MER: "DVM Merchandise", PENDING_VP_MER: "VP Merchandise",
-    PENDING_SCM: "SCM", PENDING_VP_SCM: "VP SCM",
-    PENDING_VP_MER_GW: "DPM", PENDING_GM_GW: "GM",
-  }
-  const rejectStageKey: string | null = (() => {
+  const rejectLog: any = (() => {
     if (!rejected) return null
     const logs: any[] = (req?.approvalLogs || []).filter((l: any) => l.action === "REJECT")
     if (!logs.length) return null
     const byStyle = soItem?.style
       ? logs.find((l: any) => typeof l.comment === "string" && l.comment.includes(`Style: ${soItem.style}`))
       : null
-    return (byStyle || logs[0])?.fromStatus || null
+    return byStyle || logs[0]
   })()
-  const rejectLabel = rejectStageKey ? (STAGE_LABEL[rejectStageKey] || "") : ""
+  const rejectStageKey: string | null = rejectLog?.fromStatus || null
+  // Reason to show on the trailing chip: the SO's own comment, else strip "Style: X - " off
+  // the reject log's comment, else the doc-level reason.
+  const rejectReason: string =
+    (soItem?.itemComment && String(soItem.itemComment).trim())
+    || (rejectLog?.comment ? String(rejectLog.comment).replace(/^Style:\s*[^\s-]+\s*-\s*/, "").trim() : "")
+    || (req?.rejectionReason ? String(req.rejectionReason).trim() : "")
 
   // ── NYG: linear chain (Claim step expands into per-dept chips, like GW) ──
   if (bu !== "GW") {
@@ -238,7 +239,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
               </div>
             )
           })}
-          {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected{rejectLabel ? ` · ${rejectLabel}` : ""}</span>}
+          {rejected && <span title={rejectReason || undefined} className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium max-w-[260px] truncate inline-block align-bottom">✕ {rejectReason || "Rejected"}</span>}
           {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
         </div>
         <WaitingLine items={pendingWho} />
@@ -316,7 +317,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
       {/* President = final approver (after parallel) */}
       <Bar done={completed || cur > 3} />
       <Chip sm={sm} state={rejected ? "pending" : stateFor(3)} label="President" />
-      {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected{rejectLabel ? ` · ${rejectLabel}` : ""}</span>}
+      {rejected && <span title={rejectReason || undefined} className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium max-w-[260px] truncate inline-block align-bottom">✕ {rejectReason || "Rejected"}</span>}
       {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
     </div>
     <WaitingLine items={gwPendingWho} />
