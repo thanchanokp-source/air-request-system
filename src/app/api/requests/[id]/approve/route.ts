@@ -1028,8 +1028,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-      if (nextDocStatus === "PENDING_CLAIM_GW") await notifyStatusChange(id, "PENDING_CLAIM_GW").catch(() => {})
     }
+    // MER re-submitted the re-assigned SO → it's back in Claim. Alert claim approvers every time
+    // (even if the doc status is unchanged because other SOs are still being re-worked).
+    if (nextDocStatus === "PENDING_CLAIM_GW") await notifyStatusChange(id, "PENDING_CLAIM_GW").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -1564,6 +1566,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (upd.status && upd.status !== request.status) {
     await notifyStatusChange(id, upd.status).catch(() => {})
+  } else if (action === "back_to_scm") {
+    // A "Back to SCM" must always alert SCM — even when the doc status is unchanged (VP SCM and
+    // SCM both operate at PENDING_SCM, so a status-change check alone would skip the email).
+    await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
   }
 
   return NextResponse.json(await getUpdated())
