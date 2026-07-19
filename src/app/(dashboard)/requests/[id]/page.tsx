@@ -940,10 +940,19 @@ export default function RequestDetailPage() {
   const lgFileCount = (req?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).length
   // "Complete" = every LG SO has an INV assigned AND that INV sits in a HAWB group with a
   // HAWB No. (so actual air freight is computed). Draft can be saved without this.
-  const lgComplete = allLgItems.length > 0 && allLgItems.every((it: any) => {
+  // SOs pulled into a HAWB = "being calculated" (they get an Actual Air Freight). SOs not in any
+  // HAWB are skipped (not calculated) — allowed at Save & Send.
+  const isCalcItem = (it: any) => { const inv = soInvMap[it.id]; return !!inv && hawbGroups.some(g => g.invNos.includes(inv)) }
+  const calcItems = allLgItems.filter(isCalcItem)
+  // Complete = at least 1 calculated SO, and every calculated SO sits in a HAWB that has a HAWB No.
+  const lgComplete = calcItems.length > 0 && calcItems.every((it: any) => {
     const inv = soInvMap[it.id]
     return !!inv && hawbGroups.some(g => g.hawbNo && g.invNos.includes(inv))
   })
+  // A calculated SO MUST have a real Ship Date (typed now, or already saved) before Save & Send.
+  const hasShipDate = (it: any) => !!(soShipData[it.id]?.date && String(soShipData[it.id]?.date).trim()) || !!it.planShipmentDate
+  const missingShipDateSos = calcItems.filter((it: any) => !hasShipDate(it)).map((it: any) => it.so)
+  const lgShipDatesOk = missingShipDateSos.length === 0
   // draft = save partial data, no gates, no forward, no claimer email.
   // submit (draft=false) = requires complete data + ≥1 file → forward (GW) / advance (NYG)
   // and (item 2) email the claimers with the files + signed PDF.
@@ -954,7 +963,12 @@ export default function RequestDetailPage() {
         return
       }
       if (!lgComplete) {
-        alert("ข้อมูลยังไม่ครบ — ทุก SO ต้องมี INV + HAWB (จะได้ Actual Air) ก่อนส่ง\nหากยังไม่ครบ กด \"Save Draft\" เก็บไว้ก่อนได้")
+        alert("ข้อมูลยังไม่ครบ — SO ที่คำนวณต้องอยู่ใน HAWB ที่มี HAWB No. (จะได้ Actual Air) ก่อนส่ง\nหากยังไม่ครบ กด \"Save Draft\" เก็บไว้ก่อนได้")
+        return
+      }
+      // Every calculated SO (in a HAWB) must have a real Ship Date. SOs not calculated are exempt.
+      if (!lgShipDatesOk) {
+        alert(`กรุณาใส่ Plan Ship Date ของ SO ที่ถูกคำนวณก่อนส่ง (ขาด: ${missingShipDateSos.join(", ")})\nSO ที่ไม่ได้อยู่ใน HAWB ไม่ต้องใส่ก็ได้`)
         return
       }
       // Booking Date is required on every HAWB group before sending.
@@ -4406,8 +4420,8 @@ export default function RequestDetailPage() {
                 className="bg-white border border-gray-300 text-gray-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
                 {lgDraftSaving ? "..." : "Save Draft"}
               </button>
-              <button type="button" onClick={() => saveLgHawb(false)} disabled={lgDraftSaving || hawbGroups.length === 0}
-                title={!lgComplete ? "ข้อมูลยังไม่ครบ (ต้องมี INV + HAWB ทุก SO)" : lgFileCount === 0 ? "ต้องแนบไฟล์อย่างน้อย 1" : ""}
+              <button type="button" onClick={() => saveLgHawb(false)} disabled={lgDraftSaving || hawbGroups.length === 0 || !lgShipDatesOk}
+                title={!lgComplete ? "ข้อมูลยังไม่ครบ (SO ที่คำนวณต้องอยู่ใน HAWB + มี HAWB No.)" : !lgShipDatesOk ? `ต้องใส่ Ship Date ของ SO ที่คำนวณ: ${missingShipDateSos.join(", ")}` : lgFileCount === 0 ? "ต้องแนบไฟล์อย่างน้อย 1" : ""}
                 className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50">
                 {lgDraftSaving ? "Saving..." : (isLgGwEntry ? "Save & Send to Claim" : "Save & Send")}
               </button>
