@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     // that's missing / has no WT Charge → the doc is HELD (pendingWeight) until LG adds it.
     // Normalise for matching: case-insensitive, trim, and collapse repeated spaces so
     // "t-shirt", "T-SHIRT", "  T-SHIRT " all match the same Master Description.
-    const descKey = (s: string) => String(s || "").trim().toUpperCase().replace(/\s+/g, " ")
+    const descKey = (s: string) => String(s || "").trim().toUpperCase().replace(/\s*,\s*/g, ",").replace(/\s+/g, " ")
     const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
     const descWeights: Record<string, number> = {}
     for (const d of descList) descWeights[descKey(d.name)] = d.weightPerUnit || 0
