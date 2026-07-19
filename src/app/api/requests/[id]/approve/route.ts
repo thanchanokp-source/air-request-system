@@ -645,8 +645,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: { requestId: id, userId, action: "APPROVE", fromStatus: "PENDING_SCM", toStatus: nextStatus, comment }
     })
     if (nextStatus !== "PENDING_SCM") await notifyStatusChange(id, nextStatus).catch(() => {})
-    // Notify VP SCM only on first assignment or when changed to a different person
-    if (assignedVpScm && (request as any).assignedVpScm !== assignedVpScm) {
+    // A complete style is now forwarded → it's ready for VP SCM to approve. Notify VP SCM EVERY
+    // time this happens — including after VP SCM sent it Back to SCM and SCM re-submitted (the
+    // assigned VP SCM is unchanged, so the old "only when assignment changes" check missed it).
+    else if (hasCompleteStyleAfterForward) {
       await notifyStatusChange(id, "SCM_ASSIGNED_VP_SCM").catch(() => {})
     }
     return NextResponse.json(await getUpdated())
