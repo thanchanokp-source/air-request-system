@@ -916,9 +916,19 @@ export default function RequestDetailPage() {
     if (g.id !== gid) return g
     return { ...g, invNos: g.invNos.includes(invNo) ? g.invNos.filter(n => n !== invNo) : [...g.invNos, invNo] }
   }))
+  // QTY Air for HAWB math/display: prefer what LG just typed in the "Ship Date & QTY Air" card
+  // (MER left it blank) over the saved value — so the HAWB avg/actual reflects it immediately.
+  const liveQty = (item: any): number => {
+    const typed = soShipData[item.id]?.qty
+    if (typed != null && String(typed).trim() !== "") {
+      const n = Number(String(typed).replace(/,/g, ""))
+      if (!isNaN(n)) return n
+    }
+    return Number(item.qtyRequestAir) || 0
+  }
   const getHawbCalc = (group: { totalCost: string; invNos: string[] }) => {
     const items = allLgItems.filter((i: any) => group.invNos.includes(soInvMap[i.id]))
-    const totalQty = items.reduce((s: number, i: any) => s + (Number(i.qtyRequestAir) || 0), 0)
+    const totalQty = items.reduce((s: number, i: any) => s + liveQty(i), 0)
     const hasOverride = items.some((i: any) => soActualOverride[i.id] !== undefined && soActualOverride[i.id] !== "")
     const overrideTotal = hasOverride ? items.reduce((s: number, i: any) => s + (parseFloat(soActualOverride[i.id]) || 0), 0) : null
     const totalCost = overrideTotal !== null ? overrideTotal : (parseFloat(group.totalCost) || 0)
@@ -970,7 +980,7 @@ export default function RequestDetailPage() {
         const overrideVal = soActualOverride[item.id]
         itemActualsData[item.id] = overrideVal !== undefined && overrideVal !== ""
           ? String(parseFloat(overrideVal) || 0)
-          : String(Math.round(item.qtyRequestAir * avgPerUnit * 100) / 100)
+          : String(Math.round(liveQty(item) * avgPerUnit * 100) / 100)
       })
     })
     setLgDraftSaving(true)
@@ -4325,7 +4335,7 @@ export default function RequestDetailPage() {
                     const hawbGrp = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
                     const hawbNo = hawbGrp?.hawbNo || ""
                     const af = hawbGrp && parseFloat(hawbGrp.totalCost) > 0
-                      ? Math.round(item.qtyRequestAir * getHawbCalc(hawbGrp).avgPerUnit * 100) / 100
+                      ? Math.round(liveQty(item) * getHawbCalc(hawbGrp).avgPerUnit * 100) / 100
                       : (typeof item.actualAirFreight === "number" ? item.actualAirFreight : 0)
                     const d: any[] = Array.isArray(item.claimDepts) && item.claimDepts.length > 0 ? item.claimDepts : []
                     // Actual airfreight split per claim dept = SO actual × dept% (blank if no data yet)
@@ -4640,7 +4650,7 @@ export default function RequestDetailPage() {
                     const hawbGroup = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
                     const actual = hawbGroup ? (() => {
                       const { avgPerUnit } = getHawbCalc(hawbGroup)
-                      return parseFloat(hawbGroup.totalCost) > 0 ? item.qtyRequestAir * avgPerUnit : null
+                      return parseFloat(hawbGroup.totalCost) > 0 ? liveQty(item) * avgPerUnit : null
                     })() : null
                     return (
                       <tr key={item.id}
@@ -4679,7 +4689,7 @@ export default function RequestDetailPage() {
                         <td className="px-3 py-2 text-gray-500">{item.customerPO || "—"}</td>
                         <td className="px-3 py-2 text-gray-500 max-w-48 truncate">{item.description || "—"}</td>
                         <td className="px-3 py-2 text-gray-500">{item.qtyOriginalShipment}</td>
-                        <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
+                        <td className="px-3 py-2 font-semibold">{liveQty(item)}</td>
                         <td className="px-3 py-2 text-blue-700">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "—"}</td>
                         <td className="px-3 py-2 text-blue-700">{item.airFreight != null ? Number(item.airFreight).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "—"}</td>
                         <td className="px-3 py-2 text-gray-500">{item.country || "—"}</td>
@@ -4778,7 +4788,7 @@ export default function RequestDetailPage() {
                             const isSelected = group.invNos.includes(invNo)
                             const isTaken = !isSelected && assignedHawbInvNos.has(invNo)
                             const soCount = allLgItems.filter((i: any) => soInvMap[i.id] === invNo).length
-                            const qty = allLgItems.filter((i: any) => soInvMap[i.id] === invNo).reduce((s: number, i: any) => s + (Number(i.qtyRequestAir) || 0), 0)
+                            const qty = allLgItems.filter((i: any) => soInvMap[i.id] === invNo).reduce((s: number, i: any) => s + liveQty(i), 0)
                             return (
                               <label key={invNo}
                                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors
@@ -4828,14 +4838,14 @@ export default function RequestDetailPage() {
                               </thead>
                               <tbody className="divide-y divide-orange-50">
                                 {items.map((item: any) => {
-                                  const calcVal = hasCost && !hasOverride ? item.qtyRequestAir * avgPerUnit : null
+                                  const calcVal = hasCost && !hasOverride ? liveQty(item) * avgPerUnit : null
                                   const displayVal = soActualOverride[item.id] !== undefined ? soActualOverride[item.id] : (calcVal !== null ? calcVal.toFixed(2) : "")
                                   return (
                                     <tr key={item.id} className="bg-white/80">
                                       <td className="px-3 py-1.5 font-medium">{item.so}</td>
                                       <td className="px-3 py-1.5 text-gray-500">{soInvMap[item.id] || "—"}</td>
                                       <td className="px-3 py-1.5 text-gray-500">{item.style}</td>
-                                      <td className="px-3 py-1.5">{item.qtyRequestAir}</td>
+                                      <td className="px-3 py-1.5">{liveQty(item)}</td>
                                       <td className="px-3 py-1.5">
                                         <input
                                           type="number"
