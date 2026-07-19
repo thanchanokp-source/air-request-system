@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { canonCountry } from "@/lib/freight"
+import { recomputeRequestFreight } from "@/lib/freight"
 
+// Admin "Recalculate" — recompute Gross Weight (= QTY Air × WT Charge) AND Est. Air Freight
+// (= Gross × rate) for EVERY item from the CURRENT Master data. Fixes documents created before
+// a Master Description WT Charge / Master Rate was added (their Gross was frozen at 0). Also
+// clears the pending-master holds if everything now resolves.
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -14,26 +18,14 @@ export async function POST(_: NextRequest, { params }: { params: Promise<{ id: s
   const request = await prisma.airRequest.findUnique({ where: { id }, include: { items: true } })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  const items = request.items as any[]
-  // Freight rate is keyed by COUNTRY only (one country = one rate). Case-insensitive.
-  const rateKey = (country: string) => canonCountry(country)
-  const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true }, orderBy: { updatedAt: "asc" } })
-  const freightRates: Record<string, number> = {}
-  for (const r of rateList) freightRates[rateKey(r.country)] = r.ratePerKg
+  // Recompute Gross + Est. from current Master (WT Charge + rate).
+  await recomputeRequestFreight(id)
 
-  let updated = 0
-  for (const item of items) {
-    const rate = freightRates[rateKey(String(item.country || ""))] || 0
-    const gw = item.grossWeight || 0
-    await prisma.airRequestItem.update({
-      where: { id: item.id },
-      data: {
-        airFreight: gw * rate,
-        marketRatePerKg: rate > 0 ? rate : undefined
-      }
-    })
-    updated++
-  }
+  // Re-evaluate the holds: clear pendingWeight / pendingRate if every item now resolves.
+  const items = await prisma.airRequestItem.findMany({ where: { requestId: id } })
+  const wtOk = items.filter(i => i.description).every(i => (i.grossWeight || 0) > 0)
+  const rateOk = items.filter(i => i.country).every(i => (i.marketRatePerKg || 0) > 0)
+  await (prisma.airRequest as any).update({ where: { id }, data: { pendingWeight: !wtOk, pendingRate: !rateOk } }).catch(() => {})
 
-  return NextResponse.json({ ok: true, updated })
+  return NextResponse.json({ ok: true, updated: items.length })
 }

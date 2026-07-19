@@ -2,6 +2,7 @@ import { prisma } from "./prisma"
 import { sendMail } from "./email"
 import { getSplits, claimEntryRoles, claimVpRoles, vpProdGroup, prodGroupCovers } from "./claim"
 import { supabase, BUCKET } from "./supabase-storage"
+import { MASTER_EDITOR_EMAILS } from "./master-access"
 import { randomUUID } from "crypto"
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
@@ -1220,6 +1221,53 @@ export async function notifyBackToMerGw(requestId: string, reason: string, byNam
 </td></tr></table></body></html>`
     await sendMail([req.createdBy.email], `[Air Request · Back to Merchandise] ${req.documentNo}`, html)
   } catch (e) { console.error("[notify] back-to-mer (GW) failed:", e) }
+}
+
+// A new document is HELD because Master data is incomplete — some COUNTRY has no freight rate
+// and/or some DESCRIPTION has no WT Charge (so Gross / Est. Air Freight can't be computed).
+// Alert the people who maintain Master (ADMIN / Logistics / the master-editor allowlist) with
+// the exact missing items, so they can add them and release the doc.
+export async function notifyMissingMaster(requestId: string, missingCountries: string[], missingDescriptions: string[]) {
+  try {
+    const countries = [...new Set(missingCountries.filter(Boolean))]
+    const descs = [...new Set(missingDescriptions.filter(Boolean))]
+    if (!countries.length && !descs.length) return
+    const req: any = await prisma.airRequest.findUnique({
+      where: { id: requestId },
+      select: { documentNo: true, bu: true, createdBy: { select: { name: true, email: true } } },
+    })
+    if (!req) return
+    const editors = await (prisma.user as any).findMany({
+      where: { isActive: true, OR: [{ role: { in: ["ADMIN", "LOGISTICS", "LOGISTICS_GW"] } }, { email: { in: MASTER_EDITOR_EMAILS } }] },
+      select: { email: true },
+    })
+    const recips = [...new Set((editors as any[]).map(u => u.email).filter(Boolean))]
+    if (!recips.length) return
+    const li = (v: string) => `<li style="margin:2px 0;color:#7c2d12;font-size:13px;font-family:Arial">${v}</li>`
+    const rateBlock = countries.length ? `
+      <p style="margin:12px 0 2px;color:#9a3412;font-size:12px;font-weight:700;font-family:Arial">ต้องเพิ่ม Freight Rate (Master Rate) ของประเทศ:</p>
+      <ul style="margin:0;padding-left:18px">${countries.map(li).join("")}</ul>` : ""
+    const wtBlock = descs.length ? `
+      <p style="margin:12px 0 2px;color:#9a3412;font-size:12px;font-weight:700;font-family:Arial">ต้องเพิ่ม WT Charge (Master Description) ของ:</p>
+      <ul style="margin:0;padding-left:18px">${descs.map(li).join("")}</ul>` : ""
+    const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
+  <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#d97706;padding:18px 24px">
+      <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Master ไม่ครบ</p>
+      <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo} — ${req.bu || "NYG"}</h1>
+    </td></tr>
+    <tr><td style="padding:20px 24px">
+      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">เอกสารถูก <strong>พักไว้ (Held)</strong> เพราะ Master ยังไม่ครบ — Gross Weight / Est. Air Freight คำนวณไม่ได้ (= 0)</p>
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin:12px 0">${rateBlock}${wtBlock}</div>
+      <p style="margin:10px 0 0;color:#64748b;font-size:12px;font-family:Arial">เพิ่มข้อมูลใน Master Rate / Master Description แล้วระบบจะคำนวณและปล่อยเอกสารต่อให้อัตโนมัติ</p>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group</p></td></tr>
+  </table>
+</td></tr></table></body></html>`
+    await sendMail(recips, `[Master ต้องเติม] ${req.documentNo} — ${countries.length ? `${countries.length} rate` : ""}${countries.length && descs.length ? " + " : ""}${descs.length ? `${descs.length} WT` : ""}`, html)
+  } catch (e) { console.error("[notify] missing-master alert failed:", e) }
 }
 
 // ── Weekly "stuck document" reminder (Mon 08:00 ICT via Vercel Cron) ─────────────────

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
-import { notifyStatusChange } from "@/lib/notify"
+import { notifyStatusChange, notifyMissingMaster } from "@/lib/notify"
 import { sendMail } from "@/lib/email"
 import { canonCountry } from "@/lib/freight"
 import crypto from "crypto"
@@ -256,6 +256,14 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error("[notify] send failed:", err)
       }
+    } else {
+      // Master data incomplete → doc is HELD. Alert the master-data maintainers with the exact
+      // missing countries (rate) / descriptions (WT Charge) so they can add them and release it.
+      await notifyMissingMaster(
+        request.id,
+        missingRates.map((x: any) => x.country),
+        missingDescriptions,
+      ).catch(() => {})
     }
 
     if (missingRates.length > 0) {
