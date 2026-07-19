@@ -1086,11 +1086,17 @@ export default function RequestDetailPage() {
     if (toReject.length === 0) return
     const reason = window.prompt(`Reason for rejecting ${toReject.length} style(s):`)
     if (reason == null || !reason.trim()) return
+    // NYG only: let the rejecter also type an email to forward the rejection to (optional).
+    let fwEmail: string | undefined
+    if (!isGWRequest) {
+      const typed = window.prompt("Forward to email (optional) — พิมพ์อีเมลที่จะส่งต่อ, เว้นว่าง = ไม่ส่งต่อ:")
+      if (typed && typed.includes("@")) fwEmail = typed.trim()
+    }
     for (const style of toReject) {
       setSubmitting(style)
       const res = await fetch(`/api/requests/${id}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reject_style", style, comment: reason.trim() })
+        body: JSON.stringify({ action: "reject_style", style, comment: reason.trim(), forwardEmail: fwEmail })
       })
       if (res.ok) setReq(await res.json())
       else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
