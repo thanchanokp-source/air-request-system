@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
       .filter((d: string) => d && wtChargeFor(d) <= 0))] as string[]
 
     const first = items[0]
-    const docNo = await generateDocumentNo()
+    const docNo = await generateDocumentNo(isGW ? "GW" : "NYG")
 
     // NYG now has a DVM MER approval step BEFORE VP MER. Only route there if a DVM MER
     // user is actually configured (role or roles[]); otherwise skip straight to VP MER

@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     for (const [, rows] of groups) {
       const first = rows[0]
       const isGW = String(col(first, "BU") || "").toUpperCase().includes("GW")
-      const docNo = await generateDocumentNo()
+      const docNo = await generateDocumentNo(isGW ? "GW" : "NYG")
 
       const itemsData = rows.map((item: any) => {
         const country = String(col(item, "Country") || "").trim()
