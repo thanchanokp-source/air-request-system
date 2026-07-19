@@ -53,3 +53,23 @@ export function viewableBus(user: any): { bus: Bu[]; canAll: boolean } {
   if (set.size === 0) set.add("NYG")
   return { bus: BUS.filter(b => set.has(b)), canAll: false }
 }
+
+// Prisma `where` fragment that scopes AirRequest reads to a user's BU(s). Returns null =
+// NO restriction (see everything). Cross-BU people are intentionally unrestricted so their
+// claim/approval visibility is never hidden:
+//   • ADMIN / jariya / bu === "ALL"            → null (all)
+//   • holds any shared SCM_NYK_* claim role    → null (acts in every BU's NYK claim)
+//   • otherwise                                → limited to their own BU(s) (NYG incl. legacy null)
+// NOTE: the Approvals queue must pass its own unrestricted fetch — a claim approver whose
+// role maps to one BU can still be forwarded a claim in another BU.
+export function buWhere(user: any): any | null {
+  if (!user) return null
+  const role = user.role || ""
+  const roles: string[] = [role, ...(user.roles || [])].filter(Boolean)
+  if (role === "ADMIN" || user.bu === "ALL" || canViewBothBu(user)) return null
+  if (roles.some(r => roleBu(r) === "BOTH")) return null
+  const { bus } = viewableBus(user)
+  if (!bus.length) return null
+  const conds = bus.map(b => b === "NYG" ? { OR: [{ bu: "NYG" }, { bu: null }] } : { bu: b })
+  return conds.length === 1 ? conds[0] : { OR: conds }
+}

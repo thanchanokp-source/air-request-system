@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits, deptLabel } from "@/lib/claim"
-import { canViewBothBu } from "@/lib/master-access"
+import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 import { ApprovalChain } from "@/components/ApprovalChain"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -105,23 +105,18 @@ export default function RequestsPage() {
   const { data: session } = useSession()
   const role = (session?.user as any)?.role || ""
   const userId = (session?.user as any)?.id || ""
-  const userBu = (session?.user as any)?.bu || "NYG"
-  // Cross-BU person = holds exclusive roles of BOTH BUs (SCM_NYK_* count for neither — they
-  // exist in both). They get the NYG/GW toggle so a normal login (not magic link) sees both BUs.
-  const myRolesAll: string[] = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
-  const roleBuOf = (r: string) => r.startsWith("SCM_NYK") ? "BOTH" : (r.endsWith("_GW") || r.startsWith("SCM_NYG")) ? "GW" : "NYG"
-  const buSet = new Set(myRolesAll.map(roleBuOf).filter(b => b !== "BOTH"))
-  const isCrossBu = userBu === "ALL" || (buSet.has("NYG") && buSet.has("GW")) || canViewBothBu(session?.user)
-  const [activeBu, setActiveBu] = useState<string>(userBu === "ALL" ? "NYG" : userBu)
-  // Session loads after first render — sync the active BU tab to the user's BU once it's known.
+  // Which BU(s) this viewer may browse (central logic — forward-ready for TRM/EA).
+  // ADMIN + jariya → every BU; a 2-BU person → their 2 BUs; single-BU → just theirs (badge).
+  const { bus: buTabs } = viewableBus(session?.user)
+  const showBuToggle = buTabs.length > 1
+  const [activeBu, setActiveBu] = useState<string>("NYG")
+  // Session loads after first render — default the active BU to the viewer's first allowed BU.
   const buInit = useRef(false)
   useEffect(() => {
-    if (buInit.current) return
-    const bu = (session?.user as any)?.bu
-    if (!bu) return
-    if (bu !== "ALL") setActiveBu(bu)
+    if (buInit.current || !session?.user) return
+    setActiveBu(buTabs[0] || "NYG")
     buInit.current = true
-  }, [session])
+  }, [session, buTabs])
   const [requests, setRequests] = useState<any[]>([])
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [brandF, setBrandF] = useState<string[]>([])
@@ -144,7 +139,7 @@ export default function RequestsPage() {
     fetch("/api/users/claim-directory").then(r => r.json()).then(d => setClaimDir(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
 
-  const buRequests = requests.filter(r => activeBu === "GW" ? r.bu === "GW" : (r.bu === "NYG" || !r.bu))
+  const buRequests = requests.filter(r => requestInBu(r, activeBu))
 
   const allRows = buRequests.flatMap(r =>
     (r.items || []).map((item: any) => ({ ...item, request: r }))
@@ -269,12 +264,12 @@ export default function RequestsPage() {
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900">AIR REQUESTS</h1>
-          {(isCrossBu || role === "ADMIN") ? (
+          {showBuToggle ? (
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
-              {["NYG","GW"].map(bu => (
+              {buTabs.map(bu => (
                 <button key={bu} onClick={() => setActiveBu(bu)}
-                  className={`px-4 py-1.5 transition-colors ${activeBu === bu ? (bu === "GW" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white") : "bg-white text-gray-500 hover:bg-gray-50"}`}>
-                  {bu}
+                  className={`px-4 py-1.5 transition-colors ${activeBu === bu ? BU_META[bu].active : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                  {BU_META[bu].label}
                 </button>
               ))}
             </div>

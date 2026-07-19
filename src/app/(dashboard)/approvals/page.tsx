@@ -6,6 +6,7 @@ import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO, deptSplitStatus } from "@/lib/claim"
+import { roleBu, requestInBu, BU_META, BUS } from "@/lib/bu"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -46,13 +47,13 @@ export default function ApprovalsPage() {
   // (User.roles[]). Derive every NYG claim dept they can act on so a person who is
   // (e.g.) VP MER AND a claim approver sees the doc again at the claim step.
   const myRoles: string[] = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
-  // Cross-BU person = holds exclusive roles of BOTH BUs (SCM_NYK_* count for neither).
-  // They get a NYG/GW toggle so a normal login (not magic link) can filter the queue by BU.
-  const isCrossBu = (() => {
-    const roleBuOf = (r: string) => r.startsWith("SCM_NYK") ? "BOTH" : (r.endsWith("_GW") || r.startsWith("SCM_NYG")) ? "GW" : "NYG"
-    const s = new Set(myRoles.map(roleBuOf).filter(b => b !== "BOTH"))
-    return (session?.user as any)?.bu === "ALL" || (s.has("NYG") && s.has("GW"))
-  })()
+  // Which BU(s) this person's queue can span (their roles' BUs; bu==="ALL" → every BU).
+  // SCM_NYK_* are shared (BOTH) → pin no BU. Approvals stays a PERSONAL queue, so admins/
+  // jariya are NOT auto-granted all BUs here — only people whose roles truly span >1 BU get
+  // the filter toggle. Forward-ready for TRM/EA via the central role→BU map.
+  const myBuSet = new Set(myRoles.map(roleBu).filter(b => b && b !== "BOTH") as string[])
+  const buTabs = (session?.user as any)?.bu === "ALL" ? [...BUS] : BUS.filter(b => myBuSet.has(b))
+  const showBuToggle = buTabs.length > 1
   // Claim SO this person can act on via any held role (NYG only; GW has its own roles).
   // Forward-direction via actingClaimForSO so mapped depts work (e.g. COMMERCIAL → DVM MER
   // sees it at the entry step, VP MER at the VP step).
@@ -251,7 +252,7 @@ export default function ApprovalsPage() {
   const docGroups = myRequests
     .filter(r => filtered.some(f => f.request.id === r.id))
     // Cross-BU person can filter the queue by BU via the toggle (ALL = both).
-    .filter(r => !isCrossBu || buApprovalView === "ALL" || (buApprovalView === "GW" ? r.bu === "GW" : r.bu !== "GW"))
+    .filter(r => !showBuToggle || buApprovalView === "ALL" || requestInBu(r, buApprovalView))
 
   const isClaimRole = role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG"
   const myDepts = isClaimRole ? gwDeptsForRole(role, userClaimDept) : []
@@ -267,12 +268,12 @@ export default function ApprovalsPage() {
             <h1 className="text-2xl font-bold text-gray-900">APPROVALS</h1>
             <p className="text-xs text-gray-400 mt-0.5">{docGroups.length} document(s) pending your action</p>
           </div>
-          {isCrossBu && (
+          {showBuToggle && (
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold self-start">
-              {["ALL", "NYG", "GW"].map(bu => (
+              {["ALL", ...buTabs].map(bu => (
                 <button key={bu} onClick={() => setBuApprovalView(bu)}
-                  className={`px-3 py-1.5 transition-colors ${buApprovalView === bu ? (bu === "GW" ? "bg-emerald-600 text-white" : bu === "NYG" ? "bg-blue-600 text-white" : "bg-gray-700 text-white") : "bg-white text-gray-500 hover:bg-gray-50"}`}>
-                  {bu === "ALL" ? "All BU" : bu}
+                  className={`px-3 py-1.5 transition-colors ${buApprovalView === bu ? (bu === "ALL" ? "bg-gray-700 text-white" : BU_META[bu].active) : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                  {bu === "ALL" ? "All BU" : BU_META[bu].label}
                 </button>
               ))}
             </div>
