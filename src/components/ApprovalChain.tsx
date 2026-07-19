@@ -317,6 +317,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
       {/* President = final approver (after parallel) */}
       <Bar done={completed || cur > 3} />
       <Chip sm={sm} state={rejected ? "pending" : stateFor(3)} label="President" />
+      {status === "PENDING_MER_GW" && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-300 font-medium">↩ Back to Merchandise</span>}
       {rejected && <span title={rejectReason || undefined} className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium max-w-[260px] truncate inline-block align-bottom">✕ {rejectReason || "Rejected"}</span>}
       {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
     </div>

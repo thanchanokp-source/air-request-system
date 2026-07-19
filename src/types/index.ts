@@ -16,6 +16,7 @@ export const STATUS_LABELS: Record<string, string> = {
   PENDING_LOGISTICS_GW: "Pending Logistics (GW)",
   PENDING_CLAIM_GW: "Pending Claim (GW)",
   PENDING_CLAIM_REJECT_GW: "Claim Rejected — Re-assign (Merchandise)",
+  PENDING_MER_GW: "Back to Merchandise (GW)",
   PENDING_SCM_GW: "Pending SCM (GW)",
   PENDING_ACCOUNTING: "Pending Accounting",
   COMPLETED: "Completed",
@@ -39,6 +40,7 @@ export const STATUS_COLORS: Record<string, string> = {
   PENDING_LOGISTICS_GW: "bg-blue-100 text-blue-700",
   PENDING_CLAIM_GW: "bg-indigo-100 text-indigo-700",
   PENDING_CLAIM_REJECT_GW: "bg-red-100 text-red-700",
+  PENDING_MER_GW: "bg-red-100 text-red-700",
   PENDING_SCM_GW: "bg-orange-100 text-orange-700",
   PENDING_ACCOUNTING: "bg-teal-100 text-teal-700",
   COMPLETED: "bg-green-100 text-green-700",
@@ -57,6 +59,7 @@ export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> =
   PENDING_VP_CLAIM: { approve: "COMPLETED", reject: "REJECTED" },
   PENDING_VP_NYK: { approve: "COMPLETED", reject: "REJECTED" },
   // GW flow
+  PENDING_MER_GW: { approve: "PENDING_VP_MER_GW" }, // MER re-submits → back to DPM
   PENDING_VP_MER_GW: { approve: "PENDING_GM_GW", reject: "REJECTED" },
   PENDING_GM_GW: { approve: "PENDING_PRESIDENT_GW", reject: "REJECTED" },
   PENDING_PRESIDENT_GW: { approve: "PENDING_LOGISTICS_GW", reject: "REJECTED" },
@@ -113,5 +116,5 @@ export const ROLE_ACTIONS: Record<string, string[]> = {
   SCM_NYK: ["PENDING_CLAIM_GW"],
   SCM_NYG: ["PENDING_CLAIM_GW"],
   ACCOUNTING: [],
-  MER_GW: [],
+  MER_GW: ["PENDING_MER_GW"], // re-submit after DPM/GM sends the doc back to Merchandise
 }

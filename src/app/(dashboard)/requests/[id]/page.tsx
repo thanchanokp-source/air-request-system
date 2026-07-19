@@ -417,6 +417,9 @@ export default function RequestDetailPage() {
   const [rejectingStyle, setRejectingStyle] = useState<string | null>(null)
   const [rejectComment, setRejectComment] = useState("")
   const [rejectForwardEmail, setRejectForwardEmail] = useState("")
+  // GW "Back to Merchandise" (whole doc) — reason input at DPM/GM, and resubmit at MER (GW).
+  const [backToMerOpen, setBackToMerOpen] = useState(false)
+  const [backToMerReason, setBackToMerReason] = useState("")
   const [rejectingSo, setRejectingSo] = useState<string | null>(null)
   const [rejectSoComment, setRejectSoComment] = useState("")
   const [backToScmSo, setBackToScmSo] = useState<string | null>(null)
@@ -1017,10 +1020,10 @@ export default function RequestDetailPage() {
   const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
 
   const presidentNewFlow = role === "PRESIDENT" && req?.status === "PENDING_PRESIDENT"
-  // Style-level Reject exists at the UPLOAD approvals — NYG (DVM MER / VP MER) and GW
-  // (DPM / GM) — where it sends the style back to MER with a reason + email. Later stages
+  // Style-level Reject exists only at the NYG upload approvals (DVM MER / VP MER). GW (DPM/GM)
+  // has NO hard reject — it uses a whole-document "Back to Merchandise" instead. Later stages
   // (VP SCM, President) have no Reject (use Back to SCM / approve-only).
-  const showStyleReject = ["DVM_MER", "VP_MER", "VP_MER_GW", "DPM_GW", "GM_GW"].includes(role)
+  const showStyleReject = ["DVM_MER", "VP_MER"].includes(role)
   // President approves only — no Reject, no Back-to-SCM.
   const isPresidentStage = role === "PRESIDENT" || role === "PRESIDENT_GW"
 
@@ -1104,6 +1107,30 @@ export default function RequestDetailPage() {
     }
     setSubmitting(null)
     setSelectedStyles(new Set())
+  }
+
+  // GW: DPM/GM sends the whole document back to Merchandise with a reason (+ emails MER).
+  const backToMerGw = async () => {
+    if (!backToMerReason.trim()) return
+    setSubmitting("_")
+    const res = await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "back_to_mer_gw", comment: backToMerReason.trim() })
+    })
+    if (res.ok) { window.location.href = "/approvals" }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null) }
+  }
+
+  // GW: MER re-submits a returned document → restarts approval from DPM.
+  const resubmitMerGw = async () => {
+    setSubmitting("_")
+    const res = await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resubmit_mer_gw" })
+    })
+    if (res.ok) setReq(await res.json())
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
+    setSubmitting(null)
   }
 
   const rejectStyle = async (style: string) => {
@@ -1927,6 +1954,30 @@ export default function RequestDetailPage() {
                 </>
               )}
             </div>
+          </div>
+          {/* GW has NO hard reject — DPM/GM send the WHOLE document back to Merchandise + reason. */}
+          <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+            {!backToMerOpen ? (
+              <button onClick={() => setBackToMerOpen(true)} disabled={!!submitting}
+                className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
+                ↩ Back to Merchandise
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-orange-700">ส่งกลับให้ Merchandise แก้ไข — เหตุผล *</label>
+                <textarea value={backToMerReason} onChange={e => setBackToMerReason(e.target.value)} rows={2}
+                  placeholder="ระบุเหตุผล..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                <div className="flex gap-2">
+                  <button onClick={backToMerGw} disabled={!backToMerReason.trim() || submitting === "_"}
+                    className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">
+                    {submitting === "_" ? "..." : "Confirm — Back to Merchandise"}
+                  </button>
+                  <button onClick={() => { setBackToMerOpen(false); setBackToMerReason("") }}
+                    className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                </div>
+                <p className="text-[11px] text-orange-600">ส่งทั้งเอกสารกลับให้ Merchandise + อีเมลแจ้งผู้สร้าง</p>
+              </div>
+            )}
           </div>
           {styleGroups.map(g => {
             const isExp = expanded.has(g.style)
@@ -2786,6 +2837,26 @@ export default function RequestDetailPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* MER (GW): DPM/GM sent the whole document back — review reason, fix, and re-submit to DPM */}
+      {role === "MER_GW" && isGWRequest && req.status === "PENDING_MER_GW" && (
+        <div className="bg-white rounded-xl border border-orange-200 p-4 space-y-3">
+          <div>
+            <h2 className="font-semibold text-orange-700">↩ Back to Merchandise — แก้ไขและส่งกลับ</h2>
+            <p className="text-xs text-gray-500 mt-0.5">DPM/GM ส่งเอกสารกลับมาให้แก้ไข · แก้แล้วกด Re-submit เพื่อส่งเข้า DPM อีกครั้ง</p>
+          </div>
+          {req.rejectionReason && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+              <p className="text-xs font-semibold text-orange-700">เหตุผลที่ส่งกลับ:</p>
+              <p className="text-sm text-orange-800 mt-0.5 whitespace-pre-wrap">{req.rejectionReason}</p>
+            </div>
+          )}
+          <button onClick={resubmitMerGw} disabled={submitting === "_"}
+            className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
+            {submitting === "_" ? "..." : "Re-submit to DPM"}
+          </button>
         </div>
       )}
 
@@ -4323,6 +4394,50 @@ export default function RequestDetailPage() {
             </div>
           </div>
 
+          {/* STEP 1 — Ship Date & QTY Air: Logistics fills what Merchandise left blank FIRST,
+              before generating Actual / INV (Actual & Est. Air Freight are derived from QTY). */}
+          {showAwbEntry && allLgItems.length > 0 && (
+            <div className="bg-white rounded-xl border border-orange-300 p-3 space-y-2">
+              <p className="text-xs font-semibold text-orange-800">
+                ① Ship Date &amp; QTY Air <span className="font-normal text-gray-500">(กรอกก่อน — เฉพาะที่ Merchandise เว้นว่าง · แถวแดง = ยังไม่มี QTY · Actual/Est. Air Freight คำนวณจาก QTY)</span>
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50"><tr>
+                    <th className="px-2 py-1 text-left">SO</th>
+                    <th className="px-2 py-1 text-left">STYLE</th>
+                    <th className="px-2 py-1 text-right">QTY Air</th>
+                    <th className="px-2 py-1 text-left">Plan Ship Date</th>
+                  </tr></thead>
+                  <tbody>
+                    {allLgItems.map((it: any) => {
+                      const missingQty = !(it.qtyRequestAir > 0)
+                      return (
+                        <tr key={it.id} className={`border-t border-gray-100 ${missingQty ? "bg-red-50" : ""}`}>
+                          <td className="px-2 py-1 font-medium">{it.so}</td>
+                          <td className="px-2 py-1 text-gray-500">{it.style}</td>
+                          <td className="px-2 py-1">
+                            <input type="number" min="0" disabled={lgDraftSaving}
+                              className="w-24 border border-gray-300 rounded px-2 py-1 text-right"
+                              value={soShipData[it.id]?.qty ?? (it.qtyRequestAir || "")}
+                              onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], qty: e.target.value } }))} />
+                          </td>
+                          <td className="px-2 py-1">
+                            <input type="date" disabled={lgDraftSaving}
+                              className="border border-gray-300 rounded px-2 py-1"
+                              value={soShipData[it.id]?.date ?? (it.planShipmentDate ? new Date(it.planShipmentDate).toISOString().slice(0, 10) : "")}
+                              onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], date: e.target.value } }))} />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-orange-600">กรอก QTY ให้ครบก่อน แล้วค่อยไป INV / HAWB ด้านล่าง (Actual จะคำนวณจาก QTY นี้)</p>
+            </div>
+          )}
+
           {/* Logistics attachments (GW + NYG) — INV / AWB / Expense are OPTIONAL, plus a
               Combine slot that accepts many files. At least 1 file (any slot) before Save. */}
           {showAwbEntry && (() => {
@@ -4374,48 +4489,6 @@ export default function RequestDetailPage() {
             </div>
             )
           })()}
-
-          {/* Ship Date & QTY Air — Logistics fills what Merchandise left blank at upload */}
-          {showAwbEntry && allLgItems.length > 0 && (
-            <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
-              <p className="text-xs font-semibold text-orange-800">
-                Ship Date &amp; QTY Air <span className="font-normal text-gray-500">(กรอกเฉพาะที่ Merchandise เว้นว่าง — แถวแดง = ยังไม่มี QTY, Est. Air Freight จะคำนวณให้เมื่อใส่)</span>
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50"><tr>
-                    <th className="px-2 py-1 text-left">SO</th>
-                    <th className="px-2 py-1 text-left">STYLE</th>
-                    <th className="px-2 py-1 text-right">QTY Air</th>
-                    <th className="px-2 py-1 text-left">Plan Ship Date</th>
-                  </tr></thead>
-                  <tbody>
-                    {allLgItems.map((it: any) => {
-                      const missingQty = !(it.qtyRequestAir > 0)
-                      return (
-                        <tr key={it.id} className={`border-t border-gray-100 ${missingQty ? "bg-red-50" : ""}`}>
-                          <td className="px-2 py-1 font-medium">{it.so}</td>
-                          <td className="px-2 py-1 text-gray-500">{it.style}</td>
-                          <td className="px-2 py-1">
-                            <input type="number" min="0" disabled={lgDraftSaving}
-                              className="w-24 border border-gray-300 rounded px-2 py-1 text-right"
-                              value={soShipData[it.id]?.qty ?? (it.qtyRequestAir || "")}
-                              onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], qty: e.target.value } }))} />
-                          </td>
-                          <td className="px-2 py-1">
-                            <input type="date" disabled={lgDraftSaving}
-                              className="border border-gray-300 rounded px-2 py-1"
-                              value={soShipData[it.id]?.date ?? (it.planShipmentDate ? new Date(it.planShipmentDate).toISOString().slice(0, 10) : "")}
-                              onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], date: e.target.value } }))} />
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
 
           {/* INV Assignment Table */}
           <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">

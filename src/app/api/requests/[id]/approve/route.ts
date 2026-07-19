@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
-import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator } from "@/lib/notify"
+import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 import { recomputeRequestFreight } from "@/lib/freight"
@@ -171,6 +171,43 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
+  // GW LG "Save Draft" — save the same LG data (Actual / INV / HAWB / Ship Date / QTY by SO)
+  // WITHOUT changing status or running the NYG-specific advancement. GW uses its own item
+  // statuses, so it must not go through the LOGISTICS (NYG) draft handler above.
+  if (action === "save_logistics_draft" && userRole === "LOGISTICS_GW") {
+    if (itemActuals && typeof itemActuals === "object") {
+      for (const [iid, val] of Object.entries(itemActuals)) {
+        const num = parseFloat(String(val))
+        if (!isNaN(num)) await prisma.airRequestItem.update({ where: { id: iid }, data: { actualAirFreight: num } })
+      }
+    }
+    if (itemLogistics && typeof itemLogistics === "object") {
+      for (const [iid, data] of Object.entries(itemLogistics)) {
+        const d = data as any
+        await prisma.airRequestItem.update({ where: { id: iid }, data: { invoiceNo: d.invoiceNo || null, bookingDate: d.bookingDate ? new Date(d.bookingDate) : null } })
+        if (d.hawbNo !== undefined) {
+          try { await prisma.airRequestItem.update({ where: { id: iid }, data: { hawbNo: d.hawbNo || null } as any }) } catch { /* hawbNo not in client */ }
+        }
+      }
+    }
+    // Logistics fills the QTY Air / Plan Ship Date (by SO) that Merchandise left blank at upload.
+    if (body.itemShipData && typeof body.itemShipData === "object") {
+      let qtyChanged = false
+      for (const [iid, val] of Object.entries(body.itemShipData)) {
+        const d = val as any
+        const upd: any = {}
+        if (d.qtyRequestAir != null && String(d.qtyRequestAir).trim() !== "") {
+          const q = Number(String(d.qtyRequestAir).replace(/,/g, ""))
+          if (!isNaN(q)) { upd.qtyRequestAir = q; qtyChanged = true }
+        }
+        if (d.planShipmentDate) upd.planShipmentDate = new Date(d.planShipmentDate)
+        if (Object.keys(upd).length) await prisma.airRequestItem.update({ where: { id: iid }, data: upd })
+      }
+      if (qtyChanged) await recomputeRequestFreight(id).catch(() => {})
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
   // Save logistics data without changing status (used when doc is already at PENDING_CLAIM)
   if (action === "save_logistics") {
     if (itemActuals && typeof itemActuals === "object") {
@@ -266,6 +303,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         await notifyStatusChange(id, "PENDING_LOGISTICS_GW").catch(() => {})
       }
     }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // GW "Back to Merchandise" — DPM or GM sends the WHOLE document back to the MER (GW) with a
+  // reason (GW has NO hard reject; MER fixes and re-submits). Emails the MER.
+  if (action === "back_to_mer_gw" && (request.status === "PENDING_VP_MER_GW" || request.status === "PENDING_GM_GW")) {
+    if (!comment) return NextResponse.json({ error: "Please provide a reason before sending back to Merchandise" }, { status: 400 })
+    await prisma.airRequestItem.updateMany({
+      where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
+      data: { itemStatus: "PENDING", itemComment: comment },
+    })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "BACK_TO_MER", fromStatus: request.status, toStatus: "PENDING_MER_GW", comment: `Back to Merchandise: ${comment}` }
+    })
+    await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_MER_GW", rejectionReason: comment } })
+    await notifyBackToMerGw(id, comment, session.user?.name || session.user?.email || undefined).catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
+  // GW MER re-submits after a "Back to Merchandise" → restart approval from DPM.
+  if (action === "resubmit_mer_gw" && userRole === "MER_GW" && request.status === "PENDING_MER_GW") {
+    await prisma.airRequestItem.updateMany({
+      where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
+      data: { itemStatus: "PENDING" },
+    })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "RESUBMIT", fromStatus: "PENDING_MER_GW", toStatus: "PENDING_VP_MER_GW", comment: "Merchandise re-submitted" }
+    })
+    await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_VP_MER_GW", rejectionReason: null } })
+    await notifyStatusChange(id, "PENDING_VP_MER_GW").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

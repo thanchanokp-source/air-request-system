@@ -1181,6 +1181,47 @@ export async function notifyRejectionToCreator(requestId: string, style: string,
   } catch (e) { console.error("[notify] rejection to creator failed:", e) }
 }
 
+// GW "Back to Merchandise" — DPM/GM sent the whole document back to the MER (GW) to fix and
+// re-submit (NOT a hard reject). Emails the MER creator with the reason + the full SO list.
+export async function notifyBackToMerGw(requestId: string, reason: string, byName?: string) {
+  try {
+    const req: any = await prisma.airRequest.findUnique({
+      where: { id: requestId },
+      include: { items: true, createdBy: { select: { name: true, email: true } } },
+    })
+    if (!req?.createdBy?.email) return
+    const items = (req.items as any[]).filter(i => i.itemStatus !== "REJECTED")
+    const cell = (v: any, right = false) => `<td style="padding:6px 10px;border-bottom:1px solid #eee${right ? ";text-align:right" : ""}">${v}</td>`
+    const rows = items.map(i => `<tr>${cell(i.so)}${cell(i.style)}${cell(i.customerPO || "-")}${cell(i.description || "-")}${cell((i.qtyRequestAir || 0).toLocaleString(), true)}</tr>`).join("")
+    const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
+  <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#ea580c;padding:18px 24px">
+      <p style="margin:0;color:#fed7aa;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Back to Merchandise (GW)</p>
+      <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo}</h1>
+    </td></tr>
+    <tr><td style="padding:20px 24px">
+      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">เรียน <strong>${req.createdBy?.name || req.createdBy?.email}</strong>, เอกสารถูกส่งกลับให้ Merchandise แก้ไข${byName ? ` โดย <strong>${byName}</strong>` : ""}</p>
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin:12px 0">
+        <p style="margin:0;color:#9a3412;font-size:12px;font-weight:700;font-family:Arial">เหตุผล (Back to Merchandise):</p>
+        <p style="margin:4px 0 0;color:#7c2d12;font-size:13px;font-family:Arial">${reason || "-"}</p>
+      </div>
+      <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial;margin-top:8px">
+        <thead><tr style="background:#f1f5f9">
+          <th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">STYLE</th>
+          <th style="padding:6px 10px;text-align:left">CUSTOMER PO</th><th style="padding:6px 10px;text-align:left">DESCRIPTION</th>
+          <th style="padding:6px 10px;text-align:right">QTY AIR</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+      <p style="margin:14px 0 0;color:#64748b;font-size:12px;font-family:Arial">กรุณาแก้ไขและกด Re-submit เพื่อส่งกลับเข้าอนุมัติอีกครั้ง</p>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group</p></td></tr>
+  </table>
+</td></tr></table></body></html>`
+    await sendMail([req.createdBy.email], `[Air Request · Back to Merchandise] ${req.documentNo}`, html)
+  } catch (e) { console.error("[notify] back-to-mer (GW) failed:", e) }
+}
+
 // ── Weekly "stuck document" reminder (Mon 08:00 ICT via Vercel Cron) ─────────────────
 // Emails each approver a DIGEST of documents waiting on THEM, with how many days each has
 // been sitting at the current stage + days since it was first submitted.
