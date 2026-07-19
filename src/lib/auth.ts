@@ -70,7 +70,9 @@ export const authOptions: NextAuthOptions = {
           if (presReq) {
             const isGW = presReq.bu === "GW"
             const presRole = isGW ? "PRESIDENT_GW" : "PRESIDENT"
-            const presUser = await (prisma.user as any).findFirst({ where: { role: presRole, isActive: true } })
+            // Match multi-role holders too (President may hold the role in roles[], not just as
+            // primary) — same as SCM/VP SCM/Logistics lookups. Otherwise the magic link fails.
+            const presUser = await (prisma.user as any).findFirst({ where: { isActive: true, OR: [{ role: presRole }, { roles: { has: presRole } }] } })
             if (presUser) {
               return { id: presUser.id, email: presUser.email, name: presUser.name, role: presRole, bu: isGW ? "GW" : (presUser.bu || "NYG"), claimDepartment: null, priority: null }
             }
