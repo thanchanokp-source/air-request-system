@@ -1,5 +1,6 @@
 "use client"
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useRef, useState, useMemo } from "react"
+import { useSession } from "next-auth/react"
 import * as XLSX from "xlsx"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
@@ -7,6 +8,7 @@ import {
 } from "recharts"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits, splitAirCost } from "@/lib/claim"
+import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 
 // Delay reasons come from the claim splits (REASON 1/2/3); fall back to the SO's reasonDelay.
 function rowReasonEntries(r: any): { reason: string; cost: number; qty: number }[] {
@@ -433,7 +435,25 @@ function SectionRow({ label }: { label:string }) {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const { data: session } = useSession()
+  // Which BU(s) this viewer may toggle between. ADMIN + jariya → all BUs (+ "All BU");
+  // everyone else → only their own BU(s). Forward-compatible: add TRM/EA in @/lib/bu.
+  const { bus: viewBus, canAll } = useMemo(() => viewableBus(session?.user), [session])
+  const buTabs = useMemo(() => [
+    ...(canAll ? [{ v: "ALL", label: "All BU", active: "bg-gray-700 text-white" }] : []),
+    ...viewBus.map(b => ({ v: b as string, label: BU_META[b].label, active: BU_META[b].active })),
+  ], [viewBus, canAll])
+
   const [activeBu, setActiveBu] = useState<string>("ALL")
+  // Session loads after first render — default the active BU to the viewer's first allowed
+  // BU (or "All BU" for admins) once we know who they are.
+  const buInit = useRef(false)
+  useEffect(() => {
+    if (buInit.current || !session?.user) return
+    setActiveBu(canAll ? "ALL" : (viewBus[0] || "NYG"))
+    buInit.current = true
+  }, [session, canAll, viewBus])
+
   const [requests, setRequests]   = useState<any[]>([])
   const [loading,  setLoading]    = useState(true)
   const [yearFilter,  setYearFilter]  = useState("")
@@ -451,7 +471,7 @@ export default function DashboardPage() {
     fetch("/api/requests").then(r=>r.json()).then(d=>{ setRequests(d); setLoading(false) })
   }, [])
 
-  const buRequests = useMemo(()=>requests.filter(r=> activeBu==="ALL" ? true : activeBu==="GW" ? r.bu==="GW" : (r.bu==="NYG"||!r.bu)), [requests, activeBu])
+  const buRequests = useMemo(()=>requests.filter(r=> requestInBu(r, activeBu)), [requests, activeBu])
   const allSOs = useMemo(()=>buRequests.flatMap(r=>(r.items||[]).map((item:any)=>({...item,request:r}))), [buRequests])
 
   const filtered = useMemo(()=>allSOs.filter(row=>{
@@ -624,20 +644,17 @@ export default function DashboardPage() {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-bold text-gray-900">DASHBOARD</h1>
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
-          {[{v:"ALL",label:"All BU"},{v:"NYG",label:"NYG"},{v:"GW",label:"GW"}].map(({v,label}) => (
-            <button key={v} onClick={() => setActiveBu(v)}
-              className={`px-4 py-1.5 transition-colors ${
-                activeBu === v
-                  ? v === "GW" ? "bg-emerald-600 text-white"
-                  : v === "NYG" ? "bg-blue-600 text-white"
-                  : "bg-gray-700 text-white"
-                  : "bg-white text-gray-500 hover:bg-gray-50"
-              }`}>
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Single-BU users get no toggle (nothing to switch); 2+ BUs / admins get tabs. */}
+        {buTabs.length > 1 && (
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+            {buTabs.map(({ v, label, active }) => (
+              <button key={v} onClick={() => setActiveBu(v)}
+                className={`px-4 py-1.5 transition-colors ${activeBu === v ? active : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── KPI ─────────────────────────────────────────────────────────── */}

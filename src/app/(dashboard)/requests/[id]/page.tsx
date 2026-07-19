@@ -1076,6 +1076,7 @@ export default function RequestDetailPage() {
         body: JSON.stringify({ action: "approve_style", style, comment: "", signatureData: sig })
       })
       if (res.ok) setReq(await res.json())
+      else { const e = await res.json().catch(() => ({})); alert(`${style}: ${e.error || "Error"}`); break }
     }
     setSubmitting(null)
     setSelectedStyles(new Set())
@@ -1099,7 +1100,7 @@ export default function RequestDetailPage() {
         body: JSON.stringify({ action: "reject_style", style, comment: reason.trim(), forwardEmail: fwEmail })
       })
       if (res.ok) setReq(await res.json())
-      else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
+      else { const e = await res.json().catch(() => ({})); alert(`${style}: ${e.error || "Error"}`); break }
     }
     setSubmitting(null)
     setSelectedStyles(new Set())
@@ -1139,7 +1140,7 @@ export default function RequestDetailPage() {
         body: JSON.stringify({ action: "back_to_scm_style", style, comment: reason.trim() })
       })
       if (res.ok) setReq(await res.json())
-      else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); break }
+      else { const e = await res.json().catch(() => ({})); alert(`${style}: ${e.error || "Error"}`); break }
     }
     setSubmitting(null); setSelectedStyles(new Set())
   }
