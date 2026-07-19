@@ -144,16 +144,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       if (qtyChanged) await recomputeRequestFreight(id).catch(() => {})
     }
-    // LG runs in PARALLEL with Claim. Now that Actual may be entered, re-derive any item
-    // whose claim is fully approved so it can advance to President (needs claim done AND
-    // Actual in). Items still mid-claim are unaffected.
-    {
+    // Save DRAFT = save data ONLY. No status change, no advancement, no email — nothing goes
+    // out. Everything below runs ONLY on "Save & Send" (body.lgComplete).
+    if (body.lgComplete) {
+      // LG runs in PARALLEL with Claim. Now that Actual is entered, re-derive any item whose
+      // claim is fully approved so it can advance to President (needs claim done AND Actual in).
       const nygItems = await prisma.airRequestItem.findMany({ where: { requestId: id } })
       for (const it of nygItems) {
         if (!["LOG_PASSED", "CLAIM_PASSED"].includes(it.itemStatus)) continue
-        // Advance to President only after LG "Save & Send" (lgComplete now, or logisticsSent
-        // already set) — NOT on Save Draft even though Draft fills Actual freight.
-        const ns = deriveNygItemStatus(getSplits(it), !!body.lgComplete || !!(request as any).logisticsSent)
+        const ns = deriveNygItemStatus(getSplits(it), true)
         if (ns !== it.itemStatus) await prisma.airRequestItem.update({ where: { id: it.id }, data: { itemStatus: ns } })
       }
       const nd = await recalcDocStatus(id)
@@ -161,10 +160,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         await prisma.airRequest.update({ where: { id }, data: { status: nd } })
         await notifyStatusChange(id, nd).catch(() => {})
       }
-    }
-    // "Save & Send" (data complete) → mark LG as sent (chip turns green only now, not on
-    // draft) + email the claimers the LG files + signed PDF (item 2).
-    if (body.lgComplete) {
+      // Mark LG as sent (chip turns green only now) + email the claimers the files + signed PDF.
       await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
       await notifyLgFilesToClaimers(id).catch(() => {})
     }
