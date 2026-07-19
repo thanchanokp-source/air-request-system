@@ -17,10 +17,15 @@ export const BU_META: Record<string, { label: string; active: string }> = {
   EA:  { label: "EA",  active: "bg-rose-600 text-white" },
 }
 
-// A role → its BU. SCM_NYK_* exist in every BU (shared claim role) → "BOTH" (pins no BU).
+// Roles that operate in BOTH NYG and GW (shared, no BU suffix in their name):
+//   • SCM_NYK_* — the NYK claim sub-flow, present in every BU
+//   • ACCOUNTING — the final step for both NYG and GW documents
+const BOTH_BU_ROLES = new Set(["ACCOUNTING", "SCM_NYK", "SCM_NYK_APPROVER", "SCM_NYK_EVP"])
+
+// A role → its BU. Shared roles return "BOTH" (they see NYG + GW, pin no single BU).
 export function roleBu(role: string): Bu | "BOTH" | null {
   if (!role) return null
-  if (role.startsWith("SCM_NYK")) return "BOTH"
+  if (BOTH_BU_ROLES.has(role) || role.startsWith("SCM_NYK")) return "BOTH"
   if (role.endsWith("_GW") || role.startsWith("SCM_NYG")) return "GW"
   if (role.endsWith("_TRM")) return "TRM"
   if (role.endsWith("_EA")) return "EA"
@@ -44,32 +49,18 @@ export function viewableBus(user: any): { bus: Bu[]; canAll: boolean } {
   const bu = user.bu
   const canAll = role === "ADMIN" || bu === "ALL" || canViewBothBu(user)
   if (canAll) return { bus: [...BUS], canAll: true }
+  // BU is derived from ROLES, not the User.bu field — that field is often stale/mismatched
+  // (e.g. a MER_GW whose bu was left "NYG"), which would wrongly grant a second BU.
   const set = new Set<Bu>()
+  let hasBoth = false
   for (const r of roles) {
     const b = roleBu(r)
-    if (b && b !== "BOTH") set.add(b)
+    if (b === "BOTH") hasBoth = true
+    else if (b) set.add(b)
   }
-  if (bu && bu !== "ALL" && (BUS as readonly string[]).includes(bu)) set.add(bu as Bu)
+  // Cross-BU roles (Accounting, SCM_NYK) work across NYG & GW → show both toggles so their
+  // documents in either BU stay visible.
+  if (hasBoth) { set.add("NYG"); set.add("GW") }
   if (set.size === 0) set.add("NYG")
   return { bus: BUS.filter(b => set.has(b)), canAll: false }
-}
-
-// Prisma `where` fragment that scopes AirRequest reads to a user's BU(s). Returns null =
-// NO restriction (see everything). Cross-BU people are intentionally unrestricted so their
-// claim/approval visibility is never hidden:
-//   • ADMIN / jariya / bu === "ALL"            → null (all)
-//   • holds any shared SCM_NYK_* claim role    → null (acts in every BU's NYK claim)
-//   • otherwise                                → limited to their own BU(s) (NYG incl. legacy null)
-// NOTE: the Approvals queue must pass its own unrestricted fetch — a claim approver whose
-// role maps to one BU can still be forwarded a claim in another BU.
-export function buWhere(user: any): any | null {
-  if (!user) return null
-  const role = user.role || ""
-  const roles: string[] = [role, ...(user.roles || [])].filter(Boolean)
-  if (role === "ADMIN" || user.bu === "ALL" || canViewBothBu(user)) return null
-  if (roles.some(r => roleBu(r) === "BOTH")) return null
-  const { bus } = viewableBus(user)
-  if (!bus.length) return null
-  const conds = bus.map(b => b === "NYG" ? { OR: [{ bu: "NYG" }, { bu: null }] } : { bu: b })
-  return conds.length === 1 ? conds[0] : { OR: conds }
 }

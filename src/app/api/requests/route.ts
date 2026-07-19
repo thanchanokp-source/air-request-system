@@ -6,7 +6,6 @@ import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange } from "@/lib/notify"
 import { sendMail } from "@/lib/email"
 import { canonCountry } from "@/lib/freight"
-import { buWhere } from "@/lib/bu"
 import crypto from "crypto"
 
 // Normalize a year that may be 2-digit or Thai Buddhist (B.E.) to Gregorian.
@@ -58,16 +57,10 @@ const parseDate = (val: any): Date | null => {
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  // Approvals passes ?mine=true — that queue can span BUs (cross-BU claim forwards), so it
-  // is NOT BU-scoped. Every other view (dashboard, Air Requests list) is limited to the
-  // caller's own BU(s). roles[] fetched from DB so scoping is right even for older sessions.
-  const mine = new URL(req.url).searchParams.get("mine") === "true"
-  const dbRoles: string[] = await prisma.user
-    .findUnique({ where: { id: (session.user as any).id }, select: { roles: true } as any })
-    .then((u: any) => (Array.isArray(u?.roles) ? u.roles : []))
-    .catch(() => [])
-  const scopeUser = { ...(session.user as any), roles: [...(((session.user as any).roles) || []), ...dbRoles] }
-  const where = mine ? {} : (buWhere(scopeUser) ?? {})
+  // NOTE: BU visibility is filtered CLIENT-side (via the BU toggle + viewableBus). The API
+  // returns every request so cross-BU roles (Accounting, SCM_NYK, claim forwards) never lose
+  // sight of a document. Do NOT BU-scope here — it hid legitimately-shared GW/NYG data.
+  const where = {}
   const requests = await prisma.airRequest.findMany({
     where,
     orderBy: { createdAt: "desc" },
