@@ -189,10 +189,12 @@ export async function POST(req: NextRequest) {
             const country = String(col(item, "Country") || "").trim()
             const itemBrand = String(col(item, "Brand name") || col(item, "BRAND") || "").trim()
             const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
+            const qtyOrig = Number(col(item, "QTY Original Shipment (pcs)") || 0)
             const rate = freightRates[rateKey(country)] || 0
-            // Gross = QTY Air × WT Charge/pc of the description (from Master Description).
-            // MER no longer enters weight. 0 if the description has no WT Charge yet (held).
-            const gw = qty * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
+            // Gross Weight & Est. Air Freight are computed from QTY ORIGINAL Shipment (always
+            // filled by MER) × WT Charge — NOT QTY Air (which MER may leave blank → would be 0).
+            // 0 only if the description has no WT Charge yet (held).
+            const gw = qtyOrig * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
             // GW: read up to 3 claim splits from Excel (CLAIM DEPT 1/2/3 + %CLAIM + REASON)
             // airCost is computed at display time from actualAirFreight so it stays accurate.
             let claimDepts: any = null
