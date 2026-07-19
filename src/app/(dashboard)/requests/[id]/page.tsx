@@ -1093,8 +1093,12 @@ export default function RequestDetailPage() {
     // NYG only: let the rejecter also type an email to forward the rejection to (optional).
     let fwEmail: string | undefined
     if (!isGWRequest) {
-      const typed = window.prompt("Forward to email (optional) — พิมพ์อีเมลที่จะส่งต่อ, เว้นว่าง = ไม่ส่งต่อ:")
-      if (typed && typed.includes("@")) fwEmail = typed.trim()
+      const typed = window.prompt("Forward to email (optional) — @nanyangtextile.com เท่านั้น, เว้นว่าง = ไม่ส่งต่อ:")
+      const t = (typed || "").trim()
+      if (t) {
+        if (!t.toLowerCase().endsWith("@nanyangtextile.com")) { alert("อีเมล Forward ต้องเป็น @nanyangtextile.com เท่านั้น"); return }
+        fwEmail = t
+      }
     }
     for (const style of toReject) {
       setSubmitting(style)
@@ -1134,11 +1138,17 @@ export default function RequestDetailPage() {
   }
 
   const rejectStyle = async (style: string) => {
+    // NYG Forward email must be a company address (@nanyangtextile.com only).
+    const fw = !isGWRequest ? rejectForwardEmail.trim() : ""
+    if (fw && !fw.toLowerCase().endsWith("@nanyangtextile.com")) {
+      alert("อีเมล Forward ต้องเป็น @nanyangtextile.com เท่านั้น")
+      return
+    }
     setSubmitting(style)
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       // NYG DVM/VP Merchandise reject → optionally forward the rejection to a typed email.
-      body: JSON.stringify({ action: "reject_style", style, comment: rejectComment, forwardEmail: (!isGWRequest && rejectForwardEmail.trim()) ? rejectForwardEmail.trim() : undefined })
+      body: JSON.stringify({ action: "reject_style", style, comment: rejectComment, forwardEmail: fw || undefined })
     })
     if (res.ok) setReq(await res.json())
     setSubmitting(null); setRejectingStyle(null); setRejectComment(""); setRejectForwardEmail("")
@@ -1556,7 +1566,7 @@ export default function RequestDetailPage() {
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     {!isGWRequest && (
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — พิมพ์อีเมลเอง, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com เท่านั้น, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
                         <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                       </div>
                     )}
@@ -1719,7 +1729,7 @@ export default function RequestDetailPage() {
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     {!isGWRequest && (
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — พิมพ์อีเมลเอง, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com เท่านั้น, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
                         <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                       </div>
                     )}
@@ -1842,7 +1852,7 @@ export default function RequestDetailPage() {
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     {!isGWRequest && (
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — พิมพ์อีเมลเอง, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com เท่านั้น, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
                         <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                       </div>
                     )}
@@ -2017,7 +2027,7 @@ export default function RequestDetailPage() {
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     {!isGWRequest && (
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — พิมพ์อีเมลเอง, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com เท่านั้น, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
                         <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                       </div>
                     )}

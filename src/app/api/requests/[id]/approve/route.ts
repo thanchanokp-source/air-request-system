@@ -373,7 +373,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // NYG reject → (1) tell the MER creator their doc was rejected + which email it was
     // forwarded to; (2) optionally forward the rejection (data + reason) to a typed email.
     if (action === "reject_style") {
-      const fwEmail = body.forwardEmail && String(body.forwardEmail).includes("@") ? String(body.forwardEmail).trim() : undefined
+      const fwRaw = body.forwardEmail ? String(body.forwardEmail).trim() : ""
+      // Forward only to a company address — ignore anything that is not @nanyangtextile.com.
+      const fwEmail = fwRaw.toLowerCase().endsWith("@nanyangtextile.com") ? fwRaw : undefined
       const rejBy = session.user?.name || session.user?.email || undefined
       if (fwEmail) await notifyRejectionForward(id, fwEmail, style, comment || "", rejBy).catch(() => {})
       await notifyRejectionToCreator(id, style, comment || "", rejBy, fwEmail).catch(() => {})
@@ -417,7 +419,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // NYG reject → (1) tell the MER creator their doc was rejected + which email it was
     // forwarded to; (2) optionally forward the rejection (data + reason) to a typed email.
     if (action === "reject_style") {
-      const fwEmail = body.forwardEmail && String(body.forwardEmail).includes("@") ? String(body.forwardEmail).trim() : undefined
+      const fwRaw = body.forwardEmail ? String(body.forwardEmail).trim() : ""
+      // Forward only to a company address — ignore anything that is not @nanyangtextile.com.
+      const fwEmail = fwRaw.toLowerCase().endsWith("@nanyangtextile.com") ? fwRaw : undefined
       const rejBy = session.user?.name || session.user?.email || undefined
       if (fwEmail) await notifyRejectionForward(id, fwEmail, style, comment || "", rejBy).catch(() => {})
       await notifyRejectionToCreator(id, style, comment || "", rejBy, fwEmail).catch(() => {})
