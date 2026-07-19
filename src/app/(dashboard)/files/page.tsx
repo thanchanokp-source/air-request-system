@@ -1,9 +1,10 @@
 "use client"
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useRef, useState, useMemo } from "react"
 import { useSession } from "next-auth/react"
 import React from "react"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits } from "@/lib/claim"
+import { viewableBus, requestInBu } from "@/lib/bu"
 
 type StatusFilter = "ALL" | "TOBOOK" | "BOOKED" | "COMPLETED"
 type BUFilter = "ALL" | "NYG" | "GW"
@@ -87,12 +88,22 @@ const STATUS_CHIPS: { key: StatusFilter; label: string; cls: string }[] = [
 
 export default function FilesPage() {
   const { data: session } = useSession()
-  const userBu = (session?.user as any)?.bu || "ALL"
+  // Which BU(s) this viewer may see. ADMIN + jariya → every BU (+ "ALL"); everyone else →
+  // only the BU(s) their ROLE implies. Derived from roles (not the stale User.bu field).
+  const { bus: viewBus, canAll } = useMemo(() => viewableBus(session?.user), [session])
+  const buOptions: string[] = useMemo(() => (canAll ? ["ALL", ...viewBus] : viewBus), [viewBus, canAll])
 
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL")
-  const [activeBU, setActiveBU] = useState<BUFilter>(userBu === "NYG" ? "NYG" : userBu === "GW" ? "GW" : "ALL")
+  const [activeBU, setActiveBU] = useState<string>("ALL")
+  // Default the BU filter to the viewer's first allowed BU ("ALL" for admins) once session loads.
+  const buInit = useRef(false)
+  useEffect(() => {
+    if (buInit.current || !session?.user) return
+    setActiveBU(canAll ? "ALL" : (viewBus[0] || "NYG"))
+    buInit.current = true
+  }, [session, canAll, viewBus])
   const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set())
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
@@ -123,7 +134,7 @@ export default function FilesPage() {
   }, [])
 
   const folderFiltered = useMemo(() =>
-    requests.filter(r => (activeBU === "ALL" || r.bu === activeBU) && qualifies(r) && matchesStatus(r, statusFilter)),
+    requests.filter(r => requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, statusFilter)),
     [requests, statusFilter, activeBU])
 
   const uniq = (arr: any[]) => [...new Set(arr.filter(Boolean))].sort()
@@ -366,8 +377,6 @@ export default function FilesPage() {
     })
   }
 
-  const buOptions: BUFilter[] = ["ALL", "NYG", "GW"]
-
   return (
     <div className="space-y-4">
       <div>
@@ -378,25 +387,27 @@ export default function FilesPage() {
       <div className="flex gap-4 items-start">
         {/* Left: filters */}
         <div className="w-56 shrink-0 bg-white rounded-xl border border-gray-200 p-3 space-y-3 self-start sticky top-4">
-          {/* BU filter */}
-          <div>
-            <p className="text-xs font-semibold text-gray-500 px-1 mb-1.5 uppercase tracking-wide">Business Unit</p>
-            <div className="flex gap-1 px-1">
-              {buOptions.map(b => (
-                <button key={b} onClick={() => setActiveBU(b)}
-                  className={`text-xs px-2 py-0.5 rounded font-medium transition-colors ${activeBU === b ? "bg-red-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-                  {b}
-                </button>
-              ))}
+          {/* BU filter — only shown when the viewer has more than one BU (admin/jariya/cross-BU) */}
+          {buOptions.length > 1 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 px-1 mb-1.5 uppercase tracking-wide">Business Unit</p>
+              <div className="flex gap-1 px-1">
+                {buOptions.map(b => (
+                  <button key={b} onClick={() => setActiveBU(b)}
+                    className={`text-xs px-2 py-0.5 rounded font-medium transition-colors ${activeBU === b ? "bg-red-700 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+                    {b}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Status filter */}
           <div>
             <p className="text-xs font-semibold text-gray-500 px-1 mb-1.5 uppercase tracking-wide">Status</p>
             <div className="space-y-1">
               {STATUS_CHIPS.map(c => {
-                const count = requests.filter(r => (activeBU === "ALL" || r.bu === activeBU) && qualifies(r) && matchesStatus(r, c.key)).length
+                const count = requests.filter(r => requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, c.key)).length
                 const active = statusFilter === c.key
                 return (
                   <button key={c.key} onClick={() => setStatusFilter(c.key)}
