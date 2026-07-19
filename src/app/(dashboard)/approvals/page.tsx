@@ -101,7 +101,9 @@ export default function ApprovalsPage() {
     // President (NYG) — FINAL approver (items at PRESIDENT_PENDING). Match via held roles
     // so one person who is President of BOTH BUs sees NYG docs here.
     if (myRoles.includes("PRESIDENT") && r.status === "PENDING_PRESIDENT") return items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
-    if (myRoles.includes("LOGISTICS") && r.bu !== "GW" && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
+    // LG (NYG) runs in parallel with Claim — show until LG has pressed "Save & Send"
+    // (logisticsSent). After that LG's work is done → drop it from the queue.
+    if (myRoles.includes("LOGISTICS") && r.bu !== "GW" && !r.logisticsSent && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }
