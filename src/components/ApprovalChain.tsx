@@ -47,6 +47,15 @@ function Chip({ state, label, sm }: { state: "done" | "active" | "pending"; labe
   )
 }
 
+// The stage where the doc/SO was rejected — red, so you can see AT A GLANCE which position rejected.
+function RejChip({ label, sm }: { label: React.ReactNode; sm?: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1 ${sm ? "text-[10px] px-1.5" : "text-[11px] px-2"} py-0.5 rounded-full border whitespace-nowrap bg-red-100 text-red-700 border-red-400 font-semibold ring-1 ring-red-300`}>
+      <span className="text-[9px] leading-none">✕</span>{label}
+    </span>
+  )
+}
+
 const Bar = ({ done }: { done: boolean }) => <span className={`w-4 h-px mx-0.5 shrink-0 ${done ? "bg-green-300" : "bg-gray-200"}`} />
 
 // Display name for an approver: prefer a real name, else the email's local part (before @).
@@ -131,6 +140,24 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   const completed = soItem ? soItem.itemStatus === "COMPLETED" : status === "COMPLETED"
   const claimSource: any[] = soItem ? [soItem] : (Array.isArray(items) ? items : [])
 
+  // Which stage rejected? Pull it from the REJECT approval log's fromStatus. When we have a
+  // specific SO, match the log by "Style: <style>" in its comment; else take the latest REJECT.
+  const STAGE_LABEL: Record<string, string> = {
+    PENDING_DVM_MER: "DVM Merchandise", PENDING_VP_MER: "VP Merchandise",
+    PENDING_SCM: "SCM", PENDING_VP_SCM: "VP SCM",
+    PENDING_VP_MER_GW: "DPM", PENDING_GM_GW: "GM",
+  }
+  const rejectStageKey: string | null = (() => {
+    if (!rejected) return null
+    const logs: any[] = (req?.approvalLogs || []).filter((l: any) => l.action === "REJECT")
+    if (!logs.length) return null
+    const byStyle = soItem?.style
+      ? logs.find((l: any) => typeof l.comment === "string" && l.comment.includes(`Style: ${soItem.style}`))
+      : null
+    return (byStyle || logs[0])?.fromStatus || null
+  })()
+  const rejectLabel = rejectStageKey ? (STAGE_LABEL[rejectStageKey] || "") : ""
+
   // ── NYG: linear chain (Claim step expands into per-dept chips, like GW) ──
   if (bu !== "GW") {
     const cur = completed ? 99 : soItem ? nygItemOrd(soItem, status) : (NYG_STAGES.find(s => s.key === status)?.ord ?? -1)
@@ -202,6 +229,8 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
                       )
                     })}
                   </span>
+                ) : rejected && s.key === rejectStageKey ? (
+                  <RejChip sm={sm} label={s.label} />
                 ) : (
                   <Chip sm={sm} state={chipState} label={s.label} />
                 )}
@@ -209,7 +238,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
               </div>
             )
           })}
-          {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected</span>}
+          {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected{rejectLabel ? ` · ${rejectLabel}` : ""}</span>}
           {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
         </div>
         <WaitingLine items={pendingWho} />
@@ -263,7 +292,9 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     <div className="flex items-center gap-1.5 overflow-x-auto">
       {GW_PRE.map(s => (
         <div key={s.key} className="flex items-center shrink-0">
-          <Chip sm={sm} state={rejected ? "pending" : stateFor(s.ord)} label={s.label} />
+          {rejected && s.key === rejectStageKey
+            ? <RejChip sm={sm} label={s.label} />
+            : <Chip sm={sm} state={rejected ? "pending" : stateFor(s.ord)} label={s.label} />}
           <Bar done={completed || cur > s.ord} />
         </div>
       ))}
@@ -285,7 +316,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
       {/* President = final approver (after parallel) */}
       <Bar done={completed || cur > 3} />
       <Chip sm={sm} state={rejected ? "pending" : stateFor(3)} label="President" />
-      {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected</span>}
+      {rejected && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium">✕ Rejected{rejectLabel ? ` · ${rejectLabel}` : ""}</span>}
       {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
     </div>
     <WaitingLine items={gwPendingWho} />
