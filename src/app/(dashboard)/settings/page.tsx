@@ -80,6 +80,28 @@ export default function SettingsPage() {
             ? <span className="text-red-600 font-medium">🔴 ปิดปรับปรุง (เฉพาะแอดมินเข้าได้)</span>
             : <span className="text-green-700 font-medium">🟢 เปิดใช้งานปกติ</span>}
         </p>
+
+        {/* Per-browser test bypass — lets THIS browser test the full flow (magic-link as any
+            role) while Maintenance is ON. Real users are still blocked. */}
+        <div className="border-t border-gray-100 pt-3 mt-1">
+          <p className="text-xs font-medium text-gray-700">🔑 Test bypass สำหรับ browser นี้</p>
+          <p className="text-[11px] text-gray-500 mt-0.5 mb-2">
+            เปิดตอน Maintenance ON → browser นี้ (รวม magic-link ล็อกอินเป็น role อื่น) จะข้ามหน้าปิดปรับปรุงได้
+            เพื่อเทส flow เต็ม · user จริงยังถูกบล็อก
+          </p>
+          <div className="flex gap-2">
+            <button disabled={saving}
+              onClick={async () => { setSaving(true); const r = await fetch("/api/admin/maintenance-bypass", { method: "POST" }); setSaving(false); setMsg(r.ok ? "✓ เปิด bypass สำหรับ browser นี้แล้ว" : "ล้มเหลว") }}
+              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium">
+              เปิด bypass (browser นี้)
+            </button>
+            <button disabled={saving}
+              onClick={async () => { setSaving(true); const r = await fetch("/api/admin/maintenance-bypass", { method: "DELETE" }); setSaving(false); setMsg(r.ok ? "✓ ปิด bypass แล้ว" : "ล้มเหลว") }}
+              className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-50 font-medium">
+              ปิด bypass
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
