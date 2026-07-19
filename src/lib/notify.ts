@@ -1135,6 +1135,52 @@ export async function notifyRejectionForward(requestId: string, toEmail: string,
   } catch (e) { console.error("[notify] rejection forward failed:", e) }
 }
 
+// Tell the MER creator (the person who uploaded the request) that their document got rejected —
+// including WHO rejected it and, if the rejecter forwarded it, WHICH email it was forwarded to.
+// NYG only. Recipient = req.createdBy.email.
+export async function notifyRejectionToCreator(requestId: string, style: string, reason: string, rejectedBy?: string, forwardEmail?: string) {
+  try {
+    const req: any = await prisma.airRequest.findUnique({
+      where: { id: requestId },
+      include: { items: true, createdBy: { select: { name: true, email: true } } },
+    })
+    if (!req?.createdBy?.email) return
+    const items = (req.items as any[]).filter(i => i.style === style)
+    const cell = (v: any, right = false) => `<td style="padding:6px 10px;border-bottom:1px solid #eee${right ? ";text-align:right" : ""}">${v}</td>`
+    const rows = items.map(i => `<tr>${cell(i.so)}${cell(i.style)}${cell(i.customerPO || "-")}${cell(i.description || "-")}${cell((i.qtyRequestAir || 0).toLocaleString(), true)}${cell(i.reasonDelay || "-")}</tr>`).join("")
+    const fwLine = forwardEmail
+      ? `<p style="margin:6px 0 0;color:#334155;font-size:13px;font-family:Arial">ส่งต่อ (Forward) ไปที่: <strong style="color:#dc2626">${forwardEmail}</strong></p>`
+      : ""
+    const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
+  <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#dc2626;padding:18px 24px">
+      <p style="margin:0;color:#fecaca;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · เอกสารถูก Reject</p>
+      <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo} — Style ${style}</h1>
+    </td></tr>
+    <tr><td style="padding:20px 24px">
+      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">เรียน <strong>${req.createdBy?.name || req.createdBy?.email}</strong>, เอกสารของคุณถูก Reject${rejectedBy ? ` โดย <strong>${rejectedBy}</strong>` : ""}</p>
+      ${fwLine}
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;margin:12px 0">
+        <p style="margin:0;color:#991b1b;font-size:12px;font-weight:700;font-family:Arial">เหตุผลที่ Reject:</p>
+        <p style="margin:4px 0 0;color:#7f1d1d;font-size:13px;font-family:Arial">${reason || "-"}</p>
+      </div>
+      <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial;margin-top:8px">
+        <thead><tr style="background:#f1f5f9">
+          <th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">STYLE</th>
+          <th style="padding:6px 10px;text-align:left">CUSTOMER PO</th><th style="padding:6px 10px;text-align:left">DESCRIPTION</th>
+          <th style="padding:6px 10px;text-align:right">QTY AIR</th><th style="padding:6px 10px;text-align:left">REASON DELAY</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+      <p style="margin:14px 0 0;color:#64748b;font-size:12px;font-family:Arial">กรุณาแก้ไขและอัปโหลดเอกสารใหม่อีกครั้ง</p>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group</p></td></tr>
+  </table>
+</td></tr></table></body></html>`
+    await sendMail([req.createdBy.email], `[Air Request · ถูก Reject] ${req.documentNo} — ${style}`, html)
+  } catch (e) { console.error("[notify] rejection to creator failed:", e) }
+}
+
 // ── Weekly "stuck document" reminder (Mon 08:00 ICT via Vercel Cron) ─────────────────
 // Emails each approver a DIGEST of documents waiting on THEM, with how many days each has
 // been sitting at the current stage + days since it was first submitted.
