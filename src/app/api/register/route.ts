@@ -5,9 +5,12 @@ import crypto from "crypto"
 import { emailExistsInDirectory } from "@/lib/people"
 import { sendVerificationEmail } from "@/lib/notify"
 
-const ALLOWED_ROLES: Record<string, string> = {
-  MER: "MER_USER",
-  ACCOUNTING: "ACCOUNTING",
+// Self-register role depends on BOTH the position AND the BU: a Merchandise person in GW is
+// MER_GW (not MER_USER, which is NYG). Getting this wrong makes a GW user register as NYG.
+function resolveRole(position: string, bu: string): string | null {
+  if (position === "ACCOUNTING") return "ACCOUNTING" // cross-BU (both NYG & GW)
+  if (position === "MER") return bu === "GW" ? "MER_GW" : "MER_USER"
+  return null
 }
 
 export async function POST(req: NextRequest) {
@@ -21,7 +24,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A company email is required (@nanyangtextile.com)" }, { status: 400 })
   }
 
-  const role = ALLOWED_ROLES[position]
+  if (bu !== "NYG" && bu !== "GW") {
+    return NextResponse.json({ error: "Invalid BU" }, { status: 400 })
+  }
+  const role = resolveRole(position, bu)
   if (!role) {
     return NextResponse.json({ error: "Invalid position" }, { status: 400 })
   }
