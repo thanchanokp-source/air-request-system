@@ -1681,9 +1681,9 @@ export default function RequestDetailPage() {
                 <span className="text-green-600">{styleGroups.filter(g => g.status === "PASSED" || g.status === "PRES_PASSED" || (!presidentNewFlow && g.status === "VP_MER_PASSED")).length} approved</span>
                 <span className="text-red-600">{styleGroups.filter(g => g.status === "REJECTED").length} rejected</span>
               </div>
-              {/* มุมมอง: การ์ด (กางดู SO) / ตาราง (approve ไว) */}
+              {/* View: Card (expand SO) / Table (quick approve) */}
               <div className="flex gap-1">
-                {([["card", "การ์ด"], ["table", "ตาราง"]] as const).map(([k, label]) => (
+                {([["card", "Card"], ["table", "Table"]] as const).map(([k, label]) => (
                   <button key={k} type="button" onClick={() => setStyleTableView(k === "table")}
                     className={`px-2.5 py-1 rounded-lg text-xs font-medium ${(styleTableView ? "table" : "card") === k ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{label}</button>
                 ))}
@@ -1723,68 +1723,79 @@ export default function RequestDetailPage() {
               )}
             </div>
           </div>
-          {/* ── TABLE VIEW — เห็นทุก style + approve/reject ในแถว (approve ไว) ── */}
+          {/* ── TABLE VIEW — one row per SO, all MER-entered columns + approve/reject per style ── */}
           {styleTableView && (
             <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
               <table className="w-full text-xs whitespace-nowrap">
                 <thead className="bg-gray-50 border-b border-gray-200"><tr>
-                  <th className="px-3 py-2 w-8"></th>
-                  <th className="px-3 py-2 text-left text-gray-500 font-medium">STYLE</th>
-                  <th className="px-3 py-2 text-right text-gray-500 font-medium">SO</th>
-                  <th className="px-3 py-2 text-right text-gray-500 font-medium">GROSS (KG)</th>
-                  <th className="px-3 py-2 text-right text-gray-500 font-medium">EST (THB)</th>
-                  <th className="px-3 py-2 text-left text-gray-500 font-medium">สถานะ</th>
-                  <th className="px-3 py-2 text-right text-gray-500 font-medium">จัดการ</th>
+                  {["", "STYLE", "BRAND", "SUB", "SO", "CUSTOMER PO", "DESCRIPTION", "PLAN DATE", "QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)", "FACTORY", "COUNTRY", "STATUS", "ACTION"].map((h, i) =>
+                    <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
                 </tr></thead>
                 <tbody className="divide-y divide-gray-100">
-                  {styleGroups.map(g => {
+                  {styleGroups.flatMap(g => {
                     const isRej = rejectingStyle === g.style
                     const isSub = submitting === g.style
                     const canRow = g.status === "PENDING" || (presidentNewFlow && g.status === "VP_MER_PASSED")
-                    return (
+                    const n = g.items.length
+                    const rowBg = g.status === "REJECTED" ? "bg-red-50/40" : (g.status === "PASSED" || g.status === "PRES_PASSED" || g.status === "VP_MER_PASSED") ? "bg-green-50/30" : "hover:bg-gray-50/60"
+                    const statusCell = (
                       <>
-                        <tr key={g.style} className={g.status === "REJECTED" ? "bg-red-50/40" : g.status === "PASSED" || g.status === "PRES_PASSED" ? "bg-green-50/30" : "hover:bg-gray-50/60"}>
-                          <td className="px-3 py-2">{g.status === "PENDING" && (
+                        {g.status === "PASSED" && <span className="text-green-700">✓ Approved</span>}
+                        {g.status === "VP_MER_PASSED" && !presidentNewFlow && <span className="text-green-700">✓ VP Approved</span>}
+                        {g.status === "PRES_PASSED" && <span className="text-purple-700">✓ President</span>}
+                        {g.status === "REJECTED" && <span className="text-red-700">✕ Rejected</span>}
+                        {canRow && <span className="text-yellow-600">Pending</span>}
+                      </>
+                    )
+                    const actionCell = canRow ? (
+                      <div className="inline-flex gap-1.5">
+                        <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-2.5 py-1 bg-green-600 text-white rounded-md font-medium hover:bg-green-700 disabled:opacity-50">{isSub && !isRej ? "..." : "Approve"}</button>
+                        {showStyleReject && <button onClick={() => { setRejectingStyle(isRej ? null : g.style); setRejectComment("") }} disabled={isSub} className="px-2.5 py-1 bg-red-500 text-white rounded-md font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
+                      </div>
+                    ) : null
+                    const rows = g.items.map((item: any, idx: number) => (
+                      <tr key={item.id} className={rowBg}>
+                        {idx === 0 && (
+                          <td rowSpan={n} className="px-3 py-2 align-top">{g.status === "PENDING" && (
                             <input type="checkbox" className="w-4 h-4" checked={selectedStyles.has(g.style)}
                               onChange={e => setSelectedStyles(prev => { const s = new Set(prev); e.target.checked ? s.add(g.style) : s.delete(g.style); return s })} />
                           )}</td>
-                          <td className="px-3 py-2 font-semibold text-gray-800">{g.style}</td>
-                          <td className="px-3 py-2 text-right text-gray-500">{g.items.length}</td>
-                          <td className="px-3 py-2 text-right">{fmtNum((g as any).totalGross, 2)}</td>
-                          <td className="px-3 py-2 text-right text-blue-600">{fmtNum((g as any).totalEst)}</td>
-                          <td className="px-3 py-2">
-                            {g.status === "PASSED" && <span className="text-green-700">✓ Approved</span>}
-                            {g.status === "VP_MER_PASSED" && !presidentNewFlow && <span className="text-green-700">✓ VP Approved</span>}
-                            {g.status === "PRES_PASSED" && <span className="text-purple-700">✓ President</span>}
-                            {g.status === "REJECTED" && <span className="text-red-700">✕ Rejected</span>}
-                            {canRow && <span className="text-yellow-600">รออนุมัติ</span>}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {canRow && (
-                              <div className="inline-flex gap-1.5">
-                                <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-2.5 py-1 bg-green-600 text-white rounded-md font-medium hover:bg-green-700 disabled:opacity-50">{isSub && !isRej ? "..." : "Approve"}</button>
-                                {showStyleReject && <button onClick={() => { setRejectingStyle(isRej ? null : g.style); setRejectComment("") }} disabled={isSub} className="px-2.5 py-1 bg-red-500 text-white rounded-md font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                        {isRej && (
-                          <tr key={g.style + "_rej"}><td colSpan={7} className="px-4 py-3 bg-red-50 border-t border-red-100">
-                            <div className="space-y-2">
-                              <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
-                              <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
-                              {!isGWRequest && (
-                                <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="Forward to @nanyangtextile.com (optional)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-                              )}
-                              <div className="flex gap-2">
-                                <button onClick={() => rejectStyle(g.style)} disabled={isSub || !rejectComment.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">{isSub ? "..." : "Confirm Reject"}</button>
-                                <button onClick={() => { setRejectingStyle(null); setRejectComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
-                              </div>
-                            </div>
-                          </td></tr>
                         )}
-                      </>
-                    )
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 font-semibold text-gray-800 align-top">{g.style}</td>}
+                        <td className="px-3 py-2">{item.brand || "-"}</td>
+                        <td className="px-3 py-2">{item.sub || "-"}</td>
+                        <td className="px-3 py-2 font-medium">{item.so}</td>
+                        <td className="px-3 py-2">{item.customerPO || "-"}</td>
+                        <td className="px-3 py-2">{item.description || "-"}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                        <td className="px-3 py-2 text-right">{item.qtyOriginalShipment}</td>
+                        <td className="px-3 py-2 text-right">{item.qtyRequestAir}</td>
+                        <td className="px-3 py-2 text-right">{fmtNum(item.grossWeight, 2)}</td>
+                        <td className="px-3 py-2 text-right text-blue-600">{fmtNum(item.airFreight)}</td>
+                        <td className="px-3 py-2">{item.factory}</td>
+                        <td className="px-3 py-2">{item.country}</td>
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 align-top">{statusCell}</td>}
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 align-top">{actionCell}</td>}
+                      </tr>
+                    ))
+                    if (isRej) {
+                      rows.push(
+                        <tr key={g.style + "_rej"}><td colSpan={16} className="px-4 py-3 bg-red-50 border-t border-red-100">
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-red-700">Rejection Reason — {g.style} *</label>
+                            <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                            {!isGWRequest && (
+                              <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="Forward to @nanyangtextile.com (optional)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                            )}
+                            <div className="flex gap-2">
+                              <button onClick={() => rejectStyle(g.style)} disabled={isSub || !rejectComment.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">{isSub ? "..." : "Confirm Reject"}</button>
+                              <button onClick={() => { setRejectingStyle(null); setRejectComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                            </div>
+                          </div>
+                        </td></tr>
+                      )
+                    }
+                    return rows
                   })}
                 </tbody>
               </table>
@@ -1880,7 +1891,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","BRAND","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -1888,6 +1899,8 @@ export default function RequestDetailPage() {
                         {g.items.map((item: any) => (
                           <tr key={item.id} className="hover:bg-gray-50">
                             <td className="px-3 py-2 font-medium">{item.so}</td>
+                            <td className="px-3 py-2">{item.brand || "-"}</td>
+                            <td className="px-3 py-2">{item.sub || "-"}</td>
                             <td className="px-3 py-2">{item.customerPO}</td>
                             <td className="px-3 py-2">{item.description}</td>
                                                         <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
