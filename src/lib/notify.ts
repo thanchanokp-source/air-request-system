@@ -297,8 +297,9 @@ export async function sendPasswordSetupEmail(email: string, name: string, token:
 function gwClaimGroups(depts: Set<string>, req: any): { role: string; label: string; claimDept?: string; token?: string }[] {
   const groups: { role: string; label: string; claimDept?: string; token?: string }[] = []
   // NYK entry point is the APPROVER (EVP + CR user are alerted later, after approve).
-  if (depts.has("SCM NYK")) groups.push({ role: "SCM_NYK_APPROVER", label: "SCM NYK", token: (req as any).scmNykApproverToken })
-  if (depts.has("SCM NYG")) groups.push({ role: "SCM_NYG", label: "SCM NYG", token: (req as any).scmNygToken })
+  // Accept both the canonical "SCM NYK" and the short "NYK" (defensive — depends on import path).
+  if (depts.has("SCM NYK") || depts.has("NYK")) groups.push({ role: "SCM_NYK_APPROVER", label: "SCM NYK", token: (req as any).scmNykApproverToken })
+  if (depts.has("SCM NYG") || depts.has("NYG")) groups.push({ role: "SCM_NYG", label: "SCM NYG", token: (req as any).scmNygToken })
   // GW + SUPPLIER need NO approval (auto-approved) → do NOT alert / create groups for
   // them. Only SCM NYK / SCM NYG approve.
   return groups
@@ -684,7 +685,11 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
       const link = `${APP_URL}/requests/${requestId}`
       // Each group = a claim dept's people (GW≠SUPPLIER via claimDepartment).
       for (const g of groups) {
-        const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
+        // SCM_NYK_* are CROSS-BU (a person's bu may be NYG/ALL) → don't scope NYK by the doc's
+        // bu, or the NYK approver never gets the GW claim email. Match roles[] too (multi-role).
+        const isNyk = g.role.startsWith("SCM_NYK")
+        const where: any = { isActive: true, OR: [{ role: g.role }, { roles: { has: g.role } }] }
+        if (!isNyk) where.bu = (req as any).bu
         if (g.claimDept) where.claimDepartment = g.claimDept
         const users = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
         const magicLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
@@ -886,7 +891,8 @@ export async function notifyClaimEntry(requestId: string, dept: string) {
       await sendMail(email, `[Claim – ${label}] Sent back — Pending Approval — ${deptItems.length} SO — ${req.documentNo}`, html)
     }
     if (dept === "NYK") {
-      const us = await prisma.user.findMany({ where: { isActive: true, bu, role: "SCM_NYK_APPROVER" } as any, select: { id: true, email: true } })
+      // SCM_NYK is cross-BU (users' bu may be NYG even on a GW doc) → don't filter by bu.
+      const us = await prisma.user.findMany({ where: { isActive: true, OR: [{ role: "SCM_NYK_APPROVER" }, { roles: { has: "SCM_NYK_APPROVER" } }] } as any, select: { id: true, email: true } })
       for (const u of us) await sendTo(u.id, u.email, "NYK")
       return
     }
