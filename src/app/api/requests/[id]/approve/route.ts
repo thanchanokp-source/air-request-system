@@ -296,7 +296,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // stage (Logistics ∥ Claim). President approves last, before Accounting.
         await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "VP_MER_PASSED" }, data: { itemStatus: "PRES_PASSED" } })
         await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_CLAIM_GW" } })
+        // Parallel stage → notify BOTH Logistics AND the Claim depts (NYK/NYG). Previously only
+        // Logistics was alerted, so claim approvers (incl. SCM NYK) never got an email at GM approve.
         await notifyStatusChange(id, "PENDING_LOGISTICS_GW").catch(() => {})
+        await notifyStatusChange(id, "PENDING_CLAIM_GW").catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
