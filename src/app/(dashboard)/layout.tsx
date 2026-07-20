@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
 import DashboardShell from "@/components/layout/dashboard-shell"
+import ImpersonateBar from "@/components/ImpersonateBar"
 import { isMaintenance } from "@/lib/settings"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -12,8 +13,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Maintenance mode: ADMINs always pass. A tester can also enable a per-browser bypass
   // cookie (Settings → "Enable test bypass") so magic-link logins as ANY role in that same
   // browser get through too. Real users (no cookie, not admin) see the maintenance screen.
-  const hasBypassCookie = (await cookies()).get("mtnc_bypass")?.value === "1"
-  if (role !== "ADMIN" && !hasBypassCookie && (await isMaintenance())) {
+  const jar = await cookies()
+  const hasBypassCookie = jar.get("mtnc_bypass")?.value === "1"
+  const isImpersonating = !!jar.get("impersonator")?.value
+  if (role !== "ADMIN" && !hasBypassCookie && !isImpersonating && (await isMaintenance())) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
         <div className="max-w-md text-center bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
@@ -28,8 +31,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     )
   }
   return (
-    <DashboardShell role={role} user={session.user}>
-      {children}
-    </DashboardShell>
+    <>
+      <ImpersonateBar
+        isAdmin={role === "ADMIN"}
+        isImpersonating={isImpersonating}
+        actingLabel={`${(session.user as any).name || (session.user as any).email} (${role})`}
+      />
+      <DashboardShell role={role} user={session.user}>
+        {children}
+      </DashboardShell>
+    </>
   )
 }
