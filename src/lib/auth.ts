@@ -30,32 +30,37 @@ export const authOptions: NextAuthOptions = {
           const airReq = await (prisma.airRequest as any).findFirst({ where: { vpMerToken: token } })
           if (airReq) {
             const isGW = airReq.bu === "GW"
-            // NYG has a DVM MER stage BEFORE VP MER that reuses this same per-request
-            // token. While the doc sits at PENDING_DVM_MER, resolve the link to a DVM MER
-            // user (role-based, like GM); once it advances to PENDING_VP_MER the same
-            // token resolves to VP MER below.
-            if (!isGW && airReq.status === "PENDING_DVM_MER") {
-              const dvm = await (prisma.user as any).findFirst({
-                where: { isActive: true, bu: { in: ["NYG", "ALL"] }, OR: [{ role: "DVM_MER" }, { roles: { has: "DVM_MER" } }] },
-                orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
-              })
-              if (dvm) return { id: dvm.id, email: dvm.email, name: dvm.name, role: "DVM_MER", bu: "NYG", claimDepartment: null, priority: dvm.priority ?? null }
-              return null
+            const buFor = airReq.bu || "NYG"
+            // The merch token resolves to the role of the doc's CURRENT stage (NYG DVM/VP MER,
+            // EA ADVM/DVM, or GW DPM).
+            const st = airReq.status
+            const stageRole = st === "PENDING_DVM_MER" ? "DVM_MER"
+              : st === "PENDING_VP_MER" ? "VP_MER"
+              : st === "PENDING_DVM_MER_EA" ? "DVM_MER_EA"
+              : st === "PENDING_VP_MER_EA" ? "VP_MER_EA"
+              : isGW ? "VP_MER_GW" : "VP_MER"
+            // Per-recipient (?as=email) → log in AS that specific approver (each real approver's
+            // email link resolves to THEM, not the first user). Falls through otherwise.
+            const asEmail = String((credentials as any).magicAs || "").toLowerCase()
+            if (asEmail) {
+              const asU = await (prisma.user as any).findUnique({ where: { email: asEmail } })
+              if (asU?.isActive && (asU.role === stageRole || (Array.isArray(asU.roles) && asU.roles.includes(stageRole)))) {
+                return { id: asU.id, email: asU.email, name: asU.name, role: stageRole, bu: buFor, claimDepartment: null, priority: asU.priority ?? null }
+              }
             }
+            // A specific approver chosen at upload (GW DPM / assigned VP MER).
             const assignedEmail = airReq.assignedVpMer
-            const vpRole = isGW ? "VP_MER_GW" : "VP_MER"
-            if (assignedEmail) {
+            if (assignedEmail && (stageRole === "VP_MER" || stageRole === "VP_MER_GW")) {
               const user = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
-              // Always grant VP_MER role for this session — they are the designated approver
-              if (user) return { id: user.id, email: user.email, name: user.name, role: vpRole, bu: isGW ? "GW" : (user.bu || "NYG"), claimDepartment: null, priority: null }
-              return { id: `vp_mer_guest_${token}`, email: assignedEmail, name: assignedEmail, role: vpRole, bu: isGW ? "GW" : "NYG", claimDepartment: null, priority: null }
+              if (user) return { id: user.id, email: user.email, name: user.name, role: stageRole, bu: buFor, claimDepartment: null, priority: null }
+              return { id: `vp_mer_guest_${token}`, email: assignedEmail, name: assignedEmail, role: stageRole, bu: buFor, claimDepartment: null, priority: null }
             }
-            // NYG auto — no specific VP MER picked → resolve to any active VP MER (role-based).
-            const vp = await (prisma.user as any).findFirst({
-              where: { isActive: true, bu: { in: ["NYG", "ALL"] }, OR: [{ role: "VP_MER" }, { roles: { has: "VP_MER" } }] },
-              orderBy: [{ createdAt: "asc" }],
+            // Fallback — first active holder of the stage role.
+            const u = await (prisma.user as any).findFirst({
+              where: { isActive: true, OR: [{ role: stageRole }, { roles: { has: stageRole } }] },
+              orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
             })
-            if (vp) return { id: vp.id, email: vp.email, name: vp.name, role: vpRole, bu: vp.bu === "GW" ? "GW" : "NYG", claimDepartment: null, priority: null }
+            if (u) return { id: u.id, email: u.email, name: u.name, role: stageRole, bu: buFor, claimDepartment: null, priority: u.priority ?? null }
             return null
           }
           // GM (GW) — dedicated token, always resolves to a GM_GW session

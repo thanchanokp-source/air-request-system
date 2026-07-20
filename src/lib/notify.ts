@@ -901,6 +901,29 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       return
     }
 
+    // Merch approval stages (NYG DVM/VP Merchandise + EA ADVM/DVM) → send EACH approver their
+    // OWN ?as= magic link (reuses vpMerToken) so they (or an admin testing) click once to log
+    // in as themselves and act — no manual login.
+    const MERCH_ROLE: Record<string, string> = {
+      PENDING_DVM_MER: "DVM_MER", PENDING_VP_MER: "VP_MER",
+      PENDING_DVM_MER_EA: "DVM_MER_EA", PENDING_VP_MER_EA: "VP_MER_EA",
+    }
+    if (MERCH_ROLE[newStatus]) {
+      const mrole = MERCH_ROLE[newStatus]
+      const mUsers = await (prisma.user as any).findMany({
+        where: { isActive: true, OR: [{ role: mrole }, { roles: { has: mrole } }] }, select: { email: true },
+      })
+      const link = `${APP_URL}/requests/${requestId}`
+      const token = (req as any).vpMerToken
+      const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
+      for (const u of mUsers) {
+        if (!u.email) continue
+        const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&as=${encodeURIComponent(u.email)}&redirect=/approvals` : undefined
+        await sendMail(u.email, `${subject} — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, magicLink))
+      }
+      return
+    }
+
     // For claim statuses, filter by depts that actually have items
     const activeDepts = new Set(req.items.map((i:any) => i.claimDepartment).filter(Boolean))
 
