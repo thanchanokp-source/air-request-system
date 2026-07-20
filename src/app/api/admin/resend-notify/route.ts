@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { notifyStatusChange } from "@/lib/notify"
+import { notifyStatusChange, notifyGwClaimNyk } from "@/lib/notify"
 
 // Admin-only helper: RE-SEND the "next step" notification for one or more documents. Handy when
 // test-email override was turned on AFTER an approval and you want to receive that email again.
@@ -16,13 +16,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 })
   }
   const docParam = req.nextUrl.searchParams.get("doc") || ""
+  const only = (req.nextUrl.searchParams.get("only") || "").toLowerCase() // e.g. "nyk"
   const docNos = docParam.split(",").map(s => s.trim()).filter(Boolean)
-  if (!docNos.length) return NextResponse.json({ error: "Pass ?doc=AIR-XXXX[,AIR-YYYY]" }, { status: 400 })
+  if (!docNos.length) return NextResponse.json({ error: "Pass ?doc=AIR-XXXX[,AIR-YYYY]  (optional &only=nyk)" }, { status: 400 })
 
   const results: any[] = []
   for (const documentNo of docNos) {
     const reqDoc = await (prisma.airRequest as any).findFirst({ where: { documentNo } })
     if (!reqDoc) { results.push({ documentNo, ok: false, error: "not found" }); continue }
+    // Targeted resend: ONLY the SCM NYK approvers (other roles were already notified).
+    if (only === "nyk") {
+      const n = await notifyGwClaimNyk(reqDoc.id)
+      results.push({ documentNo, ok: true, only: "nyk", nykEmailsSent: n })
+      continue
+    }
     const fired: string[] = []
     await notifyStatusChange(reqDoc.id, reqDoc.status).catch(() => {})
     fired.push(reqDoc.status)

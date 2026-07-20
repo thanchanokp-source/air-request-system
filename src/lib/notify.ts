@@ -322,6 +322,33 @@ function nykBrandLabel(req: any): string {
   return brands.length ? brands.join(", ") : (req.brandName || "-")
 }
 
+// Re-send the GW claim notification to ONLY the SCM NYK approvers (the other roles were already
+// notified). Cross-BU: no bu filter. Each approver gets their own ?as= magic link.
+export async function notifyGwClaimNyk(requestId: string): Promise<number> {
+  try {
+    const req: any = await prisma.airRequest.findUnique({ where: { id: requestId }, include: { items: true } })
+    if (!req) return 0
+    const depts = new Set<string>()
+    for (const it of req.items) getSplits(it).forEach((s: any) => depts.add(s.dept))
+    if (!depts.has("SCM NYK") && !depts.has("NYK")) return 0
+    const users = await (prisma.user as any).findMany({
+      where: { isActive: true, OR: [{ role: "SCM_NYK_APPROVER" }, { roles: { has: "SCM_NYK_APPROVER" } }] },
+      select: { email: true },
+    })
+    const link = `${APP_URL}/requests/${requestId}`
+    const token = (req as any).scmNykApproverToken
+    const subj = `[Claim – SCM NYK] Pending Approval — Brand: ${nykBrandLabel(req)} — ${req.documentNo}`
+    let sent = 0
+    for (const u of users) {
+      if (!u.email) continue
+      const perLink = token ? `${APP_URL}/api/magic-login?token=${token}&as=${encodeURIComponent(u.email)}&redirect=/approvals` : undefined
+      await sendMail(u.email, subj, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, perLink))
+      sent++
+    }
+    return sent
+  } catch (e) { console.error("[notify] resend NYK failed:", e); return 0 }
+}
+
 // Auto-cascade: after a claim approver at priority `afterPriority` approves,
 // email the NEXT priority level (the immediate next, not everyone above) of the
 // same role/dept so the chain runs to the last priority with NO manual forward.
