@@ -24,17 +24,27 @@ export async function GET(req: NextRequest) {
   for (const documentNo of docNos) {
     const reqDoc = await (prisma.airRequest as any).findFirst({ where: { documentNo } })
     if (!reqDoc) { results.push({ documentNo, ok: false, error: "not found" }); continue }
+    const isGW = reqDoc.bu === "GW"
     // Targeted resend: ONLY the SCM NYK approvers (other roles were already notified).
     if (only === "nyk") {
       const n = await notifyGwClaimNyk(reqDoc.id)
-      results.push({ documentNo, ok: true, only: "nyk", nykEmailsSent: n })
-      continue
+      results.push({ documentNo, ok: true, only: "nyk", nykEmailsSent: n }); continue
     }
+    if (only === "logistics") {
+      const s = isGW ? "PENDING_LOGISTICS_GW" : "PENDING_LOGISTICS"
+      await notifyStatusChange(reqDoc.id, s).catch(() => {})
+      results.push({ documentNo, ok: true, only: "logistics", fired: [s] }); continue
+    }
+    if (only === "claim") {
+      const s = isGW ? "PENDING_CLAIM_GW" : "PENDING_CLAIM"
+      await notifyStatusChange(reqDoc.id, s).catch(() => {})
+      results.push({ documentNo, ok: true, only: "claim", fired: [s] }); continue
+    }
+    // Default (all) — re-fire the doc's CURRENT status; GW parallel stage → Claim + Logistics.
     const fired: string[] = []
     await notifyStatusChange(reqDoc.id, reqDoc.status).catch(() => {})
     fired.push(reqDoc.status)
-    // GW parallel stage: also notify Logistics + Claim explicitly.
-    if (reqDoc.bu === "GW" && reqDoc.status === "PENDING_CLAIM_GW") {
+    if (isGW && reqDoc.status === "PENDING_CLAIM_GW") {
       await notifyStatusChange(reqDoc.id, "PENDING_LOGISTICS_GW").catch(() => {})
       fired.push("PENDING_LOGISTICS_GW")
     }

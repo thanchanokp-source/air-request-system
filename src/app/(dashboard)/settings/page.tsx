@@ -7,6 +7,26 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState("")
+  const [resendDoc, setResendDoc] = useState("")
+  const [resendWho, setResendWho] = useState("all")
+  const [resendMsg, setResendMsg] = useState("")
+  const [resendLoading, setResendLoading] = useState(false)
+
+  const resendNotify = async () => {
+    if (!resendDoc.trim()) return
+    setResendLoading(true); setResendMsg("")
+    try {
+      const params = new URLSearchParams({ doc: resendDoc.trim() })
+      if (resendWho !== "all") params.set("only", resendWho)
+      const r = await fetch(`/api/admin/resend-notify?${params.toString()}`)
+      const d = await r.json()
+      if (r.ok) {
+        const ok = (d.results || []).filter((x: any) => x.ok).map((x: any) => x.documentNo)
+        const bad = (d.results || []).filter((x: any) => !x.ok).map((x: any) => `${x.documentNo} (${x.error})`)
+        setResendMsg(`✓ ส่งแล้ว: ${ok.join(", ") || "-"}${bad.length ? ` · ไม่พบ: ${bad.join(", ")}` : ""}`)
+      } else setResendMsg(d.error || "Failed")
+    } catch { setResendMsg("Network error") } finally { setResendLoading(false) }
+  }
 
   useEffect(() => {
     fetch("/api/admin/settings").then(r => r.json()).then(d => {
@@ -102,6 +122,39 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Resend notification */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+        <div>
+          <h2 className="font-semibold text-gray-800">📤 Resend Notification</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            ยิงเมลแจ้งเตือน<b>ซ้ำ</b>สำหรับเอกสาร (เลือกส่งหาใคร) — ใช้ตอนเทส/เมลตกหล่น.
+            เมลจะไปตามสถานะปัจจุบันของเอกสาร (ถ้าเปิด Test Override เมลเด้งเข้าอีเมลทดสอบ).
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 items-end">
+          <div className="flex-1 min-w-[220px]">
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Document No. (คั่นด้วย , ได้หลายเลข)</label>
+            <input value={resendDoc} onChange={e => setResendDoc(e.target.value)} placeholder="AIR-2607-0002, AIR-2607-0003"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">ส่งหา</label>
+            <select value={resendWho} onChange={e => setResendWho(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              <option value="all">ทุก next step (สถานะปัจจุบัน)</option>
+              <option value="nyk">Claim NYK เท่านั้น</option>
+              <option value="claim">Claim ทุกแผนก</option>
+              <option value="logistics">Logistics เท่านั้น</option>
+            </select>
+          </div>
+          <button onClick={resendNotify} disabled={resendLoading || !resendDoc.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+            {resendLoading ? "กำลังส่ง..." : "Resend"}
+          </button>
+        </div>
+        {resendMsg && <p className={`text-xs ${resendMsg.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>{resendMsg}</p>}
       </div>
     </div>
   )
