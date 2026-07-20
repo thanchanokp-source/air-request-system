@@ -3,7 +3,17 @@ import { sendMail } from "./email"
 import { getSplits, claimEntryRoles, claimVpRoles, vpProdGroup, prodGroupCovers } from "./claim"
 import { supabase, BUCKET } from "./supabase-storage"
 import { MASTER_EDITOR_EMAILS } from "./master-access"
+import { runWithTestMail } from "./test-ctx"
 import { randomUUID } from "crypto"
+
+// For a TEST document (isTest), all its emails reroute to the admin who created it. Returns that
+// admin's email, else null (real doc → normal recipients).
+async function docTestRecipient(requestId: string): Promise<string | null> {
+  const r = await (prisma.airRequest as any).findUnique({
+    where: { id: requestId }, select: { isTest: true, createdBy: { select: { email: true } } } as any,
+  }).catch(() => null)
+  return r?.isTest ? (r.createdBy?.email ?? null) : null
+}
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
@@ -343,6 +353,9 @@ export async function notifyDocToEmail(requestId: string, email: string, status:
 // Re-send the GW claim notification to ONLY the SCM NYK approvers (the other roles were already
 // notified). Cross-BU: no bu filter. Each approver gets their own ?as= magic link.
 export async function notifyGwClaimNyk(requestId: string): Promise<number> {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyGwClaimNykImpl(requestId))
+}
+async function notifyGwClaimNykImpl(requestId: string): Promise<number> {
   try {
     const req: any = await prisma.airRequest.findUnique({ where: { id: requestId }, include: { items: true } })
     if (!req) return 0
@@ -371,6 +384,11 @@ export async function notifyGwClaimNyk(requestId: string): Promise<number> {
 // email the NEXT priority level (the immediate next, not everyone above) of the
 // same role/dept so the chain runs to the last priority with NO manual forward.
 export async function notifyClaimNextPriority(
+  requestId: string, role: string | string[], claimDept: string | null | undefined, afterPriority: number, label?: string,
+) {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyClaimNextPriorityImpl(requestId, role, claimDept, afterPriority, label))
+}
+async function notifyClaimNextPriorityImpl(
   requestId: string,
   role: string | string[],
   claimDept: string | null | undefined,
@@ -406,7 +424,12 @@ export async function notifyClaimNextPriority(
   }
 }
 
+// Public entry — reroute to the doc's admin if it's a TEST doc, then run the real notifier.
 export async function notifyStatusChange(requestId: string, newStatus: string) {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyStatusChangeImpl(requestId, newStatus))
+}
+
+async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
   try {
     const rolesToNotify = STATUS_ROLES[newStatus]
 
@@ -919,6 +942,9 @@ export async function notifyStatusChange(requestId: string, newStatus: string) {
 // NYK → Action Approver; PRODUCTION → priority-1 VP by factory G-group; PROCUREMENT →
 // Purchasing; others → priority-1 of the dept.
 export async function notifyClaimEntry(requestId: string, dept: string) {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyClaimEntryImpl(requestId, dept))
+}
+async function notifyClaimEntryImpl(requestId: string, dept: string) {
   try {
     const req = await prisma.airRequest.findUnique({
       where: { id: requestId },
@@ -964,6 +990,11 @@ export async function notifyClaimEntry(requestId: string, dept: string) {
 }
 
 export async function notifyClaimNext(
+  requestId: string, toEmail: string, toName: string, fromName: string, token: string, deptOverride?: string | null
+) {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyClaimNextImpl(requestId, toEmail, toName, fromName, token, deptOverride))
+}
+async function notifyClaimNextImpl(
   requestId: string,
   toEmail: string,
   toName: string,
@@ -1150,6 +1181,9 @@ export async function notifyAdminAddPerson(opts: {
 // types any address (NOT looked up from the company directory). Sends the rejected style's
 // SO data + the reject reason. Recipient just reads it (no login / no action).
 export async function notifyRejectionForward(requestId: string, toEmail: string, style: string, reason: string, rejectedBy?: string) {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyRejectionForwardImpl(requestId, toEmail, style, reason, rejectedBy))
+}
+async function notifyRejectionForwardImpl(requestId: string, toEmail: string, style: string, reason: string, rejectedBy?: string) {
   try {
     const req: any = await prisma.airRequest.findUnique({
       where: { id: requestId },
@@ -1396,6 +1430,9 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
 }
 
 export async function notifyLgFilesToClaimers(requestId: string) {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyLgFilesToClaimersImpl(requestId))
+}
+async function notifyLgFilesToClaimersImpl(requestId: string) {
   try {
     const req: any = await prisma.airRequest.findUnique({
       where: { id: requestId },

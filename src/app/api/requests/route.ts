@@ -97,7 +97,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { items, assignedVpMer, bu } = body
+    const { items, assignedVpMer, bu, isTest } = body
+    // Only ADMIN may create TEST documents (all their emails reroute to the admin, hidden from users).
+    const isTestDoc = !!isTest && (session.user as any).role === "ADMIN"
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "No items" }, { status: 400 })
     }
@@ -146,7 +148,12 @@ export async function POST(req: NextRequest) {
       .filter((d: string) => d && wtChargeFor(d) <= 0))] as string[]
 
     const first = items[0]
-    const docNo = await generateDocumentNo(isGW ? "GW" : isEA ? "EA" : "NYG")
+    const buCodeForNo = isGW ? "GW" : isEA ? "EA" : "NYG"
+    // TEST docs get their own throwaway number (timestamp) so they never touch the real per-BU
+    // running sequence and never collide with each other.
+    const docNo = isTestDoc
+      ? `TEST-${buCodeForNo}-${Date.now().toString().slice(-8)}`
+      : await generateDocumentNo(buCodeForNo)
 
     // NYG now has a DVM MER approval step BEFORE VP MER. Only route there if a DVM MER
     // user is actually configured (role or roles[]); otherwise skip straight to VP MER
@@ -170,6 +177,7 @@ export async function POST(req: NextRequest) {
         buName: String(col(first, "BU") || ""),
         bu: isGW ? "GW" : isEA ? "EA" : "NYG",
         status: initialStatus,
+        isTest: isTestDoc,
         createdById: userId,
         assignedVpMer,
         // Hold from the first approver until every Country has a rate AND every

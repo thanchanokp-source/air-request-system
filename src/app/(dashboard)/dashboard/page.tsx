@@ -471,7 +471,8 @@ export default function DashboardPage() {
     fetch("/api/requests").then(r=>r.json()).then(d=>{ setRequests(d); setLoading(false) })
   }, [])
 
-  const buRequests = useMemo(()=>requests.filter(r=> requestInBu(r, activeBu)), [requests, activeBu])
+  // TEST documents never count in dashboard reporting.
+  const buRequests = useMemo(()=>requests.filter(r=> requestInBu(r, activeBu) && !r.isTest), [requests, activeBu])
   const allSOs = useMemo(()=>buRequests.flatMap(r=>(r.items||[]).map((item:any)=>({...item,request:r}))), [buRequests])
 
   const filtered = useMemo(()=>allSOs.filter(row=>{

@@ -1419,6 +1419,9 @@ export default function RequestDetailPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700">← Back</button>
         <h1 className="text-xl font-bold text-gray-900">{req.documentNo}</h1>
+        {req.isTest && (
+          <span className="text-xs bg-amber-100 border border-amber-300 text-amber-800 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">🧪 TEST — เมลเข้า admin</span>
+        )}
         {req.crNo && isNykClaimRole && (
           <span className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
             CR NO: {req.crNo}

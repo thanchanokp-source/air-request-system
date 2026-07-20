@@ -134,7 +134,7 @@ export default function FilesPage() {
   }, [])
 
   const folderFiltered = useMemo(() =>
-    requests.filter(r => requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, statusFilter)),
+    requests.filter(r => !r.isTest && requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, statusFilter)),
     [requests, statusFilter, activeBU])
 
   const uniq = (arr: any[]) => [...new Set(arr.filter(Boolean))].sort()

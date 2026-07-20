@@ -18,6 +18,7 @@ async function getAccessToken(): Promise<string> {
 }
 
 import { getEmailOverride } from "./settings"
+import { currentTestMail } from "./test-ctx"
 
 export type MailAttachment = { filename: string; contentBase64: string; contentType?: string }
 
@@ -40,8 +41,9 @@ export async function sendMail(to: string | string[], subject: string, html: str
     return
   }
 
-  // DB toggle (admin UI) wins; env var is the fallback. When set, ALL mail goes here.
-  const override = await getEmailOverride()
+  // Reroute priority: a per-DOCUMENT test (isTest doc → its admin) wins over the global DB
+  // override; both send a monitor-only copy and skip the real recipients.
+  const override = currentTestMail() || await getEmailOverride()
   const originalTo = Array.isArray(to) ? to.join(", ") : to
   const graphAtts = graphAttachments(attachments)
 

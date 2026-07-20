@@ -23,7 +23,12 @@ const GW_REQUIRED = [
 
 export default function NewRequestPage() {
   const { data: session } = useSession()
-  const userBu = (session?.user as any)?.bu || "NYG"
+  const role = (session?.user as any)?.role || ""
+  const isAdmin = role === "ADMIN"
+  // Admin can upload a TEST document for any BU (emails reroute to the admin, hidden from users).
+  const [testMode, setTestMode] = useState(false)
+  const [testBu, setTestBu] = useState<"NYG" | "GW" | "EA">("NYG")
+  const userBu = (isAdmin && testMode) ? testBu : ((session?.user as any)?.bu || "NYG")
   const isGW = userBu === "GW"
 
   const [file, setFile] = useState<File | null>(null)
@@ -200,6 +205,7 @@ export default function NewRequestPage() {
         items: preview,
         assignedVpMer: isGW ? vpMerSelected?.email : null,
         bu: userBu,
+        isTest: isAdmin && testMode,
       })
     })
     const data = await res.json()
@@ -234,10 +240,30 @@ export default function NewRequestPage() {
       )}
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-bold text-gray-900">New Air Request</h1>
-        <span className={`px-2 py-0.5 rounded text-xs font-bold ${isGW ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
-          {userBu}
+        <span className={`px-2 py-0.5 rounded text-xs font-bold ${testMode ? "bg-amber-100 text-amber-700" : isGW ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+          {testMode ? `🧪 TEST · ${userBu}` : userBu}
         </span>
       </div>
+
+      {/* Admin TEST upload — creates a test document whose emails reroute to YOU (admin),
+          hidden from real users. Pick any BU to test its flow safely. */}
+      {isAdmin && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm font-semibold text-amber-800 cursor-pointer">
+            <input type="checkbox" checked={testMode} onChange={e => setTestMode(e.target.checked)} className="w-4 h-4" />
+            🧪 อัพเป็น Test (เมลเด้งเข้า admin, user จริงไม่เห็น/ไม่ได้เมล)
+          </label>
+          {testMode && (
+            <select value={testBu} onChange={e => setTestBu(e.target.value as any)}
+              className="border border-amber-300 rounded-lg px-3 py-1.5 text-sm bg-white">
+              <option value="NYG">BU: NYG</option>
+              <option value="GW">BU: GW</option>
+              <option value="EA">BU: EA</option>
+            </select>
+          )}
+          {testMode && <span className="text-xs text-amber-600">เอกสารจะได้เลข TEST-… · magic link แต่ละ role เข้า inbox คุณ</span>}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
 

@@ -139,7 +139,8 @@ export default function RequestsPage() {
     fetch("/api/users/claim-directory").then(r => r.json()).then(d => setClaimDir(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
 
-  const buRequests = requests.filter(r => requestInBu(r, activeBu))
+  // TEST documents (admin test uploads) are hidden from everyone except ADMIN in browse views.
+  const buRequests = requests.filter(r => requestInBu(r, activeBu) && (!r.isTest || role === "ADMIN"))
 
   const allRows = buRequests.flatMap(r =>
     (r.items || []).map((item: any) => ({ ...item, request: r }))
@@ -279,7 +280,7 @@ export default function RequestsPage() {
             </span>
           )}
         </div>
-        {(role === "MER_USER" || role === "MER_GW" || role === "MER_EA") && (
+        {(role === "MER_USER" || role === "MER_GW" || role === "MER_EA" || role === "ADMIN") && (
           <Link href="/requests/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
             + New Request
           </Link>
