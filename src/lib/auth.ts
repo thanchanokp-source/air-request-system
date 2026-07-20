@@ -129,9 +129,11 @@ export const authOptions: NextAuthOptions = {
                 if (au) return { id: au.id, email: au.email, name: au.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (au as any).claimDepartment ?? null, priority: (au as any).priority ?? null }
                 return { id: `nyk_guest_${token}`, email: assignedEmail, name: assignedEmail, role: gwRole, bu: cReq.bu || "GW", claimDepartment: null, priority: null }
               }
-              // Scope to the document's BU — SCM roles exist in both NYG & GW.
-              // For CLAIM_GW also scope by claimDepartment (GW vs SUPPLIER).
-              const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true, bu: cReq.bu, ...(scopeDept ? { claimDepartment: scopeDept } : {}) } })
+              // SCM_NYK_* are CROSS-BU (users' bu is often NYG even on a GW doc) → do NOT scope
+              // them by the doc's bu, or the magic link resolves to nobody. CLAIM_GW / SCM_NYG
+              // are BU-specific → keep the bu scope (+ claimDepartment for CLAIM_GW GW vs SUPPLIER).
+              const isNykRole = gwRole.startsWith("SCM_NYK")
+              const u = await (prisma.user as any).findFirst({ where: { role: gwRole, isActive: true, ...(isNykRole ? {} : { bu: cReq.bu }), ...(scopeDept ? { claimDepartment: scopeDept } : {}) } })
               if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (u as any).claimDepartment ?? scopeDept ?? null, priority: (u as any).priority ?? null }
               return null
             }
