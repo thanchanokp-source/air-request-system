@@ -322,6 +322,20 @@ function nykBrandLabel(req: any): string {
   return brands.length ? brands.join(", ") : (req.brandName || "-")
 }
 
+// Admin resend: send the document summary directly to ONE typed email (any person), using the
+// given status for the header/subject. No magic link — read-only view.
+export async function notifyDocToEmail(requestId: string, email: string, status: string): Promise<number> {
+  try {
+    if (!email.includes("@")) return 0
+    const req: any = await prisma.airRequest.findUnique({ where: { id: requestId }, include: { items: true } })
+    if (!req) return 0
+    const link = `${APP_URL}/requests/${requestId}`
+    const label = STATUS_SUBJECT[status] || status
+    await sendMail([email.trim()], `${label} — ${req.documentNo}`, buildHtml(req, status, link))
+    return 1
+  } catch (e) { console.error("[notify] doc-to-email failed:", e); return 0 }
+}
+
 // Re-send the GW claim notification to ONLY the SCM NYK approvers (the other roles were already
 // notified). Cross-BU: no bu filter. Each approver gets their own ?as= magic link.
 export async function notifyGwClaimNyk(requestId: string): Promise<number> {

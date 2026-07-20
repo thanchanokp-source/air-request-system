@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { notifyStatusChange, notifyGwClaimNyk } from "@/lib/notify"
+import { notifyStatusChange, notifyGwClaimNyk, notifyDocToEmail } from "@/lib/notify"
 
 // Admin-only helper: RE-SEND the "next step" notification for one or more documents. Handy when
 // test-email override was turned on AFTER an approval and you want to receive that email again.
@@ -16,7 +16,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 })
   }
   const docParam = req.nextUrl.searchParams.get("doc") || ""
-  const only = (req.nextUrl.searchParams.get("only") || "").toLowerCase() // e.g. "nyk"
+  const only = (req.nextUrl.searchParams.get("only") || "").toLowerCase()   // nyk | claim | logistics
+  const status = (req.nextUrl.searchParams.get("status") || "").trim()      // any status to re-fire
+  const email = (req.nextUrl.searchParams.get("email") || "").trim()        // send to one typed email
   const docNos = docParam.split(",").map(s => s.trim()).filter(Boolean)
   if (!docNos.length) return NextResponse.json({ error: "Pass ?doc=AIR-XXXX[,AIR-YYYY]  (optional &only=nyk)" }, { status: 400 })
 
@@ -25,6 +27,16 @@ export async function GET(req: NextRequest) {
     const reqDoc = await (prisma.airRequest as any).findFirst({ where: { documentNo } })
     if (!reqDoc) { results.push({ documentNo, ok: false, error: "not found" }); continue }
     const isGW = reqDoc.bu === "GW"
+    // Send directly to ONE typed email (any person) — read-only, uses status (or current).
+    if (email) {
+      const n = await notifyDocToEmail(reqDoc.id, email, status || reqDoc.status)
+      results.push({ documentNo, ok: n > 0, sentTo: email, status: status || reqDoc.status }); continue
+    }
+    // Fire an explicit status (any stage, either BU).
+    if (status) {
+      await notifyStatusChange(reqDoc.id, status).catch(() => {})
+      results.push({ documentNo, ok: true, firedStatus: status }); continue
+    }
     // Targeted resend: ONLY the SCM NYK approvers (other roles were already notified).
     if (only === "nyk") {
       const n = await notifyGwClaimNyk(reqDoc.id)

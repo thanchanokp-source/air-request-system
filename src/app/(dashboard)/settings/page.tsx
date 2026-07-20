@@ -9,6 +9,7 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState("")
   const [resendDoc, setResendDoc] = useState("")
   const [resendWho, setResendWho] = useState("all")
+  const [resendEmail, setResendEmail] = useState("")
   const [resendMsg, setResendMsg] = useState("")
   const [resendLoading, setResendLoading] = useState(false)
 
@@ -17,7 +18,11 @@ export default function SettingsPage() {
     setResendLoading(true); setResendMsg("")
     try {
       const params = new URLSearchParams({ doc: resendDoc.trim() })
-      if (resendWho !== "all") params.set("only", resendWho)
+      const w = resendWho
+      if (w.startsWith("only:")) params.set("only", w.slice(5))
+      else if (w.startsWith("status:")) params.set("status", w.slice(7))
+      // "all" → no param (server uses each doc's current status)
+      if (resendEmail.trim()) params.set("email", resendEmail.trim())
       const r = await fetch(`/api/admin/resend-notify?${params.toString()}`)
       const d = await r.json()
       if (r.ok) {
@@ -140,14 +145,40 @@ export default function SettingsPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
           </div>
           <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-1">ส่งหา</label>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">ส่งหา (status / กลุ่ม)</label>
             <select value={resendWho} onChange={e => setResendWho(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-              <option value="all">ทุก next step (สถานะปัจจุบัน)</option>
-              <option value="nyk">Claim NYK เท่านั้น</option>
-              <option value="claim">Claim ทุกแผนก</option>
-              <option value="logistics">Logistics เท่านั้น</option>
+              <option value="all">สถานะปัจจุบัน (default)</option>
+              <optgroup label="เจาะจงกลุ่ม">
+                <option value="only:nyk">Claim NYK เท่านั้น</option>
+                <option value="only:claim">Claim ทุกแผนก</option>
+                <option value="only:logistics">Logistics เท่านั้น</option>
+              </optgroup>
+              <optgroup label="NYG — ทุก status">
+                <option value="status:PENDING_DVM_MER">DVM Merchandise</option>
+                <option value="status:PENDING_VP_MER">VP Merchandise</option>
+                <option value="status:PENDING_SCM">SCM</option>
+                <option value="status:PENDING_VP_SCM">VP SCM</option>
+                <option value="status:PENDING_LOGISTICS">Logistics (NYG)</option>
+                <option value="status:PENDING_CLAIM">Claim (NYG)</option>
+                <option value="status:PENDING_VP_CLAIM">VP Claim (NYG)</option>
+                <option value="status:PENDING_PRESIDENT">President (NYG)</option>
+              </optgroup>
+              <optgroup label="GW — ทุก status">
+                <option value="status:PENDING_VP_MER_GW">DPM (GW)</option>
+                <option value="status:PENDING_GM_GW">GM (GW)</option>
+                <option value="status:PENDING_CLAIM_GW">Claim (GW)</option>
+                <option value="status:PENDING_LOGISTICS_GW">Logistics (GW)</option>
+                <option value="status:PENDING_PRESIDENT_GW">President (GW)</option>
+                <option value="status:PENDING_SCM_GW">SCM (GW)</option>
+                <option value="status:PENDING_ACCOUNTING">Accounting</option>
+              </optgroup>
             </select>
+          </div>
+          <div className="min-w-[200px]">
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">ส่งเจาะจงอีเมล (ถ้าใส่ = ส่งเฉพาะคนนี้)</label>
+            <input value={resendEmail} onChange={e => setResendEmail(e.target.value)} placeholder="name@nanyangtextile.com"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
           </div>
           <button onClick={resendNotify} disabled={resendLoading || !resendDoc.trim()}
             className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
