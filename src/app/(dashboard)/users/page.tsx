@@ -909,8 +909,8 @@ export default function UsersPage() {
             <table className="w-full text-sm table-fixed" style={{fontVariantNumeric:"tabular-nums"}}>
               <thead className="sticky top-0 z-10">
                 <tr className="bg-slate-800">
-                  {[["NO.","w-10"],["Name","w-[12%]"],["Email","w-[20%]"],["BU","w-[7%]"],["Role","w-[17%]"],["Sub Role","w-[8%]"],["Action","w-[8%]"],["Priority","w-[7%]"],["Status","w-[6%]"],["Manage","w-[14%]"]].map(([h,w]) =>
-                    <th key={h} className={`bg-slate-800 px-2.5 py-2.5 text-left text-[11px] font-semibold text-slate-300 uppercase tracking-wide ${w}`}>{h}</th>
+                  {[["#","w-10"],["Person","w-[30%]"],["Role","w-[34%]"],["BU","w-[9%]"],["Status","w-[8%]"],["Manage","w-[15%]"]].map(([h,w]) =>
+                    <th key={h} className={`bg-slate-800 px-3 py-2.5 text-left text-[11px] font-semibold text-slate-300 uppercase tracking-wide ${w}`}>{h}</th>
                   )}
                 </tr>
               </thead>
@@ -931,6 +931,7 @@ export default function UsersPage() {
                     if (r.startsWith("CLAIM")) return "bg-amber-100 text-amber-800 border border-amber-200"
                     return "bg-gray-100 text-gray-700 border border-gray-200"
                   })()
+                  const action = ROLE_ACTION[u.role]
                   return (
                   <tr key={u.id}
                     draggable
@@ -938,56 +939,49 @@ export default function UsersPage() {
                     onDragOver={e => handleDragOver(e, idx)}
                     onDragEnd={handleDragEnd}
                     className={`transition-colors cursor-grab active:cursor-grabbing border-b border-gray-100 ${!u.isActive ? "opacity-40" : ""} ${dragOverIdx === idx ? "bg-indigo-100 border-l-4 border-l-indigo-500" : idx % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/60 hover:bg-indigo-50/30"}`}>
-                    <td className="px-2.5 py-2 align-top text-gray-400 text-xs font-mono select-none">
+                    {/* # + drag handle */}
+                    <td className="px-3 py-2.5 align-top text-gray-400 text-xs font-mono select-none">
                       <span className="text-gray-300 mr-1">⠿</span>{idx + 1}
                     </td>
-                    <td className="px-2.5 py-2 align-top font-semibold text-gray-800 break-words">{u.name || <span className="text-gray-300 font-normal">—</span>}</td>
-                    <td className="px-2.5 py-2 align-top text-gray-500 text-xs break-all">{u.email}</td>
-                    <td className="px-2.5 py-2 align-top">
-                      {(() => { const dbu = effectiveBu(u); return (
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${dbu === "GW" ? "bg-amber-100 text-amber-800 border border-amber-200" : dbu === "ALL" ? "bg-purple-100 text-purple-700 border border-purple-200" : "bg-teal-100 text-teal-800 border border-teal-200"}`}>
-                        {dbu}
-                      </span>
-                      ) })()}
+                    {/* PERSON = name + email stacked */}
+                    <td className="px-3 py-2.5 align-top">
+                      <p className="font-semibold text-gray-800 break-words leading-tight">{u.name || <span className="text-gray-300 font-normal">—</span>}</p>
+                      <p className="text-gray-400 text-[11px] break-all leading-tight mt-0.5">{u.email}</p>
                     </td>
-                    <td className="px-2.5 py-2 align-top">
-                      <div className="flex flex-col items-start gap-0.5">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold leading-tight ${roleBadgeColor}`}>
-                          {fullRoleLabel}
-                        </span>
+                    {/* ROLE = primary role + priority + procurementType + action + extra roles (all badges) */}
+                    <td className="px-3 py-2.5 align-top">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold leading-tight ${roleBadgeColor}`}>{fullRoleLabel}</span>
+                        {u.priority != null && (
+                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold inline-flex items-center justify-center" title={`Priority ${u.priority}`}>{u.priority}</span>
+                        )}
+                        {u.procurementType && (
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${u.procurementType === "PURCHASING" ? "bg-purple-100 text-purple-700 border border-purple-200" : "bg-violet-100 text-violet-700 border border-violet-200"}`}>{u.procurementType}</span>
+                        )}
+                        {action && (
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${ACTION_STYLE[action]}`}>{action}</span>
+                        )}
                         {/* Extra roles this person also holds (multi-role) */}
                         {Array.isArray(u.roles) && u.roles.filter((r: string) => r && r !== u.role).map((r: string) => (
-                          <span key={r} className="inline-block px-2 py-0.5 rounded text-[9px] font-medium leading-tight bg-gray-100 text-gray-600 border border-gray-200">
-                            + {labelFor(r)}
-                          </span>
+                          <span key={r} className="inline-block px-2 py-0.5 rounded text-[9px] font-medium leading-tight bg-gray-100 text-gray-600 border border-gray-200">+ {labelFor(r)}</span>
                         ))}
                       </div>
                     </td>
-                    <td className="px-2.5 py-2 align-top">
-                      {u.procurementType
-                        ? <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${u.procurementType === "PURCHASING" ? "bg-purple-100 text-purple-700 border border-purple-200" : "bg-violet-100 text-violet-700 border border-violet-200"}`}>{u.procurementType}</span>
-                        : <span className="text-gray-300 text-xs">—</span>}
+                    {/* BU */}
+                    <td className="px-3 py-2.5 align-top">
+                      {(() => { const dbu = effectiveBu(u); return (
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${dbu === "GW" ? "bg-amber-100 text-amber-800 border border-amber-200" : dbu === "ALL" ? "bg-purple-100 text-purple-700 border border-purple-200" : "bg-teal-100 text-teal-800 border border-teal-200"}`}>{dbu}</span>
+                      ) })()}
                     </td>
-                    <td className="px-2.5 py-2 align-top">
-                      {(() => {
-                        const action = ROLE_ACTION[u.role]
-                        return action
-                          ? <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${ACTION_STYLE[action]}`}>{action}</span>
-                          : <span className="text-gray-300 text-xs">—</span>
-                      })()}
-                    </td>
-                    <td className="px-2.5 py-2 align-top text-center">
-                      {u.priority != null
-                        ? <span className="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold inline-flex items-center justify-center">{u.priority}</span>
-                        : <span className="text-gray-300 text-xs">—</span>}
-                    </td>
-                    <td className="px-2.5 py-2 align-top">
+                    {/* STATUS */}
+                    <td className="px-3 py-2.5 align-top">
                       <button onClick={() => toggleActive(u)}
                         className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${u.isActive ? "bg-green-500" : "bg-gray-300"}`}>
                         <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${u.isActive ? "translate-x-5" : "translate-x-0.5"}`} />
                       </button>
                     </td>
-                    <td className="px-2.5 py-2 align-top">
+                    {/* MANAGE */}
+                    <td className="px-3 py-2.5 align-top">
                       <div className="flex flex-wrap gap-x-1.5 gap-y-0.5 items-center text-[11px]">
                         <button onClick={() => openEdit(u)} className="font-medium text-blue-600 hover:text-blue-800">Edit</button>
                         <span className="text-gray-200">|</span>
