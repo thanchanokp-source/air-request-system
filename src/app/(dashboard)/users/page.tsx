@@ -213,6 +213,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [tab, setTab] = useState<"setup"|"all">("setup")
+  const [showConfigured, setShowConfigured] = useState(false) // Setup Guide: collapse the long "Configured Master Users" list
   const [buFilter, setBuFilter] = useState<"NYG"|"GW"|"">("")
   const [roleFilter, setRoleFilter] = useState("")
   const [peopleQ, setPeopleQ] = useState("")
@@ -639,15 +640,13 @@ export default function UsersPage() {
       {tab === "setup" && (
         <div className="grid grid-cols-3 gap-5">
 
-          {/* How-to banner (full width) */}
-          <div className="col-span-3 bg-blue-50 border border-blue-200 rounded-xl px-5 py-4">
-            <p className="text-sm font-semibold text-blue-900 mb-2">วิธีตั้งค่าผู้อนุมัติในระบบ (Master) — ทำ 3 ขั้นตอน</p>
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-blue-800">
-              <span><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-bold mr-1.5">1</span>เลือก <b>ตำแหน่ง (role)</b> จากรายการทางซ้าย</span>
-              <span><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-bold mr-1.5">2</span>กรอก <b>ชื่อ + อีเมล</b> (และ Priority / G-group ถ้ามี)</span>
-              <span><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs font-bold mr-1.5">3</span>กด <b>Save</b> → คนนี้จะรับหน้าที่ในตำแหน่งนั้นทันที</span>
-            </div>
-            <p className="text-xs text-blue-600 mt-2">💡 1 คนถือได้หลายตำแหน่ง/ข้าม BU — ใช้อีเมลเดิมเพิ่ม role ได้เลย · ทุกคนต้องตั้งใน master (ไม่ดึงจากที่อื่น)</p>
+          {/* How-to banner — compact single line */}
+          <div className="col-span-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-sm text-blue-800 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-semibold text-blue-900">วิธีตั้งค่า:</span>
+            <span><b>1</b> เลือกตำแหน่งซ้าย</span><span className="text-blue-300">›</span>
+            <span><b>2</b> กรอกชื่อ+อีเมล</span><span className="text-blue-300">›</span>
+            <span><b>3</b> Save</span>
+            <span className="text-xs text-blue-500 ml-auto">💡 1 คนหลายตำแหน่ง/ข้าม BU ได้ — ใช้อีเมลเดิมเพิ่ม role</span>
           </div>
 
           {/* Left: Checklist */}
@@ -735,27 +734,17 @@ export default function UsersPage() {
               </div>
             </div>
 
-            {/* People Finder roles info */}
-            <div className="bg-white rounded-xl border overflow-hidden">
-              <div className="bg-gray-100 px-4 py-3 text-sm font-semibold text-gray-600">
-                🔍 Via People Finder (no setup needed)
-              </div>
-              <div className="divide-y">
-                {visibleFinderRoles.map(fr => (
-                  <div key={fr.role} className="flex items-start gap-3 px-4 py-3">
-                    <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-xs flex-shrink-0 text-blue-500">→</span>
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">{ROLE_LABEL[fr.role] ? roleDisplayName(fr.role) : fr.label}</p>
-                      <p className="text-xs text-gray-400">{fr.who}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* MER free */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
-              <span className="font-semibold">Merchandise User</span> — self-registers, no setup needed
+            {/* Roles that need NO setup (People Finder + self-register) — one compact note */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 space-y-1.5">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ไม่ต้องตั้งค่า</p>
+              <p className="text-xs text-blue-700"><span className="font-semibold">Merchandise User</span> — สมัครเอง</p>
+              {visibleFinderRoles.map(fr => (
+                <p key={fr.role} className="text-xs text-gray-600">
+                  <span className="text-blue-400 mr-1">🔍</span>
+                  <span className="font-medium">{ROLE_LABEL[fr.role] ? roleDisplayName(fr.role) : fr.label}</span>
+                  <span className="text-gray-400"> — {fr.who}</span>
+                </p>
+              ))}
             </div>
           </div>
 
@@ -807,11 +796,14 @@ export default function UsersPage() {
             {/* Create / Edit Form — shared element (defined as userForm above the return) */}
             {userForm}
 
-            {/* Quick list of master roles */}
+            {/* Quick list of master roles — collapsed by default to reduce clutter */}
             <div className="bg-white rounded-xl border overflow-hidden">
-              <div className="px-4 py-3 border-b flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-700">Configured Master Users</p>
-              </div>
+              <button onClick={() => setShowConfigured(v => !v)}
+                className="w-full px-4 py-3 border-b flex items-center justify-between text-left hover:bg-gray-50">
+                <p className="text-sm font-semibold text-gray-700">Configured Master Users <span className="text-xs font-normal text-gray-400">(สรุปคนที่ตั้งแล้วต่อตำแหน่ง)</span></p>
+                <span className="text-gray-400 text-sm">{showConfigured ? "▲ ซ่อน" : "▼ แสดง"}</span>
+              </button>
+              {showConfigured && (
               <div className="divide-y">
                 {visibleMasterRoles.map(mr => {
                   const group = users.filter(u => hasRole(u, mr.role))
@@ -884,6 +876,7 @@ export default function UsersPage() {
                   )
                 })}
               </div>
+              )}
             </div>
           </div>
         </div>
