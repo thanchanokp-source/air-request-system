@@ -24,9 +24,15 @@ export const SPLIT_STATUS = {
   CLAIM_PENDING: "CLAIM_PENDING",     // waiting for CLAIM_GW to approve the SO
   SCM_PENDING: "SCM_PENDING",         // waiting for SCM_NYK / SCM_NYG
   ACCT_PENDING: "ACCT_PENDING",       // waiting for Accounting
+  SCM_REASSIGN: "SCM_REASSIGN",       // NYG: a claim approver sent this split back to SCM to re-pick the dept
   COMPLETED: "COMPLETED",
   REJECTED: "REJECTED",
 } as const
+
+// NYG: does this item have any split waiting for SCM to re-assign its department?
+export function itemHasReassignSplit(item: any): boolean {
+  return getSplits(item).some(s => s.status === SPLIT_STATUS.SCM_REASSIGN)
+}
 
 // Read the splits off an item, falling back to the legacy single-dept fields.
 export function getSplits(item: any): ClaimSplit[] {
@@ -427,9 +433,9 @@ export function deriveNygItemStatus(splits: ClaimSplit[], lgDone: boolean = true
   if (splits.length === 0) return "LOG_PASSED"
   const st = splits.map(s => s.status)
   if (st.every(s => s === NYG_SPLIT.REJECTED)) return "REJECTED"
-  // Any split still waiting on its DVM/entry (or NYK approver-done but EVP/CR incomplete)
-  // → whole item stays at the claim (entry) stage.
-  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_NYK_APPROVER_PASSED)) return "LOG_PASSED"
+  // Any split still waiting on its DVM/entry (or NYK approver-done but EVP/CR incomplete, or
+  // sent back to SCM to re-pick the dept) → whole item stays at the claim (entry) stage.
+  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === SPLIT_STATUS.SCM_REASSIGN || s === GW_NYK_APPROVER_PASSED)) return "LOG_PASSED"
   // At least one VP/EVP step outstanding → VP stage.
   if (st.some(s => s === NYG_SPLIT.CLAIM_PASSED)) return "CLAIM_PASSED"
   // Every claim dept fully approved → President ONLY if LG's Actual is in; else hold.

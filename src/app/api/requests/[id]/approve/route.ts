@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
-import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
+import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 import { recomputeRequestFreight } from "@/lib/freight"
 
 const getClaimDept = (role: string) => {
@@ -1347,14 +1347,57 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "BACK", fromStatus: request.status, toStatus: request.status, comment: `Claim ${dept} sent back to previous: ${comment}` }
     })
-    if (prior) {
+    // PROCUREMENT special rule: Purchasing (entry, pos 0) is a pass-through. A back from
+    // Sourcing (whose previous is Purchasing) must go to SCM to RE-PICK the claim dept — NOT
+    // back to Purchasing. VP→Sourcing (prior is pos>0) still goes to the previous person.
+    const procToScm = dept === "PROCUREMENT" && (!prior || (prior.position ?? 0) === 0)
+    if (prior && !procToScm) {
       const priorIds = Array.from(new Set([...(Array.isArray(prior.itemIds) ? prior.itemIds : []), ...selIds]))
       await (prisma as any).claimForward.update({ where: { id: prior.id }, data: { itemIds: priorIds } })
       await notifyClaimNext(id, prior.nextEmail, prior.nextName || prior.nextEmail, (session.user as any).name || "", prior.token, `${dept} — sent back (${selIds.length} SO)`).catch(() => {})
+    } else if (procToScm) {
+      // Reset ONLY the PROCUREMENT split of each SO to SCM_REASSIGN (keep dept + %). SCM re-picks
+      // the dept and re-forwards. Other depts' splits are untouched.
+      const procRows = await (prisma as any).claimForward.findMany({ where: { requestId: id, dept } })
+      for (const r of procRows) {
+        const kept = (Array.isArray(r.itemIds) ? r.itemIds : []).filter((x: string) => !selIds.includes(x))
+        await (prisma as any).claimForward.update({ where: { id: r.id }, data: { itemIds: kept } })
+      }
+      for (const sid of selIds) {
+        await (prisma as any).claimApproval.deleteMany({ where: { itemId: sid, role: { in: ["CLAIM_PROCUREMENT", "VP_PROCUREMENT", "DVM_PROCUREMENT"] } } })
+        const it = await prisma.airRequestItem.findUnique({ where: { id: sid } })
+        if (!it) continue
+        const splits = setDeptSplitStatus(getSplits(it), dept, SPLIT_STATUS.SCM_REASSIGN)
+        const ns = deriveNygItemStatus(splits as any, !!(request as any).logisticsSent)
+        await prisma.airRequestItem.update({ where: { id: sid }, data: { claimDepts: splits as any, itemStatus: ns, itemComment: comment } as any })
+      }
+      await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
     } else {
       // Back to the entry owner (position 0) — they regain the SO in their queue.
       await notifyClaimEntry(id, dept).catch(() => {})
     }
+    return NextResponse.json(await getUpdated())
+  }
+
+  // SCM re-picks the claim dept for a split that a claim approver sent back (SCM_REASSIGN).
+  // The % is LOCKED — SCM only chooses the department (same or different) → the split re-enters
+  // that dept's chain from its entry. Other splits of the SO are untouched.
+  if (action === "scm_reassign_split" && heldRoles.includes("SCM_USER")) {
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    const newDept = String(body.newDept || "").trim()
+    if (!newDept) return NextResponse.json({ error: "Please select a claim department" }, { status: 400 })
+    const it = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
+    if (!it || it.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    const splits = getSplits(it)
+    const idx = splits.findIndex((s: any) => s.status === SPLIT_STATUS.SCM_REASSIGN)
+    if (idx < 0) return NextResponse.json({ error: "No split awaiting re-assignment" }, { status: 400 })
+    const newSplits = splits.map((s: any, i: number) => i === idx ? { ...s, dept: newDept, status: null, crNo: null } : s)
+    const ns = deriveNygItemStatus(newSplits as any, !!(request as any).logisticsSent)
+    await prisma.airRequestItem.update({ where: { id: itemId }, data: { claimDepts: newSplits as any, itemStatus: ns } as any })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${it.so} — SCM re-assigned claim to ${newDept}` }
+    })
+    await notifyClaimEntry(id, newDept).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

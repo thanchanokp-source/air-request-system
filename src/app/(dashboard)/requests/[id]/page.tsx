@@ -9,7 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, type PosSpec } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, itemHasReassignSplit, type PosSpec } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -420,6 +420,8 @@ export default function RequestDetailPage() {
   // GW "Back to Merchandise" (whole doc) — reason input at DPM/GM, and resubmit at MER (GW).
   const [backToMerOpen, setBackToMerOpen] = useState(false)
   const [backToMerReason, setBackToMerReason] = useState("")
+  // SCM re-assign: per-item chosen new claim dept for a split sent back (SCM_REASSIGN).
+  const [reassignDept, setReassignDept] = useState<Record<string, string>>({})
   const [rejectingSo, setRejectingSo] = useState<string | null>(null)
   const [rejectSoComment, setRejectSoComment] = useState("")
   const [backToScmSo, setBackToScmSo] = useState<string | null>(null)
@@ -1147,6 +1149,21 @@ export default function RequestDetailPage() {
     })
     if (res.ok) { window.location.href = "/approvals" }
     else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null) }
+  }
+
+  // SCM re-picks the claim dept for a split sent back (SCM_REASSIGN). % is locked server-side.
+  const reassignSplit = async (item: any) => {
+    const split = getSplits(item).find((s: any) => s.status === "SCM_REASSIGN")
+    const newDept = reassignDept[item.id] ?? split?.dept
+    if (!newDept) return
+    setSubmitting(item.id)
+    const res = await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "scm_reassign_split", itemId: item.id, newDept })
+    })
+    if (res.ok) setReq(await res.json())
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
+    setSubmitting(null)
   }
 
   // GW: MER re-submits a returned document → restarts approval from DPM.
@@ -2097,6 +2114,37 @@ export default function RequestDetailPage() {
       )}
 
       {/* SCM processes VP_MER_PASSED items at PENDING_VP_MER */}
+      {myAllRoles.includes("SCM_USER") && !isGWRequest && (req.items || []).some((i: any) => itemHasReassignSplit(i)) && (
+        <div className="space-y-3 border border-orange-300 rounded-xl bg-orange-50/40 p-4">
+          <div>
+            <h2 className="font-semibold text-orange-800 text-base">↩ SCM — Re-assign Claim (ตีกลับจาก Procurement)</h2>
+            <p className="text-xs text-gray-500 mt-0.5">เลือกแผนกเคลมใหม่ให้ SO ที่ถูกตีกลับ — % คงเดิม (ล็อก) แล้วส่งต่อไปแผนกที่เลือก</p>
+          </div>
+          {(req.items || []).filter((i: any) => itemHasReassignSplit(i)).map((item: any) => {
+            const split = getSplits(item).find((s: any) => s.status === "SCM_REASSIGN")
+            const isSub = submitting === item.id
+            return (
+              <div key={item.id} className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-orange-200 px-3 py-2">
+                <span className="text-sm font-semibold text-gray-800">{item.so}</span>
+                <span className="text-xs text-gray-500">{item.style}{item.description ? ` · ${item.description}` : ""}</span>
+                <span className="text-xs bg-orange-100 text-orange-700 rounded px-2 py-0.5 font-medium">{split?.pct}% (ล็อก)</span>
+                {item.itemComment && <span className="text-xs text-red-500">เหตุผล: {item.itemComment}</span>}
+                <div className="ml-auto flex items-center gap-2">
+                  <select value={reassignDept[item.id] ?? split?.dept ?? ""} onChange={e => setReassignDept(p => ({ ...p, [item.id]: e.target.value }))}
+                    className="border border-orange-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
+                    {CLAIM_DEPTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <button onClick={() => reassignSplit(item)} disabled={isSub}
+                    className="bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">
+                    {isSub ? "..." : "Re-assign & Forward"}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {isScmAtVpMer && (
         <div className="space-y-4 border border-blue-200 rounded-xl bg-blue-50/20 p-4">
           {/* Header */}

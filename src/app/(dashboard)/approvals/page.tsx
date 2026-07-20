@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO, deptSplitStatus } from "@/lib/claim"
+import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO, deptSplitStatus, itemHasReassignSplit } from "@/lib/claim"
 import { roleBu, requestInBu, BU_META, BUS } from "@/lib/bu"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
@@ -95,7 +95,9 @@ export default function ApprovalsPage() {
     // Match via held roles so one person can be SCM User in NYG AND another role in GW.
     if (myRoles.includes("SCM_USER")) {
       if ((r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||
-          (r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PENDING"))) return true
+          (r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PENDING")) ||
+          // A claim approver (PROCUREMENT/Sourcing) sent a split back to SCM to re-pick the dept.
+          items.some((i: any) => itemHasReassignSplit(i))) return true
     }
     if (myRoles.includes("VP_SCM") && r.status === "PENDING_SCM" && items.some((i: any) => i.itemStatus === "PASSED")) return true
     // President (NYG) — FINAL approver (items at PRESIDENT_PENDING). Match via held roles
