@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
-import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw } from "@/lib/notify"
+import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 import { recomputeRequestFreight } from "@/lib/freight"
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const heldRoles: string[] = [userRole, ...dbUserRoles.filter((r: string) => r && r !== userRole)]
   const { id } = await params
   const body = await req.json()
-    const { action, comment, style, itemId, itemIds, claimDepartment, gwClaimDept, logisticsData, itemActuals, soClaimData, soClaimComments, soDvmData, itemLogistics, assignedVpScm } = body
+    const { action, comment, style, itemId, itemIds, claimDepartment, gwClaimDept, logisticsData, itemActuals, soClaimData, soClaimComments, soDvmData, itemLogistics, assignedVpScm, assignedVp } = body
 
   const request = await prisma.airRequest.findUnique({ where: { id }, include: { items: true } })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -335,6 +335,37 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
+  // NYG "Back to Merchandise" — SCM user sends the WHOLE document back to the MER who uploaded it
+  // (soft return with a reason; MER fixes and re-submits). Works for NYG (PENDING_SCM) and EA docs.
+  if (action === "back_to_mer_nyg" && userRole === "SCM_USER" && request.status === "PENDING_SCM") {
+    if (!comment) return NextResponse.json({ error: "Please provide a reason before sending back to Merchandise" }, { status: 400 })
+    await prisma.airRequestItem.updateMany({
+      where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
+      data: { itemStatus: "PENDING", itemComment: comment },
+    })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "BACK_TO_MER", fromStatus: request.status, toStatus: "PENDING_MER", comment: `Back to Merchandise: ${comment}` }
+    })
+    await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_MER", rejectionReason: comment } })
+    await notifyBackToMerGw(id, comment, session.user?.name || session.user?.email || undefined).catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
+  // NYG/EA MER re-submits after a "Back to Merchandise" → restart approval from the first merch approver.
+  if (action === "resubmit_mer_nyg" && ["MER_USER", "MER_EA"].includes(userRole) && request.status === "PENDING_MER") {
+    const firstStatus = request.bu === "EA" ? "PENDING_DVM_MER_EA" : "PENDING_DVM_MER"
+    await prisma.airRequestItem.updateMany({
+      where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
+      data: { itemStatus: "PENDING" },
+    })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "RESUBMIT", fromStatus: "PENDING_MER", toStatus: firstStatus, comment: "Merchandise re-submitted" }
+    })
+    await prisma.airRequest.update({ where: { id }, data: { status: firstStatus, rejectionReason: null } })
+    await notifyStatusChange(id, firstStatus).catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
   // GW PRESIDENT — FINAL approval (whole document, no reject). Reached only when
   // every claim dept is approved AND Logistics data is filled (items PRESIDENT_PENDING).
   if (request.status === "PENDING_PRESIDENT_GW" && action === "president_approve_gw") {
@@ -359,6 +390,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
     const dvmStatus = request.status
     const nextVpStatus = dvmStatus === "PENDING_DVM_MER_EA" ? "PENDING_VP_MER_EA" : "PENDING_VP_MER"
+
+    // The DVM/ADVM must pick the NEXT approver (VP MER / EA DVM) from master before approving.
+    // Selection is per-document (assignedVpMer); the picked VP is the only one notified next.
+    if (action === "approve_style") {
+      const vpEmail = assignedVp || (request as any).assignedVpMer
+      if (!vpEmail) return NextResponse.json({ error: dvmStatus === "PENDING_DVM_MER_EA" ? "กรุณาเลือก DVM (EA) ผู้อนุมัติถัดไปก่อนอนุมัติ" : "กรุณาเลือก VP Merchandise (ผู้อนุมัติถัดไป) ก่อนอนุมัติ" }, { status: 400 })
+      if (assignedVp && assignedVp !== (request as any).assignedVpMer) {
+        await prisma.airRequest.update({ where: { id }, data: { assignedVpMer: assignedVp } })
+      }
+    }
 
     const newItemStatus = action === "approve_style" ? "DVM_MER_PASSED" : "REJECTED"
     await prisma.airRequestItem.updateMany({
@@ -1011,6 +1052,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
     await notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
+  // เรื่อง 6: Logistics rejects an SO that was wrongly included (not air / not in projection) →
+  // bounce it back to the stage BEFORE the claim split (NYG: SCM re-assigns; GW: MER re-selects
+  // the claim dept), and FYI everyone who already approved the document.
+  if (action === "lg_reject_so" && ["LOGISTICS", "LOGISTICS_GW"].includes(userRole)) {
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    if (!comment) return NextResponse.json({ error: "Please provide a reason before rejecting the SO" }, { status: 400 })
+    const item = request.items.find((i: any) => i.id === itemId)
+    if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    const isGWDoc = request.bu === "GW"
+    await (prisma as any).claimApproval.deleteMany({ where: { itemId } })
+    if (isGWDoc) {
+      // GW: the claim split is chosen by MER → send the SO back to MER to re-handle (before claim).
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "CLAIM_REJECT_GW", itemComment: comment } as any })
+      await prisma.approvalLog.create({ data: { requestId: id, userId, action: "LG_REJECT_SO", fromStatus: request.status, toStatus: "PENDING_CLAIM_REJECT_GW", comment: `SO: ${item.so} — Logistics rejected (back before claim): ${comment}` } })
+      const nextDocStatus = await recalcDocStatusGW(id)
+      if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      await notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
+    } else {
+      // NYG: the claim split is assigned by SCM → reset the SO and send it back to SCM (before claim).
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "PENDING", claimDepartment: null, claimDepts: null, itemComment: comment } as any })
+      await prisma.approvalLog.create({ data: { requestId: id, userId, action: "LG_REJECT_SO", fromStatus: request.status, toStatus: "PENDING_SCM", comment: `SO: ${item.so} — Logistics rejected (back before claim): ${comment}` } })
+      const nextDocStatus = await recalcDocStatus(id)
+      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      if (nextDocStatus === "PENDING_SCM") await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
+    }
+    // FYI: alert every approver who already passed this document.
+    await notifyLgRejectFyi(id, item.so, comment, session.user?.name || session.user?.email || undefined).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

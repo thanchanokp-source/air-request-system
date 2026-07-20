@@ -408,6 +408,9 @@ export default function RequestDetailPage() {
   const [soActualOverride, setSoActualOverride] = useState<Record<string, string>>({})
   // Logistics fills QTY Air / Plan Ship Date that Merchandise left blank at upload.
   const [soShipData, setSoShipData] = useState<Record<string, { qty?: string; date?: string }>>({})
+  // เรื่อง 6: Logistics rejects an SO (wrongly included) → bounce before the claim split.
+  const [lgRejectId, setLgRejectId] = useState<string | null>(null)
+  const [lgRejectReason, setLgRejectReason] = useState("")
   const [crNoInput, setCrNoInput] = useState("")
   const [savingCr, setSavingCr] = useState(false)
   const [reassign, setReassign] = useState<Record<string, { dept: string; pct: string; reason: string }[]>>({})
@@ -466,6 +469,9 @@ export default function RequestDetailPage() {
   const [claimFwdDone, setClaimFwdDone] = useState<string|null>(null)
   // Claim review: card list (expand each) vs flat table (see all at once).
   const [claimTableView, setClaimTableView] = useState(false)
+  // เรื่อง 4: universal "all MER data" panel every role can open — flat table / by style / by SO.
+  const [showAllData, setShowAllData] = useState(false)
+  const [allView, setAllView] = useState<"table" | "style" | "so">("table")
   const [soPick, setSoPick] = useState("")        // quick-select: type SO + Enter
   const [soPickMsg, setSoPickMsg] = useState("")
   const [backModalOpen, setBackModalOpen] = useState(false) // Back to Merchandise/SCM reason modal
@@ -476,6 +482,9 @@ export default function RequestDetailPage() {
   // SCM NYK Approver picks the CR-entry person + VP/EVP approver (one per doc).
   const [nykCr, setNykCr] = useState<{name:string,email:string}|null>(null)
   const [nykEvp, setNykEvp] = useState<{name:string,email:string}|null>(null)
+  // NYG/EA: the 1st merch approver (DVM/ADVM) picks the NEXT approver (VP MER / EA DVM) from master.
+  const [vpPick, setVpPick] = useState("")
+  const [vpPickList, setVpPickList] = useState<any[]>([])
   useEffect(() => {
     if (!req) return
     if ((req as any).assignedScmNykCr) setNykCr(p => p || { name: (req as any).assignedScmNykCr, email: (req as any).assignedScmNykCr })
@@ -603,6 +612,16 @@ export default function RequestDetailPage() {
   // manual-forward model. NYG now uses the priority model → Procurement approves like
   // any other dept (VP_PROCUREMENT is the next priority group), so disable it.
   const isProcureDvm = false
+
+  // At the DVM/ADVM stage, load the master list of the NEXT approver (VP MER / EA DVM) to pick from.
+  useEffect(() => {
+    if (!req || !role) return
+    const atDvm = (role === "DVM_MER" && req.status === "PENDING_DVM_MER") || (role === "DVM_MER_EA" && req.status === "PENDING_DVM_MER_EA")
+    if (!atDvm) return
+    if ((req as any).assignedVpMer) setVpPick(p => p || (req as any).assignedVpMer)
+    const nextRole = role === "DVM_MER_EA" ? "VP_MER_EA" : "VP_MER"
+    fetch(`/api/users/by-role?role=${nextRole}`).then(r => r.json()).then(d => setVpPickList(Array.isArray(d) ? d : [])).catch(() => {})
+  }, [req, role])
 
   useEffect(() => {
     if (!role) return
@@ -1083,26 +1102,32 @@ export default function RequestDetailPage() {
     setExpanded(prev => { const n = new Set(prev); n.has(style) ? n.delete(style) : n.add(style); return n })
   }
 
+  // DVM/ADVM must pick the next approver (VP) before approving; other merch stages don't.
+  const needsVpPick = (role === "DVM_MER" && req?.status === "PENDING_DVM_MER") || (role === "DVM_MER_EA" && req?.status === "PENDING_DVM_MER_EA")
+
   const approveStyle = async (style: string) => {
+    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "กรุณาเลือก DVM (EA) ผู้อนุมัติถัดไปก่อน" : "กรุณาเลือก VP Merchandise (ผู้อนุมัติถัดไป) ก่อน"); return }
     const sig = await askSignature(); if (!sig) return
     setSubmitting(style)
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "approve_style", style, comment: "", signatureData: sig })
+      body: JSON.stringify({ action: "approve_style", style, comment: "", signatureData: sig, assignedVp: needsVpPick ? vpPick : undefined })
     })
     if (res.ok) setReq(await res.json())
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
     setSubmitting(null)
   }
 
   const approveSelectedStyles = async () => {
     const toApprove = styleGroups.filter(g => (g.status === "PENDING" || g.status === "PASSED" || (presidentNewFlow && g.status === "VP_MER_PASSED")) && selectedStyles.has(g.style)).map(g => g.style)
     if (toApprove.length === 0) return
+    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "กรุณาเลือก DVM (EA) ผู้อนุมัติถัดไปก่อน" : "กรุณาเลือก VP Merchandise (ผู้อนุมัติถัดไป) ก่อน"); return }
     const sig = await askSignature(); if (!sig) return
     for (const style of toApprove) {
       setSubmitting(style)
       const res = await fetch(`/api/requests/${id}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "approve_style", style, comment: "", signatureData: sig })
+        body: JSON.stringify({ action: "approve_style", style, comment: "", signatureData: sig, assignedVp: needsVpPick ? vpPick : undefined })
       })
       if (res.ok) setReq(await res.json())
       else { const e = await res.json().catch(() => ({})); alert(`${style}: ${e.error || "Error"}`); break }
@@ -1172,6 +1197,43 @@ export default function RequestDetailPage() {
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "resubmit_mer_gw" })
+    })
+    if (res.ok) setReq(await res.json())
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
+    setSubmitting(null)
+  }
+
+  // NYG/EA: SCM sends the whole document back to the MER who uploaded it, with a reason (+ emails MER).
+  const backToMerNyg = async () => {
+    if (!backToMerReason.trim()) return
+    setSubmitting("_")
+    const res = await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "back_to_mer_nyg", comment: backToMerReason.trim() })
+    })
+    if (res.ok) { window.location.href = "/approvals" }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null) }
+  }
+
+  // เรื่อง 6: Logistics rejects an SO → bounce it back before the claim split (NYG→SCM, GW→MER) + FYI all.
+  const lgRejectSo = async (itemId: string) => {
+    if (!lgRejectReason.trim()) return
+    setSubmitting(itemId)
+    const res = await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "lg_reject_so", itemId, comment: lgRejectReason.trim() })
+    })
+    if (res.ok) { setReq(await res.json()); setLgRejectId(null); setLgRejectReason("") }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
+    setSubmitting(null)
+  }
+
+  // NYG/EA: MER re-submits a returned document → restarts approval from the first merch approver.
+  const resubmitMerNyg = async () => {
+    setSubmitting("_")
+    const res = await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resubmit_mer_nyg" })
     })
     if (res.ok) setReq(await res.json())
     else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
@@ -1510,6 +1572,99 @@ export default function RequestDetailPage() {
       {req.rejectionReason && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
           <span className="font-semibold">Rejection Reason: </span>{req.rejectionReason}
+        </div>
+      )}
+
+      {/* เรื่อง 4: ทุก role เปิดดูข้อมูลทั้งหมดที่ MER อัพได้ — สลับ ตาราง / กลุ่มตาม Style / กลุ่มตาม SO */}
+      {activeItems.length > 0 && (() => {
+        const ALL_COLS: { h: string; v: (it: any) => any; right?: boolean }[] = [
+          { h: "SO", v: it => it.so }, { h: "STYLE", v: it => it.style }, { h: "SUB", v: it => it.sub || "-" },
+          { h: "CUSTOMER PO", v: it => it.customerPO || "-" }, { h: "PO GARMENT", v: it => it.poGarment || "-" },
+          { h: "DESCRIPTION", v: it => it.description || "-" }, { h: "GMT TYPE", v: it => it.gmtType || "-" },
+          { h: "ORIG DATE", v: it => it.originalShipmentDate ? new Date(it.originalShipmentDate).toLocaleDateString("en-GB") : "-" },
+          { h: "PLAN DATE", v: it => it.planShipmentDate ? new Date(it.planShipmentDate).toLocaleDateString("en-GB") : "-" },
+          { h: "QTY ORIG", v: it => (it.qtyOriginalShipment || 0).toLocaleString(), right: true },
+          { h: "QTY AIR", v: it => (it.qtyRequestAir || 0).toLocaleString(), right: true },
+          { h: "REASON DELAY", v: it => it.reasonDelay || "-" }, { h: "FACTORY", v: it => it.factory || "-" },
+          { h: "COUNTRY", v: it => it.country || "-" }, { h: "PORT", v: it => it.port || "-" },
+          { h: "GROSS (KG)", v: it => it.grossWeight != null ? it.grossWeight : "-", right: true },
+          { h: "EST FREIGHT", v: it => it.airFreight != null ? Number(it.airFreight).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "-", right: true },
+          { h: "ACTUAL", v: it => it.actualAirFreight != null ? Number(it.actualAirFreight).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "-", right: true },
+          { h: "CLAIM DEPT", v: it => getSplits(it).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "-" },
+          { h: "INV NO", v: it => it.invoiceNo || "-" }, { h: "HAWB#", v: it => it.hawbNo || "-" },
+          { h: "STATUS", v: it => it.itemStatus },
+        ]
+        const Table = ({ items, hide }: { items: any[]; hide?: string }) => (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs whitespace-nowrap">
+              <thead className="bg-gray-50 border-b border-gray-200"><tr>
+                {ALL_COLS.filter(c => c.h !== hide).map(c => <th key={c.h} className={`px-2.5 py-1.5 font-medium text-gray-600 ${c.right ? "text-right" : "text-left"}`}>{c.h}</th>)}
+              </tr></thead>
+              <tbody className="divide-y divide-gray-100">
+                {items.map((it: any) => (
+                  <tr key={it.id} className={it.itemStatus === "REJECTED" ? "bg-red-50/40" : "hover:bg-gray-50/60"}>
+                    {ALL_COLS.filter(c => c.h !== hide).map(c => <td key={c.h} className={`px-2.5 py-1.5 text-gray-700 ${c.right ? "text-right" : "text-left"}`}>{c.v(it)}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+        const groupBy = (key: "style" | "so") => {
+          const m = new Map<string, any[]>()
+          for (const it of activeItems) { const k = String(it[key] || "-"); if (!m.has(k)) m.set(k, []); m.get(k)!.push(it) }
+          return [...m.entries()]
+        }
+        return (
+          <div className="bg-white rounded-xl border border-gray-200">
+            <button type="button" onClick={() => setShowAllData(v => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left">
+              <span className="font-semibold text-gray-800">📋 ข้อมูลทั้งหมด (MER upload) — {activeItems.length} SO</span>
+              <span className="text-gray-400 text-sm">{showAllData ? "▲ ซ่อน" : "▼ ดูทั้งหมด"}</span>
+            </button>
+            {showAllData && (
+              <div className="px-4 pb-4 space-y-3">
+                <div className="flex gap-1.5">
+                  {([["table", "ตาราง"], ["style", "ตาม Style"], ["so", "ตาม SO"]] as const).map(([k, label]) => (
+                    <button key={k} type="button" onClick={() => setAllView(k)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium ${allView === k ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{label}</button>
+                  ))}
+                </div>
+                {allView === "table" && <Table items={activeItems} />}
+                {allView === "style" && groupBy("style").map(([k, its]) => (
+                  <div key={k} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700">STYLE: {k} <span className="font-normal text-gray-400">({its.length} SO)</span></div>
+                    <Table items={its} hide="STYLE" />
+                  </div>
+                ))}
+                {allView === "so" && groupBy("so").map(([k, its]) => (
+                  <div key={k} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700">SO: {k}</div>
+                    <Table items={its} hide="SO" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* DVM/ADVM picks the NEXT approver (VP MER / EA DVM) from master before approving. */}
+      {canAct && needsVpPick && (
+        <div className="bg-white rounded-xl border border-blue-200 p-4 space-y-2">
+          <label className="text-sm font-semibold text-blue-800">
+            เลือก{role === "DVM_MER_EA" ? " DVM (EA)" : " VP Merchandise"} ผู้อนุมัติถัดไป <span className="text-red-500">*</span>
+          </label>
+          {vpPickList.length === 0 ? (
+            <p className="text-sm text-red-500">ยังไม่มี {role === "DVM_MER_EA" ? "VP_MER_EA" : "VP_MER"} ใน Master — กรุณาเพิ่มใน User Management ก่อน</p>
+          ) : (
+            <select value={vpPick} onChange={e => setVpPick(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+              <option value="">-- เลือกผู้อนุมัติ --</option>
+              {vpPickList.map((u: any) => <option key={u.id} value={u.email}>{u.name} ({u.email})</option>)}
+            </select>
+          )}
+          <p className="text-[11px] text-blue-500">เอกสารนี้จะส่งให้เฉพาะคนที่เลือกเท่านั้น</p>
         </div>
       )}
 
@@ -2170,7 +2325,7 @@ export default function RequestDetailPage() {
                   "QTY ORIG": item.qtyOriginalShipment, "QTY AIR": item.qtyRequestAir,
                   "GROSS WEIGHT (KG)": item.grossWeight ?? "", "EST. AIR FREIGHT (THB)": item.airFreight ?? "",
                   "FACTORY": item.factory || "", "COUNTRY": item.country || "",
-                  "CLAIM DEPT": (soClaimDepts[item.id] || []).map((d: any) => `${d.dept}:${d.pct}%`).join(", "), "SCM DELAY REASON": soClaimComments[item.id] || ""
+                  "CLAIM DEPT": (soClaimDepts[item.id] || []).map((d: any) => `${deptLabel(d.dept)}:${d.pct}%`).join(", "), "SCM DELAY REASON": soClaimComments[item.id] || ""
                 }))
                 const ws = XLSX.utils.json_to_sheet(rows)
                 ws["!cols"] = [8,6,12,14,22,12,12,10,10,14,16,10,12,12,16,24].map(w => ({ wch: w }))
@@ -2202,7 +2357,10 @@ export default function RequestDetailPage() {
                       if (deptRaw) {
                         const parsed: {dept: string, pct: number}[] = deptRaw.split(",").map((s: string) => s.trim()).flatMap((s: string) => {
                           const m = s.match(/^([^:]+):(\d+)%?$/)
-                          const d = m ? m[1].trim() : s; const p = m ? parseInt(m[2]) : 100
+                          let d = m ? m[1].trim() : s; const p = m ? parseInt(m[2]) : 100
+                          // deptLabel drops "SCM" on export → map the label back to the stored value on import
+                          if (d.toUpperCase() === "NYK") d = "SCM NYK"
+                          else if (d.toUpperCase() === "NYG") d = "SCM NYG"
                           return CLAIM_DEPTS.includes(d) ? [{ dept: d, pct: p }] : []
                         })
                         if (parsed.length > 0) newDepts[(found as any).id] = parsed
@@ -2249,6 +2407,33 @@ export default function RequestDetailPage() {
               })()}
             </div>
           </div>
+
+          {/* SCM can send the whole document back to the MER who uploaded it (soft return + reason). */}
+          {role === "SCM_USER" && (
+            <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+              {!backToMerOpen ? (
+                <button onClick={() => setBackToMerOpen(true)} disabled={!!submitting}
+                  className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
+                  ↩ Back to Merchandise (ส่งกลับผู้อัพโหลด)
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-orange-700">ส่งกลับให้ Merchandise (ผู้อัพโหลด) แก้ไข — เหตุผล *</label>
+                  <textarea value={backToMerReason} onChange={e => setBackToMerReason(e.target.value)} rows={2}
+                    placeholder="ระบุเหตุผล..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                  <div className="flex gap-2">
+                    <button onClick={backToMerNyg} disabled={!backToMerReason.trim() || submitting === "_"}
+                      className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">
+                      {submitting === "_" ? "..." : "Confirm — Back to Merchandise"}
+                    </button>
+                    <button onClick={() => { setBackToMerOpen(false); setBackToMerReason("") }}
+                      className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                  </div>
+                  <p className="text-[11px] text-orange-600">ส่งทั้งเอกสารกลับให้ผู้อัพโหลด + อีเมลแจ้ง — MER แก้แล้วกด Re-submit จะเริ่มอนุมัติใหม่</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Flat table */}
           {vpMerPassedItems.length === 0 ? (
@@ -2941,6 +3126,26 @@ export default function RequestDetailPage() {
           <button onClick={resubmitMerGw} disabled={submitting === "_"}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
             {submitting === "_" ? "..." : "Re-submit to DPM"}
+          </button>
+        </div>
+      )}
+
+      {/* NYG/EA MER re-submits after SCM sent the document back */}
+      {["MER_USER", "MER_EA"].includes(role) && !isGWRequest && req.status === "PENDING_MER" && (
+        <div className="bg-white rounded-xl border border-orange-200 p-4 space-y-3">
+          <div>
+            <h2 className="font-semibold text-orange-700">↩ Back to Merchandise — แก้ไขและส่งกลับ</h2>
+            <p className="text-xs text-gray-500 mt-0.5">SCM ส่งเอกสารกลับมาให้แก้ไข · แก้แล้วกด Re-submit เพื่อส่งเข้าอนุมัติใหม่</p>
+          </div>
+          {req.rejectionReason && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+              <p className="text-xs font-semibold text-orange-700">เหตุผลที่ส่งกลับ:</p>
+              <p className="text-sm text-orange-800 mt-0.5 whitespace-pre-wrap">{req.rejectionReason}</p>
+            </div>
+          )}
+          <button onClick={resubmitMerNyg} disabled={submitting === "_"}
+            className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
+            {submitting === "_" ? "..." : "Re-submit"}
           </button>
         </div>
       )}
@@ -4493,10 +4698,12 @@ export default function RequestDetailPage() {
                     <th className="px-2 py-1 text-left">STYLE</th>
                     <th className="px-2 py-1 text-right">QTY Air</th>
                     <th className="px-2 py-1 text-left">Plan Ship Date</th>
+                    <th className="px-2 py-1 text-center">ตีกลับ</th>
                   </tr></thead>
                   <tbody>
                     {allLgItems.map((it: any) => {
                       const missingQty = !(it.qtyRequestAir > 0)
+                      const isRejecting = lgRejectId === it.id
                       return (
                         <tr key={it.id} className={`border-t border-gray-100 ${missingQty ? "bg-red-50" : ""}`}>
                           <td className="px-2 py-1 font-medium">{it.so}</td>
@@ -4512,6 +4719,22 @@ export default function RequestDetailPage() {
                               className="border border-gray-300 rounded px-2 py-1"
                               value={soShipData[it.id]?.date ?? (it.planShipmentDate ? new Date(it.planShipmentDate).toISOString().slice(0, 10) : "")}
                               onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], date: e.target.value } }))} />
+                          </td>
+                          <td className="px-2 py-1 text-center">
+                            {isRejecting ? (
+                              <div className="flex items-center gap-1">
+                                <input autoFocus placeholder="เหตุผล (ไม่ใช่ air / ไม่อยู่ใน projection)" value={lgRejectReason}
+                                  onChange={e => setLgRejectReason(e.target.value)}
+                                  className="w-56 border border-red-300 rounded px-2 py-1" />
+                                <button type="button" onClick={() => lgRejectSo(it.id)} disabled={!lgRejectReason.trim() || submitting === it.id}
+                                  className="px-2 py-1 bg-red-600 text-white rounded disabled:opacity-50">{submitting === it.id ? "..." : "ยืนยัน"}</button>
+                                <button type="button" onClick={() => { setLgRejectId(null); setLgRejectReason("") }}
+                                  className="px-2 py-1 bg-gray-100 text-gray-600 rounded">ยกเลิก</button>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => { setLgRejectId(it.id); setLgRejectReason("") }}
+                                className="px-2 py-0.5 text-red-600 border border-red-200 rounded hover:bg-red-50">✕ ตีกลับ</button>
+                            )}
                           </td>
                         </tr>
                       )

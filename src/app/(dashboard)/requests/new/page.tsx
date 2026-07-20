@@ -30,6 +30,7 @@ export default function NewRequestPage() {
   const [testBu, setTestBu] = useState<"NYG" | "GW" | "EA">("NYG")
   const userBu = (isAdmin && testMode) ? testBu : ((session?.user as any)?.bu || "NYG")
   const isGW = userBu === "GW"
+  const isEA = userBu === "EA"
 
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<any[]>([])
@@ -53,11 +54,12 @@ export default function NewRequestPage() {
   }
 
   useEffect(() => {
-    // GW: MER picks the first approver (DPM_GW / legacy VP_MER_GW) — scope by BU.
-    // NYG: no pick — the first approver is DVM MER (auto). Fetch DVM MER just to DISPLAY who
-    // it will route to (DVM_MER is an NYG-only role, so no bu scoping needed).
+    // MER picks the FIRST approver from master (dropdown, single). By BU:
+    //   GW  → DPM_GW (legacy VP_MER_GW)   NYG → DVM_MER   EA → DVM_MER_EA (ADVM)
     const fetches = isGW
       ? ["DPM_GW", "VP_MER_GW"].map(r => fetch(`/api/users/by-role?role=${r}&bu=${userBu}`).then(res => res.json()).catch(() => []))
+      : isEA
+      ? [fetch(`/api/users/by-role?role=DVM_MER_EA`).then(res => res.json()).catch(() => [])]
       : [fetch(`/api/users/by-role?role=DVM_MER`).then(res => res.json()).catch(() => [])]
     Promise.all(fetches)
       .then(results => {
@@ -68,9 +70,9 @@ export default function NewRequestPage() {
           for (const u of res) { if (u?.email && !seen.has(u.email)) { seen.add(u.email); list.push(u) } }
         }
         setVpMerUsers(list)
-        if (isGW && list.length === 1) setVpMerSelected({ name: list[0].name, email: list[0].email })
+        if (list.length === 1) setVpMerSelected({ name: list[0].name, email: list[0].email })
       })
-  }, [isGW, userBu])
+  }, [isGW, isEA, userBu])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -149,6 +151,13 @@ export default function NewRequestPage() {
     const errs: string[] = []
     rows.forEach((row: any, idx: number) => {
       const so = getVal(row, "SO") || `Row ${idx + 2}`
+      // GW: SO ปกติ 8 หลัก ขึ้นต้น 01 — ห้าม 05 (และกรณี Excel ตัดเหลือ 7 หลักขึ้นต้น 5 = 05 ที่โดนตัด 0)
+      if (isGW) {
+        const soDigits = String(getVal(row, "SO") ?? "").trim().replace(/\D/g, "")
+        if (soDigits && (soDigits.startsWith("05") || (soDigits.length === 7 && soDigits.startsWith("5")))) {
+          errs.push(`SO ${so}: SO นี้ขึ้นต้นด้วย 05 (หรือถูกตัดเหลือ 7 หลักขึ้นต้น 5) — กรุณาใช้ SO ที่ขึ้นต้นด้วย 01`)
+        }
+      }
       // completeness
       for (const f of perRowRequired) if (isEmpty(getVal(row, f))) errs.push(`SO ${so}: missing "${f}"`)
       // numbers
@@ -194,8 +203,11 @@ export default function NewRequestPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file || preview.length === 0) return
-    // GW: MER must pick the first approver (DPM GW). NYG: no pick — DVM MER auto-notifies all.
-    if (isGW && !vpMerSelected) { setError("Please select a DPM GW before submitting"); return }
+    // MER must pick the first approver: GW → DPM GW, NYG → DVM MER, EA → ADVM.
+    if (!vpMerSelected) {
+      setError(isGW ? "Please select a DPM GW before submitting" : isEA ? "Please select an ADVM (EA) before submitting" : "กรุณาเลือก DVM Merchandise ก่อนส่ง")
+      return
+    }
     setLoading(true)
     setError("")
     const res = await fetch("/api/requests", {
@@ -203,7 +215,8 @@ export default function NewRequestPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         items: preview,
-        assignedVpMer: isGW ? vpMerSelected?.email : null,
+        assignedVpMer: isGW ? vpMerSelected?.email : null,   // GW: DPM
+        assignedDvm: !isGW ? vpMerSelected?.email : null,     // NYG/EA: 1st merch approver (DVM/ADVM)
         bu: userBu,
         isTest: isAdmin && testMode,
       })
@@ -267,56 +280,43 @@ export default function NewRequestPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
 
-        {/* Select first approver — GW only (picks DPM GW). NYG auto-routes to DVM MER. */}
-        {isGW && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-          <h2 className="font-semibold text-gray-800">
-            Select DPM GW <span className="text-red-500">*</span>
-          </h2>
-
-          {vpMerUsers.length === 0 ? (
-            <p className="text-sm text-red-500">No approver found in Master — please add a {isGW ? "DPM_GW" : "VP_MER"} in User Management</p>
-          ) : vpMerUsers.length === 1 ? (
-            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-              <div>
-                <p className="text-sm font-medium text-green-800">{vpMerUsers[0].name}</p>
-                <p className="text-xs text-green-600">{vpMerUsers[0].email}</p>
-              </div>
-              <span className="ml-auto text-xs text-green-500 font-medium">Auto-selected</span>
+        {/* Select first approver from Master — GW: DPM · NYG: DVM MER · EA: ADVM. The picked
+            person is the ONLY one notified; they in turn pick the next approver (VP / DVM). */}
+        {(() => {
+          const firstLabel = isGW ? "DPM GW" : isEA ? "ADVM (EA)" : "DVM Merchandise"
+          const firstRole = isGW ? "DPM_GW" : isEA ? "DVM_MER_EA" : "DVM_MER"
+          return (
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+              <h2 className="font-semibold text-gray-800">
+                Select {firstLabel} <span className="text-red-500">*</span>
+              </h2>
+              {vpMerUsers.length === 0 ? (
+                <p className="text-sm text-red-500">ยังไม่มี {firstRole} ใน Master — กรุณาเพิ่มใน User Management ก่อน</p>
+              ) : vpMerUsers.length === 1 ? (
+                <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-green-800">{vpMerUsers[0].name}</p>
+                    <p className="text-xs text-green-600">{vpMerUsers[0].email}</p>
+                  </div>
+                  <span className="ml-auto text-xs text-green-500 font-medium">Auto-selected</span>
+                </div>
+              ) : (
+                <select
+                  value={vpMerSelected?.email || ""}
+                  onChange={e => {
+                    const u = vpMerUsers.find(u => u.email === e.target.value)
+                    setVpMerSelected(u ? { name: u.name, email: u.email } : null)
+                  }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                  <option value="">-- Select {firstLabel} --</option>
+                  {vpMerUsers.map(u => (
+                    <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
+                  ))}
+                </select>
+              )}
             </div>
-          ) : (
-            <select
-              value={vpMerSelected?.email || ""}
-              onChange={e => {
-                const u = vpMerUsers.find(u => u.email === e.target.value)
-                setVpMerSelected(u ? { name: u.name, email: u.email } : null)
-              }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
-              <option value="">-- Select {isGW ? "DPM GW" : "VP Merchandise"} --</option>
-              {vpMerUsers.map(u => (
-                <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
-              ))}
-            </select>
-          )}
-        </div>
-        )}
-
-        {/* NYG: read-only info — auto-routes to DVM MER (first approver) */}
-        {!isGW && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-              <div>
-                <p className="text-sm font-medium text-green-800">Auto-select to DVM Merchandise</p>
-                <p className="text-xs text-green-600">
-                  {vpMerUsers.length > 0
-                    ? vpMerUsers.map(u => u.name || u.email).join(", ")
-                    : "⚠ ยังไม่มี DVM Merchandise — จะข้ามไป VP Merchandise"}
-                </p>
-              </div>
-              <span className="ml-auto text-xs text-green-500 font-medium">Auto</span>
-            </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Upload Excel */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -426,7 +426,7 @@ export default function NewRequestPage() {
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={loading || preview.length === 0 || (isGW && !vpMerSelected)}
+            disabled={loading || preview.length === 0 || !vpMerSelected}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {loading ? "Submitting..." : "Submit Request"}
           </button>

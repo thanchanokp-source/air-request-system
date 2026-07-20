@@ -543,9 +543,18 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       return
     }
 
-    // For PENDING_DVM_MER (NYG first approver, before VP MER) — notify the DVM MER
-    // role-holder(s). Multi-role aware (primary role OR roles[]); web login link.
+    // For PENDING_DVM_MER (NYG first approver, before VP MER) — MER picked ONE DVM MER at upload
+    // (assignedDvmMer) → notify only that person. Fallback (no pick) → all DVM MER, priority-1 batch.
     if (newStatus === "PENDING_DVM_MER") {
+      const link = `${APP_URL}/requests/${requestId}`
+      const token = (req as any).vpMerToken
+      const assignedEmail = (req as any).assignedDvmMer
+      if (assignedEmail) {
+        // ?as= → clicking logs in as that specific DVM (or the admin testing) → /approvals.
+        const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&as=${encodeURIComponent(assignedEmail)}&redirect=/approvals` : undefined
+        await sendMail([assignedEmail], `${STATUS_SUBJECT[newStatus]} — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, magicLink))
+        return
+      }
       const users = await (prisma.user as any).findMany({
         where: {
           isActive: true, bu: (req as any).bu,
@@ -558,10 +567,6 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const firstBatch = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : users
       const recipients = [...new Set(firstBatch.map((u: any) => u.email).filter(Boolean))] as string[]
       if (!recipients.length) return
-      const link = `${APP_URL}/requests/${requestId}`
-      // Reuse the per-request vpMerToken for one-click login (auth resolves it to a
-      // DVM MER session while the doc is at PENDING_DVM_MER) → lands on /approvals.
-      const token = (req as any).vpMerToken
       const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&redirect=/approvals` : undefined
       const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
       await sendMail(recipients, `${STATUS_SUBJECT[newStatus]} — ${req.documentNo}`, html)
@@ -910,12 +915,18 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
     }
     if (MERCH_ROLE[newStatus]) {
       const mrole = MERCH_ROLE[newStatus]
-      const mUsers = await (prisma.user as any).findMany({
-        where: { isActive: true, OR: [{ role: mrole }, { roles: { has: mrole } }] }, select: { email: true },
-      })
       const link = `${APP_URL}/requests/${requestId}`
       const token = (req as any).vpMerToken
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
+      // EA: MER picked ADVM (assignedDvmMer, step 1), ADVM picked DVM (assignedVpMer, step 2) →
+      // notify only that chosen person. Fallback (no pick) → all holders of the stage role.
+      const assignedEmail = newStatus === "PENDING_DVM_MER_EA" ? (req as any).assignedDvmMer
+        : newStatus === "PENDING_VP_MER_EA" ? (req as any).assignedVpMer : null
+      const mUsers = assignedEmail
+        ? [{ email: assignedEmail }]
+        : await (prisma.user as any).findMany({
+            where: { isActive: true, OR: [{ role: mrole }, { roles: { has: mrole } }] }, select: { email: true },
+          })
       for (const u of mUsers) {
         if (!u.email) continue
         const magicLink = token ? `${APP_URL}/api/magic-login?token=${token}&as=${encodeURIComponent(u.email)}&redirect=/approvals` : undefined
@@ -1306,7 +1317,7 @@ export async function notifyBackToMerGw(requestId: string, reason: string, byNam
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
   <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
     <tr><td style="background:#ea580c;padding:18px 24px">
-      <p style="margin:0;color:#fed7aa;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Back to Merchandise (GW)</p>
+      <p style="margin:0;color:#fed7aa;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Back to Merchandise (${req.bu || "GW"})</p>
       <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo}</h1>
     </td></tr>
     <tr><td style="padding:20px 24px">
@@ -1329,6 +1340,47 @@ export async function notifyBackToMerGw(requestId: string, reason: string, byNam
 </td></tr></table></body></html>`
     await sendMail([req.createdBy.email], `[Air Request · Back to Merchandise] ${req.documentNo}`, html)
   } catch (e) { console.error("[notify] back-to-mer (GW) failed:", e) }
+}
+
+// เรื่อง 6 — Logistics rejected an SO and bounced it back before the claim split. FYI-alert every
+// person who already approved this document (distinct approvers from the approval log) + the creator.
+export async function notifyLgRejectFyi(requestId: string, so: string, reason: string, byName?: string) {
+  try {
+    const req: any = await prisma.airRequest.findUnique({
+      where: { id: requestId },
+      include: {
+        createdBy: { select: { email: true } },
+        approvalLogs: { include: { user: { select: { email: true } } } },
+      },
+    })
+    if (!req) return
+    const emails = [...new Set([
+      req.createdBy?.email,
+      ...(req.approvalLogs || []).map((l: any) => l.user?.email),
+    ].filter(Boolean))] as string[]
+    if (!emails.length) return
+    const link = `${APP_URL}/requests/${requestId}`
+    const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
+  <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#b45309;padding:18px 24px">
+      <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Logistics Rejected an SO (FYI)</p>
+      <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo} — SO ${so}</h1>
+    </td></tr>
+    <tr><td style="padding:20px 24px">
+      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">Logistics${byName ? ` (<strong>${byName}</strong>)` : ""} ตีกลับ SO <strong>${so}</strong> (ไม่ใช่ของ air / ไม่อยู่ใน projection) ให้กลับไปก่อนขั้นตอนแบ่ง Claim เพื่อแก้ไข</p>
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin:12px 0">
+        <p style="margin:0;color:#92400e;font-size:12px;font-weight:700;font-family:Arial">เหตุผล:</p>
+        <p style="margin:4px 0 0;color:#78350f;font-size:13px;font-family:Arial">${reason || "-"}</p>
+      </div>
+      <p style="margin:14px 0 0;font-family:Arial"><a href="${link}" style="color:#b45309;font-size:13px">เปิดเอกสาร →</a></p>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group · อีเมลนี้เพื่อแจ้งให้ทราบ (FYI)</p></td></tr>
+  </table>
+</td></tr></table></body></html>`
+    await sendMail(emails, `[Air Request · FYI] Logistics ตีกลับ SO ${so} — ${req.documentNo}`, html)
+  } catch (e) { console.error("[notify] lg-reject FYI failed:", e) }
 }
 
 // A new document is HELD because Master data is incomplete — some COUNTRY has no freight rate

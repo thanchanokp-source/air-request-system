@@ -353,7 +353,7 @@ export default function ApprovalsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b">
-                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["MY CLAIM (THB)"] : []),"FACTORY","COUNTRY","CLAIM DEPT",...(hasNyk ? ["CR NO"] : []),"INVOICE NO","HAWB#"].map(h =>
+                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["MY CLAIM (THB)"] : []),"FACTORY","COUNTRY","CLAIM DEPT",...(hasNyk ? ["CR NO"] : []),"INVOICE NO","HAWB#","PO GARMENT"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
@@ -379,6 +379,7 @@ export default function ApprovalsPage() {
                         {hasNyk && <td className="px-3 py-1.5 whitespace-nowrap font-medium text-indigo-700">{req.crNo || "-"}</td>}
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.invoiceNo || "-"}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.hawbNo || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap font-medium text-purple-700">{item.poGarment || "-"}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -20,6 +20,7 @@ export const STATUS_LABELS: Record<string, string> = {
   PENDING_CLAIM_GW: "Pending Claim (GW)",
   PENDING_CLAIM_REJECT_GW: "Claim Rejected — Re-assign (Merchandise)",
   PENDING_MER_GW: "Back to Merchandise (GW)",
+  PENDING_MER: "Back to Merchandise",
   PENDING_SCM_GW: "Pending SCM (GW)",
   PENDING_ACCOUNTING: "Pending Accounting",
   COMPLETED: "Completed",
@@ -46,6 +47,7 @@ export const STATUS_COLORS: Record<string, string> = {
   PENDING_CLAIM_GW: "bg-indigo-100 text-indigo-700",
   PENDING_CLAIM_REJECT_GW: "bg-red-100 text-red-700",
   PENDING_MER_GW: "bg-red-100 text-red-700",
+  PENDING_MER: "bg-red-100 text-red-700",
   PENDING_SCM_GW: "bg-orange-100 text-orange-700",
   PENDING_ACCOUNTING: "bg-teal-100 text-teal-700",
   COMPLETED: "bg-green-100 text-green-700",
@@ -60,6 +62,8 @@ export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> =
   PENDING_DVM_MER_EA: { approve: "PENDING_VP_MER_EA", reject: "REJECTED" },
   PENDING_VP_MER_EA: { approve: "PENDING_SCM", reject: "REJECTED" },
   PENDING_SCM: { approve: "PENDING_VP_SCM" },
+  PENDING_MER: { approve: "PENDING_DVM_MER" }, // NYG MER re-submits after SCM sent it back → restart approvals
+
   PENDING_VP_SCM: { approve: "PENDING_CLAIM", reject: "REJECTED" },
   PENDING_PRESIDENT: { approve: "PENDING_SCM", reject: "REJECTED" },
   PENDING_LOGISTICS: { approve: "PENDING_CLAIM" },

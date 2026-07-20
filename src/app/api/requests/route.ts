@@ -6,6 +6,7 @@ import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange, notifyMissingMaster } from "@/lib/notify"
 import { sendMail } from "@/lib/email"
 import { canonCountry } from "@/lib/freight"
+import { attachGarmentPo } from "@/lib/bom"
 import crypto from "crypto"
 
 // Normalize a year that may be 2-digit or Thai Buddhist (B.E.) to Gregorian.
@@ -87,6 +88,8 @@ export async function GET(req: NextRequest) {
   // NOTE: don't filter items server-side by item.claimDepartment — that is only
   // the FIRST split, so multi-split docs (e.g. [SCM NYG, GW]) were wrongly dropped
   // for GW/SUPPLIER users. The client (approvals page) scopes correctly via getSplits.
+  // Attach the garment PO(s) from the Bill of Material (RPA reference) for recheck at claim.
+  await attachGarmentPo(requests as any)
   return NextResponse.json(requests)
 }
 
@@ -97,19 +100,21 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { items, assignedVpMer, bu, isTest } = body
+    const { items, assignedVpMer, assignedDvm, bu, isTest } = body
     // Only ADMIN may create TEST documents (all their emails reroute to the admin, hidden from users).
     const isTestDoc = !!isTest && (session.user as any).role === "ADMIN"
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "No items" }, { status: 400 })
     }
-    // GW: MER picks the first approver (DPM GW). NYG: no pick — DVM MER auto-notifies all
-    // active DVM MER, then VP MER auto-notifies all VP MER (assignedVpMer stays null).
-    if (!assignedVpMer && bu === "GW") {
-      return NextResponse.json({ error: "Please select a DPM (GW)" }, { status: 400 })
-    }
     const isGW = bu === "GW"
     const isEA = bu === "EA"   // EA = same flow as NYG, only the top-3 approvers differ
+    // MER picks the FIRST approver from master: GW → DPM (assignedVpMer), NYG/EA → DVM/ADVM (assignedDvm).
+    if (!assignedVpMer && isGW) {
+      return NextResponse.json({ error: "Please select a DPM (GW)" }, { status: 400 })
+    }
+    if (!assignedDvm && !isGW) {
+      return NextResponse.json({ error: isEA ? "Please select an ADVM (EA)" : "กรุณาเลือก DVM Merchandise" }, { status: 400 })
+    }
 
     // Case-insensitive column lookup (handles template header casing variations)
     const col = (item: any, key: string) => {
@@ -155,20 +160,11 @@ export async function POST(req: NextRequest) {
       ? `TEST-${buCodeForNo}-${Date.now().toString().slice(-8)}`
       : await generateDocumentNo(buCodeForNo)
 
-    // NYG now has a DVM MER approval step BEFORE VP MER. Only route there if a DVM MER
-    // user is actually configured (role or roles[]); otherwise skip straight to VP MER
-    // so documents never get stuck at an unstaffed stage.
-    // DVM_MER is an NYG-only role; count active holders regardless of a bu="ALL" cross-BU
-    // setting (strict bu:"NYG" would miss an ALL-BU DVM MER → wrongly skip the DVM step).
-    const hasRole = async (role: string) => (await prisma.user.count({
-      where: { isActive: true, OR: [{ role }, { roles: { has: role } }] } as any,
-    })) > 0
-    const hasDvmMer = !isGW && !isEA && await hasRole("DVM_MER")
-    const hasDvmMerEa = isEA && await hasRole("DVM_MER_EA")
-    // EA: ADVM (DVM_MER_EA) → DVM (VP_MER_EA) → merges into PENDING_SCM. Skip ADVM if unstaffed.
+    // MER picked the 1st approver (assignedDvm) → route straight to that DVM/ADVM stage.
+    // (Fallback to the VP stage only if — unexpectedly — no DVM was picked.)
     const initialStatus = isGW ? "PENDING_VP_MER_GW"
-      : isEA ? (hasDvmMerEa ? "PENDING_DVM_MER_EA" : "PENDING_VP_MER_EA")
-      : (hasDvmMer ? "PENDING_DVM_MER" : "PENDING_VP_MER")
+      : isEA ? (assignedDvm ? "PENDING_DVM_MER_EA" : "PENDING_VP_MER_EA")
+      : (assignedDvm ? "PENDING_DVM_MER" : "PENDING_VP_MER")
 
     const request = await prisma.airRequest.create({
       data: {
@@ -180,6 +176,7 @@ export async function POST(req: NextRequest) {
         isTest: isTestDoc,
         createdById: userId,
         assignedVpMer,
+        assignedDvmMer: !isGW ? (assignedDvm || null) : null,
         // Hold from the first approver until every Country has a rate AND every
         // description has a WT Charge (so Gross/Est. Air Freight can be computed).
         pendingRate: missingRates.length > 0,

@@ -1,6 +1,6 @@
 "use client"
 import { signIn } from "next-auth/react"
-import { useState, Suspense } from "react"
+import { useState, Suspense, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -12,15 +12,44 @@ function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [sendingLink, setSendingLink] = useState(false)
   const [linkSent, setLinkSent] = useState(false)
+  const [knownEmails, setKnownEmails] = useState<string[]>([])
+  const [serverHints, setServerHints] = useState<string[]>([])
   const router = useRouter()
   const params = useSearchParams()
   const registered = params.get("registered")
+
+  // Remember emails that have signed in on THIS browser → hint them next time (no server call, no privacy leak)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("ars_known_emails")
+      if (raw) setKnownEmails(JSON.parse(raw))
+    } catch {}
+  }, [])
+
+  function rememberEmail(e: string) {
+    try {
+      const next = [e, ...knownEmails.filter(x => x.toLowerCase() !== e.toLowerCase())].slice(0, 5)
+      localStorage.setItem("ars_known_emails", JSON.stringify(next))
+    } catch {}
+  }
+
+  // Server-side suggestions: as the user types (≥2 chars, debounced) fetch matching emails.
+  useEffect(() => {
+    const q = email.trim()
+    if (q.length < 2 || q.includes("@") && q.split("@")[1]?.length > 2) { setServerHints([]); return }
+    const t = setTimeout(() => {
+      fetch(`/api/auth/email-hint?q=${encodeURIComponent(q)}`)
+        .then(r => r.json()).then(d => setServerHints(Array.isArray(d) ? d : [])).catch(() => setServerHints([]))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [email])
 
   async function sendLoginLink() {
     if (!email) { setError("Please enter your email first"); return }
     setSendingLink(true); setError("")
     try {
       await fetch("/api/auth/request-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) })
+      rememberEmail(email)
       setLinkSent(true)
     } catch { setError("Could not send the login link. Please try again") }
     setSendingLink(false)
@@ -32,7 +61,7 @@ function LoginForm() {
     setError("")
     const res = await signIn("credentials", { email, password, redirect: false })
     setLoading(false)
-    if (res?.ok) router.push("/dashboard")
+    if (res?.ok) { rememberEmail(email); router.push("/dashboard") }
     else setError("Invalid email or password")
   }
 
@@ -109,7 +138,10 @@ function LoginForm() {
             <div className="lab">Email</div>
             <div className="ipt">
               <span className="ic"><svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5" /><path strokeLinecap="round" d="m4 7 8 6 8-6" /></svg></span>
-              <input type="email" placeholder="name@nanyangtextile.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off" required />
+              <input type="email" placeholder="name@nanyangtextile.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="off" list="ars-known-emails" required />
+              <datalist id="ars-known-emails">
+                {[...new Set([...knownEmails, ...serverHints])].map(em => <option key={em} value={em} />)}
+              </datalist>
             </div>
           </div>
 

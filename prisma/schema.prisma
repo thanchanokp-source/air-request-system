@@ -97,7 +97,8 @@ model AirRequest {
   actualAirFreight Float?
   bookingDate      DateTime?
   airline          String?
-  assignedVpMer    String?
+  assignedVpMer    String?   // 2nd merch approver (VP MER / EA DVM) — chosen by the 1st approver
+  assignedDvmMer   String?   // 1st merch approver (DVM MER / EA ADVM) — chosen by MER at upload (NYG+EA)
   vpMerToken       String?
   gmToken          String?
   presidentToken   String?
@@ -273,6 +274,23 @@ model AppSetting {
   key       String   @id
   value     String
   updatedAt DateTime @default(now()) @updatedAt
+}
+
+// Bill of Material — a REFERENCE table synced by RPA (not part of the approval flow). The app
+// reads it to map a MER-uploaded SO → its garment PO(s): match SO + Style + Customer PO.
+// If several rows match, several POs are shown ("PO A / PO B / …"). RLS not used (Prisma direct).
+model BillOfMaterial {
+  id           String   @id @default(uuid())
+  bu           String?
+  soNoDoc      String?
+  customerName String?
+  customerPo   String?
+  vendorName   String?
+  poNoDoc      String?
+  style        String?
+  updatedAt    DateTime @default(now())
+
+  @@index([soNoDoc, style, customerPo])
 }
 
 model RequestAttachment {

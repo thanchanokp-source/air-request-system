@@ -48,9 +48,10 @@ export const authOptions: NextAuthOptions = {
                 return { id: asU.id, email: asU.email, name: asU.name, role: stageRole, bu: buFor, claimDepartment: null, priority: asU.priority ?? null }
               }
             }
-            // A specific approver chosen at upload (GW DPM / assigned VP MER).
-            const assignedEmail = airReq.assignedVpMer
-            if (assignedEmail && (stageRole === "VP_MER" || stageRole === "VP_MER_GW")) {
+            // A specific approver chosen from master: DVM/ADVM (assignedDvmMer, picked by MER) or
+            // VP/EA-DVM/GW-DPM (assignedVpMer, picked by the 1st approver).
+            const assignedEmail = (stageRole === "DVM_MER" || stageRole === "DVM_MER_EA") ? airReq.assignedDvmMer : airReq.assignedVpMer
+            if (assignedEmail && ["VP_MER", "VP_MER_GW", "VP_MER_EA", "DVM_MER", "DVM_MER_EA"].includes(stageRole)) {
               const user = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
               if (user) return { id: user.id, email: user.email, name: user.name, role: stageRole, bu: buFor, claimDepartment: null, priority: null }
               return { id: `vp_mer_guest_${token}`, email: assignedEmail, name: assignedEmail, role: stageRole, bu: buFor, claimDepartment: null, priority: null }
