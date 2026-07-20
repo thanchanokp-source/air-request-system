@@ -107,6 +107,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please select a DPM (GW)" }, { status: 400 })
     }
     const isGW = bu === "GW"
+    const isEA = bu === "EA"   // EA = same flow as NYG, only the top-3 approvers differ
 
     // Case-insensitive column lookup (handles template header casing variations)
     const col = (item: any, key: string) => {
@@ -145,24 +146,29 @@ export async function POST(req: NextRequest) {
       .filter((d: string) => d && wtChargeFor(d) <= 0))] as string[]
 
     const first = items[0]
-    const docNo = await generateDocumentNo(isGW ? "GW" : "NYG")
+    const docNo = await generateDocumentNo(isGW ? "GW" : isEA ? "EA" : "NYG")
 
     // NYG now has a DVM MER approval step BEFORE VP MER. Only route there if a DVM MER
     // user is actually configured (role or roles[]); otherwise skip straight to VP MER
     // so documents never get stuck at an unstaffed stage.
     // DVM_MER is an NYG-only role; count active holders regardless of a bu="ALL" cross-BU
     // setting (strict bu:"NYG" would miss an ALL-BU DVM MER → wrongly skip the DVM step).
-    const hasDvmMer = !isGW && (await prisma.user.count({
-      where: { isActive: true, bu: { in: ["NYG", "ALL"] }, OR: [{ role: "DVM_MER" }, { roles: { has: "DVM_MER" } }] } as any,
+    const hasRole = async (role: string) => (await prisma.user.count({
+      where: { isActive: true, OR: [{ role }, { roles: { has: role } }] } as any,
     })) > 0
-    const initialStatus = isGW ? "PENDING_VP_MER_GW" : (hasDvmMer ? "PENDING_DVM_MER" : "PENDING_VP_MER")
+    const hasDvmMer = !isGW && !isEA && await hasRole("DVM_MER")
+    const hasDvmMerEa = isEA && await hasRole("DVM_MER_EA")
+    // EA: ADVM (DVM_MER_EA) → DVM (VP_MER_EA) → merges into PENDING_SCM. Skip ADVM if unstaffed.
+    const initialStatus = isGW ? "PENDING_VP_MER_GW"
+      : isEA ? (hasDvmMerEa ? "PENDING_DVM_MER_EA" : "PENDING_VP_MER_EA")
+      : (hasDvmMer ? "PENDING_DVM_MER" : "PENDING_VP_MER")
 
     const request = await prisma.airRequest.create({
       data: {
         documentNo: docNo,
         brandName: String(col(first, "Brand name") || col(first, "BRAND") || ""),
         buName: String(col(first, "BU") || ""),
-        bu: isGW ? "GW" : "NYG",
+        bu: isGW ? "GW" : isEA ? "EA" : "NYG",
         status: initialStatus,
         createdById: userId,
         assignedVpMer,

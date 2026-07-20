@@ -41,6 +41,8 @@ const STATUS_SUBJECT: Record<string, string> = {
   PENDING_LOGISTICS:   "[Logistics] Pending HAWB Details",
   PENDING_CLAIM:       "[Claim] Pending Approval",
   PENDING_VP_CLAIM:    "[VP Claim] Pending Approval",
+  PENDING_DVM_MER_EA:  "[ADVM – EA] Pending Approval",
+  PENDING_VP_MER_EA:   "[DVM – EA] Pending Approval",
   PENDING_VP_NYK:      "[VP NYK] Pending Approval",
   // GW
   PENDING_VP_MER_GW:   "[DPM – GW] Pending Approval",
@@ -58,6 +60,8 @@ const STATUS_SUBJECT: Record<string, string> = {
 const STATUS_ROLES: Record<string, string[]> = {
   PENDING_DVM_MER:      ["DVM_MER"],
   PENDING_VP_MER:       ["VP_MER"],
+  PENDING_DVM_MER_EA:   ["DVM_MER_EA"],
+  PENDING_VP_MER_EA:    ["VP_MER_EA"],
   PENDING_SCM:          ["SCM_USER"],
   PENDING_VP_SCM:       ["VP_SCM"],
   PENDING_PRESIDENT:    ["PRESIDENT"],

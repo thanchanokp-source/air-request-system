@@ -161,7 +161,10 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
 
   // ── NYG: linear chain (Claim step expands into per-dept chips, like GW) ──
   if (bu !== "GW") {
-    const cur = completed ? 99 : soItem ? nygItemOrd(soItem, status) : (NYG_STAGES.find(s => s.key === status)?.ord ?? -1)
+    // EA re-uses the NYG chain (only the top-3 approvers differ) → map EA merch statuses to the
+    // equivalent NYG stage so the progress chain renders correctly.
+    const nyStatus = status === "PENDING_DVM_MER_EA" ? "PENDING_DVM_MER" : status === "PENDING_VP_MER_EA" ? "PENDING_VP_MER" : status
+    const cur = completed ? 99 : soItem ? nygItemOrd(soItem, nyStatus) : (NYG_STAGES.find(s => s.key === nyStatus)?.ord ?? -1)
     const CLAIM_ORD = 5
     // Per-department claim status from this SO's (or aggregate) splits.
     const dmap: Record<string, { total: number; done: number }> = {}

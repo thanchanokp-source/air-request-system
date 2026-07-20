@@ -352,9 +352,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // DVM MER per-style (NYG): the FIRST approver, before VP MER. approve → DVM_MER_PASSED,
   // reject → REJECTED. When every style is processed, hand the whole doc to VP MER.
-  if (request.status === "PENDING_DVM_MER" && (action === "approve_style" || action === "reject_style")) {
+  // ADVM step — NYG (PENDING_DVM_MER) and EA (PENDING_DVM_MER_EA) share the same logic; EA
+  // just advances to its own VP step. (EA = NYG flow, only the top-3 approvers differ.)
+  if ((request.status === "PENDING_DVM_MER" || request.status === "PENDING_DVM_MER_EA") && (action === "approve_style" || action === "reject_style")) {
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
     if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
+    const dvmStatus = request.status
+    const nextVpStatus = dvmStatus === "PENDING_DVM_MER_EA" ? "PENDING_VP_MER_EA" : "PENDING_VP_MER"
 
     const newItemStatus = action === "approve_style" ? "DVM_MER_PASSED" : "REJECTED"
     await prisma.airRequestItem.updateMany({
@@ -365,7 +369,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: {
         requestId: id, userId,
         action: action === "approve_style" ? "APPROVE" : "REJECT",
-        fromStatus: "PENDING_DVM_MER", toStatus: "PENDING_DVM_MER",
+        fromStatus: dvmStatus, toStatus: dvmStatus,
         comment: `Style: ${style}${comment ? ` - ${comment}` : ""}`
       }
     })
@@ -390,15 +394,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         await notifyStatusChange(id, "REJECTED").catch(() => {})
       } else {
         await prisma.airRequestItem.updateMany({ where: { requestId: id, itemStatus: "DVM_MER_PASSED" }, data: { itemStatus: "PENDING" } })
-        await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_VP_MER" } })
-        await notifyStatusChange(id, "PENDING_VP_MER").catch(() => {})
+        await prisma.airRequest.update({ where: { id }, data: { status: nextVpStatus } })
+        await notifyStatusChange(id, nextVpStatus).catch(() => {})
       }
     }
     return NextResponse.json(await getUpdated())
   }
 
-  // VP MER per-style: approve → VP_MER_PASSED (SCM can start immediately), reject → REJECTED
-  if (request.status === "PENDING_VP_MER" && (action === "approve_style" || action === "reject_style")) {
+  // DVM (2nd merch) step — NYG (PENDING_VP_MER) and EA (PENDING_VP_MER_EA). Both approve →
+  // PENDING_SCM (EA merges into the shared NYG SCM/Claim/President pipeline from here on).
+  if ((request.status === "PENDING_VP_MER" || request.status === "PENDING_VP_MER_EA") && (action === "approve_style" || action === "reject_style")) {
+    const vpMerStatus = request.status
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
     if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
 
@@ -411,11 +417,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: {
         requestId: id, userId,
         action: action === "approve_style" ? "APPROVE" : "REJECT",
-        fromStatus: "PENDING_VP_MER", toStatus: "PENDING_VP_MER",
+        fromStatus: vpMerStatus, toStatus: vpMerStatus,
         comment: `Style: ${style}${comment ? ` - ${comment}` : ""}`
       }
     })
-    // NYG reject → (1) tell the MER creator their doc was rejected + which email it was
+    // NYG/EA reject → (1) tell the MER creator their doc was rejected + which email it was
     // forwarded to; (2) optionally forward the rejection (data + reason) to a typed email.
     if (action === "reject_style") {
       const fwRaw = body.forwardEmail ? String(body.forwardEmail).trim() : ""
@@ -426,7 +432,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await notifyRejectionToCreator(id, style, comment || "", rejBy, fwEmail).catch(() => {})
     }
 
-    // Advance to PENDING_PRESIDENT when VP MER done (no PENDING left)
+    // Advance to PENDING_SCM when the 2nd merch step is done (no PENDING left)
     const pendingCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "PENDING" } })
     if (pendingCount === 0) {
       const vpMerPassedCount = await prisma.airRequestItem.count({ where: { requestId: id, itemStatus: "VP_MER_PASSED" } })

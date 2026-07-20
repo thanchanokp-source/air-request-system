@@ -279,7 +279,7 @@ export default function RequestsPage() {
             </span>
           )}
         </div>
-        {(role === "MER_USER" || role === "MER_GW") && (
+        {(role === "MER_USER" || role === "MER_GW" || role === "MER_EA") && (
           <Link href="/requests/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
             + New Request
           </Link>

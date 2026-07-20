@@ -1049,7 +1049,7 @@ export default function RequestDetailPage() {
   // Style-level Reject exists only at the NYG upload approvals (DVM MER / VP MER). GW (DPM/GM)
   // has NO hard reject — it uses a whole-document "Back to Merchandise" instead. Later stages
   // (VP SCM, President) have no Reject (use Back to SCM / approve-only).
-  const showStyleReject = ["DVM_MER", "VP_MER"].includes(role)
+  const showStyleReject = ["DVM_MER", "VP_MER", "DVM_MER_EA", "VP_MER_EA"].includes(role)
   // President approves only — no Reject, no Back-to-SCM.
   const isPresidentStage = role === "PRESIDENT" || role === "PRESIDENT_GW"
 
@@ -5626,8 +5626,8 @@ export default function RequestDetailPage() {
       {/* Attachments */}
       {(() => {
         const allAttachments: any[] = req.attachments || []
-        const canAttach = role === "MER_USER" || role === "SCM_USER"
-        const canDelete = role === "MER_USER" || role === "MER_GW"
+        const canAttach = role === "MER_USER" || role === "SCM_USER" || role === "MER_EA"
+        const canDelete = role === "MER_USER" || role === "MER_GW" || role === "MER_EA"
         const isUploadingReq = uploadingItem === "_req"
         // LG file categories → grouped as a "LOGISTICS FILES" folder, split by type.
         const LG_CATS: Record<string, { label: string; icon: string }> = {
