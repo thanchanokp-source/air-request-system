@@ -5510,6 +5510,33 @@ export default function RequestDetailPage() {
                 </div>
               </div>
 
+              {/* SCM can send the whole document back to the MER who uploaded it (soft return + reason). */}
+              {role === "SCM_USER" && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+                  {!backToMerOpen ? (
+                    <button onClick={() => setBackToMerOpen(true)} disabled={!!submitting}
+                      className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
+                      ↩ Back to Merchandise (ส่งกลับผู้อัพโหลด)
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-orange-700">ส่งกลับให้ Merchandise (ผู้อัพโหลด) แก้ไข — เหตุผล *</label>
+                      <textarea value={backToMerReason} onChange={e => setBackToMerReason(e.target.value)} rows={2}
+                        placeholder="ระบุเหตุผล..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                      <div className="flex gap-2">
+                        <button onClick={backToMerNyg} disabled={!backToMerReason.trim() || submitting === "_"}
+                          className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">
+                          {submitting === "_" ? "..." : "Confirm — Back to Merchandise"}
+                        </button>
+                        <button onClick={() => { setBackToMerOpen(false); setBackToMerReason("") }}
+                          className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                      </div>
+                      <p className="text-[11px] text-orange-600">ส่งทั้งเอกสารกลับให้ผู้อัพโหลด + อีเมลแจ้ง — MER แก้แล้วกด Re-submit จะเริ่มอนุมัติใหม่</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Import error popup */}
               {importErrors.length > 0 && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setImportErrors([])}>
