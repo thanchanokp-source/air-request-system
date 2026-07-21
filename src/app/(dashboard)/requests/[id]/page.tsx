@@ -2459,11 +2459,6 @@ export default function RequestDetailPage() {
                   Select All
                 </label>
               )}
-              {/* Back ALL styles → whole document back to Merchandise (GW has no hard reject) */}
-              <button onClick={() => { setBackToMerOpen(v => !v); setGwBackStyle(null) }} disabled={!!submitting}
-                className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
-                ↩ Back all to Merchandise
-              </button>
               {selectedStyles.size > 0 && (
                 <>
                 <button onClick={approveSelectedStyles} disabled={!!submitting}
@@ -2484,6 +2479,12 @@ export default function RequestDetailPage() {
                 )}
                 </>
               )}
+              {/* Back ALL styles → whole document back to Merchandise (GW has no hard reject).
+                  Placed AFTER Approve so the positive action stays leftmost (matches per-row order). */}
+              <button onClick={() => { setBackToMerOpen(v => !v); setGwBackStyle(null) }} disabled={!!submitting}
+                className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
+                ↩ Back all to Merchandise
+              </button>
             </div>
           </div>
           {/* Whole-document Back to Merchandise — reason box (opens from the header button) */}
