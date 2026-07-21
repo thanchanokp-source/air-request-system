@@ -5322,57 +5322,8 @@ export default function RequestDetailPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Export — give SCM the ACTUAL file MER attached (same format MER filled).
-                      Fallback to a generated sheet only if no MER attachment is found. */}
-                  <button type="button" onClick={async () => {
-                    // The ORIGINAL uploaded file = earliest doc-level xlsx that isn't an LG file or an
-                    // SCM re-upload (attachments come ordered by createdAt asc). Not role-based, so it
-                    // also works for admin TEST uploads (uploader role = ADMIN, not MER).
-                    if (await downloadScmClaimFile()) return // original MER file + dropdown (server)
-                    const rows = pendingScmItems.map((item: any) => {
-                      const d = soClaimDepts[item.id] || []
-                      return {
-                        "SO": item.so, "SUB": item.sub || "", "STYLE": item.style,
-                        "CUSTOMER PO": item.customerPO || "", "DESCRIPTION": item.description || "",
-                        "QTY ORIG": item.qtyOriginalShipment, "QTY AIR": item.qtyRequestAir,
-                        "FACTORY": item.factory || "", "COUNTRY": item.country || "", "PORT": item.port || "",
-                        "MER REASON": item.reasonDelay || "",
-                        "CLAIM DEPT 1": d[0]?.dept ? (CLAIM_DEPT_LABEL[d[0].dept] || d[0].dept) : "", "%CLAIM1": d[0]?.pct ?? "", "REASON 1": d[0]?.reason || "",
-                        "CLAIM DEPT 2": d[1]?.dept ? (CLAIM_DEPT_LABEL[d[1].dept] || d[1].dept) : "", "%CLAIM2": d[1]?.pct ?? "", "REASON 2": d[1]?.reason || "",
-                        "CLAIM DEPT 3": d[2]?.dept ? (CLAIM_DEPT_LABEL[d[2].dept] || d[2].dept) : "", "%CLAIM3": d[2]?.pct ?? "", "REASON 3": d[2]?.reason || ""
-                      } as Record<string, any>
-                    })
-                    // exceljs writes real Excel dropdown (data validation); SheetJS cannot.
-                    const ExcelJSMod: any = await import("exceljs")
-                    const ExcelJS = ExcelJSMod.default || ExcelJSMod
-                    const wb = new ExcelJS.Workbook()
-                    const ws = wb.addWorksheet("SCM")
-                    const headers = ["SO","SUB","STYLE","CUSTOMER PO","DESCRIPTION","QTY ORIG","QTY AIR","FACTORY","COUNTRY","PORT","MER REASON","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
-                    const widths = [8,6,12,14,22,10,10,10,12,12,20,16,7,16,16,7,16,16,7,16]
-                    ws.columns = headers.map((h, i) => ({ header: h, key: h, width: widths[i] }))
-                    ws.getColumn(11).hidden = true // MER REASON (Reason delay from MER) — hidden, data kept
-                    ws.getRow(1).font = { bold: true }
-                    rows.forEach((r: Record<string, any>) => ws.addRow(r))
-                    // Dropdown on all 3 CLAIM DEPT columns → L / O / R
-                    const listFormula = `"${CLAIM_DEPTS.join(",")}"`
-                    for (let r = 2; r <= rows.length + 1; r++) {
-                      for (const col of ["L", "O", "R"]) {
-                        ws.getCell(`${col}${r}`).dataValidation = {
-                          type: "list", allowBlank: true, formulae: [listFormula],
-                          showErrorMessage: true, errorStyle: "error", errorTitle: "Invalid claim dept",
-                          error: `Please select from the list: ${CLAIM_DEPTS.join(", ")}`,
-                        }
-                      }
-                    }
-                    const buf = await wb.xlsx.writeBuffer()
-                    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
-                    const url = URL.createObjectURL(blob)
-                    const a = document.createElement("a")
-                    a.href = url; a.download = `scm-claim-dept_${req.documentNo}.xlsx`; a.click()
-                    URL.revokeObjectURL(url)
-                  }} className="flex items-center gap-1 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 cursor-pointer">
-                    ↓ Export Excel
-                  </button>
+                  {/* Export removed — SCM downloads the original file from the Attachments section below. */}
+                  <span className="text-[11px] text-gray-400 self-center">↓ โหลดไฟล์ต้นฉบับได้ที่ Attachments ด้านล่าง</span>
                   {/* Import */}
                   <label className="flex items-center gap-1 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 cursor-pointer">
                     ↑ Import Excel
