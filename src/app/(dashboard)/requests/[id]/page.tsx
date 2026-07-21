@@ -237,7 +237,12 @@ const posMatches = (p: any, position?: string, bu?: string, positionRole?: strin
   // Production EVP of G1/G3 or the Procurement VP is filtered exactly.
   if (positionRole) {
     const up = (s: any) => String(s || "").toUpperCase()
-    const roleOk = up(p.role || p.pos) === up(positionRole) || (Array.isArray(p.roles) && p.roles.some((r: string) => up(r) === up(positionRole)))
+    // Factory-based positions carry a group suffix (VP_PRODUCTION_G1G3 / _G2G4), but the
+    // actual user's role is the BASE role (VP_PRODUCTION) — the G-group lives in
+    // claimDepartment. Strip the suffix before matching role; the group is enforced via
+    // spec.group + prodGroupCovers below.
+    const baseRole = up(positionRole).replace(/_G1G3$/, "").replace(/_G2G4$/, "")
+    const roleOk = up(p.role || p.pos) === baseRole || (Array.isArray(p.roles) && p.roles.some((r: string) => up(r) === baseRole))
     if (!roleOk) return false
     if (spec) {
       if (spec.priority != null && Number(p.priority) !== Number(spec.priority)) return false
