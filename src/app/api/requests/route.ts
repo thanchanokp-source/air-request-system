@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
-import { notifyStatusChange, notifyMissingMaster } from "@/lib/notify"
+import { notifyStatusChange } from "@/lib/notify"
 import { sendMail } from "@/lib/email"
 import { canonCountry } from "@/lib/freight"
 import { attachGarmentPo } from "@/lib/bom"
@@ -315,15 +315,11 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error("[notify] send failed:", err)
       }
-    } else {
-      // Master data incomplete → doc is HELD. Alert the master-data maintainers with the exact
-      // missing countries (rate) / descriptions (WT Charge) so they can add them and release it.
-      await notifyMissingMaster(
-        request.id,
-        missingRates.map((x: any) => x.country),
-        missingDescriptions,
-      ).catch(() => {})
     }
+    // Master data incomplete → doc is HELD. The detailed, per-type alerts below
+    // ([Freight Rate Missing] / [WT Charge Missing]) already tell the maintainers exactly
+    // what to add — so we do NOT also send the combined "[Master needs data]" summary
+    // (it was a duplicate that hit admin twice for the same document).
 
     if (missingRates.length > 0) {
       try {

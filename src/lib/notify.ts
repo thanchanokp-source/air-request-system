@@ -1527,6 +1527,69 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
   return { docs: docs.length, emailsSent }
 }
 
+// Resolve WHO actually handles one claim dept on THIS document — the SAME person(s) the
+// initial PENDING_CLAIM alert targets, NOT every holder of the dept's role:
+//   COMMERCIAL → the specific DVM MER picked on this doc (assignedDvmMer)
+//   NYK        → the SCM NYK Action Approver(s) (cross-BU)
+//   PRODUCTION → priority-1 CLAIM_PRODUCTION by the SO's factory G-group
+//   PROCUREMENT→ PURCHASING priority-1 only
+//   others     → the dept's priority-1 batch
+// GW: SCM NYG → SCM_NYG; GW / SUPPLIER auto-approve → nobody to notify.
+async function claimEntryUsersForDept(req: any, dept: string, items: any[]): Promise<{ id: string; email: string }[]> {
+  const out: { id: string; email: string }[] = []
+  const push = (arr: any[]) => { for (const u of arr) if (u?.email) out.push({ id: u.id, email: u.email }) }
+
+  // COMMERCIAL = the merch person picked on this doc.
+  if (dept === "COMMERCIAL") {
+    const email = (req as any).assignedDvmMer
+    if (email) {
+      const u = await prisma.user.findFirst({ where: { email, isActive: true } as any, select: { id: true, email: true } })
+      if (u?.email) return [{ id: u.id, email: u.email }]
+    }
+    // no pick → fall through to the generic role-priority branch
+  }
+  // NYK = the 3-role Action Approver(s), cross-BU (match role OR roles[]).
+  if (dept === "NYK" || dept === "SCM NYK") {
+    const us = await prisma.user.findMany({
+      where: { isActive: true, OR: [{ role: "SCM_NYK_APPROVER" }, { roles: { has: "SCM_NYK_APPROVER" } }] } as any,
+      select: { id: true, email: true }, orderBy: [{ createdAt: "asc" }],
+    })
+    push(us)
+    return out
+  }
+  // Which role(s) approve this dept's claim?
+  let deptRoles: string[]
+  if (req.bu === "GW") {
+    if (dept === "SCM NYG" || dept === "NYG") deptRoles = ["SCM_NYG"]
+    else return [] // GW / SUPPLIER = auto-approve → no claimer to notify
+  } else deptRoles = claimEntryRoles(dept)
+
+  // PRODUCTION entry → priority-1 by factory G-group.
+  if (dept === "PRODUCTION") {
+    const byGroup = new Map<string, any[]>()
+    for (const it of items) { const g = vpProdGroup((it as any).factory); if (!g) continue; if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g)!.push(it) }
+    for (const [g] of byGroup) {
+      const usAll = await prisma.user.findMany({
+        where: { isActive: true, bu: (req as any).bu, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] } as any,
+        select: { id: true, email: true, priority: true, claimDepartment: true }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      })
+      const us = usAll.filter((u: any) => prodGroupCovers(u.claimDepartment, g))
+      const withP = us.filter((u: any) => u.priority != null)
+      push(withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : us.slice(0, 1))
+    }
+    return out
+  }
+  // PROCUREMENT entry → PURCHASING only; others → dept priority-1 batch.
+  const procFilter = dept === "PROCUREMENT" ? { procurementType: "PURCHASING" } : {}
+  const users = await prisma.user.findMany({
+    where: { isActive: true, bu: (req as any).bu, ...procFilter, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] } as any,
+    select: { id: true, email: true, priority: true }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+  })
+  const withP = users.filter((u: any) => u.priority != null)
+  push(withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : users.slice(0, 1))
+  return out
+}
+
 export async function notifyLgFilesToClaimers(requestId: string) {
   return runWithTestMail(await docTestRecipient(requestId), () => notifyLgFilesToClaimersImpl(requestId))
 }
@@ -1594,22 +1657,12 @@ async function notifyLgFilesToClaimersImpl(requestId: string) {
       deptSOs.get(s.dept)!.push(it.so)
     }
     if (deptSOs.size === 0) return
-    const link = `${APP_URL}/requests/${requestId}`
     for (const [dept, sos] of deptSOs) {
-      // Which role approves this dept's claim? NYK = 3-role Action Approver. In GW the claim
-      // roles differ from NYG (SCM_NYG, not CLAIM_NYG); GW + SUPPLIER auto-approve so they
-      // have no claimer to notify — skip them.
-      let deptRoles: string[]
-      if (dept === "NYK" || dept === "SCM NYK") deptRoles = ["SCM_NYK_APPROVER"]
-      else if (req.bu === "GW") {
-        if (dept === "SCM NYG" || dept === "NYG") deptRoles = ["SCM_NYG"]
-        else continue // GW / SUPPLIER = NO_APPROVAL_GW_DEPTS → auto-approve, nobody to email
-      } else deptRoles = claimEntryRoles(dept)
-      const users = await (prisma.user as any).findMany({
-        where: { isActive: true, bu: req.bu, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] },
-        select: { id: true, email: true },
-      })
-      const recipients = users.filter((u: any) => u.email)
+      // Only the people who actually handle this dept's claim on THIS document — same
+      // resolution as the PENDING_CLAIM alert (picked COMMERCIAL DVM, PURCHASING p1, etc.),
+      // NOT a blast to every holder of the dept's role.
+      const deptItems = items.filter(it => getSplits(it).some(s => s.dept === dept))
+      const recipients = await claimEntryUsersForDept(req, dept, deptItems)
       if (!recipients.length) continue
       // Each claimer gets a magic-login link straight to the document (where the generated
       // PDF is always downloadable) — so even if the PDF is too big to inline, they can get it.

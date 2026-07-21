@@ -16,24 +16,24 @@ const rates = [
   ["TURKEY", 165], ["PHILIPPINES", 65], ["SWEDEN", 285],
 ]
 
-// ── Description → WT charge per pc (kg) ──
+// ── Description → WT charge per pc (kg) ── (kept in sync with the live DB master)
 const descriptions = [
   ["BOXER", 0.12],
   ["GLOVES", 0.03],
   ["HEADBAND", 0.03],
-  ["JACKET,Hoodie", 0.41],
-  ["JACKET,PULLOVER,SWEATSHIRT", 0.99],
-  ["JACKET,SWEATSHIRT,PULLOVER", 0.60],
+  ["HOODIE", 0.45],
+  ["JACKET", 0.45],
+  ["JACKET,Hoodie", 0.45],
   ["KNITTED POLO SHIRT", 0.30],
   ["KNITTED SHIRT", 0.25],
   ["PANTS", 0.76],
   ["POLO SHIRT", 0.37],
   ["PULLOVER", 0.35],
-  ["PULLOVER,SWEATSHIRT", 0.56],
   ["SHIRT", 0.38],
   ["SHORTS", 0.39],
   ["SLEEVES", 0.07],
-  ["TANK,T-shirt", 0.21],
+  ["SWEATSHIRT", 0.65],
+  ["TANK", 0.25],
   ["T-SHIRT", 0.26],
 ]
 
