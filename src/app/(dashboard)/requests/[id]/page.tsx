@@ -3424,7 +3424,7 @@ export default function RequestDetailPage() {
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-xs text-yellow-600 font-medium">{gwFwdItems.length} SO pending{claimSelIds.length ? ` · ${claimSelIds.length} selected` : ""}</span>
               <button onClick={() => setClaimTableView(v => !v)}
-                className="text-xs text-gray-600 border border-gray-300 rounded-lg px-2.5 py-1 hover:bg-gray-50 font-medium">
+                className="flex items-center gap-1 text-xs font-semibold text-white bg-indigo-600 rounded-lg px-3 py-1.5 hover:bg-indigo-700 shadow-sm">
                 {claimTableView ? "▤ Card view" : "▤ Table view"}
               </button>
               <button onClick={exportClaimExcel}
