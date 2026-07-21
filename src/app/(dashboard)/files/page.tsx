@@ -505,12 +505,24 @@ export default function FilesPage() {
           </div>
 
           {loading && <div className="text-center py-16 text-gray-400">Loading...</div>}
-          {!loading && (soView ? soRows.length === 0 : filtered.length === 0) && (
-            <div className="text-center py-16 text-gray-300">
-              <p className="text-4xl mb-2">📂</p>
-              <p className="text-sm">No documents match</p>
-            </div>
-          )}
+          {!loading && (soView ? soRows.length === 0 : filtered.length === 0) && (() => {
+            // Admin testing hint: if the ONLY matching docs are TEST docs (hidden), offer to reveal them.
+            const hiddenTest = isAdmin && !showTest
+              ? requests.filter(r => r.isTest && requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, statusFilter)).length
+              : 0
+            return (
+              <div className="text-center py-16 text-gray-300">
+                <p className="text-4xl mb-2">📂</p>
+                <p className="text-sm">No documents match</p>
+                {hiddenTest > 0 && (
+                  <button onClick={() => setShowTest(true)}
+                    className="mt-3 text-xs font-semibold text-purple-600 border border-purple-300 rounded-lg px-3 py-1.5 hover:bg-purple-50">
+                    🧪 {hiddenTest} test document{hiddenTest > 1 ? "s" : ""} hidden — click to show
+                  </button>
+                )}
+              </div>
+            )
+          })()}
 
           {/* LG "By SO" view — flat SO list grouped by Port / Ship Date, bulk-selectable */}
           {soView && soRows.length > 0 && (
