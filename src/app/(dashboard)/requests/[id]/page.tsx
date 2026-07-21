@@ -15,6 +15,74 @@ const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isN
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
 
+// Shared NYG-style flat SO table for the "by SO" approver screens (claim / GW). One row per SO
+// with a checkbox on rows the viewer may act on, plus a STATUS badge. Selection + batch actions
+// stay in each screen's existing header/footer bar — this only renders the grid.
+function SoApprovalTable({ items, selected, onToggle, canApprove, statusOf, showActual = true }: {
+  items: any[]
+  selected: Set<string>
+  onToggle: (id: string, checked: boolean) => void
+  canApprove: (item: any) => boolean
+  statusOf: (item: any) => { t: string; c: string }
+  showActual?: boolean
+}) {
+  const RIGHT = new Set(["QTY AIR", "GROSS (KG)", "EST. (THB)", "ACTUAL (THB)"])
+  const cols: { h: string; get: (it: any) => any }[] = [
+    { h: "SO", get: it => it.so },
+    { h: "STYLE", get: it => it.style },
+    { h: "BRAND", get: it => it.brand || "-" },
+    { h: "CUSTOMER PO", get: it => it.customerPO || "-" },
+    { h: "PO GARMENT", get: it => it.poGarment || "-" },
+    { h: "QTY AIR", get: it => fmtNum(it.qtyRequestAir) },
+    { h: "GROSS (KG)", get: it => it.grossWeight != null ? fmtNum(it.grossWeight, 2) : "-" },
+    { h: "EST. (THB)", get: it => fmtNum(it.airFreight) },
+    ...(showActual ? [{ h: "ACTUAL (THB)", get: (it: any) => fmtNum(it.actualAirFreight) }] : []),
+    { h: "CLAIM DEPT", get: it => getSplits(it).map((s: any) => deptLabel(s.dept)).join(", ") || "-" },
+  ]
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-auto max-h-[70vh]">
+      <table className="text-xs w-full">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-2 py-2 w-8 sticky left-0 top-0 bg-gray-50 z-30"></th>
+            {cols.map(c => (
+              <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h}</th>
+            ))}
+            <th className="px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 text-left z-20">STATUS</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {items.map((item: any) => {
+            const sel = selected.has(item.id)
+            const mine = canApprove(item)
+            const st = statusOf(item)
+            return (
+              <tr key={item.id} className={`hover:bg-gray-50 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
+                <td className={`px-2 py-1.5 text-center sticky left-0 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
+                  {mine && (
+                    <input type="checkbox" checked={sel}
+                      onChange={e => onToggle(item.id, e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-blue-600" />
+                  )}
+                </td>
+                {cols.map(c => (
+                  <td key={c.h}
+                    className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""}`}>
+                    {c.get(item)}
+                  </td>
+                ))}
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  <span className={`px-2 py-0.5 rounded-full font-medium ${st.c}`}>{st.t}</span>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 // Executive summary shown to the President at final approval (both BU).
 // Focus: total ACTUAL air freight + a breakdown of how much each department claims,
 // then the SO table, then the single approve button centered below it.
@@ -3222,6 +3290,10 @@ export default function RequestDetailPage() {
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs font-medium">
+                <button onClick={() => setClaimTableView(v => !v)}
+                  className="flex items-center gap-1 text-xs font-semibold text-white bg-indigo-600 rounded-lg px-3 py-1.5 hover:bg-indigo-700 shadow-sm">
+                  {claimTableView ? "▤ Card view" : "▤ Table view"}
+                </button>
                 <span className={pendingItems.length > 0 ? "text-yellow-600" : "text-gray-300"}>{pendingItems.length} pending</span>
                 <span className="text-green-600">{approvedCount} approved</span>
                 {pendingItems.length > 0 && (
@@ -3343,7 +3415,13 @@ export default function RequestDetailPage() {
               </div>
             )}
 
-            {nextItems.map((item: any) => {
+            {claimTableView && (
+              <SoApprovalTable items={nextItems} selected={nextSelected}
+                onToggle={(id, checked) => setNextSelected(prev => { const s = new Set(prev); checked ? s.add(id) : s.delete(id); return s })}
+                canApprove={(i: any) => i.itemStatus === "LOG_PASSED"}
+                statusOf={(i: any) => i.itemStatus === "CLAIM_PASSED" ? { t: "Approved ✓", c: "bg-green-100 text-green-700" } : i.itemStatus === "LOG_PASSED" ? { t: "Your turn", c: "bg-yellow-100 text-yellow-700" } : { t: "Pending", c: "bg-gray-100 text-gray-500" }} />
+            )}
+            {!claimTableView && nextItems.map((item: any) => {
               const isPending = item.itemStatus === "LOG_PASSED"
               const isPassed = item.itemStatus === "CLAIM_PASSED"
               const isSub = submitting === item.id
@@ -4754,6 +4832,10 @@ export default function RequestDetailPage() {
               <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">GW</span>
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
+              <button onClick={() => setClaimTableView(v => !v)}
+                className="flex items-center gap-1 text-xs font-semibold text-white bg-indigo-600 rounded-lg px-3 py-1.5 hover:bg-indigo-700 shadow-sm">
+                {claimTableView ? "▤ Card view" : "▤ Table view"}
+              </button>
               <span className="text-yellow-600">{(req.items||[]).filter((i:any) => i.itemStatus === "LOG_PASSED").length} pending</span>
               <span className="text-green-600">{(req.items||[]).filter((i:any) => i.itemStatus === "COMPLETED").length} approved</span>
               <span className="text-red-600">{(req.items||[]).filter((i:any) => i.itemStatus === "REJECTED").length} rejected</span>
@@ -4800,7 +4882,14 @@ export default function RequestDetailPage() {
               Claim Department: <span className="font-semibold text-emerald-700">{req.claimDepartment === "SUPPLIER_IN" ? "Supplier (Internal)" : req.claimDepartment === "SUPPLIER_OUT" ? "Supplier (External)" : req.claimDepartment}</span>
             </div>
           )}
-          {(req.items||[]).filter((i:any) => ["LOG_PASSED","COMPLETED","REJECTED"].includes(i.itemStatus)).map((item: any) => {
+          {claimTableView && (
+            <SoApprovalTable items={(req.items||[]).filter((i:any) => ["LOG_PASSED","COMPLETED","REJECTED"].includes(i.itemStatus))}
+              selected={claimGwSelected}
+              onToggle={(id, checked) => setClaimGwSelected(prev => { const n = new Set(prev); checked ? n.add(id) : n.delete(id); return n })}
+              canApprove={(i: any) => i.itemStatus === "LOG_PASSED"}
+              statusOf={(i: any) => i.itemStatus === "COMPLETED" ? { t: "Completed", c: "bg-green-100 text-green-700" } : i.itemStatus === "REJECTED" ? { t: "Rejected", c: "bg-red-100 text-red-700" } : { t: "Your turn", c: "bg-yellow-100 text-yellow-700" }} />
+          )}
+          {!claimTableView && (req.items||[]).filter((i:any) => ["LOG_PASSED","COMPLETED","REJECTED"].includes(i.itemStatus)).map((item: any) => {
             const isSub = submitting === item.id || submitting === "_batch"
             const isRejRow = rejectingSo === item.id
             const isPending = item.itemStatus === "LOG_PASSED"
