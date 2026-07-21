@@ -16,17 +16,25 @@ const rates = [
   ["TURKEY", 165], ["PHILIPPINES", 65], ["SWEDEN", 285],
 ]
 
-// ── Description → WT charge per pc (kg) ── 9 items
+// ── Description → WT charge per pc (kg) ──
 const descriptions = [
-  ["SHORTS", 0.25],
-  ["JACKET,HOODIE,PULLOVER,SEATSHIRT", 0.45],
-  ["TANK,T-SHIRT,SHIRT", 0.2],
-  ["POLO SHIRT", 0.25],
-  ["BOXER", 0.09],
-  ["PANTS", 0.35],
-  ["HEADBAND", 0.07],
-  ["GLOVES", 0.06],
-  ["SLEEVES", 0.05],
+  ["BOXER", 0.12],
+  ["GLOVES", 0.03],
+  ["HEADBAND", 0.03],
+  ["JACKET,Hoodie", 0.41],
+  ["JACKET,PULLOVER,SWEATSHIRT", 0.99],
+  ["JACKET,SWEATSHIRT,PULLOVER", 0.60],
+  ["KNITTED POLO SHIRT", 0.30],
+  ["KNITTED SHIRT", 0.25],
+  ["PANTS", 0.76],
+  ["POLO SHIRT", 0.37],
+  ["PULLOVER", 0.35],
+  ["PULLOVER,SWEATSHIRT", 0.56],
+  ["SHIRT", 0.38],
+  ["SHORTS", 0.39],
+  ["SLEEVES", 0.07],
+  ["TANK,T-shirt", 0.21],
+  ["T-SHIRT", 0.26],
 ]
 
 // ── Brands ── (add when provided)
@@ -43,6 +51,8 @@ async function main() {
       where: { name }, update: { weightPerUnit, isActive: true }, create: { name, weightPerUnit, isActive: true },
     })
   }
+  // Make this list authoritative: drop any old description not in it (no FK — items store a string).
+  await prisma.masterDescription.deleteMany({ where: { name: { notIn: descriptions.map(d => d[0]) } } })
   for (const name of brands) {
     await prisma.masterBrand.upsert({ where: { name }, update: { isActive: true }, create: { name, isActive: true } })
   }

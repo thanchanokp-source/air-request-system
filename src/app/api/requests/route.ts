@@ -154,7 +154,36 @@ export async function POST(req: NextRequest) {
     const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
     const descWeights: Record<string, number> = {}
     for (const d of descList) descWeights[descKey(d.name)] = d.weightPerUnit || 0
-    const wtChargeFor = (desc: string) => descWeights[descKey(desc)] ?? 0
+    const descKeys = Object.keys(descWeights)
+    // Levenshtein ratio — catches typos / plurals / minor variations, but a REORDER of the same
+    // words (e.g. JACKET,PULLOVER,SWEATSHIRT vs JACKET,SWEATSHIRT,PULLOVER) scores low, so those
+    // stay distinct. Only truly-unknown descriptions fall through (→ held + alert LG/jariya).
+    const lev = (a: string, b: string) => {
+      const m = a.length, n = b.length
+      if (!m) return n; if (!n) return m
+      const dp = Array.from({ length: n + 1 }, (_, j) => j)
+      for (let i = 1; i <= m; i++) {
+        let prev = dp[0]; dp[0] = i
+        for (let j = 1; j <= n; j++) {
+          const tmp = dp[j]
+          dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1))
+          prev = tmp
+        }
+      }
+      return dp[n]
+    }
+    const FUZZY_MIN = 0.85 // ≥85% similar → treat as the same description
+    const wtChargeFor = (desc: string): number => {
+      const k = descKey(desc)
+      if (!k) return 0
+      if (descWeights[k] != null) return descWeights[k]        // exact (after normalise)
+      let best = "", ratio = 0
+      for (const mk of descKeys) {
+        const r = 1 - lev(k, mk) / Math.max(k.length, mk.length, 1)
+        if (r > ratio) { ratio = r; best = mk }
+      }
+      return ratio >= FUZZY_MIN ? descWeights[best] : 0        // no close match → 0 (held + alert)
+    }
     const missingDescriptions = [...new Set(items
       .map((i: any) => String(col(i, "DESCRIPTION") || "").trim())
       .filter((d: string) => d && wtChargeFor(d) <= 0))] as string[]
