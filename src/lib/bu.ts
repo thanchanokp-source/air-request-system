@@ -47,7 +47,8 @@ export function viewableBus(user: any): { bus: Bu[]; canAll: boolean } {
   const role = user.role || ""
   const roles: string[] = [role, ...(user.roles || [])].filter(Boolean)
   const bu = user.bu
-  const canAll = role === "ADMIN" || bu === "ALL" || canViewBothBu(user)
+  // VISITOR = read-only viewer → sees every BU (no actions, since it holds no approver role).
+  const canAll = role === "ADMIN" || role === "VISITOR" || roles.includes("VISITOR") || bu === "ALL" || canViewBothBu(user)
   if (canAll) return { bus: [...BUS], canAll: true }
   // BU is derived from ROLES, not the User.bu field — that field is often stale/mismatched
   // (e.g. a MER_GW whose bu was left "NYG"), which would wrongly grant a second BU.

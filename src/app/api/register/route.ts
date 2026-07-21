@@ -10,6 +10,7 @@ import { sendVerificationEmail } from "@/lib/notify"
 function resolveRole(position: string, bu: string): string | null {
   if (position === "ACCOUNTING") return "ACCOUNTING" // cross-BU (both NYG & GW)
   if (position === "MER") return bu === "GW" ? "MER_GW" : "MER_USER"
+  if (position === "VISITOR") return "VISITOR" // read-only viewer (all BU, no actions)
   return null
 }
 
