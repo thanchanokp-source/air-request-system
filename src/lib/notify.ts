@@ -935,6 +935,29 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       return
     }
 
+    // NYK (NYG 3-role claim): SCM_NYK_APPROVER is NOT in STATUS_ROLES[PENDING_CLAIM] (which only
+    // lists DVM_/CLAIM_ dept roles), so it would never be emailed. Alert them explicitly when the
+    // doc enters PENDING_CLAIM and any SO has an NYK split — each approver gets their OWN ?as= link.
+    // (Does NOT return — the generic sender below still notifies COMMERCIAL / PROCUREMENT / PRODUCTION.)
+    if (newStatus === "PENDING_CLAIM") {
+      const nykItems = (req.items as any[]).filter(i => getSplits(i).some((s: any) => s.dept === "NYK" || s.dept === "SCM NYK"))
+      if (nykItems.length) {
+        const us = await (prisma.user as any).findMany({ where: { role: "SCM_NYK_APPROVER", isActive: true }, select: { email: true } })
+        if (us.length) {
+          let token = (req as any).scmNykApproverToken
+          if (!token) { token = randomUUID(); await prisma.airRequest.update({ where: { id: requestId }, data: { scmNykApproverToken: token } as any }) }
+          const nykLink = `${APP_URL}/requests/${requestId}`
+          const brands = [...new Set(nykItems.map((i: any) => i.brand).filter(Boolean))].join(", ")
+          const subj = `[Claim – NYK] Pending Approval${brands ? ` — Brand: ${brands}` : ""} — ${req.documentNo}`
+          for (const u of us) {
+            if (!u.email) continue
+            const ml = `${APP_URL}/api/magic-login?token=${token}&as=${encodeURIComponent(u.email)}&redirect=/approvals`
+            await sendMail(u.email, subj, buildHtml(req, "PENDING_CLAIM", nykLink, undefined, undefined, ml))
+          }
+        }
+      }
+    }
+
     // For claim statuses, filter by depts that actually have items
     const activeDepts = new Set(req.items.map((i:any) => i.claimDepartment).filter(Boolean))
 
