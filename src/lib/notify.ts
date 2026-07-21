@@ -873,6 +873,21 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
             }
             continue
           }
+          // COMMERCIAL claim = the SAME merch people picked on this doc: DVM MER (entry,
+          // assignedDvmMer) → VP MER (VP, assignedVpMer). Route to THAT specific person, not the
+          // priority-1 DVM MER. (Falls through to the generic role-priority branch if unset.)
+          if (dept === "COMMERCIAL") {
+            const email = isVp ? (req as any).assignedVpMer : (req as any).assignedDvmMer
+            if (email) {
+              const u = await prisma.user.findFirst({ where: { email, isActive: true } as any, select: { id: true, email: true } })
+              if (u?.email) {
+                const html = buildHtml(req, newStatus, docLink, undefined, undefined, await magicFor(u.id))
+                await sendMail(u.email, `[Claim${isVp ? " VP" : ""} – COMMERCIAL] Pending Approval — ${items.length} SO — ${req.documentNo}`, html)
+                continue
+              }
+            }
+            // else: no assigned person → fall through to the generic role-priority branch below
+          }
           // Procurement entry goes to PURCHASING only (they decide: approve or forward to
           // Sourcing). Sourcing is reached later via forward, not the initial alert.
           const procEntryFilter = (!isVp && dept === "PROCUREMENT") ? { procurementType: "PURCHASING" } : {}

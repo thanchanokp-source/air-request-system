@@ -64,6 +64,12 @@ export default function ApprovalsPage() {
       if (["REJECTED", "COMPLETED", "ACCOUNTING_PENDING"].includes(i.itemStatus)) return false
       const act = actingClaimForSO(myRoles, getSplits(i).map((s: any) => s.dept))
       if (!act) return false
+      // COMMERCIAL claim = the SPECIFIC merch people picked on this doc (DVM MER entry / VP MER VP),
+      // not every DVM_MER/VP_MER. Scope it to the assigned person so others don't see it.
+      if (act.dept === "COMMERCIAL") {
+        const wantEmail = act.isVp ? r.assignedVpMer : r.assignedDvmMer
+        if (wantEmail && String(wantEmail).toLowerCase() !== String(userEmail || "").toLowerCase()) return false
+      }
       // Check the SPLIT status of the dept THIS user acts on (not the whole item) — so
       // once they approve their dept, the SO drops from their queue even if OTHER depts
       // on the same SO are still pending.
