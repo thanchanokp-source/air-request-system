@@ -1242,6 +1242,46 @@ export default function RequestDetailPage() {
     setSubmitting(null)
   }
 
+  // Download the ORIGINAL uploaded file UNCHANGED (colours, columns, layout) but inject a claim-dept
+  // dropdown (data validation) onto every "CLAIM DEPT n" column so SCM can pick from the list.
+  const downloadMerFileWithClaimDropdown = async (attId: string, fileName: string) => {
+    try {
+      const res = await fetch(`/api/attachments/${attId}`)
+      if (!res.ok) throw new Error("fetch failed")
+      const buf = await res.arrayBuffer()
+      const ExcelJSMod: any = await import("exceljs")
+      const ExcelJS = ExcelJSMod.default || ExcelJSMod
+      const wb = new ExcelJS.Workbook()
+      await wb.xlsx.load(buf)
+      const ws = wb.worksheets[0]
+      if (ws) {
+        const claimCols: number[] = []
+        ws.getRow(1).eachCell((cell: any, col: number) => {
+          if (String(cell.value ?? "").trim().toUpperCase().startsWith("CLAIM DEPT")) claimCols.push(col)
+        })
+        const listFormula = `"${CLAIM_DEPTS.join(",")}"`
+        const lastRow = Math.max(ws.rowCount, 1) + 100 // cover current + newly added rows
+        for (const c of claimCols) {
+          for (let r = 2; r <= lastRow; r++) {
+            ws.getCell(r, c).dataValidation = {
+              type: "list", allowBlank: true, formulae: [listFormula],
+              showErrorMessage: true, errorStyle: "error", errorTitle: "Invalid claim dept",
+              error: `Please select from the list: ${CLAIM_DEPTS.join(", ")}`,
+            }
+          }
+        }
+      }
+      const out = await wb.xlsx.writeBuffer()
+      const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url; a.download = fileName || `claim_${req.documentNo}.xlsx`; a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      window.open(`/api/attachments/${attId}`, "_blank") // fallback: raw file, no dropdown
+    }
+  }
+
   const rejectStyle = async (style: string) => {
     // NYG Forward email must be a company address (@nanyangtextile.com only).
     const fw = !isGWRequest ? rejectForwardEmail.trim() : ""
@@ -2406,12 +2446,12 @@ export default function RequestDetailPage() {
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               {/* Export */}
-              <button type="button" onClick={() => {
-                // Prefer the ACTUAL original uploaded file (unchanged from MER). Not role-based so it
-                // also covers admin TEST uploads. Fallback: generate a same-format sheet.
+              <button type="button" onClick={async () => {
+                // Prefer the ACTUAL original uploaded file (unchanged from MER) + claim-dept dropdown.
+                // Not role-based so it also covers admin TEST uploads. Fallback: generate a sheet.
                 const merAtt = (req.attachments || []).find((a: any) =>
                   !a.itemId && /\.xlsx?$/i.test(a.fileName || "") && !LG_FILE_CATS.includes(a.category) && a.uploadedBy?.role !== "SCM_USER")
-                if (merAtt) { window.open(`/api/attachments/${merAtt.id}`, "_blank"); return }
+                if (merAtt) { await downloadMerFileWithClaimDropdown(merAtt.id, merAtt.fileName); return }
                 // Same layout as the file MER uploaded (upload template) so SCM works in a familiar
                 // format: original columns + CLAIM DEPT 1-3 / %CLAIM / REASON for SCM to fill.
                 const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
@@ -5311,7 +5351,7 @@ export default function RequestDetailPage() {
                     // also works for admin TEST uploads (uploader role = ADMIN, not MER).
                     const merAtt = (req.attachments || []).find((a: any) =>
                       !a.itemId && /\.xlsx?$/i.test(a.fileName || "") && !LG_FILE_CATS.includes(a.category) && a.uploadedBy?.role !== "SCM_USER")
-                    if (merAtt) { window.open(`/api/attachments/${merAtt.id}`, "_blank"); return }
+                    if (merAtt) { await downloadMerFileWithClaimDropdown(merAtt.id, merAtt.fileName); return }
                     const rows = pendingScmItems.map((item: any) => {
                       const d = soClaimDepts[item.id] || []
                       return {
