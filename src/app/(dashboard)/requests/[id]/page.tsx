@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState, useMemo, useRef, useCallback } from "react"
+import { useEffect, useState, useMemo, useRef, useCallback, createElement } from "react"
 import { useSession } from "next-auth/react"
 import { useParams, useRouter } from "next/navigation"
 import * as XLSX from "xlsx"
@@ -453,10 +453,33 @@ export default function RequestDetailPage() {
   const [claimGwSelected, setClaimGwSelected] = useState<Set<string>>(new Set())
   const [claimApproversList, setClaimApproversList] = useState<any[]>([])
   const [recalculating, setRecalculating] = useState(false)
+  const [docPdfLoading, setDocPdfLoading] = useState(false)
   const [deletingAtt, setDeletingAtt] = useState<string | null>(null)
   const [hawbRefreshKey, setHawbRefreshKey] = useState(0)
   const [importingLg, setImportingLg] = useState(false)
   const claimAutoSaveReady = useRef(false)
+
+  // Download the whole document as a formal PDF — one page per SO (same layout as
+  // ALL FILES). Available on the detail page so any doc (incl. TEST) can be verified.
+  const downloadWholeDocPdf = useCallback(async () => {
+    setDocPdfLoading(true)
+    try {
+      const fullReq = await fetch(`/api/requests/${id}`).then(r => r.json())
+      const items = (fullReq.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
+      if (items.length === 0) { alert("No SO to print"); return }
+      const [{ pdf }, { CombinedPdfDocument }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/request-pdf"),
+      ])
+      const pages = items.map((item: any) => ({ req: fullReq, item }))
+      const blob = await (pdf(createElement(CombinedPdfDocument as any, { pages }) as any) as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url; a.download = `${fullReq.documentNo}.pdf`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch { alert("PDF generation failed") }
+    finally { setDocPdfLoading(false) }
+  }, [id])
 
   // Claim Forward (Option B) state
   const [claimFwdQ, setClaimFwdQ] = useState("")
@@ -1530,6 +1553,11 @@ export default function RequestDetailPage() {
             </span>
           )
         })()}
+        <button onClick={downloadWholeDocPdf} disabled={docPdfLoading}
+          title="Download the whole document as PDF (one page per SO)"
+          className="ml-auto text-xs bg-gray-700 text-white px-3 py-1 rounded-lg hover:bg-gray-800 disabled:opacity-50 font-medium whitespace-nowrap">
+          {docPdfLoading ? "Generating..." : "↓ PDF (whole document)"}
+        </button>
         {role === "ADMIN" && (
           <button onClick={async () => {
             setRecalculating(true)

@@ -92,6 +92,11 @@ export default function FilesPage() {
   // only the BU(s) their ROLE implies. Derived from roles (not the stale User.bu field).
   const { bus: viewBus, canAll } = useMemo(() => viewableBus(session?.user), [session])
   const buOptions: string[] = useMemo(() => (canAll ? ["ALL", ...viewBus] : viewBus), [viewBus, canAll])
+  // Only admins may reveal TEST documents (hidden from everyone else, incl. in counts).
+  const isAdmin = useMemo(() => {
+    const u: any = session?.user
+    return u?.role === "ADMIN" || (Array.isArray(u?.roles) && u.roles.includes("ADMIN"))
+  }, [session])
 
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,6 +117,7 @@ export default function FilesPage() {
   const [hawbLoading, setHawbLoading] = useState(false)
   const [hawbQuery, setHawbQuery] = useState("")
   const [unbookedOnly, setUnbookedOnly] = useState(false)
+  const [showTest, setShowTest] = useState(false)
   const [selectedForCombine, setSelectedForCombine] = useState<Set<string>>(new Set())
   const [combineLoading, setCombineLoading] = useState(false)
   const [brandF, setBrandF] = useState<string[]>([])
@@ -134,8 +140,8 @@ export default function FilesPage() {
   }, [])
 
   const folderFiltered = useMemo(() =>
-    requests.filter(r => !r.isTest && requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, statusFilter)),
-    [requests, statusFilter, activeBU])
+    requests.filter(r => (showTest || !r.isTest) && requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, statusFilter)),
+    [requests, statusFilter, activeBU, showTest])
 
   const uniq = (arr: any[]) => [...new Set(arr.filter(Boolean))].sort()
   const brandOpts = useMemo(() => uniq(folderFiltered.map(r => r.brandName)), [folderFiltered])
@@ -407,7 +413,7 @@ export default function FilesPage() {
             <p className="text-xs font-semibold text-gray-500 px-1 mb-1.5 uppercase tracking-wide">Status</p>
             <div className="space-y-1">
               {STATUS_CHIPS.map(c => {
-                const count = requests.filter(r => !r.isTest && requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, c.key)).length
+                const count = requests.filter(r => (showTest || !r.isTest) && requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, c.key)).length
                 const active = statusFilter === c.key
                 return (
                   <button key={c.key} onClick={() => setStatusFilter(c.key)}
@@ -451,6 +457,13 @@ export default function FilesPage() {
                 <button onClick={() => setUnbookedOnly(v => !v)}
                   className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${unbookedOnly ? "bg-amber-500 text-white border-amber-500" : "bg-white text-amber-700 border-amber-300 hover:bg-amber-50"}`}>
                   {unbookedOnly ? "● Showing unbooked" : "○ Unbooked only"}
+                </button>
+              )}
+              {isAdmin && (
+                <button onClick={() => setShowTest(v => !v)}
+                  title="Admin only — include TEST documents (hidden from other users)"
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${showTest ? "bg-purple-600 text-white border-purple-600" : "bg-white text-purple-600 border-purple-300 hover:bg-purple-50"}`}>
+                  {showTest ? "● Showing test" : "○ Test docs"}
                 </button>
               )}
               <button onClick={() => { setCombineMode(m => !m); setSelectedForCombine(new Set()) }}
