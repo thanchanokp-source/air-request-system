@@ -8,6 +8,7 @@ const prisma = new PrismaClient()
 // [email, name, role, roles[], bu, claimDepartment?, priority?, procurementType?]
 const users = [
   ["thanchanok.p@nanyangtextile.com", "Thanchanok P", "ADMIN", ["ADMIN"], "ALL"],
+  ["jariya.t@nanyangtextile.com", "Jariya T", "ADMIN", ["ADMIN"], "ALL"],
   // ── add the rest here, e.g.:
   // ["apisit.n@nanyangtextile.com", "Apisit N", "MER_USER", ["MER_USER"], "NYG"],
   // ["saji.t@nanyangtextile.com",   "Saji T",   "VP_SCM",   ["VP_SCM"],   "NYG"],
