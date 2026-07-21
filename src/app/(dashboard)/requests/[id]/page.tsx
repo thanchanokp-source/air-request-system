@@ -2407,9 +2407,10 @@ export default function RequestDetailPage() {
             <div className="flex items-center gap-2 flex-wrap">
               {/* Export */}
               <button type="button" onClick={() => {
-                // Prefer the ACTUAL file MER attached (same format MER filled). Fallback: generate.
+                // Prefer the ACTUAL original uploaded file (unchanged from MER). Not role-based so it
+                // also covers admin TEST uploads. Fallback: generate a same-format sheet.
                 const merAtt = (req.attachments || []).find((a: any) =>
-                  ["MER_USER", "MER_EA"].includes(a.uploadedBy?.role) && !a.itemId && /\.xlsx?$/i.test(a.fileName || ""))
+                  !a.itemId && /\.xlsx?$/i.test(a.fileName || "") && !LG_FILE_CATS.includes(a.category) && a.uploadedBy?.role !== "SCM_USER")
                 if (merAtt) { window.open(`/api/attachments/${merAtt.id}`, "_blank"); return }
                 // Same layout as the file MER uploaded (upload template) so SCM works in a familiar
                 // format: original columns + CLAIM DEPT 1-3 / %CLAIM / REASON for SCM to fill.
@@ -5305,8 +5306,11 @@ export default function RequestDetailPage() {
                   {/* Export — give SCM the ACTUAL file MER attached (same format MER filled).
                       Fallback to a generated sheet only if no MER attachment is found. */}
                   <button type="button" onClick={async () => {
+                    // The ORIGINAL uploaded file = earliest doc-level xlsx that isn't an LG file or an
+                    // SCM re-upload (attachments come ordered by createdAt asc). Not role-based, so it
+                    // also works for admin TEST uploads (uploader role = ADMIN, not MER).
                     const merAtt = (req.attachments || []).find((a: any) =>
-                      ["MER_USER", "MER_EA"].includes(a.uploadedBy?.role) && !a.itemId && /\.xlsx?$/i.test(a.fileName || ""))
+                      !a.itemId && /\.xlsx?$/i.test(a.fileName || "") && !LG_FILE_CATS.includes(a.category) && a.uploadedBy?.role !== "SCM_USER")
                     if (merAtt) { window.open(`/api/attachments/${merAtt.id}`, "_blank"); return }
                     const rows = pendingScmItems.map((item: any) => {
                       const d = soClaimDepts[item.id] || []
