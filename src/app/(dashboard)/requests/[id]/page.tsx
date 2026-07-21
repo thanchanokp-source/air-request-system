@@ -921,9 +921,19 @@ export default function RequestDetailPage() {
   const gwFwdItems = (() => {
     if (!isGwForwardRole) return []
     if (role === "CLAIM_NEXT_APPROVER") {
-      // Empty itemIds = whole-department (legacy/older rows stored []), NOT "no SO".
-      const ids = Array.isArray(myClaimFwdRow?.itemIds) && myClaimFwdRow.itemIds.length ? myClaimFwdRow.itemIds : null
-      return ids ? gwFwdBase.filter((i: any) => ids.includes(i.id)) : gwFwdBase
+      // MERGE every forward addressed to THIS person (by email), not just the one link's
+      // token. e.g. the Production EVP (khomkrit) gets a separate forward from rushan (G1/G3)
+      // and pk (G2/G4) → both land here as ONE combined view. Whichever link they open shows
+      // all SOs forwarded to them, and they can approve whatever has arrived so far (no need
+      // to wait for the other G-group).
+      const myEmail = String((session?.user as any)?.email || "").toLowerCase()
+      const myRows = (req?.claimForwards || []).filter((f: any) =>
+        String(f.nextEmail || "").toLowerCase() === myEmail && f.dept === gwFwdCanonicalDept)
+      // Empty itemIds on any row = whole-department scope (legacy rows stored []), NOT "no SO".
+      const wholeDept = myRows.some((f: any) => !Array.isArray(f.itemIds) || f.itemIds.length === 0)
+      if (wholeDept || myRows.length === 0) return gwFwdBase
+      const ids = new Set<string>(myRows.flatMap((f: any) => Array.isArray(f.itemIds) ? f.itemIds : []))
+      return gwFwdBase.filter((i: any) => ids.has(i.id))
     }
     const covered = new Set<string>((req?.claimForwards || [])
       .filter((f: any) => f.dept === gwFwdCanonicalDept)

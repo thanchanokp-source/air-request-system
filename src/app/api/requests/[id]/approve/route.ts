@@ -1360,12 +1360,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let dept: string | null = null
     let currentPos = 0
     let ownerRow: any = null
+    let myFwdRows: any[] = []
     if (userRole === "CLAIM_NEXT_APPROVER") {
-      const email = session.user?.email || ""
+      const email = (session.user?.email || "").toLowerCase()
       const tok = (session.user as any).claimNextToken || null
-      ownerRow = tok
-        ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, token: tok } })
-        : (email ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: email } }) : null)
+      // MERGE every forward addressed to this person (e.g. the Production EVP gets one forward
+      // from the G1/G3 approver and one from the G2/G4 approver) → finish them together, no
+      // matter which link they came in on. Scope to the dept of the row matching their token.
+      const tokRow = tok ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, token: tok } }) : null
+      const allRows = await (prisma as any).claimForward.findMany({ where: { requestId: id } })
+      myFwdRows = allRows.filter((r: any) => String(r.nextEmail || "").toLowerCase() === email && (!tokRow || r.dept === tokRow.dept))
+      ownerRow = tokRow || myFwdRows[0]
       if (!ownerRow) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
       dept = ownerRow.dept
       currentPos = ownerRow.position ?? 0
@@ -1395,9 +1400,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const deptPendingIds: string[] = items.filter((it: any) => itemHasPendingDept(it, dept!)).map((it: any) => it.id)
     let ownedIds: string[]
     if (ownerRow) {
-      ownedIds = Array.isArray(ownerRow.itemIds) && ownerRow.itemIds.length
-        ? (ownerRow.itemIds as string[]).filter((x) => deptPendingIds.includes(x))
-        : deptPendingIds
+      // Union EVERY forward row addressed to this person (not just the link's token) so the
+      // EVP finishes all SOs forwarded to them across the G-groups in one action.
+      const rowsForIds = myFwdRows.length ? myFwdRows : [ownerRow]
+      const anyWhole = rowsForIds.some((r: any) => !Array.isArray(r.itemIds) || !r.itemIds.length)
+      const unionIds = new Set<string>(rowsForIds.flatMap((r: any) => Array.isArray(r.itemIds) ? r.itemIds : []))
+      ownedIds = anyWhole ? deptPendingIds : deptPendingIds.filter((x) => unionIds.has(x))
     } else {
       const rows = await (prisma as any).claimForward.findMany({ where: { requestId: id, dept } })
       const covered = new Set<string>(rows.flatMap((r: any) => (Array.isArray(r.itemIds) ? r.itemIds : [])))
