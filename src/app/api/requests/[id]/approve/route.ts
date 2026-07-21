@@ -46,6 +46,23 @@ async function recalcDocStatusGW(id: string): Promise<string> {
   return "COMPLETED"
 }
 
+// NYK claim is split BY BRAND across the SCM NYK Approvers (2 people). We must NOT
+// forward the document to the EVP (k.wallop) + CR user (benjamat) until EVERY
+// non-rejected NYK-split SO in the document has been approved by the Approver level.
+// This lets the EVP/CR alert fire ONCE — after all brands are approved — not per SO.
+// Works for both NYG (dept "NYK") and GW (dept "SCM NYK").
+async function allNykApproverApproved(reqId: string): Promise<boolean> {
+  const items = await prisma.airRequestItem.findMany({
+    where: { requestId: reqId },
+    include: { claimApprovals: { select: { role: true } } },
+  })
+  const nykSOs = items.filter(it =>
+    it.itemStatus !== "REJECTED" &&
+    getSplits(it).some((s: any) => (s.dept === "NYK" || s.dept === "SCM NYK") && s.status !== "REJECTED"))
+  if (nykSOs.length === 0) return false
+  return nykSOs.every(it => ((it as any).claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER"))
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -1121,11 +1138,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const crNo = (request as any).crNo || null
 
     // NYK Approver assigns the CR-entry person + EVP once for the whole document.
-    // Notify EVP/CR only on the FIRST assignment (null → set), not every batch/SO.
-    let gwNykFirstAssign = false
     if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
-      const cur = await (prisma.airRequest as any).findUnique({ where: { id }, select: { assignedScmNykEvp: true, assignedScmNykCr: true } })
-      gwNykFirstAssign = (!!body.evpEmail && !cur?.assignedScmNykEvp) || (!!body.crEmail && !cur?.assignedScmNykCr)
       await prisma.airRequest.update({ where: { id }, data: { assignedScmNykEvp: body.evpEmail || null, assignedScmNykCr: body.crEmail || null } as any })
     }
 
@@ -1177,7 +1190,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (count === 0) return NextResponse.json({ error: "No SO to approve (already handled or not your turn)" }, { status: 400 })
 
     await prisma.approvalLog.create({ data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `Batch approve ${count} SO — ${userRole}` } })
-    if (userRole === "SCM_NYK_APPROVER" && gwNykFirstAssign) await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+    // Alert EVP + CR user ONCE — only after EVERY brand/SO is Approver-approved,
+    // so the whole document moves to the EVP/CR step together (not per SO/brand).
+    if (userRole === "SCM_NYK_APPROVER" && await allNykApproverApproved(id)) await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
@@ -1221,10 +1236,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
       // Approver picks the specific CR-entry person + VP/EVP approver (one per doc).
       // Alert them only on the FIRST assignment (null → set), not per SO/brand.
-      let nykFirstAssignGwSo = false
       if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
         const cur = await (prisma.airRequest as any).findUnique({ where: { id }, select: { assignedScmNykEvp: true, assignedScmNykCr: true, scmNykEvpToken: true, scmNykToken: true } })
-        nykFirstAssignGwSo = (!!body.evpEmail && !cur?.assignedScmNykEvp) || (!!body.crEmail && !cur?.assignedScmNykCr)
         await prisma.airRequest.update({
           where: { id },
           data: {
@@ -1235,8 +1248,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           } as any,
         })
       }
-      // Approver's approval → alert the chosen EVP + CR user (once, with LG data).
-      if (userRole === "SCM_NYK_APPROVER" && nykFirstAssignGwSo) await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+      // Alert EVP + CR user ONCE — only after EVERY brand/SO is Approver-approved,
+      // so the whole document moves to the EVP/CR step together (not per SO/brand).
+      if (userRole === "SCM_NYK_APPROVER" && await allNykApproverApproved(id)) await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
       const nextDocStatus = await recalcDocStatusGW(id)
       if (nextDocStatus !== request.status) {
         await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
@@ -1532,7 +1546,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await prisma.approvalLog.create({
         data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `SO: ${itemData.so} — SCM NYK ${userRole === "SCM_NYK_APPROVER" ? "Approver" : "EVP"} approved` }
       })
-      let nykFirstAssign = false
       if (userRole === "SCM_NYK_APPROVER" && (body.evpEmail || body.crEmail)) {
         // Store the chosen people + a UNIQUE magic-login token each, so their email
         // link logs in AS them (via assignedScmNyk* in auth) — not as whoever's already
@@ -1541,7 +1554,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const cur = await prisma.airRequest.findUnique({ where: { id }, select: { scmNykEvpToken: true, scmNykToken: true } as any })
         const setEvp = !!body.evpEmail && !(cur as any)?.scmNykEvpToken
         const setCr = !!body.crEmail && !(cur as any)?.scmNykToken
-        nykFirstAssign = setEvp || setCr
         await prisma.airRequest.update({
           where: { id },
           data: {
@@ -1552,8 +1564,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           } as any,
         })
       }
-      // Alert EVP + CR user ONCE — when the assignment is first made, not per SO.
-      if (userRole === "SCM_NYK_APPROVER" && nykFirstAssign) await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
+      // Alert EVP + CR user ONCE — only after EVERY brand/SO is Approver-approved,
+      // so the whole document moves to the EVP/CR step together (not per SO/brand).
+      if (userRole === "SCM_NYK_APPROVER" && await allNykApproverApproved(id)) await notifyStatusChange(id, "NYK_APPROVER_DONE").catch(() => {})
       const newStatus = await recalcDocStatus(id)
       if (newStatus !== request.status) {
         await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
