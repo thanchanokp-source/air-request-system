@@ -9,7 +9,7 @@ const users = [
   // ── Admins ──
   { email: "thanchanok.p@nanyangtextile.com", name: "Thanchanok P", role: "ADMIN", roles: ["ADMIN"], bu: "ALL", pw: "1234" },
   // jariya = ADMIN + Claim Procurement (Purchasing), NYG
-  { email: "jariya.t@nanyangtextile.com", name: "Jariya T", role: "ADMIN", roles: ["ADMIN", "CLAIM_PROCUREMENT"], bu: "NYG", priority: 1, procurementType: "PURCHASING", pw: "123456" },
+  { email: "jariya.t@nanyangtextile.com", name: "Jariya T", role: "ADMIN", roles: ["ADMIN", "CLAIM_PROCUREMENT"], bu: "ALL", priority: 1, procurementType: "PURCHASING", pw: "123456" },
 
   // ── Test MER ──
   { email: "atsadet.n@nanyangtextile.com", name: "Atsadet N", role: "MER_USER", roles: ["MER_USER"], bu: "NYG", pw: "123456" },
@@ -29,9 +29,15 @@ const users = [
   // ── NYG — Logistics ──
   { email: "aoyjai.p@nanyangtextile.com", name: "Aoyjai P", role: "LOGISTICS", roles: ["LOGISTICS"], bu: "NYG" },
 
-  // ── NYG — Procurement claim ──
-  { email: "jarunee.su@nanyangtextile.com", name: "Jarunee Su", role: "CLAIM_PROCUREMENT", roles: ["CLAIM_PROCUREMENT"], bu: "NYG", priority: 1, procurementType: "SOURCING" },
-  { email: "prapakorn.s@nanyangtextile.com", name: "Prapakorn S", role: "VP_PROCUREMENT", roles: ["VP_PROCUREMENT"], bu: "NYG" },
+  // ── EA — same flow as NYG, only the top-2 merch approvers differ (ADVM → DVM).
+  //    Merges into PENDING_SCM after merch, then reuses NYG's SCM/VP SCM/claim/president.
+  { email: "sally@nanyangtextile.com", name: "Sally", role: "DVM_MER_EA", roles: ["DVM_MER_EA"], bu: "EA" },       // ADVM (step 1)
+  { email: "peshan.p@nanyangtextile.com", name: "Peshan P", role: "VP_MER_EA", roles: ["VP_MER_EA"], bu: "EA" },   // DVM (step 2)
+  { email: "quynh.nguyen@nanyangtextile.com", name: "Quynh Nguyen", role: "LOGISTICS", roles: ["LOGISTICS"], bu: "EA" }, // EA Logistics (BU-scoped, separate from NYG's)
+
+  // ── Procurement claim — cross-BU (serves NYG AND EA; GW never uses CLAIM_PROCUREMENT) ──
+  { email: "jarunee.su@nanyangtextile.com", name: "Jarunee Su", role: "CLAIM_PROCUREMENT", roles: ["CLAIM_PROCUREMENT"], bu: "ALL", priority: 1, procurementType: "SOURCING" },
+  { email: "prapakorn.s@nanyangtextile.com", name: "Prapakorn S", role: "VP_PROCUREMENT", roles: ["VP_PROCUREMENT"], bu: "ALL" },
 
   // ── NYK claim (cross-BU; used by NYG & GW) ──
   { email: "sukanya.s@nanyangtextile.com", name: "Sukanya S", role: "SCM_NYK_APPROVER", roles: ["SCM_NYK_APPROVER"], bu: "NYG", priority: 1 },

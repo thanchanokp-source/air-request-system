@@ -42,6 +42,7 @@ export default function ApprovalsPage() {
     : CLAIM_VP_ROLES.includes(role) ? role.replace("VP_", "")
     : ""
   const userClaimDept = (session?.user as any)?.claimDepartment || null
+  const userBu = (session?.user as any)?.bu || null
 
   // Multi-role: a person may hold claim roles beyond their primary login role
   // (User.roles[]). Derive every NYG claim dept they can act on so a person who is
@@ -114,7 +115,8 @@ export default function ApprovalsPage() {
     if (myRoles.includes("PRESIDENT") && r.status === "PENDING_PRESIDENT") return items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     // LG (NYG) runs in parallel with Claim — show until LG has pressed "Save & Send"
     // (logisticsSent). After that LG's work is done → drop it from the queue.
-    if (myRoles.includes("LOGISTICS") && r.bu !== "GW" && !r.logisticsSent && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
+    // Logistics is BU-scoped: NYG LG sees NYG docs, EA LG (quynh) sees EA docs. (GW uses LOGISTICS_GW.)
+    if (myRoles.includes("LOGISTICS") && r.bu !== "GW" && requestInBu(r, userBu || "NYG") && !r.logisticsSent && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }

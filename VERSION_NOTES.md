@@ -9,6 +9,14 @@
 
 ## 2026-07-21
 
+### 🌏 EA business unit (flow เดียวกับ NYG, เปลี่ยนแค่ merch 2 คน + LG)
+- Sign-up: เพิ่ม BU **EA** ใน dropdown → MER สมัครเป็น EA ได้ (role `MER_EA`)
+- เพิ่ม 3 user: **sally** = ADVM (`DVM_MER_EA`), **peshan.p** = DVM (`VP_MER_EA`), **quynh.nguyen** = Logistics EA
+- Flow: create → ADVM(sally) → DVM(peshan) → **เข้าเส้น NYG** (SCM kimita → VP SCM saji → claim → president) ที่ใช้คนร่วมกัน
+- **Logistics แยกตาม BU**: EA = quynh, NYG = aoyjai (bu-scoped notify + queue) — ไม่ปนกัน
+- **Procurement claim** = คนเดิม NYG (jarunee/prapakorn/jariya ปรับ bu=ALL ให้ครอบ EA; GW ไม่ใช้ role นี้จึงปลอดภัย)
+- **Commercial claim EA** → ทีม merch EA (sally/peshan) ผ่าน assignedDvmMer/assignedVpMer + เพิ่ม DVM_MER_EA/VP_MER_EA ใน COMMERCIAL role map
+
 ### 🔁 Claim — การส่งต่อ / การแจ้งเตือน (routing & email)
 - **Cross-BU fix (สำคัญ):** role ที่ตั้ง `bu="ALL"` (Claim-Production, VP-Production, Accounting, SCM_NYG) เคยถูกตัดออกเพราะกรอง `bu` แบบตรงตัว → แก้ให้ match `[bu, "ALL"]` ทุกจุด (claim entry, next-priority cascade, LG-files, accounting alert, approver chain, by-role picker)
 - **Production route ตาม factory G-group:**

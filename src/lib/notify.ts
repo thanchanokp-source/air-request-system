@@ -719,7 +719,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const acMagicLink = acToken ? `${APP_URL}/api/magic-login?token=${acToken}&redirect=/approvals` : undefined
       const lgHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, lgMagicLink)
       const acHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, acMagicLink)
-      const lgUsers = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "LOGISTICS" }, { roles: { has: "LOGISTICS" } }] }, select: { email: true } })
+      const lgUsers = await (prisma.user as any).findMany({ where: { isActive: true, bu: { in: [(req as any).bu || "NYG", "ALL"] }, OR: [{ role: "LOGISTICS" }, { roles: { has: "LOGISTICS" } }] }, select: { email: true } })
       const acUsers = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "ACCOUNTING" }, { roles: { has: "ACCOUNTING" } }] }, select: { email: true } })
       const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
@@ -922,7 +922,8 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       // NYG: Logistics runs IN PARALLEL with Claim → alert LG (enter INV / HAWB / Actual Air)
       // when the doc first enters the claim stage. Only at the DVM step (PENDING_CLAIM).
       if (!isVp && (req as any).bu !== "GW") {
-        const lgUsers = await prisma.user.findMany({ where: { isActive: true, role: "LOGISTICS" } as any, select: { id: true, email: true } })
+        // BU-scoped: NYG docs → NYG Logistics; EA docs → EA Logistics (quynh). Cross-BU LG (bu="ALL") sees both.
+        const lgUsers = await prisma.user.findMany({ where: { isActive: true, role: "LOGISTICS", bu: { in: [(req as any).bu || "NYG", "ALL"] } } as any, select: { id: true, email: true } })
         for (const u of lgUsers) {
           if (!u.email) continue
           const html = buildHtml(req, "PENDING_LOGISTICS", docLink, undefined, undefined, await magicFor(u.id))

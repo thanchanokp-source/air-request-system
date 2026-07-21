@@ -215,7 +215,9 @@ export const PROCUREMENT_BRANCHES = ["Purchasing", "Sourcing"]
 // naming. Commercial claim is handled by MER's team (DVM MER entry / VP MER) so the
 // same people who approve the upload approve the claim — no extra role per person.
 export const CLAIM_DEPT_ROLE_MAP: Record<string, { entry: string[]; vp: string[] }> = {
-  COMMERCIAL: { entry: ["DVM_MER"], vp: ["VP_MER"] },
+  // NYG merch = DVM_MER/VP_MER; EA merch = DVM_MER_EA/VP_MER_EA. Both listed so the acting-role
+  // resolver recognises either — the SPECIFIC person is still scoped by assignedDvmMer/assignedVpMer.
+  COMMERCIAL: { entry: ["DVM_MER", "DVM_MER_EA"], vp: ["VP_MER", "VP_MER_EA"] },
 }
 export function claimEntryRoles(dept: string): string[] {
   return CLAIM_DEPT_ROLE_MAP[dept]?.entry ?? [`DVM_${dept}`, `CLAIM_${dept}`]

@@ -85,6 +85,7 @@ export default function RegisterPage() {
                 className="bg-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
                 <option value="NYG">NYG</option>
                 <option value="GW">GW</option>
+                <option value="EA">EA</option>
               </select>
               <select value={form.position} onChange={set("position")} required
                 className="bg-gray-100 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
