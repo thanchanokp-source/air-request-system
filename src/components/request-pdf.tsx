@@ -86,7 +86,7 @@ const s = StyleSheet.create({
   // Details table
   table: { borderWidth: 0.8, borderColor: "#333" },
   thead: { flexDirection: "row", backgroundColor: "#1E3A8A" },
-  th: { color: "#fff", fontFamily: "SarabunB", fontSize: 6.8, paddingHorizontal: 3, paddingVertical: 4, textAlign: "center", borderRightWidth: 0.5, borderRightColor: "#4B6CB7" },
+  th: { color: "#fff", fontFamily: "SarabunB", fontSize: 6.3, paddingHorizontal: 3, paddingVertical: 4, textAlign: "center", borderRightWidth: 0.5, borderRightColor: "#4B6CB7" },
   tr: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#ddd" },
   td: { fontSize: 7.5, paddingHorizontal: 3, paddingVertical: 4, textAlign: "center", borderRightWidth: 0.5, borderRightColor: "#eee" },
   tdL: { fontSize: 7.5, paddingHorizontal: 3, paddingVertical: 4, textAlign: "left", borderRightWidth: 0.5, borderRightColor: "#eee" },
@@ -213,7 +213,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
   const actual = item.actualAirFreight != null ? Number(item.actualAirFreight) : null
   const grandTotal = actual != null ? actual : est
   const dept = isGW ? "GW" : "NYG"
-  const C = { no: 16, so: 48, style: 42, sub: 28, hawb: 46, inv: 48, qty: 34, gross: 40, est: 48, act: 48 }
+  const C = { no: 16, so: 48, style: 54, sub: 28, hawb: 46, inv: 48, qty: 34, gross: 40, est: 48, act: 48 }
 
   const body = (
     <>
@@ -378,7 +378,10 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
   }
   const claimDeptRows = Object.entries(claimByDept)
   // Portrait A4 (usable ~551pt). REASON takes the remaining width (flex) and wraps.
-  const C = { no: 14, so: 42, style: 36, sub: 18, desc: 16, fac: 34, ctry: 46, hawb: 38, inv: 40, qty: 26, gross: 30, est: 38, act: 38, claim: 46 }
+  // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
+  // wrap, so a too-narrow column overflows and overlaps its neighbour. Fixed cols sum ≈ 482
+  // → REASON (flex) gets the rest.
+  const C = { no: 14, so: 42, style: 52, sub: 20, desc: 24, fac: 38, ctry: 44, hawb: 36, inv: 40, qty: 26, gross: 30, est: 36, act: 36, claim: 44 }
   return (
     <Document title={`${req.documentNo || "Combined"}`}>
       <Page size="A4" style={s.pageFlow} wrap>
