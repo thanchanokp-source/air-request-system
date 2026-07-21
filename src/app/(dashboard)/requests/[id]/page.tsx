@@ -2407,18 +2407,27 @@ export default function RequestDetailPage() {
             <div className="flex items-center gap-2 flex-wrap">
               {/* Export */}
               <button type="button" onClick={() => {
-                const rows = vpMerPassedItems.map((item: any) => ({
-                  "SO": item.so, "SUB": item.sub || "", "STYLE": item.style,
-                  "CUSTOMER PO": item.customerPO || "", "DESCRIPTION": item.description || "",
-                  "ORIG. DATE": item.originalShipmentDate ? new Date(item.originalShipmentDate).toLocaleDateString("en-GB") : "",
-                  "PLAN DATE": item.planShipmentDate ? new Date(item.planShipmentDate).toLocaleDateString("en-GB") : "",
-                  "QTY ORIG": item.qtyOriginalShipment, "QTY AIR": item.qtyRequestAir,
-                  "GROSS WEIGHT (KG)": item.grossWeight ?? "", "EST. AIR FREIGHT (THB)": item.airFreight ?? "",
-                  "FACTORY": item.factory || "", "COUNTRY": item.country || "",
-                  "CLAIM DEPT": (soClaimDepts[item.id] || []).map((d: any) => `${deptLabel(d.dept)}:${d.pct}%`).join(", "), "SCM DELAY REASON": soClaimComments[item.id] || ""
-                }))
-                const ws = XLSX.utils.json_to_sheet(rows)
-                ws["!cols"] = [8,6,12,14,22,12,12,10,10,14,16,10,12,12,16,24].map(w => ({ wch: w }))
+                // Prefer the ACTUAL file MER attached (same format MER filled). Fallback: generate.
+                const merAtt = (req.attachments || []).find((a: any) =>
+                  ["MER_USER", "MER_EA"].includes(a.uploadedBy?.role) && !a.itemId && /\.xlsx?$/i.test(a.fileName || ""))
+                if (merAtt) { window.open(`/api/attachments/${merAtt.id}`, "_blank"); return }
+                // Same layout as the file MER uploaded (upload template) so SCM works in a familiar
+                // format: original columns + CLAIM DEPT 1-3 / %CLAIM / REASON for SCM to fill.
+                const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
+                const aoa = [headers, ...vpMerPassedItems.map((item: any) => {
+                  const d: any[] = soClaimDepts[item.id] || []
+                  const cmt = soClaimComments[item.id] || ""
+                  return [
+                    req?.documentNo || "", req?.brandName || item.brand || "", "NYG", item.style || "", item.so || "", item.sub || "", item.customerPO || "",
+                    item.description || "", fmtDate(item.originalShipmentDate), fmtDate(item.planShipmentDate),
+                    item.qtyOriginalShipment ?? "", item.qtyRequestAir ?? "", item.reasonDelay || "", item.factory || "", item.country || "",
+                    d[0]?.dept ? deptLabel(d[0].dept) : "", d[0]?.pct ?? "", d[0]?.reason || cmt || "",
+                    d[1]?.dept ? deptLabel(d[1].dept) : "", d[1]?.pct ?? "", d[1]?.reason || "",
+                    d[2]?.dept ? deptLabel(d[2].dept) : "", d[2]?.pct ?? "", d[2]?.reason || "",
+                  ]
+                })]
+                const ws = XLSX.utils.aoa_to_sheet(aoa)
+                ws["!cols"] = [16,14,6,14,10,8,14,22,18,18,20,20,16,14,12,14,8,16,14,8,16,14,8,16].map(w => ({ wch: w }))
                 const wb = XLSX.utils.book_new()
                 XLSX.utils.book_append_sheet(wb, ws, "SCM")
                 XLSX.writeFile(wb, `scm-claim-dept_${req.documentNo}.xlsx`)
@@ -5293,8 +5302,12 @@ export default function RequestDetailPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Export */}
+                  {/* Export — give SCM the ACTUAL file MER attached (same format MER filled).
+                      Fallback to a generated sheet only if no MER attachment is found. */}
                   <button type="button" onClick={async () => {
+                    const merAtt = (req.attachments || []).find((a: any) =>
+                      ["MER_USER", "MER_EA"].includes(a.uploadedBy?.role) && !a.itemId && /\.xlsx?$/i.test(a.fileName || ""))
+                    if (merAtt) { window.open(`/api/attachments/${merAtt.id}`, "_blank"); return }
                     const rows = pendingScmItems.map((item: any) => {
                       const d = soClaimDepts[item.id] || []
                       return {
@@ -5690,7 +5703,7 @@ export default function RequestDetailPage() {
                               checked={pendingScmItems.length > 0 && pendingScmItems.every((i: any) => scmSelectedIds.has(i.id))}
                               onChange={e => setScmSelectedIds(e.target.checked ? new Set(pendingScmItems.map((i: any) => i.id)) : new Set())} />
                           </th>
-                          {["SO","SUB","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","FACTORY","COUNTRY",
+                          {["SO","SUB","STYLE","BRAND","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","FACTORY","COUNTRY","PORT",
                             "CLAIM DEPT 1","%CLAIM1","REASON 1",
                             "CLAIM DEPT 2","%CLAIM2","REASON 2",
                             "CLAIM DEPT 3","%CLAIM3","REASON 3",""].map(h =>
@@ -5712,11 +5725,16 @@ export default function RequestDetailPage() {
                               <td className="px-3 py-2 font-semibold text-gray-800">{item.so}</td>
                               <td className="px-3 py-2 text-gray-500">{item.sub || "—"}</td>
                               <td className="px-3 py-2 text-gray-700">{item.style}</td>
-                              <td className="px-3 py-2 text-gray-500 max-w-40 truncate">{item.description || "—"}</td>
+                              <td className="px-3 py-2 text-gray-500">{item.brand || "—"}</td>
+                              <td className="px-3 py-2 text-gray-500">{item.customerPO || "—"}</td>
+                              <td className="px-3 py-2 text-gray-500">{item.description || "—"}</td>
+                              <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
+                              <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                               <td className="px-3 py-2">{item.qtyOriginalShipment}</td>
                               <td className="px-3 py-2 font-semibold">{item.qtyRequestAir}</td>
                               <td className="px-3 py-2 text-gray-500">{item.factory || "—"}</td>
                               <td className="px-3 py-2 text-gray-500">{item.country || "—"}</td>
+                              <td className="px-3 py-2 text-gray-500">{item.port || "—"}</td>
                               {[0,1,2].map(n => {
                                 const d = dept[n]
                                 const cellColor = d ? (isItemReady ? "text-green-800" : deptTotal !== 100 ? "text-amber-700" : "text-gray-700") : "text-gray-300"
