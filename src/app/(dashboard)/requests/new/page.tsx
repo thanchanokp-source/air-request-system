@@ -29,7 +29,7 @@ export default function NewRequestPage() {
   const [testMode, setTestMode] = useState(false)
   const [historical, setHistorical] = useState(false) // admin: import old doc as COMPLETED (no approval)
   const [testBu, setTestBu] = useState<"NYG" | "GW" | "EA">("NYG")
-  const userBu = (isAdmin && testMode) ? testBu : ((session?.user as any)?.bu || "NYG")
+  const userBu = (isAdmin && (testMode || historical)) ? testBu : ((session?.user as any)?.bu || "NYG")
   const isGW = userBu === "GW"
   const isEA = userBu === "EA"
 
@@ -288,7 +288,15 @@ export default function NewRequestPage() {
             <input type="checkbox" checked={historical} onChange={e => setHistorical(e.target.checked)} className="w-4 h-4" />
             📁 Import old document (save as COMPLETED — no approval flow, no emails)
           </label>
-          {historical && <span className="text-xs text-slate-500">Saved straight as a completed record · no approver needed</span>}
+          {historical && (
+            <select value={testBu} onChange={e => setTestBu(e.target.value as any)}
+              className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-white">
+              <option value="NYG">BU: NYG</option>
+              <option value="GW">BU: GW</option>
+              <option value="EA">BU: EA</option>
+            </select>
+          )}
+          {historical && <span className="text-xs text-slate-500">Saved as a completed record · pick the BU that matches the file</span>}
         </div>
       )}
 
