@@ -9,11 +9,11 @@ const users = [
   // ── Admins ──
   { email: "thanchanok.p@nanyangtextile.com", name: "Thanchanok P", role: "ADMIN", roles: ["ADMIN"], bu: "ALL", pw: "1234" },
   // jariya = ADMIN + Claim Procurement (Purchasing), NYG
-  { email: "jariya.t@nanyangtextile.com", name: "Jariya T", role: "ADMIN", roles: ["ADMIN", "DVM_PROCUREMENT"], bu: "NYG", priority: 1, procurementType: "PURCHASING" },
+  { email: "jariya.t@nanyangtextile.com", name: "Jariya T", role: "ADMIN", roles: ["ADMIN", "CLAIM_PROCUREMENT"], bu: "NYG", priority: 1, procurementType: "PURCHASING", pw: "123456" },
 
   // ── Test MER ──
-  { email: "atsadet.n@nanyangtextile.com", name: "Atsadet N", role: "MER_USER", roles: ["MER_USER"], bu: "NYG" },
-  { email: "apisit.n@nanyangtextile.com", name: "Apisit N", role: "MER_GW", roles: ["MER_GW"], bu: "GW" },
+  { email: "atsadet.n@nanyangtextile.com", name: "Atsadet N", role: "MER_USER", roles: ["MER_USER"], bu: "NYG", pw: "123456" },
+  { email: "apisit.n@nanyangtextile.com", name: "Apisit N", role: "MER_GW", roles: ["MER_GW"], bu: "GW", pw: "123456" },
 
   // ── NYG — DVM Merchandise (also Commercial claim) ──
   { email: "wasa.su@nanyangtextile.com", name: "Wasa Su", role: "DVM_MER", roles: ["DVM_MER"], bu: "NYG" },
@@ -30,7 +30,7 @@ const users = [
   { email: "aoyjai.p@nanyangtextile.com", name: "Aoyjai P", role: "LOGISTICS", roles: ["LOGISTICS"], bu: "NYG" },
 
   // ── NYG — Procurement claim ──
-  { email: "jarunee.su@nanyangtextile.com", name: "Jarunee Su", role: "DVM_PROCUREMENT", roles: ["DVM_PROCUREMENT"], bu: "NYG", procurementType: "SOURCING" },
+  { email: "jarunee.su@nanyangtextile.com", name: "Jarunee Su", role: "CLAIM_PROCUREMENT", roles: ["CLAIM_PROCUREMENT"], bu: "NYG", priority: 1, procurementType: "SOURCING" },
   { email: "prapakorn.s@nanyangtextile.com", name: "Prapakorn S", role: "VP_PROCUREMENT", roles: ["VP_PROCUREMENT"], bu: "NYG" },
 
   // ── NYK claim (cross-BU; used by NYG & GW) ──
@@ -55,7 +55,9 @@ const users = [
 
 async function main() {
   for (const u of users) {
-    const password = await bcrypt.hash(u.pw || "123456", 10)
+    // Master approvers have NO password (login via magic link / admin "View as").
+    // Only accounts with `pw` set (admins, test MER) get a credentials password.
+    const password = u.pw ? await bcrypt.hash(u.pw, 10) : null
     const data = {
       name: u.name, role: u.role, roles: u.roles, bu: u.bu,
       claimDepartment: u.claimDepartment ?? null, priority: u.priority ?? null,
@@ -63,7 +65,8 @@ async function main() {
     }
     await prisma.user.upsert({
       where: { email: u.email },
-      update: { ...data, password },
+      // On re-run, don't wipe a password someone already set — only write it when `pw` is given.
+      update: { ...data, ...(password ? { password } : {}) },
       create: { ...data, email: u.email, password },
     })
   }
