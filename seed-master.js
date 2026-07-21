@@ -31,10 +31,6 @@ const descriptions = [
 
 // ── Brands ── (add when provided)
 const brands = []
-// ── Ports ── (add when provided) [country, port, ratePerKg]
-const ports = []
-// ── GMT types ── (add when provided)
-const gmtTypes = []
 
 async function main() {
   for (const [country, ratePerKg] of rates) {
@@ -50,13 +46,7 @@ async function main() {
   for (const name of brands) {
     await prisma.masterBrand.upsert({ where: { name }, update: { isActive: true }, create: { name, isActive: true } })
   }
-  for (const [country, port, ratePerKg] of ports) {
-    await prisma.masterPort.upsert({ where: { port }, update: { country, ratePerKg, isActive: true }, create: { country, port, ratePerKg, isActive: true } })
-  }
-  for (const name of gmtTypes) {
-    await prisma.masterGMTType.upsert({ where: { name }, update: { isActive: true }, create: { name, isActive: true } })
-  }
-  console.log(`Master seeded: ${rates.length} rates, ${descriptions.length} descriptions, ${brands.length} brands, ${ports.length} ports, ${gmtTypes.length} gmtTypes`)
+  console.log(`Master seeded: ${rates.length} rates, ${descriptions.length} descriptions, ${brands.length} brands`)
 }
 
 main().catch(e => { console.error(e); process.exit(1) }).finally(() => prisma.$disconnect())

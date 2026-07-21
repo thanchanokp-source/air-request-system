@@ -54,20 +54,8 @@ model MasterDescription {
   isActive      Boolean @default(true)
 }
 
-model MasterGMTType {
-  id       String  @id @default(cuid())
-  name     String  @unique
-  isActive Boolean @default(true)
-}
-
-model MasterPort {
-  id        String   @id @default(cuid())
-  country   String
-  port      String   @unique
-  ratePerKg Float    @default(0)
-  isActive  Boolean  @default(true)
-  updatedAt DateTime @updatedAt
-}
+// MasterGMTType + MasterPort removed — unused (Port kept only as a display field on items;
+// freight rate is keyed by Country via MasterFreightRate).
 
 // Freight rate keyed by COUNTRY (destination) only. MER selects the country; the rate
 // is the same regardless of brand. Est. Air Freight = grossWeight × rate.

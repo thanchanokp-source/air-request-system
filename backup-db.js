@@ -12,8 +12,6 @@ async function main() {
     masterBrand: await prisma.masterBrand.findMany(),
     masterBU: await prisma.masterBU.findMany(),
     masterDescription: await prisma.masterDescription.findMany(),
-    masterGMTType: await prisma.masterGMTType.findMany(),
-    masterPort: await prisma.masterPort.findMany(),
     masterFreightRate: await prisma.masterFreightRate.findMany(),
     // billOfMaterial EXCLUDED — it's huge (100k+ rows) and re-syncable from RPA / the CSV, so it
     // doesn't belong in this snapshot. Back it up via the CSV / RPA source instead.

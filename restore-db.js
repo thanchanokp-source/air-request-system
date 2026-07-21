@@ -9,14 +9,14 @@ if (!file) { console.error("Usage: node restore-db.js <backup.json>"); process.e
 
 // FK-safe order: parents before children.
 const ORDER = [
-  "user", "masterBrand", "masterBU", "masterDescription", "masterGMTType", "masterPort",
+  "user", "masterBrand", "masterBU", "masterDescription",
   "masterFreightRate", "billOfMaterial", "appSetting", "pendingApprover",
   "airRequest", "hawbGroup", "airRequestItem", "approvalLog", "requestAttachment",
   "claimForward", "claimApproval", "approvalSignature",
 ]
 const MODEL = {
   user: "user", masterBrand: "masterBrand", masterBU: "masterBU", masterDescription: "masterDescription",
-  masterGMTType: "masterGMTType", masterPort: "masterPort", masterFreightRate: "masterFreightRate",
+  masterFreightRate: "masterFreightRate",
   billOfMaterial: "billOfMaterial", appSetting: "appSetting", pendingApprover: "pendingApprover",
   airRequest: "airRequest", hawbGroup: "hawbGroup", airRequestItem: "airRequestItem",
   approvalLog: "approvalLog", requestAttachment: "requestAttachment", claimForward: "claimForward",
