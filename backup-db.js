@@ -15,7 +15,8 @@ async function main() {
     masterGMTType: await prisma.masterGMTType.findMany(),
     masterPort: await prisma.masterPort.findMany(),
     masterFreightRate: await prisma.masterFreightRate.findMany(),
-    billOfMaterial: await prisma.billOfMaterial.findMany(),
+    // billOfMaterial EXCLUDED — it's huge (100k+ rows) and re-syncable from RPA / the CSV, so it
+    // doesn't belong in this snapshot. Back it up via the CSV / RPA source instead.
     airRequest: await prisma.airRequest.findMany(),
     hawbGroup: await prisma.hawbGroup.findMany(),
     airRequestItem: await prisma.airRequestItem.findMany(),
