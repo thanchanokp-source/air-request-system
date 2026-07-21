@@ -378,7 +378,10 @@ export default function UsersPage() {
     if ((u.bu || "NYG") === bu) return true
     // Only BU-EXCLUSIVE roles cross tabs. SCM_NYK_* exist in BOTH BUs (same role name)
     // → their BU is decided by the `bu` field, so they must NOT leak into the other tab.
-    const set = bu === "GW" ? GW_ONLY_ROLES : NYG_ONLY_ROLES
+    // EA must use EA_ONLY_ROLES — otherwise every NYG-role holder (DVM_MER, VP_MER,
+    // LOGISTICS, NYK…) wrongly leaks into the EA tab. (EA reuses NYG's shared claim/
+    // downstream people, but those carry bu="ALL" and already match the first check.)
+    const set = bu === "GW" ? GW_ONLY_ROLES : bu === "EA" ? EA_ONLY_ROLES : NYG_ONLY_ROLES
     return heldRolesOf(u).some(r => set.has(r))
   }
   const filtered = users.filter(u =>
