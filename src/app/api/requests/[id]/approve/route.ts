@@ -1167,7 +1167,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const myDepts = gwDeptsForRole(userRole, userClaimDept)
     // Priority chain (CLAIM_GW / SCM_NYG) — resolve once for all items.
     const allApprovers = (userRole === "CLAIM_GW" || userRole === "SCM_NYG")
-      ? await (prisma.user as any).findMany({ where: { role: userRole, isActive: true, priority: { not: null }, bu: request.bu }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }] })
+      ? await (prisma.user as any).findMany({ where: { role: userRole, isActive: true, priority: { not: null }, bu: { in: [request.bu, "ALL"] } }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }] })
       : []
     const myPriority = allApprovers.find((u: any) => u.id === userId)?.priority ?? null
 
@@ -1289,9 +1289,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "No claim portion for this department awaiting approval" }, { status: 400 })
     }
 
-    // Priority chain for this role (scoped to the doc's BU — SCM roles exist in both).
+    // Priority chain for this role — include cross-BU holders (bu = "ALL", e.g. SCM_NYG,
+    // Claim-Production) so the priority gating sees the whole chain, not just BU-scoped users.
     const allApprovers = await (prisma.user as any).findMany({
-      where: { role: userRole, isActive: true, priority: { not: null }, bu: request.bu },
+      where: { role: userRole, isActive: true, priority: { not: null }, bu: { in: [request.bu, "ALL"] } },
       orderBy: [{ priority: "asc" }, { createdAt: "asc" }]
     })
     const currentUser = allApprovers.find((u: any) => u.id === userId)

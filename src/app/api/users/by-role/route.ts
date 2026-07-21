@@ -22,7 +22,9 @@ export async function GET(req: NextRequest) {
   let users = await (prisma.user as any).findMany({
     where: {
       isActive: true,
-      ...(bu ? { bu } : {}),
+      // Cross-BU claim roles (SCM_NYG, Claim/VP-Production, SCM NYK) carry bu = "ALL" —
+      // include them alongside the requested BU so pickers/chains don't drop them.
+      ...(bu ? { bu: { in: [bu, "ALL"] } } : {}),
       ...priorityFilter,
       OR: [{ role }, { roles: { has: role } }],
     },

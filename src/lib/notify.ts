@@ -407,7 +407,8 @@ async function notifyClaimNextPriorityImpl(
     const roleList = Array.isArray(role) ? role : [role]
     // Multi-role aware: match the primary role OR any role in roles[].
     const where: any = {
-      isActive: true, bu: (req as any).bu, priority: { gt: afterPriority },
+      // Cross-BU claim roles (e.g. Claim-Production, VP-Production) have bu = "ALL".
+      isActive: true, bu: { in: [(req as any).bu, "ALL"] }, priority: { gt: afterPriority },
       OR: [{ role: { in: roleList } }, { roles: { hasSome: roleList } }],
     }
     if (claimDept) where.claimDepartment = claimDept
@@ -663,7 +664,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const depts = new Set<string>()
       for (const it of req.items) getSplits(it).forEach(s => depts.add(s.dept))
       for (const g of gwClaimGroups(depts, req)) {
-        const where: any = { role: g.role, isActive: true, bu: (req as any).bu }
+        const where: any = { role: g.role, isActive: true, bu: { in: [(req as any).bu, "ALL"] } }
         if (g.claimDept) where.claimDepartment = g.claimDept
         const us = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
@@ -686,7 +687,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
         await sendMail(em, `[Claim – ${g.label}] GM Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
       }
       // 3) Accounting (read alert) — this BU only (GW → ACCOUNTING_GW).
-      const acUsers = await (prisma.user as any).findMany({ where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: (req as any).bu }, select: { email: true } })
+      const acUsers = await (prisma.user as any).findMany({ where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: { in: [(req as any).bu, "ALL"] } }, select: { email: true } })
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
       if (acEmails.length) {
         const t = (req as any).accountingToken
@@ -841,7 +842,8 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
             for (const [g, gItems] of byGroup) {
               const usAll = await prisma.user.findMany({
                 where: {
-                  isActive: true, bu: (req as any).bu,
+                  // Claim-Production people are cross-BU (bu = "ALL"), so match this BU OR "ALL".
+                  isActive: true, bu: { in: [(req as any).bu, "ALL"] },
                   OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }],
                 } as any,
                 select: { id: true, email: true, priority: true, claimDepartment: true },
@@ -899,7 +901,8 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
           const procEntryFilter = (!isVp && dept === "PROCUREMENT") ? { procurementType: "PURCHASING" } : {}
           const users = await prisma.user.findMany({
             where: {
-              isActive: true, bu: (req as any).bu, ...procEntryFilter,
+              // Some claim roles are cross-BU (bu = "ALL") — match this BU OR "ALL".
+              isActive: true, bu: { in: [(req as any).bu, "ALL"] }, ...procEntryFilter,
               OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }],
             },
             select: { id: true, email: true, priority: true },
@@ -1125,7 +1128,7 @@ export async function notifyClaimFinalToAccounting(requestId: string) {
     if (!req) return
 
     const accountingUsers = await (prisma.user as any).findMany({
-      where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: (req as any).bu },
+      where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: { in: [(req as any).bu, "ALL"] } },
       select: { email: true }
     })
     const recipients: string[] = accountingUsers.map((u: any) => u.email).filter(Boolean)
@@ -1570,7 +1573,7 @@ async function claimEntryUsersForDept(req: any, dept: string, items: any[]): Pro
     for (const it of items) { const g = vpProdGroup((it as any).factory); if (!g) continue; if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g)!.push(it) }
     for (const [g] of byGroup) {
       const usAll = await prisma.user.findMany({
-        where: { isActive: true, bu: (req as any).bu, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] } as any,
+        where: { isActive: true, bu: { in: [(req as any).bu, "ALL"] }, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] } as any,
         select: { id: true, email: true, priority: true, claimDepartment: true }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
       })
       const us = usAll.filter((u: any) => prodGroupCovers(u.claimDepartment, g))
@@ -1582,7 +1585,7 @@ async function claimEntryUsersForDept(req: any, dept: string, items: any[]): Pro
   // PROCUREMENT entry → PURCHASING only; others → dept priority-1 batch.
   const procFilter = dept === "PROCUREMENT" ? { procurementType: "PURCHASING" } : {}
   const users = await prisma.user.findMany({
-    where: { isActive: true, bu: (req as any).bu, ...procFilter, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] } as any,
+    where: { isActive: true, bu: { in: [(req as any).bu, "ALL"] }, ...procFilter, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] } as any,
     select: { id: true, email: true, priority: true }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
   })
   const withP = users.filter((u: any) => u.priority != null)
