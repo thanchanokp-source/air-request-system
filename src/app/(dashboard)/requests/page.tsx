@@ -280,16 +280,19 @@ export default function RequestsPage() {
             </span>
           )}
         </div>
-        {(role === "MER_USER" || role === "MER_GW" || role === "MER_EA" || role === "ADMIN") && (
-          <Link href="/requests/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
-            + New Request
-          </Link>
-        )}
-        {role === "ADMIN" && (
-          <Link href="/import-history" className="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
-            📥 Import History
-          </Link>
-        )}
+        {/* Actions grouped on the right (New Request next to Import History) */}
+        <div className="flex items-center gap-2">
+          {(role === "MER_USER" || role === "MER_GW" || role === "MER_EA" || role === "ADMIN") && (
+            <Link href="/requests/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
+              + New Request
+            </Link>
+          )}
+          {role === "ADMIN" && (
+            <Link href="/import-history" className="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+              📥 Import History
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
