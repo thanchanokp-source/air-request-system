@@ -1246,13 +1246,22 @@ export default function RequestDetailPage() {
   // SCM_<documentNo>.xlsx. Same-origin fetch (no CORS) → we read the blob and force a download.
   // Returns true if downloaded; false → caller should fall back to generating a sheet.
   const downloadScmClaimFile = async (): Promise<boolean> => {
-    // Direct <a download> to the same-origin endpoint (Content-Disposition: attachment). Most
-    // reliable — no blob/CORS, browser downloads straight to disk as SCM_<docNo>.xlsx.
-    const a = document.createElement("a")
-    a.href = `/api/requests/${id}/scm-claim-file`
-    a.download = `SCM_${req.documentNo}.xlsx`
-    document.body.appendChild(a); a.click(); a.remove()
-    return true
+    // Fetch the server-built file (original MER file + claim dropdown) same-origin, verify it's a
+    // real xlsx (not a JSON error), then download as SCM_<docNo>.xlsx. Return false → caller
+    // falls back to generating a sheet, so a broken endpoint never yields a corrupt download.
+    try {
+      const res = await fetch(`/api/requests/${id}/scm-claim-file`)
+      const ct = res.headers.get("content-type") || ""
+      if (!res.ok || ct.includes("json")) return false
+      const blob = await res.blob()
+      if (!blob.size) return false
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url; a.download = `SCM_${req.documentNo}.xlsx`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+      return true
+    } catch { return false }
   }
 
   const rejectStyle = async (style: string) => {
