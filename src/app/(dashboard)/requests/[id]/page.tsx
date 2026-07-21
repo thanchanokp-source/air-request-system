@@ -2462,7 +2462,7 @@ export default function RequestDetailPage() {
               {/* Back ALL styles → whole document back to Merchandise (GW has no hard reject) */}
               <button onClick={() => { setBackToMerOpen(v => !v); setGwBackStyle(null) }} disabled={!!submitting}
                 className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
-                ↩ Back all to MER
+                ↩ Back all to Merchandise
               </button>
               {selectedStyles.size > 0 && (
                 <>
@@ -2531,7 +2531,7 @@ export default function RequestDetailPage() {
                     const actionCell = canRow ? (
                       <div className="inline-flex gap-1.5">
                         <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-2.5 py-1 bg-green-600 text-white rounded-md font-medium hover:bg-green-700 disabled:opacity-50">{isSub && !isBack ? "..." : "Approve"}</button>
-                        <button onClick={() => { setGwBackStyle(isBack ? null : g.style); setGwBackReason(""); setBackToMerOpen(false) }} disabled={isSub} className="px-2.5 py-1 bg-orange-500 text-white rounded-md font-medium hover:bg-orange-600 disabled:opacity-50">Back to MER</button>
+                        <button onClick={() => { setGwBackStyle(isBack ? null : g.style); setGwBackReason(""); setBackToMerOpen(false) }} disabled={isSub} className="px-2.5 py-1 bg-orange-500 text-white rounded-md font-medium hover:bg-orange-600 disabled:opacity-50">Back to Merchandise</button>
                       </div>
                     ) : null
                     const rows = g.items.map((item: any, idx: number) => (
@@ -2566,7 +2566,7 @@ export default function RequestDetailPage() {
                             <label className="text-xs font-medium text-orange-700">Send style {g.style} back to Merchandise — Reason *</label>
                             <textarea value={gwBackReason} onChange={e => setGwBackReason(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                             <div className="flex gap-2">
-                              <button onClick={() => backToMerStyleGw(g.style)} disabled={isSub || !gwBackReason.trim()} className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">{isSub ? "..." : "Confirm — Back to MER"}</button>
+                              <button onClick={() => backToMerStyleGw(g.style)} disabled={isSub || !gwBackReason.trim()} className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">{isSub ? "..." : "Confirm — Back to Merchandise"}</button>
                               <button onClick={() => { setGwBackStyle(null); setGwBackReason("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                             </div>
                           </div>
@@ -2608,7 +2608,7 @@ export default function RequestDetailPage() {
                     <div className="flex gap-2">
                       <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">{isSub ? "..." : "Approve"}</button>
                       {showStyleReject && <button onClick={() => { setRejectingStyle(isRej ? null : g.style); setRejectComment("") }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
-                      <button onClick={() => { setGwBackStyle(gwBackStyle === g.style ? null : g.style); setGwBackReason(""); setBackToMerOpen(false) }} disabled={isSub} className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to MER</button>
+                      <button onClick={() => { setGwBackStyle(gwBackStyle === g.style ? null : g.style); setGwBackReason(""); setBackToMerOpen(false) }} disabled={isSub} className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to Merchandise</button>
                     </div>
                   )}
                 </div>
@@ -2617,7 +2617,7 @@ export default function RequestDetailPage() {
                     <label className="text-xs font-medium text-orange-700">Send style {g.style} back to Merchandise — Reason *</label>
                     <textarea value={gwBackReason} onChange={e => setGwBackReason(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                     <div className="flex gap-2">
-                      <button onClick={() => backToMerStyleGw(g.style)} disabled={isSub || !gwBackReason.trim()} className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">{isSub ? "..." : "Confirm — Back to MER"}</button>
+                      <button onClick={() => backToMerStyleGw(g.style)} disabled={isSub || !gwBackReason.trim()} className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">{isSub ? "..." : "Confirm — Back to Merchandise"}</button>
                       <button onClick={() => { setGwBackStyle(null); setGwBackReason("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                     </div>
                     <p className="text-[11px] text-orange-600">Sends only this style back to Merchandise — approved styles stay approved</p>
