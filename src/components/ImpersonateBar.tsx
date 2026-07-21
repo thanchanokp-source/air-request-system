@@ -61,15 +61,15 @@ export default function ImpersonateBar({ isAdmin, isImpersonating, actingLabel }
       <div className="max-w-full px-4 py-1.5 flex flex-wrap items-center gap-2">
         {isImpersonating ? (
           <>
-            <span className="font-semibold">🔍 กำลังดูในนาม: {actingLabel || "—"}</span>
+            <span className="font-semibold">🔍 Viewing as: {actingLabel || "—"}</span>
             <span className="opacity-70">·</span>
-            <button onClick={() => setOpen(o => !o)} className="underline hover:opacity-80">สลับ role</button>
-            <a href="/api/admin/impersonate/return" className="ml-auto bg-white text-amber-700 font-semibold px-3 py-1 rounded-md hover:bg-amber-50">↩ กลับเป็น Admin</a>
+            <button onClick={() => setOpen(o => !o)} className="underline hover:opacity-80">Switch role</button>
+            <a href="/api/admin/impersonate/return" className="ml-auto bg-white text-amber-700 font-semibold px-3 py-1 rounded-md hover:bg-amber-50">↩ Back to Admin</a>
           </>
         ) : (
           <>
-            <span className="font-semibold">👁 Admin — View as (ดูหน้าแต่ละ role)</span>
-            <button onClick={() => setOpen(o => !o)} className="ml-auto underline hover:opacity-80">{open ? "ซ่อน" : "เลือก role"}</button>
+            <span className="font-semibold">👁 Admin — View as (see each role's pages)</span>
+            <button onClick={() => setOpen(o => !o)} className="ml-auto underline hover:opacity-80">{open ? "Hide" : "Select role"}</button>
           </>
         )}
       </div>
@@ -83,14 +83,14 @@ export default function ImpersonateBar({ isAdmin, isImpersonating, actingLabel }
           </select>
           <select value={role} onChange={e => setRole(e.target.value)}
             className="text-gray-800 rounded-md px-2 py-1 text-xs min-w-[220px]">
-            <option value="">-- เลือก role --</option>
+            <option value="">-- Select role --</option>
             {roles.map(r => <option key={r.role} value={r.role}>{r.label}</option>)}
           </select>
           <button onClick={go} disabled={!role}
             className="bg-white text-slate-800 font-semibold px-3 py-1 rounded-md text-xs hover:bg-gray-100 disabled:opacity-40">
             View as →
           </button>
-          <span className="text-[11px] opacity-80">เข้าเป็น role นั้นทันที (ไม่ต้อง login) · ดูหน้า Approvals ที่ต้อง action</span>
+          <span className="text-[11px] opacity-80">Instantly act as that role (no login needed) · view the Approvals pages that need action</span>
         </div>
       )}
     </div>

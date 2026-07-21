@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   if (bu && bu !== "ALL" && !role.startsWith("SCM_NYK")) where.bu = { in: [bu, "ALL"] }
   const target = await (prisma.user as any).findFirst({ where, orderBy: [{ priority: "asc" }, { createdAt: "asc" }] })
   if (!target) {
-    return NextResponse.redirect(new URL(`/approvals?impersonate_error=${encodeURIComponent(`ไม่มี user role ${role}${bu ? " ("+bu+")" : ""}`)}`, req.url))
+    return NextResponse.redirect(new URL(`/approvals?impersonate_error=${encodeURIComponent(`No user with role ${role}${bu ? " ("+bu+")" : ""}`)}`, req.url))
   }
 
   // Remember the ORIGINAL admin (only on the first hop; keep it while switching roles).

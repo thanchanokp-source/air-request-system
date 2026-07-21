@@ -189,7 +189,7 @@ function roleDisplayName(
   }
   if (r === "CLAIM_PRODUCTION") {
     const level = p === 1 ? "VP" : p === 2 ? "EVP" : p ? `P${p}` : ""
-    const g = claimDept === "G1G3" ? "G1/G3" : claimDept === "G2G4" ? "G2/G4" : String(claimDept || "").toUpperCase() === "ALL" ? "ทุก G" : (claimDept || "")
+    const g = claimDept === "G1G3" ? "G1/G3" : claimDept === "G2G4" ? "G2/G4" : String(claimDept || "").toUpperCase() === "ALL" ? "All G" : (claimDept || "")
     return `Claim-Production ${level} ${g}`.trim()
   }
   if (r === "CLAIM_COMMERCIAL") return p === 2 ? "Claim-Commercial VP" : "Claim-Commercial DPM/DVM"
@@ -333,16 +333,16 @@ export default function UsersPage() {
   }
 
   const del = async (id: string, name: string) => {
-    if (!confirm(`ลบผู้ใช้ "${name}" ?\n(ถ้าเคยอนุมัติ/สร้างเอกสารมาก่อน อาจลบไม่ได้ — ให้ปิด Status แทน)`)) return
+    if (!confirm(`Delete user "${name}"?\n(If they have approved/created documents before, deletion may not be possible — disable Status instead)`)) return
     const res = await fetch(`/api/users/${id}`, { method: "DELETE" })
     if (res.ok) {
       setUsers(prev => prev.filter(u => u.id !== id))
       return
     }
     // FK constraint / other error → the account is referenced by existing documents.
-    let msg = "ลบไม่ได้"
+    let msg = "Cannot delete"
     try { const d = await res.json(); if (d?.error) msg = d.error } catch {}
-    alert(`ลบไม่สำเร็จ: ${name}\n${msg}\n\nสาเหตุที่พบบ่อย: ผู้ใช้นี้ผูกกับเอกสารเดิมอยู่ → แนะนำให้ "ปิด Status" แทนการลบ`)
+    alert(`Delete failed: ${name}\n${msg}\n\nCommon cause: this user is linked to existing documents → we recommend disabling Status instead of deleting`)
   }
 
   const searchPeople = async () => {
@@ -502,7 +502,7 @@ export default function UsersPage() {
               <option value="">-- Select G-group --</option>
               <option value="G1G3">G1 / G3</option>
               <option value="G2G4">G2 / G4</option>
-              <option value="ALL">ทุก G (G1/G3 + G2/G4)</option>
+              <option value="ALL">All G (G1/G3 + G2/G4)</option>
             </select>
           </div>
         )}
@@ -660,11 +660,11 @@ export default function UsersPage() {
 
           {/* How-to banner — compact single line */}
           <div className="col-span-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-sm text-blue-800 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="font-semibold text-blue-900">วิธีตั้งค่า:</span>
-            <span><b>1</b> เลือกตำแหน่งซ้าย</span><span className="text-blue-300">›</span>
-            <span><b>2</b> กรอกชื่อ+อีเมล</span><span className="text-blue-300">›</span>
+            <span className="font-semibold text-blue-900">How to set up:</span>
+            <span><b>1</b> Select a position on the left</span><span className="text-blue-300">›</span>
+            <span><b>2</b> Enter name + email</span><span className="text-blue-300">›</span>
             <span><b>3</b> Save</span>
-            <span className="text-xs text-blue-500 ml-auto">💡 1 คนหลายตำแหน่ง/ข้าม BU ได้ — ใช้อีเมลเดิมเพิ่ม role</span>
+            <span className="text-xs text-blue-500 ml-auto">💡 One person can hold multiple positions / span BUs — reuse the same email to add a role</span>
           </div>
 
           {/* Left: Checklist */}
@@ -673,10 +673,10 @@ export default function UsersPage() {
             {/* Must-setup checklist */}
             <div className="bg-white rounded-xl border overflow-hidden">
               <div className="bg-slate-800 text-white px-4 py-3">
-                <p className="text-sm font-semibold">ตำแหน่งที่ต้องตั้งค่า (คลิกเพื่อเลือก)</p>
+                <p className="text-sm font-semibold">Positions to set up (click to select)</p>
                 <div className="flex gap-3 mt-1.5 text-[11px] text-slate-300">
-                  <span className="flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-green-500 text-white flex items-center justify-center text-[9px] font-bold">✓</span> ตั้งแล้ว</span>
-                  <span className="flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-gray-400 text-white flex items-center justify-center text-[9px] font-bold">!</span> ยังไม่ได้ตั้ง</span>
+                  <span className="flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-green-500 text-white flex items-center justify-center text-[9px] font-bold">✓</span> Configured</span>
+                  <span className="flex items-center gap-1"><span className="w-3.5 h-3.5 rounded-full bg-gray-400 text-white flex items-center justify-center text-[9px] font-bold">!</span> Not set yet</span>
                 </div>
               </div>
               <div className="divide-y">
@@ -754,8 +754,8 @@ export default function UsersPage() {
 
             {/* Roles that need NO setup (People Finder + self-register) — one compact note */}
             <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 space-y-1.5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ไม่ต้องตั้งค่า</p>
-              <p className="text-xs text-blue-700"><span className="font-semibold">Merchandise User</span> — สมัครเอง</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">No setup needed</p>
+              <p className="text-xs text-blue-700"><span className="font-semibold">Merchandise User</span> — self-registers</p>
               {visibleFinderRoles.map(fr => (
                 <p key={fr.role} className="text-xs text-gray-600">
                   <span className="text-blue-400 mr-1">🔍</span>
@@ -771,11 +771,11 @@ export default function UsersPage() {
 
             {/* Search existing master users (optional) */}
             <div className="bg-white rounded-xl border p-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ค้นหาคนที่มีในระบบแล้ว <span className="normal-case text-gray-400 font-normal">(ไม่บังคับ — ใช้เพื่อเพิ่มตำแหน่งให้คนเดิม)</span></p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Search people already in the system <span className="normal-case text-gray-400 font-normal">(optional — use to add a position to an existing person)</span></p>
               <div className="flex gap-2">
                 <input value={peopleQ} onChange={e => setPeopleQ(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && searchPeople()}
-                  placeholder="พิมพ์ชื่อหรืออีเมล แล้วกด Enter..."
+                  placeholder="Type a name or email, then press Enter..."
                   className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 <button onClick={searchPeople} disabled={peopleLoading || !peopleQ.trim()}
                   className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50">
@@ -818,8 +818,8 @@ export default function UsersPage() {
             <div className="bg-white rounded-xl border overflow-hidden">
               <button onClick={() => setShowConfigured(v => !v)}
                 className="w-full px-4 py-3 border-b flex items-center justify-between text-left hover:bg-gray-50">
-                <p className="text-sm font-semibold text-gray-700">Configured Master Users <span className="text-xs font-normal text-gray-400">(สรุปคนที่ตั้งแล้วต่อตำแหน่ง)</span></p>
-                <span className="text-gray-400 text-sm">{showConfigured ? "▲ ซ่อน" : "▼ แสดง"}</span>
+                <p className="text-sm font-semibold text-gray-700">Configured Master Users <span className="text-xs font-normal text-gray-400">(summary of configured people per position)</span></p>
+                <span className="text-gray-400 text-sm">{showConfigured ? "▲ Hide" : "▼ Show"}</span>
               </button>
               {showConfigured && (
               <div className="divide-y">
@@ -846,15 +846,15 @@ export default function UsersPage() {
                           const detail = (() => {
                             if (mr.role === "CLAIM_PRODUCTION") {
                               const d = String(u.claimDepartment || "")
-                              if (d.toUpperCase() === "ALL" || (/[13]/.test(d) && /[24]/.test(d))) return { text: "ทุก G", missing: false }
+                              if (d.toUpperCase() === "ALL" || (/[13]/.test(d) && /[24]/.test(d))) return { text: "All G", missing: false }
                               if (/G1|G3/i.test(d)) return { text: "G1/G3", missing: false }
                               if (/G2|G4/i.test(d)) return { text: "G2/G4", missing: false }
-                              return { text: "⚠ ยังไม่ตั้ง G", missing: true }
+                              return { text: "⚠ G not set", missing: true }
                             }
                             if (mr.role === "CLAIM_PROCUREMENT" && u.priority === 1) {
                               if (u.procurementType === "SOURCING") return { text: "Sourcing", missing: false }
                               if (u.procurementType === "PURCHASING") return { text: "Purchasing", missing: false }
-                              return { text: "⚠ ยังไม่ตั้งประเภท", missing: true }
+                              return { text: "⚠ Type not set", missing: true }
                             }
                             if (["CLAIM_GW", "SCM_NYK", "SCM_NYG"].includes(mr.role) && u.claimDepartment) {
                               return { text: u.claimDepartment, missing: false }

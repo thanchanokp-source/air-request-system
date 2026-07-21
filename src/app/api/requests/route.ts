@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please select a DPM (GW)" }, { status: 400 })
     }
     if (!assignedDvm && !isGW) {
-      return NextResponse.json({ error: isEA ? "Please select an ADVM (EA)" : "กรุณาเลือก DVM Merchandise" }, { status: 400 })
+      return NextResponse.json({ error: isEA ? "Please select an ADVM (EA)" : "Please select a DVM Merchandise" }, { status: 400 })
     }
 
     // Case-insensitive column lookup (handles template header casing variations)

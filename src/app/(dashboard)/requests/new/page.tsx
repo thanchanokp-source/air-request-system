@@ -151,11 +151,11 @@ export default function NewRequestPage() {
     const errs: string[] = []
     rows.forEach((row: any, idx: number) => {
       const so = getVal(row, "SO") || `Row ${idx + 2}`
-      // GW: SO ปกติ 8 หลัก ขึ้นต้น 01 — ห้าม 05 (และกรณี Excel ตัดเหลือ 7 หลักขึ้นต้น 5 = 05 ที่โดนตัด 0)
+      // GW: SO is normally 8 digits starting with 01 — 05 is not allowed (including the case where Excel truncates it to 7 digits starting with 5 = an 05 with the leading 0 dropped)
       if (isGW) {
         const soDigits = String(getVal(row, "SO") ?? "").trim().replace(/\D/g, "")
         if (soDigits && (soDigits.startsWith("05") || (soDigits.length === 7 && soDigits.startsWith("5")))) {
-          errs.push(`SO ${so}: SO นี้ขึ้นต้นด้วย 05 (หรือถูกตัดเหลือ 7 หลักขึ้นต้น 5) — กรุณาใช้ SO ที่ขึ้นต้นด้วย 01`)
+          errs.push(`SO ${so}: this SO starts with 05 (or was truncated to 7 digits starting with 5) — please use an SO that starts with 01`)
         }
       }
       // completeness
@@ -205,7 +205,7 @@ export default function NewRequestPage() {
     if (!file || preview.length === 0) return
     // MER must pick the first approver: GW → DPM GW, NYG → DVM MER, EA → ADVM.
     if (!vpMerSelected) {
-      setError(isGW ? "Please select a DPM GW before submitting" : isEA ? "Please select an ADVM (EA) before submitting" : "กรุณาเลือก DVM Merchandise ก่อนส่ง")
+      setError(isGW ? "Please select a DPM GW before submitting" : isEA ? "Please select an ADVM (EA) before submitting" : "Please select a DVM Merchandise before submitting")
       return
     }
     setLoading(true)
@@ -264,7 +264,7 @@ export default function NewRequestPage() {
         <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm font-semibold text-amber-800 cursor-pointer">
             <input type="checkbox" checked={testMode} onChange={e => setTestMode(e.target.checked)} className="w-4 h-4" />
-            🧪 อัพเป็น Test (เมลเด้งเข้า admin, user จริงไม่เห็น/ไม่ได้เมล)
+            🧪 Upload as Test (emails reroute to admin; real users don't see it / get no email)
           </label>
           {testMode && (
             <select value={testBu} onChange={e => setTestBu(e.target.value as any)}
@@ -274,7 +274,7 @@ export default function NewRequestPage() {
               <option value="EA">BU: EA</option>
             </select>
           )}
-          {testMode && <span className="text-xs text-amber-600">เอกสารจะได้เลข TEST-… · magic link แต่ละ role เข้า inbox คุณ</span>}
+          {testMode && <span className="text-xs text-amber-600">The document gets a TEST-… number · each role's magic link goes to your inbox</span>}
         </div>
       )}
 
@@ -291,7 +291,7 @@ export default function NewRequestPage() {
                 Select {firstLabel} <span className="text-red-500">*</span>
               </h2>
               {vpMerUsers.length === 0 ? (
-                <p className="text-sm text-red-500">ยังไม่มี {firstRole} ใน Master — กรุณาเพิ่มใน User Management ก่อน</p>
+                <p className="text-sm text-red-500">No {firstRole} in Master yet — please add one in User Management first</p>
               ) : vpMerUsers.length === 1 ? (
                 <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
                   <div>

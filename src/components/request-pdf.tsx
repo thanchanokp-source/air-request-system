@@ -10,7 +10,7 @@ Font.registerHyphenationCallback((word: string) => [word]) // avoid breaking Tha
 // Company letterhead — edit here if the legal entity / address changes.
 const COMPANY = {
   name: "Nan Yang Garment Co., Ltd.",
-  thai: "บริษัท นันยางการ์เม้นท์ จำกัด ", // trailing space prevents the last glyph being clipped
+  thai: "Nan Yang Garment Co., Ltd.", // Thai legal-name line (localized to English)
   address: "27 Phetkasem Rd, Nong Khang Phlu, Nong Khaem, Bangkok 10160, Thailand",
 }
 

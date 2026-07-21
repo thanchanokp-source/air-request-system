@@ -408,7 +408,7 @@ export default function RequestDetailPage() {
   const [soActualOverride, setSoActualOverride] = useState<Record<string, string>>({})
   // Logistics fills QTY Air / Plan Ship Date that Merchandise left blank at upload.
   const [soShipData, setSoShipData] = useState<Record<string, { qty?: string; date?: string }>>({})
-  // เรื่อง 6: Logistics rejects an SO (wrongly included) → bounce before the claim split.
+  // Story 6: Logistics rejects an SO (wrongly included) → bounce before the claim split.
   const [lgRejectId, setLgRejectId] = useState<string | null>(null)
   const [lgRejectReason, setLgRejectReason] = useState("")
   const [crNoInput, setCrNoInput] = useState("")
@@ -469,7 +469,7 @@ export default function RequestDetailPage() {
   const [claimFwdDone, setClaimFwdDone] = useState<string|null>(null)
   // Claim review: card list (expand each) vs flat table (see all at once).
   const [claimTableView, setClaimTableView] = useState(false)
-  // เรื่อง 4: universal "all MER data" panel every role can open — flat table / by style / by SO.
+  // Story 4: universal "all MER data" panel every role can open — flat table / by style / by SO.
   const [showAllData, setShowAllData] = useState(false)
   const [allView, setAllView] = useState<"table" | "style" | "so">("table")
   // STYLES approval section: accordion (card) vs compact table (approve/reject in-row).
@@ -986,18 +986,18 @@ export default function RequestDetailPage() {
         return
       }
       if (!lgComplete) {
-        alert("ข้อมูลยังไม่ครบ — SO ที่คำนวณต้องอยู่ใน HAWB ที่มี HAWB No. (จะได้ Actual Air) ก่อนส่ง\nหากยังไม่ครบ กด \"Save Draft\" เก็บไว้ก่อนได้")
+        alert("Incomplete data — calculated SOs must be in a HAWB with a HAWB No. (to get Actual Air) before sending\nIf not yet complete, press \"Save Draft\" to keep it for now")
         return
       }
       // Every calculated SO (in a HAWB) must have a real Ship Date. SOs not calculated are exempt.
       if (!lgShipDatesOk) {
-        alert(`กรุณาใส่ Plan Ship Date ของ SO ที่ถูกคำนวณก่อนส่ง (ขาด: ${missingShipDateSos.join(", ")})\nSO ที่ไม่ได้อยู่ใน HAWB ไม่ต้องใส่ก็ได้`)
+        alert(`Please enter the Plan Ship Date for the calculated SOs before sending (missing: ${missingShipDateSos.join(", ")})\nSOs not in a HAWB do not need one`)
         return
       }
       // Booking Date is required on every HAWB group before sending.
       const missingBooking = hawbGroups.filter(g => !g.bookingDate)
       if (missingBooking.length > 0) {
-        alert(`กรุณากรอก Booking Date ให้ครบทุก HAWB ก่อนส่ง (ขาด ${missingBooking.length} HAWB)`)
+        alert(`Please fill in the Booking Date for all HAWBs before sending (missing ${missingBooking.length} HAWB)`)
         return
       }
     }
@@ -1033,7 +1033,7 @@ export default function RequestDetailPage() {
     if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Save failed"); return }
     if (draft) {
       const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json())
-      alert("บันทึกฉบับร่างแล้ว (ยังไม่ส่ง)")
+      alert("Draft saved (not yet sent)")
       return
     }
     router.push("/approvals")
@@ -1108,7 +1108,7 @@ export default function RequestDetailPage() {
   const needsVpPick = (role === "DVM_MER" && req?.status === "PENDING_DVM_MER") || (role === "DVM_MER_EA" && req?.status === "PENDING_DVM_MER_EA")
 
   const approveStyle = async (style: string) => {
-    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "กรุณาเลือก DVM (EA) ผู้อนุมัติถัดไปก่อน" : "กรุณาเลือก VP Merchandise (ผู้อนุมัติถัดไป) ก่อน"); return }
+    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "Please select the next approver (DVM – EA) first" : "Please select the next approver (VP Merchandise) first"); return }
     const sig = await askSignature(); if (!sig) return
     setSubmitting(style)
     const res = await fetch(`/api/requests/${id}/approve`, {
@@ -1123,7 +1123,7 @@ export default function RequestDetailPage() {
   const approveSelectedStyles = async () => {
     const toApprove = styleGroups.filter(g => (g.status === "PENDING" || g.status === "PASSED" || (presidentNewFlow && g.status === "VP_MER_PASSED")) && selectedStyles.has(g.style)).map(g => g.style)
     if (toApprove.length === 0) return
-    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "กรุณาเลือก DVM (EA) ผู้อนุมัติถัดไปก่อน" : "กรุณาเลือก VP Merchandise (ผู้อนุมัติถัดไป) ก่อน"); return }
+    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "Please select the next approver (DVM – EA) first" : "Please select the next approver (VP Merchandise) first"); return }
     const sig = await askSignature(); if (!sig) return
     for (const style of toApprove) {
       setSubmitting(style)
@@ -1146,10 +1146,10 @@ export default function RequestDetailPage() {
     // NYG only: let the rejecter also type an email to forward the rejection to (optional).
     let fwEmail: string | undefined
     if (!isGWRequest) {
-      const typed = window.prompt("Forward to email (optional) — @nanyangtextile.com เท่านั้น, เว้นว่าง = ไม่ส่งต่อ:")
+      const typed = window.prompt("Forward to email (optional) — @nanyangtextile.com only, blank = do not forward:")
       const t = (typed || "").trim()
       if (t) {
-        if (!t.toLowerCase().endsWith("@nanyangtextile.com")) { alert("อีเมล Forward ต้องเป็น @nanyangtextile.com เท่านั้น"); return }
+        if (!t.toLowerCase().endsWith("@nanyangtextile.com")) { alert("Forward email must be @nanyangtextile.com only"); return }
         fwEmail = t
       }
     }
@@ -1217,7 +1217,7 @@ export default function RequestDetailPage() {
     else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null) }
   }
 
-  // เรื่อง 6: Logistics rejects an SO → bounce it back before the claim split (NYG→SCM, GW→MER) + FYI all.
+  // Story 6: Logistics rejects an SO → bounce it back before the claim split (NYG→SCM, GW→MER) + FYI all.
   const lgRejectSo = async (itemId: string) => {
     if (!lgRejectReason.trim()) return
     setSubmitting(itemId)
@@ -1268,7 +1268,7 @@ export default function RequestDetailPage() {
     // NYG Forward email must be a company address (@nanyangtextile.com only).
     const fw = !isGWRequest ? rejectForwardEmail.trim() : ""
     if (fw && !fw.toLowerCase().endsWith("@nanyangtextile.com")) {
-      alert("อีเมล Forward ต้องเป็น @nanyangtextile.com เท่านั้น")
+      alert("Forward email must be @nanyangtextile.com only")
       return
     }
     setSubmitting(style)
@@ -1295,7 +1295,7 @@ export default function RequestDetailPage() {
   const backToScmSelectedStyles = async () => {
     const toBack = styleGroups.filter(g => (g.status === "PENDING" || g.status === "PASSED" || (presidentNewFlow && g.status === "VP_MER_PASSED")) && selectedStyles.has(g.style)).map(g => g.style)
     if (toBack.length === 0) return
-    const reason = window.prompt(`เหตุผลในการส่งกลับ SCM (${toBack.length} style):`)
+    const reason = window.prompt(`Reason for sending back to SCM (${toBack.length} style):`)
     if (reason == null || !reason.trim()) return
     for (const style of toBack) {
       setSubmitting(style)
@@ -1506,7 +1506,7 @@ export default function RequestDetailPage() {
         <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700">← Back</button>
         <h1 className="text-xl font-bold text-gray-900">{req.documentNo}</h1>
         {req.isTest && (
-          <span className="text-xs bg-amber-100 border border-amber-300 text-amber-800 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">🧪 TEST — เมลเข้า admin</span>
+          <span className="text-xs bg-amber-100 border border-amber-300 text-amber-800 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">🧪 TEST — email goes to admin</span>
         )}
         {req.crNo && isNykClaimRole && (
           <span className="flex items-center gap-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
@@ -1599,7 +1599,7 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* เรื่อง 4: ทุก role เปิดดูข้อมูลทั้งหมดที่ MER อัพได้ — สลับ ตาราง / กลุ่มตาม Style / กลุ่มตาม SO */}
+      {/* Story 4: every role can open all data MER uploaded — switch between table / group by Style / group by SO */}
       {activeItems.length > 0 && (() => {
         const ALL_COLS: { h: string; v: (it: any) => any; right?: boolean }[] = [
           { h: "SO", v: it => it.so }, { h: "STYLE", v: it => it.style }, { h: "SUB", v: it => it.sub || "-" },
@@ -1643,13 +1643,13 @@ export default function RequestDetailPage() {
           <div className="bg-white rounded-xl border border-gray-200">
             <button type="button" onClick={() => setShowAllData(v => !v)}
               className="w-full flex items-center justify-between px-4 py-3 text-left">
-              <span className="font-semibold text-gray-800">📋 ข้อมูลทั้งหมด (MER upload) — {activeItems.length} SO</span>
-              <span className="text-gray-400 text-sm">{showAllData ? "▲ ซ่อน" : "▼ ดูทั้งหมด"}</span>
+              <span className="font-semibold text-gray-800">📋 All data (MER upload) — {activeItems.length} SO</span>
+              <span className="text-gray-400 text-sm">{showAllData ? "▲ Hide" : "▼ View all"}</span>
             </button>
             {showAllData && (
               <div className="px-4 pb-4 space-y-3">
                 <div className="flex gap-1.5">
-                  {([["table", "ตาราง"], ["style", "ตาม Style"], ["so", "ตาม SO"]] as const).map(([k, label]) => (
+                  {([["table", "Table"], ["style", "By Style"], ["so", "By SO"]] as const).map(([k, label]) => (
                     <button key={k} type="button" onClick={() => setAllView(k)}
                       className={`px-3 py-1 rounded-lg text-xs font-medium ${allView === k ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{label}</button>
                   ))}
@@ -1677,18 +1677,18 @@ export default function RequestDetailPage() {
       {canAct && needsVpPick && (
         <div className="bg-white rounded-xl border border-blue-200 p-4 space-y-2">
           <label className="text-sm font-semibold text-blue-800">
-            เลือก{role === "DVM_MER_EA" ? " DVM (EA)" : " VP Merchandise"} ผู้อนุมัติถัดไป <span className="text-red-500">*</span>
+            Select next {role === "DVM_MER_EA" ? "DVM (EA)" : "VP Merchandise"} approver <span className="text-red-500">*</span>
           </label>
           {vpPickList.length === 0 ? (
-            <p className="text-sm text-red-500">ยังไม่มี {role === "DVM_MER_EA" ? "VP_MER_EA" : "VP_MER"} ใน Master — กรุณาเพิ่มใน User Management ก่อน</p>
+            <p className="text-sm text-red-500">No {role === "DVM_MER_EA" ? "VP_MER_EA" : "VP_MER"} in Master — please add one in User Management first</p>
           ) : (
             <select value={vpPick} onChange={e => setVpPick(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
-              <option value="">-- เลือกผู้อนุมัติ --</option>
+              <option value="">-- Select approver --</option>
               {vpPickList.map((u: any) => <option key={u.id} value={u.email}>{u.name} ({u.email})</option>)}
             </select>
           )}
-          <p className="text-[11px] text-blue-500">เอกสารนี้จะส่งให้เฉพาะคนที่เลือกเท่านั้น</p>
+          <p className="text-[11px] text-blue-500">This document will be sent only to the person you select</p>
         </div>
       )}
 
@@ -1875,7 +1875,7 @@ export default function RequestDetailPage() {
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     {!isGWRequest && (
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com เท่านั้น, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com only, sends data + reason (no account required)</label>
                         <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                       </div>
                     )}
@@ -2064,7 +2064,7 @@ export default function RequestDetailPage() {
                     if (isBackScm && isReady) rows.push(
                       <tr key={g.style + "_bts"}><td colSpan={15} className="px-4 py-3 bg-orange-50 border-t border-orange-100">
                         <div className="space-y-2">
-                          <label className="text-xs font-medium text-orange-700">Back to SCM — {g.style} — เหตุผล *</label>
+                          <label className="text-xs font-medium text-orange-700">Back to SCM — {g.style} — Reason *</label>
                           <textarea value={backToScmStyleComment} onChange={e => setBackToScmStyleComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                           <div className="flex gap-2">
                             <button onClick={() => backToScmStyleFn(g.style)} disabled={isSub || !backToScmStyleComment.trim()} className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{isSub ? "..." : "Confirm Back to SCM"}</button>
@@ -2127,7 +2127,7 @@ export default function RequestDetailPage() {
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     {!isGWRequest && (
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com เท่านั้น, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com only, sends data + reason (no account required)</label>
                         <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                       </div>
                     )}
@@ -2250,7 +2250,7 @@ export default function RequestDetailPage() {
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     {!isGWRequest && (
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com เท่านั้น, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com only, sends data + reason (no account required)</label>
                         <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                       </div>
                     )}
@@ -2372,9 +2372,9 @@ export default function RequestDetailPage() {
               </button>
             ) : (
               <div className="space-y-2">
-                <label className="text-xs font-medium text-orange-700">ส่งกลับให้ Merchandise แก้ไข — เหตุผล *</label>
+                <label className="text-xs font-medium text-orange-700">Send back to Merchandise to edit — Reason *</label>
                 <textarea value={backToMerReason} onChange={e => setBackToMerReason(e.target.value)} rows={2}
-                  placeholder="ระบุเหตุผล..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                  placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                 <div className="flex gap-2">
                   <button onClick={backToMerGw} disabled={!backToMerReason.trim() || submitting === "_"}
                     className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">
@@ -2383,7 +2383,7 @@ export default function RequestDetailPage() {
                   <button onClick={() => { setBackToMerOpen(false); setBackToMerReason("") }}
                     className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                 </div>
-                <p className="text-[11px] text-orange-600">ส่งทั้งเอกสารกลับให้ Merchandise + อีเมลแจ้งผู้สร้าง</p>
+                <p className="text-[11px] text-orange-600">Sends the whole document back to Merchandise + emails the creator</p>
               </div>
             )}
           </div>
@@ -2425,7 +2425,7 @@ export default function RequestDetailPage() {
                     <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     {!isGWRequest && (
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com เท่านั้น, ส่งข้อมูล + เหตุผลให้ (ไม่ต้องมีบัญชี)</label>
+                        <label className="text-[11px] font-medium text-gray-500">Forward to email (optional) — @nanyangtextile.com only, sends data + reason (no account required)</label>
                         <input type="email" value={rejectForwardEmail} onChange={e => setRejectForwardEmail(e.target.value)} placeholder="name@nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
                       </div>
                     )}
@@ -2474,8 +2474,8 @@ export default function RequestDetailPage() {
       {myAllRoles.includes("SCM_USER") && !isGWRequest && (req.items || []).some((i: any) => itemHasReassignSplit(i)) && (
         <div className="space-y-3 border border-orange-300 rounded-xl bg-orange-50/40 p-4">
           <div>
-            <h2 className="font-semibold text-orange-800 text-base">↩ SCM — Re-assign Claim (ตีกลับจาก Procurement)</h2>
-            <p className="text-xs text-gray-500 mt-0.5">เลือกแผนกเคลมใหม่ให้ SO ที่ถูกตีกลับ — % คงเดิม (ล็อก) แล้วส่งต่อไปแผนกที่เลือก</p>
+            <h2 className="font-semibold text-orange-800 text-base">↩ SCM — Re-assign Claim (sent back from Procurement)</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Select a new claim department for the sent-back SO — % stays the same (locked), then forward to the selected department</p>
           </div>
           {(req.items || []).filter((i: any) => itemHasReassignSplit(i)).map((item: any) => {
             const split = getSplits(item).find((s: any) => s.status === "SCM_REASSIGN")
@@ -2484,8 +2484,8 @@ export default function RequestDetailPage() {
               <div key={item.id} className="flex flex-wrap items-center gap-3 bg-white rounded-lg border border-orange-200 px-3 py-2">
                 <span className="text-sm font-semibold text-gray-800">{item.so}</span>
                 <span className="text-xs text-gray-500">{item.style}{item.description ? ` · ${item.description}` : ""}</span>
-                <span className="text-xs bg-orange-100 text-orange-700 rounded px-2 py-0.5 font-medium">{split?.pct}% (ล็อก)</span>
-                {item.itemComment && <span className="text-xs text-red-500">เหตุผล: {item.itemComment}</span>}
+                <span className="text-xs bg-orange-100 text-orange-700 rounded px-2 py-0.5 font-medium">{split?.pct}% (locked)</span>
+                {item.itemComment && <span className="text-xs text-red-500">Reason: {item.itemComment}</span>}
                 <div className="ml-auto flex items-center gap-2">
                   <select value={reassignDept[item.id] ?? split?.dept ?? ""} onChange={e => setReassignDept(p => ({ ...p, [item.id]: e.target.value }))}
                     className="border border-orange-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
@@ -2620,13 +2620,13 @@ export default function RequestDetailPage() {
               {!backToMerOpen ? (
                 <button onClick={() => setBackToMerOpen(true)} disabled={!!submitting}
                   className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
-                  ↩ Back to Merchandise (ส่งกลับผู้อัพโหลด)
+                  ↩ Back to Merchandise (send back to uploader)
                 </button>
               ) : (
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-orange-700">ส่งกลับให้ Merchandise (ผู้อัพโหลด) แก้ไข — เหตุผล *</label>
+                  <label className="text-xs font-medium text-orange-700">Send back to Merchandise (uploader) to edit — Reason *</label>
                   <textarea value={backToMerReason} onChange={e => setBackToMerReason(e.target.value)} rows={2}
-                    placeholder="ระบุเหตุผล..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                    placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                   <div className="flex gap-2">
                     <button onClick={backToMerNyg} disabled={!backToMerReason.trim() || submitting === "_"}
                       className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">
@@ -2635,7 +2635,7 @@ export default function RequestDetailPage() {
                     <button onClick={() => { setBackToMerOpen(false); setBackToMerReason("") }}
                       className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                   </div>
-                  <p className="text-[11px] text-orange-600">ส่งทั้งเอกสารกลับให้ผู้อัพโหลด + อีเมลแจ้ง — MER แก้แล้วกด Re-submit จะเริ่มอนุมัติใหม่</p>
+                  <p className="text-[11px] text-orange-600">Sends the whole document back to the uploader + email notification — once MER edits and presses Re-submit, approval starts over</p>
                 </div>
               )}
             </div>
@@ -3320,12 +3320,12 @@ export default function RequestDetailPage() {
       {role === "MER_GW" && isGWRequest && req.status === "PENDING_MER_GW" && (
         <div className="bg-white rounded-xl border border-orange-200 p-4 space-y-3">
           <div>
-            <h2 className="font-semibold text-orange-700">↩ Back to Merchandise — แก้ไขและส่งกลับ</h2>
-            <p className="text-xs text-gray-500 mt-0.5">DPM/GM ส่งเอกสารกลับมาให้แก้ไข · แก้แล้วกด Re-submit เพื่อส่งเข้า DPM อีกครั้ง</p>
+            <h2 className="font-semibold text-orange-700">↩ Back to Merchandise — edit and resend</h2>
+            <p className="text-xs text-gray-500 mt-0.5">DPM/GM sent the document back for editing · once edited, press Re-submit to send it to DPM again</p>
           </div>
           {req.rejectionReason && (
             <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
-              <p className="text-xs font-semibold text-orange-700">เหตุผลที่ส่งกลับ:</p>
+              <p className="text-xs font-semibold text-orange-700">Reason for sending back:</p>
               <p className="text-sm text-orange-800 mt-0.5 whitespace-pre-wrap">{req.rejectionReason}</p>
             </div>
           )}
@@ -3340,12 +3340,12 @@ export default function RequestDetailPage() {
       {["MER_USER", "MER_EA"].includes(role) && !isGWRequest && req.status === "PENDING_MER" && (
         <div className="bg-white rounded-xl border border-orange-200 p-4 space-y-3">
           <div>
-            <h2 className="font-semibold text-orange-700">↩ Back to Merchandise — แก้ไขและส่งกลับ</h2>
-            <p className="text-xs text-gray-500 mt-0.5">SCM ส่งเอกสารกลับมาให้แก้ไข · แก้แล้วกด Re-submit เพื่อส่งเข้าอนุมัติใหม่</p>
+            <h2 className="font-semibold text-orange-700">↩ Back to Merchandise — edit and resend</h2>
+            <p className="text-xs text-gray-500 mt-0.5">SCM sent the document back for editing · once edited, press Re-submit to send it for approval again</p>
           </div>
           {req.rejectionReason && (
             <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
-              <p className="text-xs font-semibold text-orange-700">เหตุผลที่ส่งกลับ:</p>
+              <p className="text-xs font-semibold text-orange-700">Reason for sending back:</p>
               <p className="text-sm text-orange-800 mt-0.5 whitespace-pre-wrap">{req.rejectionReason}</p>
             </div>
           )}
@@ -4883,7 +4883,7 @@ export default function RequestDetailPage() {
                 {lgDraftSaving ? "..." : "Save Draft"}
               </button>
               <button type="button" onClick={() => saveLgHawb(false)} disabled={lgDraftSaving || hawbGroups.length === 0 || !lgShipDatesOk}
-                title={!lgComplete ? "ข้อมูลยังไม่ครบ (SO ที่คำนวณต้องอยู่ใน HAWB + มี HAWB No.)" : !lgShipDatesOk ? `ต้องใส่ Ship Date ของ SO ที่คำนวณ: ${missingShipDateSos.join(", ")}` : lgFileCount === 0 ? "ต้องแนบไฟล์อย่างน้อย 1" : ""}
+                title={!lgComplete ? "Incomplete data (calculated SOs must be in a HAWB + have a HAWB No.)" : !lgShipDatesOk ? `Ship Date required for calculated SOs: ${missingShipDateSos.join(", ")}` : lgFileCount === 0 ? "At least 1 file must be attached" : ""}
                 className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50">
                 {lgDraftSaving ? "Saving..." : (isLgGwEntry ? "Save & Send to Claim" : "Save & Send")}
               </button>
@@ -4895,7 +4895,7 @@ export default function RequestDetailPage() {
           {showAwbEntry && allLgItems.length > 0 && (
             <div className="bg-white rounded-xl border border-orange-300 p-3 space-y-2">
               <p className="text-xs font-semibold text-orange-800">
-                ① Ship Date &amp; QTY Air <span className="font-normal text-gray-500">(กรอกก่อน — เฉพาะที่ Merchandise เว้นว่าง · แถวแดง = ยังไม่มี QTY · Actual/Est. Air Freight คำนวณจาก QTY)</span>
+                ① Ship Date &amp; QTY Air <span className="font-normal text-gray-500">(fill in first — only what Merchandise left blank · red rows = no QTY yet · Actual/Est. Air Freight calculated from QTY)</span>
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -4904,7 +4904,7 @@ export default function RequestDetailPage() {
                     <th className="px-2 py-1 text-left">STYLE</th>
                     <th className="px-2 py-1 text-right">QTY Air</th>
                     <th className="px-2 py-1 text-left">Plan Ship Date</th>
-                    <th className="px-2 py-1 text-center">ตีกลับ</th>
+                    <th className="px-2 py-1 text-center">Send back</th>
                   </tr></thead>
                   <tbody>
                     {allLgItems.map((it: any) => {
@@ -4929,17 +4929,17 @@ export default function RequestDetailPage() {
                           <td className="px-2 py-1 text-center">
                             {isRejecting ? (
                               <div className="flex items-center gap-1">
-                                <input autoFocus placeholder="เหตุผล (ไม่ใช่ air / ไม่อยู่ใน projection)" value={lgRejectReason}
+                                <input autoFocus placeholder="Reason (not air / not in projection)" value={lgRejectReason}
                                   onChange={e => setLgRejectReason(e.target.value)}
                                   className="w-56 border border-red-300 rounded px-2 py-1" />
                                 <button type="button" onClick={() => lgRejectSo(it.id)} disabled={!lgRejectReason.trim() || submitting === it.id}
-                                  className="px-2 py-1 bg-red-600 text-white rounded disabled:opacity-50">{submitting === it.id ? "..." : "ยืนยัน"}</button>
+                                  className="px-2 py-1 bg-red-600 text-white rounded disabled:opacity-50">{submitting === it.id ? "..." : "Confirm"}</button>
                                 <button type="button" onClick={() => { setLgRejectId(null); setLgRejectReason("") }}
-                                  className="px-2 py-1 bg-gray-100 text-gray-600 rounded">ยกเลิก</button>
+                                  className="px-2 py-1 bg-gray-100 text-gray-600 rounded">Cancel</button>
                               </div>
                             ) : (
                               <button type="button" onClick={() => { setLgRejectId(it.id); setLgRejectReason("") }}
-                                className="px-2 py-0.5 text-red-600 border border-red-200 rounded hover:bg-red-50">✕ ตีกลับ</button>
+                                className="px-2 py-0.5 text-red-600 border border-red-200 rounded hover:bg-red-50">✕ Send back</button>
                             )}
                           </td>
                         </tr>
@@ -4948,7 +4948,7 @@ export default function RequestDetailPage() {
                   </tbody>
                 </table>
               </div>
-              <p className="text-[11px] text-orange-600">กรอก QTY ให้ครบก่อน แล้วค่อยไป INV / HAWB ด้านล่าง (Actual จะคำนวณจาก QTY นี้)</p>
+              <p className="text-[11px] text-orange-600">Fill in all QTY first, then go to INV / HAWB below (Actual is calculated from this QTY)</p>
             </div>
           )}
 
@@ -5410,7 +5410,7 @@ export default function RequestDetailPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Export removed — SCM downloads the original file from the Attachments section below. */}
-                  <span className="text-[11px] text-gray-400 self-center">↓ โหลดไฟล์ต้นฉบับได้ที่ Attachments ด้านล่าง</span>
+                  <span className="text-[11px] text-gray-400 self-center">↓ Download the original files from Attachments below</span>
                   {/* Import */}
                   <label className="flex items-center gap-1 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 cursor-pointer">
                     ↑ Import Excel
@@ -5535,9 +5535,9 @@ export default function RequestDetailPage() {
               {/* Back to Merchandise — reason box (shown only after the small toolbar button is clicked) */}
               {role === "SCM_USER" && backToMerOpen && (
                 <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 space-y-2">
-                  <label className="text-xs font-medium text-orange-700">ส่งกลับให้ Merchandise (ผู้อัพโหลด) แก้ไข — เหตุผล *</label>
+                  <label className="text-xs font-medium text-orange-700">Send back to Merchandise (uploader) to edit — Reason *</label>
                   <textarea value={backToMerReason} onChange={e => setBackToMerReason(e.target.value)} rows={2}
-                    placeholder="ระบุเหตุผล..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                    placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                   <div className="flex gap-2">
                     <button onClick={backToMerNyg} disabled={!backToMerReason.trim() || submitting === "_"}
                       className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">
@@ -5546,7 +5546,7 @@ export default function RequestDetailPage() {
                     <button onClick={() => { setBackToMerOpen(false); setBackToMerReason("") }}
                       className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                   </div>
-                  <p className="text-[11px] text-orange-600">ส่งทั้งเอกสารกลับให้ผู้อัพโหลด + อีเมลแจ้ง — MER แก้แล้วกด Re-submit จะเริ่มอนุมัติใหม่</p>
+                  <p className="text-[11px] text-orange-600">Sends the whole document back to the uploader + email notification — once MER edits and presses Re-submit, approval starts over</p>
                 </div>
               )}
 

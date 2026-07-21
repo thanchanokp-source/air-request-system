@@ -417,15 +417,15 @@ export default function RequestsPage() {
                   return <span className="text-xs text-gray-500 truncate" title={label}>{label} · {dg.request.buName}</span>
                 })()}
                 {(dg.request.createdBy?.name || dg.request.createdBy?.email) && (
-                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0" title="ผู้อัปโหลด / Requested by">
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0" title="Uploaded by / Requested by">
                     👤 {dg.request.createdBy.name || dg.request.createdBy.email}
                   </span>
                 )}
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
                   <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
                 )}
-                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ml-auto">EST {fmtNum(dg.estTotal)} ฿</span>
-                <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {fmtNum(dg.actTotal)} ฿</span>
+                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ml-auto">EST {fmtNum(dg.estTotal)} THB</span>
+                <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {fmtNum(dg.actTotal)} THB</span>
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{dg.styles.length} style(s) · {dg.total} SO(s)</span>
                 {(dg.request.attachments || []).filter((a: any) => ["MER_USER","VP_MER"].includes(a.uploadedBy?.role)).map((att: any) => (
                   <span key={att.id} className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full whitespace-nowrap font-medium shrink-0">

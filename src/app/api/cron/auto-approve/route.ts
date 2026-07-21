@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { notifyStatusChange } from "@/lib/notify"
 import { getSplits, nykSplitStatus, setGwSplitStatus, deriveGwItemStatus, deriveNygItemStatus } from "@/lib/claim"
 
-// เรื่อง 9b — Auto-approve SCM NYK claim (EVP step) when it has been pending > 3 days.
+// Case 9b — Auto-approve SCM NYK claim (EVP step) when it has been pending > 3 days.
 //
 // Scope (confirmed): ONLY the SCM NYK claim. Timer: from when the SO ENTERED the SCM NYK
 // stage — i.e. the moment the SCM NYK *Approver* approved (that's when the EVP was notified).

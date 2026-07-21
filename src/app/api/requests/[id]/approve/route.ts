@@ -395,7 +395,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Selection is per-document (assignedVpMer); the picked VP is the only one notified next.
     if (action === "approve_style") {
       const vpEmail = assignedVp || (request as any).assignedVpMer
-      if (!vpEmail) return NextResponse.json({ error: dvmStatus === "PENDING_DVM_MER_EA" ? "กรุณาเลือก DVM (EA) ผู้อนุมัติถัดไปก่อนอนุมัติ" : "กรุณาเลือก VP Merchandise (ผู้อนุมัติถัดไป) ก่อนอนุมัติ" }, { status: 400 })
+      if (!vpEmail) return NextResponse.json({ error: dvmStatus === "PENDING_DVM_MER_EA" ? "Please select the next approver, DVM (EA), before approving" : "Please select VP Merchandise (the next approver) before approving" }, { status: 400 })
       if (assignedVp && assignedVp !== (request as any).assignedVpMer) {
         await prisma.airRequest.update({ where: { id }, data: { assignedVpMer: assignedVp } })
       }
@@ -1055,7 +1055,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
-  // เรื่อง 6: Logistics rejects an SO that was wrongly included (not air / not in projection) →
+  // Case 6: Logistics rejects an SO that was wrongly included (not air / not in projection) →
   // bounce it back to the stage BEFORE the claim split (NYG: SCM re-assigns; GW: MER re-selects
   // the claim dept), and FYI everyone who already approved the document.
   if (action === "lg_reject_so" && ["LOGISTICS", "LOGISTICS_GW"].includes(userRole)) {

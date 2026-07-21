@@ -68,7 +68,7 @@ export async function sendMail(to: string | string[], subject: string, html: str
       </td></tr>
       <tr><td style="padding:16px 20px 4px;font-family:Arial,sans-serif">
         ${posTag ? `<p style="margin:0 0 8px"><span style="display:inline-block;background:#1e293b;color:#fff;font-size:13px;font-weight:700;padding:4px 12px;border-radius:6px">📍 ${posTag}</span></p>` : ""}
-        <p style="margin:0;color:#6b7280;font-size:12px">ปกติจะส่งหา (meant for): <strong style="color:#b45309">${originalTo}</strong></p>
+        <p style="margin:0;color:#6b7280;font-size:12px">Normally sent to (meant for): <strong style="color:#b45309">${originalTo}</strong></p>
       </td></tr>
       <tr><td style="padding:8px 20px 20px;font-family:Arial,sans-serif;font-size:13px;color:#374151">
         ${html}

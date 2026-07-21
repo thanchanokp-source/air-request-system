@@ -1260,7 +1260,7 @@ async function notifyRejectionForwardImpl(requestId: string, toEmail: string, st
     <tr><td style="padding:20px 24px">
       <p style="color:#334155;font-size:13px;font-family:Arial;margin:0 0 4px">Requested by: <strong>${req.createdBy?.name || req.createdBy?.email || "-"}</strong>${rejectedBy ? ` · Rejected by: <strong>${rejectedBy}</strong>` : ""}</p>
       <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;margin:10px 0">
-        <p style="margin:0;color:#991b1b;font-size:12px;font-weight:700;font-family:Arial">เหตุผลที่ Reject:</p>
+        <p style="margin:0;color:#991b1b;font-size:12px;font-weight:700;font-family:Arial">Reason for rejection:</p>
         <p style="margin:4px 0 0;color:#7f1d1d;font-size:13px;font-family:Arial">${reason || "-"}</p>
       </div>
       <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial;margin-top:8px">
@@ -1292,20 +1292,20 @@ export async function notifyRejectionToCreator(requestId: string, style: string,
     const cell = (v: any, right = false) => `<td style="padding:6px 10px;border-bottom:1px solid #eee${right ? ";text-align:right" : ""}">${v}</td>`
     const rows = items.map(i => `<tr>${cell(i.so)}${cell(i.style)}${cell(i.customerPO || "-")}${cell(i.description || "-")}${cell((i.qtyRequestAir || 0).toLocaleString(), true)}${cell(i.reasonDelay || "-")}</tr>`).join("")
     const fwLine = forwardEmail
-      ? `<p style="margin:6px 0 0;color:#334155;font-size:13px;font-family:Arial">ส่งต่อ (Forward) ไปที่: <strong style="color:#dc2626">${forwardEmail}</strong></p>`
+      ? `<p style="margin:6px 0 0;color:#334155;font-size:13px;font-family:Arial">Forwarded to: <strong style="color:#dc2626">${forwardEmail}</strong></p>`
       : ""
     const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
   <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
     <tr><td style="background:#dc2626;padding:18px 24px">
-      <p style="margin:0;color:#fecaca;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · เอกสารถูก Reject</p>
+      <p style="margin:0;color:#fecaca;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Document Rejected</p>
       <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo} — Style ${style}</h1>
     </td></tr>
     <tr><td style="padding:20px 24px">
-      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">เรียน <strong>${req.createdBy?.name || req.createdBy?.email}</strong>, เอกสารของคุณถูก Reject${rejectedBy ? ` โดย <strong>${rejectedBy}</strong>` : ""}</p>
+      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">Dear <strong>${req.createdBy?.name || req.createdBy?.email}</strong>, your document was rejected${rejectedBy ? ` by <strong>${rejectedBy}</strong>` : ""}</p>
       ${fwLine}
       <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;margin:12px 0">
-        <p style="margin:0;color:#991b1b;font-size:12px;font-weight:700;font-family:Arial">เหตุผลที่ Reject:</p>
+        <p style="margin:0;color:#991b1b;font-size:12px;font-weight:700;font-family:Arial">Reason for rejection:</p>
         <p style="margin:4px 0 0;color:#7f1d1d;font-size:13px;font-family:Arial">${reason || "-"}</p>
       </div>
       <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial;margin-top:8px">
@@ -1314,13 +1314,13 @@ export async function notifyRejectionToCreator(requestId: string, style: string,
           <th style="padding:6px 10px;text-align:left">CUSTOMER PO</th><th style="padding:6px 10px;text-align:left">DESCRIPTION</th>
           <th style="padding:6px 10px;text-align:right">QTY AIR</th><th style="padding:6px 10px;text-align:left">REASON DELAY</th>
         </tr></thead><tbody>${rows}</tbody></table>
-      <p style="margin:14px 0 0;color:#64748b;font-size:12px;font-family:Arial">กรุณาแก้ไขและอัปโหลดเอกสารใหม่อีกครั้ง</p>
+      <p style="margin:14px 0 0;color:#64748b;font-size:12px;font-family:Arial">Please edit and upload the document again.</p>
     </td></tr>
     <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
       <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group</p></td></tr>
   </table>
 </td></tr></table></body></html>`
-    await sendMail([req.createdBy.email], `[Air Request · ถูก Reject] ${req.documentNo} — ${style}`, html)
+    await sendMail([req.createdBy.email], `[Air Request · Rejected] ${req.documentNo} — ${style}`, html)
   } catch (e) { console.error("[notify] rejection to creator failed:", e) }
 }
 
@@ -1344,9 +1344,9 @@ export async function notifyBackToMerGw(requestId: string, reason: string, byNam
       <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo}</h1>
     </td></tr>
     <tr><td style="padding:20px 24px">
-      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">เรียน <strong>${req.createdBy?.name || req.createdBy?.email}</strong>, เอกสารถูกส่งกลับให้ Merchandise แก้ไข${byName ? ` โดย <strong>${byName}</strong>` : ""}</p>
+      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">Dear <strong>${req.createdBy?.name || req.createdBy?.email}</strong>, the document was sent back to Merchandise for editing${byName ? ` by <strong>${byName}</strong>` : ""}</p>
       <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin:12px 0">
-        <p style="margin:0;color:#9a3412;font-size:12px;font-weight:700;font-family:Arial">เหตุผล (Back to Merchandise):</p>
+        <p style="margin:0;color:#9a3412;font-size:12px;font-weight:700;font-family:Arial">Reason (Back to Merchandise):</p>
         <p style="margin:4px 0 0;color:#7c2d12;font-size:13px;font-family:Arial">${reason || "-"}</p>
       </div>
       <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial;margin-top:8px">
@@ -1355,7 +1355,7 @@ export async function notifyBackToMerGw(requestId: string, reason: string, byNam
           <th style="padding:6px 10px;text-align:left">CUSTOMER PO</th><th style="padding:6px 10px;text-align:left">DESCRIPTION</th>
           <th style="padding:6px 10px;text-align:right">QTY AIR</th>
         </tr></thead><tbody>${rows}</tbody></table>
-      <p style="margin:14px 0 0;color:#64748b;font-size:12px;font-family:Arial">กรุณาแก้ไขและกด Re-submit เพื่อส่งกลับเข้าอนุมัติอีกครั้ง</p>
+      <p style="margin:14px 0 0;color:#64748b;font-size:12px;font-family:Arial">Please edit and click Re-submit to send it back for approval again.</p>
     </td></tr>
     <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
       <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group</p></td></tr>
@@ -1365,7 +1365,7 @@ export async function notifyBackToMerGw(requestId: string, reason: string, byNam
   } catch (e) { console.error("[notify] back-to-mer (GW) failed:", e) }
 }
 
-// เรื่อง 6 — Logistics rejected an SO and bounced it back before the claim split. FYI-alert every
+// Topic 6 — Logistics rejected an SO and bounced it back before the claim split. FYI-alert every
 // person who already approved this document (distinct approvers from the approval log) + the creator.
 export async function notifyLgRejectFyi(requestId: string, so: string, reason: string, byName?: string) {
   try {
@@ -1391,18 +1391,18 @@ export async function notifyLgRejectFyi(requestId: string, so: string, reason: s
       <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo} — SO ${so}</h1>
     </td></tr>
     <tr><td style="padding:20px 24px">
-      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">Logistics${byName ? ` (<strong>${byName}</strong>)` : ""} ตีกลับ SO <strong>${so}</strong> (ไม่ใช่ของ air / ไม่อยู่ใน projection) ให้กลับไปก่อนขั้นตอนแบ่ง Claim เพื่อแก้ไข</p>
+      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">Logistics${byName ? ` (<strong>${byName}</strong>)` : ""} sent back SO <strong>${so}</strong> (not an air item / not in the projection) to before the Claim split step for editing</p>
       <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin:12px 0">
-        <p style="margin:0;color:#92400e;font-size:12px;font-weight:700;font-family:Arial">เหตุผล:</p>
+        <p style="margin:0;color:#92400e;font-size:12px;font-weight:700;font-family:Arial">Reason:</p>
         <p style="margin:4px 0 0;color:#78350f;font-size:13px;font-family:Arial">${reason || "-"}</p>
       </div>
-      <p style="margin:14px 0 0;font-family:Arial"><a href="${link}" style="color:#b45309;font-size:13px">เปิดเอกสาร →</a></p>
+      <p style="margin:14px 0 0;font-family:Arial"><a href="${link}" style="color:#b45309;font-size:13px">Open Document →</a></p>
     </td></tr>
     <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
-      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group · อีเมลนี้เพื่อแจ้งให้ทราบ (FYI)</p></td></tr>
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group · This email is for your information (FYI)</p></td></tr>
   </table>
 </td></tr></table></body></html>`
-    await sendMail(emails, `[Air Request · FYI] Logistics ตีกลับ SO ${so} — ${req.documentNo}`, html)
+    await sendMail(emails, `[Air Request · FYI] Logistics sent back SO ${so} — ${req.documentNo}`, html)
   } catch (e) { console.error("[notify] lg-reject FYI failed:", e) }
 }
 
@@ -1428,28 +1428,28 @@ export async function notifyMissingMaster(requestId: string, missingCountries: s
     if (!recips.length) return
     const li = (v: string) => `<li style="margin:2px 0;color:#7c2d12;font-size:13px;font-family:Arial">${v}</li>`
     const rateBlock = countries.length ? `
-      <p style="margin:12px 0 2px;color:#9a3412;font-size:12px;font-weight:700;font-family:Arial">ต้องเพิ่ม Freight Rate (Master Rate) ของประเทศ:</p>
+      <p style="margin:12px 0 2px;color:#9a3412;font-size:12px;font-weight:700;font-family:Arial">Freight Rate (Master Rate) must be added for country:</p>
       <ul style="margin:0;padding-left:18px">${countries.map(li).join("")}</ul>` : ""
     const wtBlock = descs.length ? `
-      <p style="margin:12px 0 2px;color:#9a3412;font-size:12px;font-weight:700;font-family:Arial">ต้องเพิ่ม WT Charge (Master Description) ของ:</p>
+      <p style="margin:12px 0 2px;color:#9a3412;font-size:12px;font-weight:700;font-family:Arial">WT Charge (Master Description) must be added for:</p>
       <ul style="margin:0;padding-left:18px">${descs.map(li).join("")}</ul>` : ""
     const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
   <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
     <tr><td style="background:#d97706;padding:18px 24px">
-      <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Master ไม่ครบ</p>
+      <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Incomplete Master</p>
       <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo} — ${req.bu || "NYG"}</h1>
     </td></tr>
     <tr><td style="padding:20px 24px">
-      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">เอกสารถูก <strong>พักไว้ (Held)</strong> เพราะ Master ยังไม่ครบ — Gross Weight / Est. Air Freight คำนวณไม่ได้ (= 0)</p>
+      <p style="color:#334155;font-size:13px;font-family:Arial;margin:0">The document is <strong>Held</strong> because the Master data is incomplete — Gross Weight / Est. Air Freight cannot be calculated (= 0)</p>
       <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin:12px 0">${rateBlock}${wtBlock}</div>
-      <p style="margin:10px 0 0;color:#64748b;font-size:12px;font-family:Arial">เพิ่มข้อมูลใน Master Rate / Master Description แล้วระบบจะคำนวณและปล่อยเอกสารต่อให้อัตโนมัติ</p>
+      <p style="margin:10px 0 0;color:#64748b;font-size:12px;font-family:Arial">Add the data to Master Rate / Master Description and the system will calculate and release the document automatically.</p>
     </td></tr>
     <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
       <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group</p></td></tr>
   </table>
 </td></tr></table></body></html>`
-    await sendMail(recips, `[Master ต้องเติม] ${req.documentNo} — ${countries.length ? `${countries.length} rate` : ""}${countries.length && descs.length ? " + " : ""}${descs.length ? `${descs.length} WT` : ""}`, html)
+    await sendMail(recips, `[Master needs data] ${req.documentNo} — ${countries.length ? `${countries.length} rate` : ""}${countries.length && descs.length ? " + " : ""}${descs.length ? `${descs.length} WT` : ""}`, html)
   } catch (e) { console.error("[notify] missing-master alert failed:", e) }
 }
 
@@ -1501,27 +1501,27 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
       <td style="padding:6px 10px;border-bottom:1px solid #eee">${r.docNo}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #eee">${r.bu}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #eee">${r.stage}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;${r.daysStage >= 7 ? "color:#dc2626;font-weight:700" : ""}">${r.daysStage} วัน</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:#64748b">${r.daysTotal} วัน</td></tr>`).join("")
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;${r.daysStage >= 7 ? "color:#dc2626;font-weight:700" : ""}">${r.daysStage} days</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:#64748b">${r.daysTotal} days</td></tr>`).join("")
     const html = `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
   <table width="620" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
     <tr><td style="background:#b45309;padding:18px 24px">
       <p style="margin:0;color:#fde68a;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Weekly Reminder</p>
-      <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">เอกสารรอดำเนินการ (${rows.length})</h1>
+      <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">Documents Pending Action (${rows.length})</h1>
     </td></tr>
     <tr><td style="padding:20px 24px">
-      <p style="color:#64748b;font-size:13px;font-family:Arial;margin:0 0 12px">เอกสารด้านล่างยังรอการดำเนินการจากคุณ (แดง = ค้างเกิน 7 วัน) กรุณาเข้าระบบเพื่ออนุมัติ/กรอกข้อมูล</p>
+      <p style="color:#64748b;font-size:13px;font-family:Arial;margin:0 0 12px">The documents below are still awaiting action from you (red = pending over 7 days). Please log in to approve / fill in data.</p>
       <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial">
         <thead><tr style="background:#f1f5f9">
-          <th style="padding:6px 10px;text-align:left">เอกสาร</th><th style="padding:6px 10px;text-align:left">BU</th>
-          <th style="padding:6px 10px;text-align:left">ขั้นตอน</th><th style="padding:6px 10px;text-align:right">ค้างที่ขั้นนี้</th>
-          <th style="padding:6px 10px;text-align:right">รวมตั้งแต่สร้าง</th></tr></thead>
+          <th style="padding:6px 10px;text-align:left">Document</th><th style="padding:6px 10px;text-align:left">BU</th>
+          <th style="padding:6px 10px;text-align:left">Stage</th><th style="padding:6px 10px;text-align:right">Pending at this stage</th>
+          <th style="padding:6px 10px;text-align:right">Total since created</th></tr></thead>
         <tbody>${trs}</tbody></table>
-      <div style="text-align:center;margin-top:18px">${emailButton(`${APP_URL}/approvals`, "เปิดคิวอนุมัติ →", "#b45309")}</div>
+      <div style="text-align:center;margin-top:18px">${emailButton(`${APP_URL}/approvals`, "Open Approval Queue →", "#b45309")}</div>
     </td></tr></table>
 </td></tr></table></body></html>`
-    await sendMail([email], `[แจ้งเตือน] เอกสารรอดำเนินการ ${rows.length} ฉบับ`, html).catch(() => {})
+    await sendMail([email], `[Reminder] ${rows.length} documents pending action`, html).catch(() => {})
     emailsSent++
   }
   return { docs: docs.length, emailsSent }
@@ -1583,7 +1583,7 @@ async function notifyLgFilesToClaimersImpl(requestId: string) {
     }
     // Download links (shown when files are too big to attach) — the doc PDF is always attached.
     const linksHtml = (!inlineLg && lgAtts.length)
-      ? `<div style="margin:0 0 14px"><p style="color:#334155;font-size:13px;font-family:Arial,sans-serif;margin:0 0 6px"><strong>ไฟล์แนบจาก Logistics</strong> (ไฟล์ใหญ่ — คลิกดาวน์โหลด):</p>${lgAtts.map((a: any) => `<a href="${APP_URL}/api/attachments/${a.id}" style="display:block;font-family:Arial,sans-serif;font-size:12px;color:#1e3a8a;text-decoration:none;padding:2px 0">📎 ${a.fileName}</a>`).join("")}</div>`
+      ? `<div style="margin:0 0 14px"><p style="color:#334155;font-size:13px;font-family:Arial,sans-serif;margin:0 0 6px"><strong>Attachments from Logistics</strong> (large files — click to download):</p>${lgAtts.map((a: any) => `<a href="${APP_URL}/api/attachments/${a.id}" style="display:block;font-family:Arial,sans-serif;font-size:12px;color:#1e3a8a;text-decoration:none;padding:2px 0">📎 ${a.fileName}</a>`).join("")}</div>`
       : ""
 
     // Group SOs by claim dept → email each dept's claimers.
@@ -1624,11 +1624,11 @@ async function notifyLgFilesToClaimersImpl(requestId: string) {
       <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
     </td></tr>
     <tr><td style="padding:28px 32px">
-      <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 6px">เอกสาร <strong>${req.documentNo}</strong> — Logistics กรอกข้อมูลครบแล้ว (${sos.length} SO)</p>
-      <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 14px">${attachPdf ? "แนบ: เอกสาร PDF (มีลายเซ็น) มากับเมลล์นี้" : "เอกสาร PDF: กดปุ่มด้านล่างเพื่อเปิด/ดาวน์โหลด (ไฟล์ใหญ่จึงไม่แนบมา)"} ${inlineLg && lgAtts.length ? "+ ไฟล์จาก Logistics" : ""}</p>
+      <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 6px">Document <strong>${req.documentNo}</strong> — Logistics has completed the data entry (${sos.length} SO)</p>
+      <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 14px">${attachPdf ? "Attached: PDF document (signed) with this email" : "PDF document: click the button below to open/download (too large to attach)"} ${inlineLg && lgAtts.length ? "+ files from Logistics" : ""}</p>
       ${linksHtml}
       <div style="text-align:center;margin-top:8px">
-        <a href="${openLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">เปิดเอกสาร / ดาวน์โหลด PDF →</a>
+        <a href="${openLink}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">Open Document / Download PDF →</a>
       </div>
     </td></tr>
     <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
@@ -1677,7 +1677,7 @@ export async function notifyLgPendingReminder(): Promise<{ sent: number; docs: n
         const link = `${APP_URL}/api/magic-login?token=${token}&redirect=/requests/${d.id}`
         return `<tr>
           <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;font-weight:600">${d.documentNo}</td>
-          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;color:#b45309">${missing} SO ยังไม่มี Actual</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:Arial,sans-serif;font-size:13px;color:#b45309">${missing} SO without Actual</td>
           <td style="padding:6px 10px;border-bottom:1px solid #eee"><a href="${link}" style="font-family:Arial,sans-serif;font-size:12px;color:#1e3a8a;font-weight:700;text-decoration:none">Open Document →</a></td>
         </tr>`
       }).join("")
@@ -1690,22 +1690,22 @@ export async function notifyLgPendingReminder(): Promise<{ sent: number; docs: n
       <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
     </td></tr>
     <tr><td style="padding:28px 32px">
-      <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 14px">มีเอกสาร <strong>${list.length}</strong> ใบที่ยังรอ Logistics กรอก INV / HAWB / Actual Air Freight — กรุณาเข้าไปกรอกให้ครบ</p>
+      <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 14px">There are <strong>${list.length}</strong> documents still awaiting Logistics to enter INV / HAWB / Actual Air Freight — please go in and complete them.</p>
       <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse">
         <thead><tr style="background:#eff6ff">
           <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#1e40af">DOC NO</th>
-          <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#1e40af">สถานะ</th>
+          <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#1e40af">Status</th>
           <th style="padding:6px 10px;text-align:left;font-family:Arial,sans-serif;font-size:11px;color:#1e40af"></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </td></tr>
     <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
-      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group · แจ้งเตือนอัตโนมัติทุกวันจันทร์</p>
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group · Automatic reminder every Monday</p>
     </td></tr>
   </table>
 </td></tr></table></body></html>`
-      await sendMail(u.email, `[Reminder] เอกสารรอ Logistics กรอกข้อมูล (${bu}) — ${list.length} ใบ`, html)
+      await sendMail(u.email, `[Reminder] Documents awaiting Logistics data entry (${bu}) — ${list.length} docs`, html)
       sent++
     }
   }

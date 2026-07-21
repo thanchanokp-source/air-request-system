@@ -337,13 +337,13 @@ export default function ApprovalsPage() {
                   <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm shrink-0">{req.documentNo}</Link>
                   <span className="text-xs text-gray-500 truncate">{req.buName}</span>
                   <StatusBadge status={req.status} />
-                  <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">EST {fmtNum(estTotal)} ฿</span>
-                  <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">ACT {fmtNum(actTotal)} ฿</span>
+                  <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">EST {fmtNum(estTotal)} THB</span>
+                  <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">ACT {fmtNum(actTotal)} THB</span>
                   {Object.entries(deptSums).map(([dept, sum]) => (
-                    <span key={dept} className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{dept} {fmtNum(sum)} ฿</span>
+                    <span key={dept} className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{dept} {fmtNum(sum)} THB</span>
                   ))}
                   {isClaimRole && (
-                    <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">My Claim {fmtNum(myDocTotal)} ฿</span>
+                    <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">My Claim {fmtNum(myDocTotal)} THB</span>
                   )}
                 </div>
                 <Link href={`/requests/${req.id}`} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium shrink-0 ml-auto">
@@ -373,7 +373,7 @@ export default function ApprovalsPage() {
                         <td className="px-3 py-1.5 text-blue-700">{fmtNum(item.grossWeight, 2)}</td>
                         <td className="px-3 py-1.5 text-blue-700">{fmtNum(item.airFreight)}</td>
                         <td className="px-3 py-1.5 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
-                        {isClaimRole && <td className="px-3 py-1.5 font-bold text-red-700 whitespace-nowrap">{fmtNum(myClaimForItem(item))} ฿</td>}
+                        {isClaimRole && <td className="px-3 py-1.5 font-bold text-red-700 whitespace-nowrap">{fmtNum(myClaimForItem(item))} THB</td>}
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.factory}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.country}</td>
                         <td className="px-3 py-1.5"><ClaimSplitBadges item={item} /></td>
