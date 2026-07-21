@@ -4136,7 +4136,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -4144,7 +4144,9 @@ export default function RequestDetailPage() {
                         <tr className="hover:bg-gray-50">
                           <td className="px-3 py-2 font-medium">{item.so}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
+                          <td className="px-3 py-2">{item.brand || "-"}</td>
                           <td className="px-3 py-2">{item.customerPO}</td>
+                          <td className="px-3 py-2 whitespace-nowrap font-medium text-purple-700">{item.poGarment || "-"}</td>
                           <td className="px-3 py-2">{item.description}</td>
                                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
@@ -4368,7 +4370,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -4376,7 +4378,9 @@ export default function RequestDetailPage() {
                         <tr className="hover:bg-gray-50">
                           <td className="px-3 py-2 font-medium">{item.so}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{item.style}</td>
+                          <td className="px-3 py-2">{item.brand || "-"}</td>
                           <td className="px-3 py-2">{item.customerPO}</td>
+                          <td className="px-3 py-2 whitespace-nowrap font-medium text-purple-700">{item.poGarment || "-"}</td>
                           <td className="px-3 py-2">{item.description}</td>
                                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
