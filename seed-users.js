@@ -45,7 +45,7 @@ const users = [
   { email: "chotik.c@nanyangtextile.com", name: "Chotik C", role: "PRESIDENT", roles: ["PRESIDENT", "PRESIDENT_GW"], bu: "ALL" },
   { email: "rushan@nanyangtextile.com", name: "Rushan", role: "CLAIM_PRODUCTION", roles: ["CLAIM_PRODUCTION"], bu: "ALL", claimDepartment: "G1/G3", priority: 3 },
   { email: "pk@nanyangtextile.com", name: "PK", role: "CLAIM_PRODUCTION", roles: ["CLAIM_PRODUCTION"], bu: "ALL", claimDepartment: "G2/G4", priority: 3 },
-  { email: "khomkrit.h@nanyangtextile.com", name: "Khomkrit H", role: "VP_PRODUCTION", roles: ["VP_PRODUCTION"], bu: "ALL", priority: 4 },
+  { email: "khomkrit.h@nanyangtextile.com", name: "Khomkrit H", role: "VP_PRODUCTION", roles: ["VP_PRODUCTION"], bu: "ALL", claimDepartment: "ALL", priority: 4 },
 
   // ── GW ──
   { email: "oranuch.k@nanyangtextile.com", name: "Oranuch K", role: "DPM_GW", roles: ["DPM_GW"], bu: "GW" },
