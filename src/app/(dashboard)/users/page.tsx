@@ -925,18 +925,13 @@ export default function UsersPage() {
             <table className="w-full text-sm table-fixed" style={{fontVariantNumeric:"tabular-nums"}}>
               <thead className="sticky top-0 z-10">
                 <tr className="bg-slate-800">
-                  {[["#","w-10"],["Person","w-[30%]"],["Role","w-[34%]"],["BU","w-[9%]"],["Status","w-[8%]"],["Manage","w-[15%]"]].map(([h,w]) =>
+                  {[["#","w-10"],["Person","w-[23%]"],["Role","w-[20%]"],["Pri","w-[5%]"],["Detail","w-[12%]"],["Action","w-[9%]"],["BU","w-[7%]"],["Status","w-[6%]"],["Manage","w-[12%]"]].map(([h,w]) =>
                     <th key={h} className={`bg-slate-800 px-3 py-2.5 text-left text-[11px] font-semibold text-slate-300 uppercase tracking-wide ${w}`}>{h}</th>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {displayed.map((u, idx) => {
-                  // Full display label for ANY role this person holds (primary or extra).
-                  // Uses the shared roleDisplayName() so All Users / Setup Guide / badges match.
-                  const labelFor = (r: string): string =>
-                    roleDisplayName(r, { priority: u.priority, claimDepartment: u.claimDepartment, procurementType: u.procurementType })
-                  const fullRoleLabel: string = labelFor(u.role)
                   const roleBadgeColor = (() => {
                     const r = u.role || ""
                     if (["PRESIDENT","PRESIDENT_GW"].includes(r)) return "bg-blue-100 text-blue-800 border border-blue-200"
@@ -964,24 +959,38 @@ export default function UsersPage() {
                       <p className="font-semibold text-gray-800 break-words leading-tight">{u.name || <span className="text-gray-300 font-normal">—</span>}</p>
                       <p className="text-gray-400 text-[11px] break-all leading-tight mt-0.5">{u.email}</p>
                     </td>
-                    {/* ROLE = primary role + priority + procurementType + action + extra roles (all badges) */}
+                    {/* ROLE = primary role + extra roles (multi-role) only */}
                     <td className="px-3 py-2.5 align-top">
                       <div className="flex flex-wrap items-center gap-1">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold leading-tight ${roleBadgeColor}`}>{fullRoleLabel}</span>
-                        {u.priority != null && (
-                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold inline-flex items-center justify-center" title={`Priority ${u.priority}`}>{u.priority}</span>
-                        )}
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold leading-tight ${roleBadgeColor}`}>{ROLE_LABEL[u.role] || u.role}</span>
+                        {Array.isArray(u.roles) && u.roles.filter((r: string) => r && r !== u.role).map((r: string) => (
+                          <span key={r} className="inline-block px-2 py-0.5 rounded text-[9px] font-medium leading-tight bg-gray-100 text-gray-600 border border-gray-200">+ {ROLE_LABEL[r] || r}</span>
+                        ))}
+                      </div>
+                    </td>
+                    {/* PRIORITY */}
+                    <td className="px-3 py-2.5 align-top">
+                      {u.priority != null
+                        ? <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold inline-flex items-center justify-center" title={`Priority ${u.priority}`}>{u.priority}</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
+                    {/* DETAIL = procurement type / factory G-group */}
+                    <td className="px-3 py-2.5 align-top">
+                      <div className="flex flex-wrap gap-1">
                         {u.procurementType && (
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${u.procurementType === "PURCHASING" ? "bg-purple-100 text-purple-700 border border-purple-200" : "bg-violet-100 text-violet-700 border border-violet-200"}`}>{u.procurementType}</span>
                         )}
-                        {action && (
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${ACTION_STYLE[action]}`}>{action}</span>
+                        {u.claimDepartment && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200">{u.claimDepartment}</span>
                         )}
-                        {/* Extra roles this person also holds (multi-role) */}
-                        {Array.isArray(u.roles) && u.roles.filter((r: string) => r && r !== u.role).map((r: string) => (
-                          <span key={r} className="inline-block px-2 py-0.5 rounded text-[9px] font-medium leading-tight bg-gray-100 text-gray-600 border border-gray-200">+ {labelFor(r)}</span>
-                        ))}
+                        {!u.procurementType && !u.claimDepartment && <span className="text-gray-300">—</span>}
                       </div>
+                    </td>
+                    {/* ACTION */}
+                    <td className="px-3 py-2.5 align-top">
+                      {action
+                        ? <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${ACTION_STYLE[action]}`}>{action}</span>
+                        : <span className="text-gray-300">—</span>}
                     </td>
                     {/* BU */}
                     <td className="px-3 py-2.5 align-top">
