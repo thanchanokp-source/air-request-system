@@ -338,10 +338,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
+  // GW "Back to Merchandise" for ONE style only — send just that style's SO back to the MER to
+  // edit, while the already-approved styles (VP_MER_PASSED) stay approved. The doc moves to
+  // PENDING_MER_GW; on resubmit only the returned (PENDING) style needs DPM re-approval.
+  if (action === "back_to_mer_style_gw" && (request.status === "PENDING_VP_MER_GW" || request.status === "PENDING_GM_GW")) {
+    if (!style) return NextResponse.json({ error: "style required" }, { status: 400 })
+    if (!comment) return NextResponse.json({ error: "Please provide a reason before sending back to Merchandise" }, { status: 400 })
+    const n = await prisma.airRequestItem.updateMany({
+      where: { requestId: id, style, itemStatus: { notIn: ["REJECTED"] } },
+      data: { itemStatus: "PENDING", itemComment: comment },
+    })
+    if (n.count === 0) return NextResponse.json({ error: "No SO found for that style" }, { status: 400 })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "BACK_TO_MER", fromStatus: request.status, toStatus: "PENDING_MER_GW", comment: `Back to Merchandise (style ${style}): ${comment}` }
+    })
+    await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_MER_GW", rejectionReason: comment } })
+    await notifyBackToMerGw(id, comment, session.user?.name || session.user?.email || undefined).catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
   // GW MER re-submits after a "Back to Merchandise" → restart approval from DPM.
   if (action === "resubmit_mer_gw" && userRole === "MER_GW" && request.status === "PENDING_MER_GW") {
+    // Keep styles that DPM/GM already approved (VP_MER_PASSED) approved — only the style(s)
+    // that were sent back sit at PENDING and need DPM re-approval. (Whole-doc back had already
+    // set every style to PENDING, so this is a no-op there.)
     await prisma.airRequestItem.updateMany({
-      where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
+      where: { requestId: id, itemStatus: { notIn: ["REJECTED", "VP_MER_PASSED"] } },
       data: { itemStatus: "PENDING" },
     })
     await prisma.approvalLog.create({

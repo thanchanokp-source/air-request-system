@@ -423,6 +423,9 @@ export default function RequestDetailPage() {
   // GW "Back to Merchandise" (whole doc) — reason input at DPM/GM, and resubmit at MER (GW).
   const [backToMerOpen, setBackToMerOpen] = useState(false)
   const [backToMerReason, setBackToMerReason] = useState("")
+  // GW "Back to Merchandise" for ONE style — which style's reason box is open + its reason.
+  const [gwBackStyle, setGwBackStyle] = useState<string | null>(null)
+  const [gwBackReason, setGwBackReason] = useState("")
   // SCM re-assign: per-item chosen new claim dept for a split sent back (SCM_REASSIGN).
   const [reassignDept, setReassignDept] = useState<Record<string, string>>({})
   const [rejectingSo, setRejectingSo] = useState<string | null>(null)
@@ -1196,6 +1199,18 @@ export default function RequestDetailPage() {
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "back_to_mer_gw", comment: backToMerReason.trim() })
+    })
+    if (res.ok) { window.location.href = "/approvals" }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null) }
+  }
+
+  // GW: send just ONE style back to Merchandise (other approved styles stay approved).
+  const backToMerStyleGw = async (styleName: string) => {
+    if (!gwBackReason.trim()) return
+    setSubmitting(styleName)
+    const res = await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "back_to_mer_style_gw", style: styleName, comment: gwBackReason.trim() })
     })
     if (res.ok) { window.location.href = "/approvals" }
     else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null) }
@@ -2357,6 +2372,13 @@ export default function RequestDetailPage() {
                 <span className="text-green-600">{styleGroups.filter(g => ["VP_MER_PASSED","PRES_PASSED"].includes(g.status)).length} approved</span>
                 <span className="text-red-600">{styleGroups.filter(g => g.status === "REJECTED").length} rejected</span>
               </div>
+              {/* View: Card (expand SO) / Table (quick approve) — same as NYG */}
+              <div className="flex gap-1">
+                {([["card", "Card"], ["table", "Table"]] as const).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setStyleTableView(k === "table")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium ${(styleTableView ? "table" : "card") === k ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{label}</button>
+                ))}
+              </div>
               {styleGroups.some(g => g.status === "PENDING") && (
                 <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
                   <input type="checkbox"
@@ -2369,6 +2391,11 @@ export default function RequestDetailPage() {
                   Select All
                 </label>
               )}
+              {/* Back ALL styles → whole document back to Merchandise (GW has no hard reject) */}
+              <button onClick={() => { setBackToMerOpen(v => !v); setGwBackStyle(null) }} disabled={!!submitting}
+                className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
+                ↩ Back all to MER
+              </button>
               {selectedStyles.size > 0 && (
                 <>
                 <button onClick={approveSelectedStyles} disabled={!!submitting}
@@ -2391,31 +2418,100 @@ export default function RequestDetailPage() {
               )}
             </div>
           </div>
-          {/* GW has NO hard reject — DPM/GM send the WHOLE document back to Merchandise + reason. */}
-          <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
-            {!backToMerOpen ? (
-              <button onClick={() => setBackToMerOpen(true)} disabled={!!submitting}
-                className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">
-                ↩ Back to Merchandise
-              </button>
-            ) : (
+          {/* Whole-document Back to Merchandise — reason box (opens from the header button) */}
+          {backToMerOpen && (
+            <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-orange-700">Send back to Merchandise to edit — Reason *</label>
+                <label className="text-xs font-medium text-orange-700">Send the WHOLE document back to Merchandise to edit — Reason *</label>
                 <textarea value={backToMerReason} onChange={e => setBackToMerReason(e.target.value)} rows={2}
                   placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
                 <div className="flex gap-2">
                   <button onClick={backToMerGw} disabled={!backToMerReason.trim() || submitting === "_"}
                     className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">
-                    {submitting === "_" ? "..." : "Confirm — Back to Merchandise"}
+                    {submitting === "_" ? "..." : "Confirm — Back all to Merchandise"}
                   </button>
                   <button onClick={() => { setBackToMerOpen(false); setBackToMerReason("") }}
                     className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                 </div>
-                <p className="text-[11px] text-orange-600">Sends the whole document back to Merchandise + emails the creator</p>
+                <p className="text-[11px] text-orange-600">Sends every style back to Merchandise + emails the creator</p>
               </div>
-            )}
-          </div>
-          {styleGroups.map(g => {
+            </div>
+          )}
+          {/* ── TABLE VIEW — one row per SO, all MER columns + Approve / Back-to-MER per style ── */}
+          {styleTableView && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+              <table className="w-full text-xs whitespace-nowrap">
+                <thead className="bg-gray-50 border-b border-gray-200"><tr>
+                  {["", "STYLE", "BRAND", "SUB", "SO", "CUSTOMER PO", "DESCRIPTION", "PLAN DATE", "QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)", "FACTORY", "COUNTRY", "STATUS", "ACTION"].map((h, i) =>
+                    <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
+                </tr></thead>
+                <tbody className="divide-y divide-gray-100">
+                  {styleGroups.flatMap(g => {
+                    const isBack = gwBackStyle === g.style
+                    const isSub = submitting === g.style
+                    const canRow = g.status === "PENDING"
+                    const n = g.items.length
+                    const isApproved = ["VP_MER_PASSED", "PRES_PASSED"].includes(g.status)
+                    const rowBg = g.status === "REJECTED" ? "bg-red-50/40" : isApproved ? "bg-green-50/30" : "hover:bg-gray-50/60"
+                    const statusCell = (
+                      <>
+                        {isApproved && <span className="text-green-700">✓ Approved</span>}
+                        {g.status === "REJECTED" && <span className="text-red-700">✕ Rejected</span>}
+                        {canRow && <span className="text-yellow-600">Pending</span>}
+                      </>
+                    )
+                    const actionCell = canRow ? (
+                      <div className="inline-flex gap-1.5">
+                        <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-2.5 py-1 bg-green-600 text-white rounded-md font-medium hover:bg-green-700 disabled:opacity-50">{isSub && !isBack ? "..." : "Approve"}</button>
+                        <button onClick={() => { setGwBackStyle(isBack ? null : g.style); setGwBackReason(""); setBackToMerOpen(false) }} disabled={isSub} className="px-2.5 py-1 bg-orange-500 text-white rounded-md font-medium hover:bg-orange-600 disabled:opacity-50">Back to MER</button>
+                      </div>
+                    ) : null
+                    const rows = g.items.map((item: any, idx: number) => (
+                      <tr key={item.id} className={rowBg}>
+                        {idx === 0 && (
+                          <td rowSpan={n} className="px-3 py-2 align-top">{canRow && (
+                            <input type="checkbox" className="w-4 h-4" checked={selectedStyles.has(g.style)}
+                              onChange={e => setSelectedStyles(prev => { const s = new Set(prev); e.target.checked ? s.add(g.style) : s.delete(g.style); return s })} />
+                          )}</td>
+                        )}
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 font-semibold text-gray-800 align-top">{g.style}</td>}
+                        <td className="px-3 py-2">{item.brand || "-"}</td>
+                        <td className="px-3 py-2">{item.sub || "-"}</td>
+                        <td className="px-3 py-2 font-medium">{item.so}</td>
+                        <td className="px-3 py-2">{item.customerPO || "-"}</td>
+                        <td className="px-3 py-2">{item.description || "-"}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                        <td className="px-3 py-2 text-right">{item.qtyOriginalShipment}</td>
+                        <td className="px-3 py-2 text-right">{item.qtyRequestAir}</td>
+                        <td className="px-3 py-2 text-right">{fmtNum(item.grossWeight, 2)}</td>
+                        <td className="px-3 py-2 text-right text-blue-600">{fmtNum(item.airFreight)}</td>
+                        <td className="px-3 py-2">{item.factory}</td>
+                        <td className="px-3 py-2">{item.country}</td>
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 align-top">{statusCell}</td>}
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 align-top">{actionCell}</td>}
+                      </tr>
+                    ))
+                    if (isBack) {
+                      rows.push(
+                        <tr key={g.style + "_back"}><td colSpan={16} className="px-4 py-3 bg-orange-50 border-t border-orange-100">
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-orange-700">Send style {g.style} back to Merchandise — Reason *</label>
+                            <textarea value={gwBackReason} onChange={e => setGwBackReason(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                            <div className="flex gap-2">
+                              <button onClick={() => backToMerStyleGw(g.style)} disabled={isSub || !gwBackReason.trim()} className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">{isSub ? "..." : "Confirm — Back to MER"}</button>
+                              <button onClick={() => { setGwBackStyle(null); setGwBackReason("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                            </div>
+                          </div>
+                        </td></tr>
+                      )
+                    }
+                    return rows
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {!styleTableView && styleGroups.map(g => {
             const isExp = expanded.has(g.style)
             const isRej = rejectingStyle === g.style
             const isSub = submitting === g.style
@@ -2444,9 +2540,21 @@ export default function RequestDetailPage() {
                     <div className="flex gap-2">
                       <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">{isSub ? "..." : "Approve"}</button>
                       {showStyleReject && <button onClick={() => { setRejectingStyle(isRej ? null : g.style); setRejectComment("") }} disabled={isSub} className="px-3 py-1 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-50">Reject</button>}
+                      <button onClick={() => { setGwBackStyle(gwBackStyle === g.style ? null : g.style); setGwBackReason(""); setBackToMerOpen(false) }} disabled={isSub} className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">Back to MER</button>
                     </div>
                   )}
                 </div>
+                {gwBackStyle === g.style && (
+                  <div className="px-4 py-3 bg-orange-50 border-t border-orange-100 space-y-2">
+                    <label className="text-xs font-medium text-orange-700">Send style {g.style} back to Merchandise — Reason *</label>
+                    <textarea value={gwBackReason} onChange={e => setGwBackReason(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                    <div className="flex gap-2">
+                      <button onClick={() => backToMerStyleGw(g.style)} disabled={isSub || !gwBackReason.trim()} className="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-xs font-medium hover:bg-orange-700 disabled:opacity-50">{isSub ? "..." : "Confirm — Back to MER"}</button>
+                      <button onClick={() => { setGwBackStyle(null); setGwBackReason("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                    </div>
+                    <p className="text-[11px] text-orange-600">Sends only this style back to Merchandise — approved styles stay approved</p>
+                  </div>
+                )}
                 {isRej && (
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
                     <label className="text-xs font-medium text-red-700">Rejection Reason *</label>
