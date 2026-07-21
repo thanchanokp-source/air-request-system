@@ -178,7 +178,8 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
   // ── NYG ── positions map to master by role + priority (+ factory G group /
   // procurementType) so the next-person dropdown filters precisely. Master encoding:
   //   Commercial  = CLAIM_COMMERCIAL  (priority 1 = DPM/DVM entry, 2 = VP)
-  //   Production   = CLAIM_PRODUCTION  (priority 1 = VP, 2 = EVP) × claimDept G1G3/G2G4
+  //   Production   = CLAIM_PRODUCTION (entry VP, per factory G1G3/G2G4) → EVP = VP_PRODUCTION
+  //                  (dedicated role, one EVP covering every G — like VP_PROCUREMENT below)
   //   Procurement  = CLAIM_PROCUREMENT (priority 1 = DPM/DVM ×Purchasing/Sourcing, 2 = VP)
   // Commercial claim reuses MER's team (no dedicated Claim-Commercial role, so one
   // person needn't hold two roles): DVM MER (entry, the upload approver) → VP MER.
@@ -187,8 +188,10 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
     { label: "VP Merchandise", role: "VP_MER" },
   ],
   "PRODUCTION": [
-    { label: "VP PROD", factoryBased: true, role: "CLAIM_PRODUCTION", priority: 1 },
-    { label: "EVP", factoryBased: true, role: "CLAIM_PRODUCTION", priority: 2 },
+    { label: "VP PROD", factoryBased: true, role: "CLAIM_PRODUCTION" },
+    // EVP = the dedicated VP_PRODUCTION role (khomkrit, claimDepartment "ALL" → covers every
+    // G). Group suffix is still added for display; prodGroupCovers("ALL", g) matches all.
+    { label: "EVP", factoryBased: true, role: "VP_PRODUCTION" },
   ],
   // Purchasing (entry, auto) chooses: forward to Sourcing (pos 1) OR approve-self and
   // skip straight to VP (pos 2). Sourcing then forwards to VP. All CLAIM_PROCUREMENT.
