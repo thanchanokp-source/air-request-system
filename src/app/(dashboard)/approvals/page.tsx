@@ -335,7 +335,7 @@ export default function ApprovalsPage() {
               <div className="px-4 py-3 bg-gray-50 border-b flex flex-wrap items-center gap-2">
                 <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                   <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm shrink-0">{req.documentNo}</Link>
-                  <span className="text-xs text-gray-500 truncate">{req.brandName} · {req.buName}</span>
+                  <span className="text-xs text-gray-500 truncate">{req.buName}</span>
                   <StatusBadge status={req.status} />
                   <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">EST {fmtNum(estTotal)} ฿</span>
                   <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">ACT {fmtNum(actTotal)} ฿</span>
