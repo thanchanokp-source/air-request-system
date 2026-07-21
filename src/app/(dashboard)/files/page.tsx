@@ -407,7 +407,7 @@ export default function FilesPage() {
             <p className="text-xs font-semibold text-gray-500 px-1 mb-1.5 uppercase tracking-wide">Status</p>
             <div className="space-y-1">
               {STATUS_CHIPS.map(c => {
-                const count = requests.filter(r => requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, c.key)).length
+                const count = requests.filter(r => !r.isTest && requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, c.key)).length
                 const active = statusFilter === c.key
                 return (
                   <button key={c.key} onClick={() => setStatusFilter(c.key)}
