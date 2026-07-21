@@ -124,6 +124,12 @@ const EMAIL_HEAD = `<head>
 </style>
 </head>`
 
+// All distinct brands on the document (one doc can span several brands) → comma-joined for email.
+const docBrands = (req: any) => {
+  const bs = [...new Set((req?.items || []).map((i: any) => i.brand).filter(Boolean))]
+  return bs.length ? bs.join(", ") : (req?.brandName || "-")
+}
+
 function buildHtml(req: any, newStatus: string, link: string, approveUrl?: string, rejectUrl?: string, magicLink?: string) {
   const statusLabel: Record<string,string> = {
     PENDING_DVM_MER:"Pending DVM Merchandise",
@@ -184,7 +190,7 @@ ${EMAIL_HEAD}
                 <tr>
                   <td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
                     <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">BRAND</span><br>
-                    <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${req.brandName || "-"}</span>
+                    <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${docBrands(req)}</span>
                   </td>
                 </tr>
                 <tr>
@@ -1057,7 +1063,7 @@ async function notifyClaimNextImpl(
   try {
     const req = await prisma.airRequest.findUnique({
       where: { id: requestId },
-      select: { documentNo: true, brandName: true, claimDepartment: true, bu: true }
+      select: { documentNo: true, brandName: true, claimDepartment: true, bu: true, items: { select: { brand: true } } }
     })
     if (!req) return
 
@@ -1084,7 +1090,7 @@ async function notifyClaimNextImpl(
           </td></tr>
           <tr><td style="border-bottom:1px solid #f1f5f9;padding:8px 0">
             <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">BRAND</span><br>
-            <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${req.brandName}</span>
+            <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${docBrands(req)}</span>
           </td></tr>
           <tr><td style="padding:8px 0">
             <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">CLAIM DEPT</span><br>
@@ -1153,7 +1159,7 @@ export async function notifyClaimFinalToAccounting(requestId: string) {
           </td></tr>
           <tr><td style="border-bottom:1px solid #f1f5f9;padding:8px 0">
             <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">BRAND</span><br>
-            <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${req.brandName || "-"}</span>
+            <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${docBrands(req)}</span>
           </td></tr>
           <tr><td style="border-bottom:1px solid #f1f5f9;padding:8px 0">
             <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">CLAIM DEPT</span><br>
