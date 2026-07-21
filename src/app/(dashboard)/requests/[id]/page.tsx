@@ -9,7 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, itemHasReassignSplit, type PosSpec } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, type PosSpec } from "@/lib/claim"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -897,10 +897,19 @@ export default function RequestDetailPage() {
   const myClaimFwdRow = role === "CLAIM_NEXT_APPROVER"
     ? (req?.claimForwards || []).find((f: any) => myClaimToken ? f.token === myClaimToken : (f.dept === gwFwdCanonicalDept && f.nextEmail === (session?.user as any)?.email))
     : null
+  // Claim-Production is split BY FACTORY G-GROUP (rushan G1/G3, pk G2/G4; VP "ALL" = every
+  // group). The ENTRY claimer only handles SOs whose factory group they cover. Skip this for
+  // CLAIM_NEXT_APPROVER (already scoped by the forward's itemIds) and non-production depts.
+  const coversMyProdG = (i: any) => {
+    if (gwFwdCanonicalDept !== "PRODUCTION" || role === "CLAIM_NEXT_APPROVER" || !myClaimDept) return true
+    const g = vpProdGroup(i.factory)
+    return !g || prodGroupCovers(myClaimDept, g)
+  }
   // Base = SO at the claim stage with a still-pending split for my dept.
   const gwFwdBase = isGwForwardRole
     ? (req?.items || []).filter((i: any) => fwdItemStatuses.includes(i.itemStatus) &&
-        getSplits(i).some((s: any) => gwFwdSplitDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "COMPLETED" && s.status !== "REJECTED"))
+        getSplits(i).some((s: any) => gwFwdSplitDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "COMPLETED" && s.status !== "REJECTED") &&
+        coversMyProdG(i))
     : []
   // Scope to the SO THIS actor owns (per-SO forward): a forwarded approver sees only
   // their row's SO; the entry owner sees SO not yet forwarded to a later position.

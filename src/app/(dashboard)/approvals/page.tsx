@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import Link from "next/link"
 import { CLAIM_VP_ROLES } from "@/types"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO, deptSplitStatus, itemHasReassignSplit } from "@/lib/claim"
+import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO, deptSplitStatus, itemHasReassignSplit, vpProdGroup, prodGroupCovers } from "@/lib/claim"
 import { roleBu, requestInBu, BU_META, BUS } from "@/lib/bu"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
 
@@ -228,6 +228,7 @@ export default function ApprovalsPage() {
   }
 
   // Union of primary-role items + claim SO owned via any held role (multi-role).
+  const isProdClaimer = myRoles.includes("CLAIM_PRODUCTION") || myRoles.includes("VP_PRODUCTION")
   const getRelevantItems = (r: any) => {
     const prim = primaryItems(r)
     const seen = new Set(prim.map((i: any) => i.id))
@@ -235,7 +236,19 @@ export default function ApprovalsPage() {
       if (seen.has(i.id)) return false
       seen.add(i.id); return true
     })
-    return [...prim, ...extra]
+    let out = [...prim, ...extra]
+    // Claim-Production is split BY FACTORY G-GROUP — rushan handles G1/G3, pk handles G2/G4
+    // (VP with claimDepartment "ALL" sees every group). Drop PRODUCTION SOs whose factory
+    // group this person doesn't cover, so each claimer only sees their own G.
+    if (isProdClaimer) {
+      out = out.filter((i: any) => {
+        const onProd = i.claimDepartment === "PRODUCTION" || getSplits(i).some((s: any) => s.dept === "PRODUCTION")
+        if (!onProd) return true
+        const g = vpProdGroup(i.factory)
+        return !g || prodGroupCovers(userClaimDept, g)
+      })
+    }
+    return out
   }
 
   const allRows = myRequests.flatMap(r =>
