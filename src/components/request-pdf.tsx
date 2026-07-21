@@ -368,14 +368,19 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
   const totActual = rows.reduce((n, i) => n + (Number(i.actualAirFreight) || 0), 0)
   const grand = anyActual ? totActual : totEst
   // Claim split by department (across all SO): amount = (Actual, else Est) × claim %.
-  const claimByDept: Record<string, number> = {}
+  // Sum the RAW (un-rounded) shares first, then round ONCE per dept — otherwise
+  // rounding each SO before adding makes the dept total drift from the grand TOTAL
+  // (e.g. 29,687.5 + 20,312.5 = 50,000, but round-each = 29,688 + 20,313 = 50,001).
+  const claimByDeptRaw: Record<string, number> = {}
   for (const it of rows) {
     const base = it.actualAirFreight != null ? Number(it.actualAirFreight) : (Number(it.airFreight) || 0)
     for (const sp of getSplits(it)) {
       if (!sp.dept) continue
-      claimByDept[sp.dept] = (claimByDept[sp.dept] || 0) + Math.round(base * (Number(sp.pct) || 0) / 100)
+      claimByDeptRaw[sp.dept] = (claimByDeptRaw[sp.dept] || 0) + base * (Number(sp.pct) || 0) / 100
     }
   }
+  const claimByDept: Record<string, number> = {}
+  for (const [d, v] of Object.entries(claimByDeptRaw)) claimByDept[d] = Math.round(v)
   const claimDeptRows = Object.entries(claimByDept)
   // Portrait A4 (usable ~551pt). REASON takes the remaining width (flex) and wraps.
   // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
