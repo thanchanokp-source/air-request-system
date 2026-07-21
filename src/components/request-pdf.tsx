@@ -128,11 +128,38 @@ type Signer = { title: string; name: string; date: any; verb: string; sig?: stri
 function computeSigners(req: any): Signer[] {
   const isGW = req?.bu === "GW"
   const approveLogs = (req?.approvalLogs || []).filter((l: any) => l.action === "APPROVE")
-  const sigList: any[] = ((req?.approvalSignatures || []) as any[])
+  let sigList: any[] = ((req?.approvalSignatures || []) as any[])
     // NYG: the SCM user only assigns claim depts (not a formal approver) → hide their signature in the PDF.
     .filter((sg: any) => !(!isGW && sg.role === "SCM_USER"))
     .slice()
     .sort((a, b) => new Date(a.signedAt).getTime() - new Date(b.signedAt).getTime())
+
+  // NYG: stamp only the LAST signatory of each chain/claim — VP Merchandise, VP SCM, the
+  // FINAL approver of each claim department, and the President. Intermediate approvers
+  // (DVM MER, PURCHASING/SOURCING, SCM NYK Approver, factory-group claimers…) are collapsed
+  // into their chain's last signer. (GW keeps its full DPM → GM → President stamps.)
+  if (!isGW && sigList.length) {
+    // role → chain group. Same person may sign twice (e.g. VP MER for merch AND commercial
+    // claim) → collapse per group to the last-signed, so each chain shows once.
+    const KEEP_GROUP: Record<string, string> = { VP_MER: "MERCH", VP_SCM: "SCM", PRESIDENT: "PRESIDENT" }
+    const CLAIM_DEPT: Record<string, string> = {
+      CLAIM_PROCUREMENT: "PROCUREMENT", DVM_PROCUREMENT: "PROCUREMENT", VP_PROCUREMENT: "PROCUREMENT",
+      CLAIM_PRODUCTION: "PRODUCTION", VP_PRODUCTION: "PRODUCTION",
+      SCM_NYK_APPROVER: "NYK", SCM_NYK_EVP: "NYK", SCM_NYK: "NYK",
+    }
+    const groups = new Map<string, any[]>()
+    for (const sg of sigList) {
+      const key = KEEP_GROUP[sg.role] ? `KEEP_${KEEP_GROUP[sg.role]}`
+        : CLAIM_DEPT[sg.role] ? `CLAIM_${CLAIM_DEPT[sg.role]}` : null
+      if (!key) continue // drop intermediate / non-terminal signatories
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(sg)
+    }
+    // sigList is time-sorted → the last element of each group is that chain's final signer.
+    sigList = [...groups.values()]
+      .map(g => ({ ...g[g.length - 1], crNo: g[g.length - 1].crNo || g.map(x => x.crNo).filter(Boolean).pop() || null }))
+      .sort((a, b) => new Date(a.signedAt).getTime() - new Date(b.signedAt).getTime())
+  }
   const signers: Signer[] = []
   if (sigList.length) {
     for (const sg of sigList) {
