@@ -128,7 +128,10 @@ type Signer = { title: string; name: string; date: any; verb: string; sig?: stri
 function computeSigners(req: any): Signer[] {
   const isGW = req?.bu === "GW"
   const approveLogs = (req?.approvalLogs || []).filter((l: any) => l.action === "APPROVE")
-  const sigList: any[] = ((req?.approvalSignatures || []) as any[]).slice()
+  const sigList: any[] = ((req?.approvalSignatures || []) as any[])
+    // NYG: the SCM user only assigns claim depts (not a formal approver) → hide their signature in the PDF.
+    .filter((sg: any) => !(!isGW && sg.role === "SCM_USER"))
+    .slice()
     .sort((a, b) => new Date(a.signedAt).getTime() - new Date(b.signedAt).getTime())
   const signers: Signer[] = []
   if (sigList.length) {
@@ -138,7 +141,7 @@ function computeSigners(req: any): Signer[] {
   } else {
     const chain: [string, string][] = isGW
       ? [["PENDING_VP_MER_GW", "DPM"], ["PENDING_GM_GW", "GM"], ["PENDING_PRESIDENT_GW", "President"]]
-      : [["PENDING_VP_MER", "VP Merchandise"], ["PENDING_SCM", "SCM"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
+      : [["PENDING_VP_MER", "VP Merchandise"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
     for (const [status, label] of chain) {
       const log = approveLogs.find((l: any) => l.fromStatus === status)
       signers.push({ title: label, name: log?.user?.name || "", date: log?.createdAt, verb: log ? "Approved" : "" })
