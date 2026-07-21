@@ -3766,6 +3766,10 @@ export default function RequestDetailPage() {
               <h2 className="font-semibold text-gray-800">SO APPROVAL — {isGwClaimP1Role ? (gwClaimDepts[0] || "Claim") : `DVM ${claimDept}`} ({myClaimItems.length})</h2>
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
+              <button onClick={() => setClaimTableView(v => !v)}
+                className="flex items-center gap-1 text-xs font-semibold text-white bg-indigo-600 rounded-lg px-3 py-1.5 hover:bg-indigo-700 shadow-sm">
+                {claimTableView ? "▤ Card view" : "▤ Table view"}
+              </button>
               <span className="text-yellow-600">{myClaimItems.filter((i:any) => isGwClaimP1Role ? ["PRES_PASSED","LOG_PASSED"].includes(i.itemStatus) : i.itemStatus === "LOG_PASSED").length} pending</span>
               <span className="text-green-600">{myClaimItems.filter((i:any) => i.itemStatus === "CLAIM_PASSED").length} forwarded to VP</span>
               <span className="text-red-600">{myClaimItems.filter((i:any) => i.itemStatus === "REJECTED").length} rejected</span>
@@ -3958,7 +3962,93 @@ export default function RequestDetailPage() {
               {soPickMsg && <span className={`text-xs font-medium ${soPickMsg.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>{soPickMsg}</span>}
             </div>
           )}
-          {myClaimItems.filter((i: any) => {
+          {/* Flat table view — all SO at once (same items as the card list), no expand */}
+          {claimTableView && (() => {
+            const rows = myClaimItems.filter((i: any) => {
+              if (i.itemStatus === "REJECTED") return false
+              const ap: any[] = i.claimApprovals || []
+              if (role === "SCM_NYK_APPROVER") return !ap.some((a: any) => a.role === "SCM_NYK_APPROVER")
+              if (role === "SCM_NYK_EVP") return ap.some((a: any) => a.role === "SCM_NYK_APPROVER") && !ap.some((a: any) => a.role === "SCM_NYK_EVP")
+              return true
+            })
+            // Can I tick this SO? (mirrors the card's isMyTurn)
+            const canApprove = (i: any) => {
+              const pending = isGwClaimP1Role ? ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) : i.itemStatus === "LOG_PASSED"
+              if (!pending) return false
+              const ap: any[] = i.claimApprovals || []
+              if (ap.some((a: any) => a.userId === myUserId)) return false
+              if (role === "SCM_NYK") return false
+              if (role === "SCM_NYK_EVP" && !ap.some((a: any) => a.role === "SCM_NYK_APPROVER")) return false
+              if (role === "SCM_NYK_APPROVER" && ap.some((a: any) => a.role === "SCM_NYK_APPROVER")) return false
+              const lower = myPriority !== null ? claimApproversList.filter((u: any) => u.priority !== null && u.priority < myPriority) : []
+              return lower.every((u: any) => ap.some((a: any) => a.userId === u.id))
+            }
+            const statusOf = (i: any) => {
+              if (i.itemStatus === "CLAIM_PASSED") return { t: "→ VP", c: "bg-green-100 text-green-700" }
+              const ap: any[] = i.claimApprovals || []
+              if (ap.some((a: any) => a.userId === myUserId)) return { t: "You approved ✓", c: "bg-blue-100 text-blue-700" }
+              const nyk = ap.find((a: any) => a.role === "SCM_NYK_APPROVER")
+              if (role === "SCM_NYK_APPROVER" && nyk) return { t: `✓ ${nyk?.user?.name || nyk?.user?.email || "approved"}`, c: "bg-gray-100 text-gray-600" }
+              if (canApprove(i)) return { t: "Your turn", c: "bg-yellow-100 text-yellow-700" }
+              return { t: "Pending", c: "bg-gray-100 text-gray-500" }
+            }
+            const RIGHT = new Set(["QTY AIR", "GROSS (KG)", "EST. (THB)", "ACTUAL (THB)"])
+            const cols: { h: string; get: (it: any) => any }[] = [
+              { h: "SO", get: it => it.so },
+              { h: "STYLE", get: it => it.style },
+              { h: "BRAND", get: it => it.brand || "-" },
+              { h: "CUSTOMER PO", get: it => it.customerPO || "-" },
+              { h: "PO GARMENT", get: it => it.poGarment || "-" },
+              { h: "QTY AIR", get: it => fmtNum(it.qtyRequestAir) },
+              { h: "GROSS (KG)", get: it => it.grossWeight != null ? fmtNum(it.grossWeight, 2) : "-" },
+              { h: "EST. (THB)", get: it => fmtNum(it.airFreight) },
+              { h: "ACTUAL (THB)", get: it => fmtNum(it.actualAirFreight) },
+              { h: "CLAIM DEPT", get: it => getSplits(it).map((s: any) => deptLabel(s.dept)).join(", ") || "-" },
+            ]
+            return (
+            <div className="border border-gray-200 rounded-xl overflow-auto max-h-[70vh]">
+              <table className="text-xs w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-2 py-2 w-8 sticky left-0 top-0 bg-gray-50 z-30"></th>
+                    {cols.map(c => (
+                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h}</th>
+                    ))}
+                    <th className="px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 text-left z-20">STATUS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {rows.map((item: any) => {
+                    const sel = dvmSelected.has(item.id)
+                    const mine = canApprove(item)
+                    const st = statusOf(item)
+                    return (
+                      <tr key={item.id} className={`hover:bg-gray-50 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
+                        <td className={`px-2 py-1.5 text-center sticky left-0 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}`}>
+                          {mine && (
+                            <input type="checkbox" checked={sel}
+                              onChange={e => setDvmSelected(prev => { const n = new Set(prev); e.target.checked ? n.add(item.id) : n.delete(item.id); return n })}
+                              className="w-4 h-4 rounded border-gray-300 cursor-pointer accent-blue-600" />
+                          )}
+                        </td>
+                        {cols.map(c => (
+                          <td key={c.h}
+                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""}`}>
+                            {c.get(item)}
+                          </td>
+                        ))}
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${st.c}`}>{st.t}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            )
+          })()}
+          {!claimTableView && myClaimItems.filter((i: any) => {
             if (i.itemStatus === "REJECTED") return false
             // NYK is split BY BRAND across 2 approvers: once an SO is approver-approved it
             // DROPS for every approver (the other approver keeps only their remaining SO).
