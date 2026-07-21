@@ -353,7 +353,7 @@ export default function ApprovalsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b">
-                    <tr>{["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["MY CLAIM (THB)"] : []),"FACTORY","COUNTRY","CLAIM DEPT",...(hasNyk ? ["CR NO"] : []),"INVOICE NO","HAWB#","PO GARMENT"].map(h =>
+                    <tr>{["SO","STYLE","BRAND","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)",...(isClaimRole ? ["MY CLAIM (THB)"] : []),"FACTORY","COUNTRY","CLAIM DEPT",...(hasNyk ? ["CR NO"] : []),"INVOICE NO","HAWB#","PO GARMENT"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>
                   </thead>
@@ -362,6 +362,7 @@ export default function ApprovalsPage() {
                       <tr key={item.id} className="hover:bg-gray-50">
                         <td className="px-3 py-1.5 font-medium">{item.so}</td>
                         <td className="px-3 py-1.5">{item.style}</td>
+                        <td className="px-3 py-1.5">{item.brand || "-"}</td>
                         <td className="px-3 py-1.5">{item.sub || "-"}</td>
                         <td className="px-3 py-1.5">{item.customerPO || "-"}</td>
                         <td className="px-3 py-1.5">{item.description}</td>

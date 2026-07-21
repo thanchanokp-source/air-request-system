@@ -1959,6 +1959,13 @@ export default function RequestDetailPage() {
                 <span className="text-green-600">{styleGroups.filter(g => g.status === "VP_PASSED").length} approved</span>
                 <span className="text-red-600">{styleGroups.filter(g => g.status === "REJECTED").length} rejected</span>
               </div>
+              {/* View: Card / Table */}
+              <div className="flex gap-1">
+                {([["card", "Card"], ["table", "Table"]] as const).map(([k, label]) => (
+                  <button key={k} type="button" onClick={() => setStyleTableView(k === "table")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium ${(styleTableView ? "table" : "card") === k ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{label}</button>
+                ))}
+              </div>
               {styleGroups.some(g => g.status === "PASSED") && (
                 <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
                   <input type="checkbox"
@@ -1993,7 +2000,87 @@ export default function RequestDetailPage() {
               )}
             </div>
           </div>
-          {styleGroups.map(g => {
+          {/* ── TABLE VIEW — one row per SO, all MER columns + claim + Approve/Back to SCM per style ── */}
+          {styleTableView && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+              <table className="w-full text-xs whitespace-nowrap">
+                <thead className="bg-gray-50 border-b border-gray-200"><tr>
+                  {["", "STYLE", "BRAND", "SO", "CUSTOMER PO", "DESCRIPTION", "PLAN DATE", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)", "CLAIM DEPT", "FACTORY", "COUNTRY", "STATUS", "ACTION"].map((h, i) =>
+                    <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
+                </tr></thead>
+                <tbody className="divide-y divide-gray-100">
+                  {styleGroups.flatMap(g => {
+                    const isRej = rejectingStyle === g.style
+                    const isBackScm = backToScmStyleOpen === g.style
+                    const isSub = submitting === g.style
+                    const isReady = g.status === "PASSED"
+                    const isApproved = ["VP_PASSED", "PRES_PASSED", "LOG_PASSED", "CLAIM_PASSED", "COMPLETED"].includes(g.status)
+                    const n = g.items.length
+                    const rowBg = g.status === "REJECTED" ? "bg-red-50/40" : isApproved ? "bg-green-50/30" : isReady ? "hover:bg-gray-50/60" : "bg-gray-50/40 opacity-70"
+                    const rows = g.items.map((item: any, idx: number) => (
+                      <tr key={item.id} className={rowBg}>
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 align-top">{isReady && (
+                          <input type="checkbox" className="w-4 h-4" checked={selectedStyles.has(g.style)}
+                            onChange={e => setSelectedStyles(prev => { const s = new Set(prev); e.target.checked ? s.add(g.style) : s.delete(g.style); return s })} />
+                        )}</td>}
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 font-semibold text-gray-800 align-top">{g.style}</td>}
+                        <td className="px-3 py-2">{item.brand || "-"}</td>
+                        <td className="px-3 py-2 font-medium">{item.so}</td>
+                        <td className="px-3 py-2">{item.customerPO || "-"}</td>
+                        <td className="px-3 py-2">{item.description || "-"}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
+                        <td className="px-3 py-2 text-right">{item.qtyRequestAir}</td>
+                        <td className="px-3 py-2 text-right">{fmtNum(item.grossWeight, 2)}</td>
+                        <td className="px-3 py-2 text-right text-blue-600">{fmtNum(item.airFreight)}</td>
+                        <td className="px-3 py-2">{getSplits(item).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "-"}</td>
+                        <td className="px-3 py-2">{item.factory}</td>
+                        <td className="px-3 py-2">{item.country}</td>
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 align-top">
+                          {g.status === "PENDING" && <span className="text-gray-400">⏳ Waiting SCM</span>}
+                          {isApproved && <span className="text-green-700">✓ Approved</span>}
+                          {g.status === "REJECTED" && <span className="text-red-700">✕ Rejected</span>}
+                          {isReady && <span className="text-blue-600">Ready</span>}
+                        </td>}
+                        {idx === 0 && <td rowSpan={n} className="px-3 py-2 align-top">{isReady && !isRej && !isBackScm && (
+                          <div className="inline-flex gap-1.5">
+                            <button onClick={() => approveStyle(g.style)} disabled={isSub} className="px-2.5 py-1 bg-green-600 text-white rounded-md font-medium hover:bg-green-700 disabled:opacity-50">{isSub ? "..." : "Approve"}</button>
+                            {!isPresidentStage && <button onClick={() => { setBackToScmStyleOpen(g.style); setBackToScmStyleComment(""); setRejectingStyle(null) }} disabled={isSub} className="px-2.5 py-1 bg-orange-500 text-white rounded-md font-medium hover:bg-orange-600 disabled:opacity-50">Back to SCM</button>}
+                          </div>
+                        )}</td>}
+                      </tr>
+                    ))
+                    if (isRej && isReady) rows.push(
+                      <tr key={g.style + "_rej"}><td colSpan={15} className="px-4 py-3 bg-red-50 border-t border-red-100">
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-red-700">Rejection Reason — {g.style} *</label>
+                          <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                          <div className="flex gap-2">
+                            <button onClick={() => rejectStyle(g.style)} disabled={isSub || !rejectComment.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">{isSub ? "..." : "Confirm Reject"}</button>
+                            <button onClick={() => { setRejectingStyle(null); setRejectComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                          </div>
+                        </div>
+                      </td></tr>
+                    )
+                    if (isBackScm && isReady) rows.push(
+                      <tr key={g.style + "_bts"}><td colSpan={15} className="px-4 py-3 bg-orange-50 border-t border-orange-100">
+                        <div className="space-y-2">
+                          <label className="text-xs font-medium text-orange-700">Back to SCM — {g.style} — เหตุผล *</label>
+                          <textarea value={backToScmStyleComment} onChange={e => setBackToScmStyleComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                          <div className="flex gap-2">
+                            <button onClick={() => backToScmStyleFn(g.style)} disabled={isSub || !backToScmStyleComment.trim()} className="px-4 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{isSub ? "..." : "Confirm Back to SCM"}</button>
+                            <button onClick={() => { setBackToScmStyleOpen(null); setBackToScmStyleComment("") }} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+                          </div>
+                        </div>
+                      </td></tr>
+                    )
+                    return rows
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!styleTableView && styleGroups.map(g => {
             const isExp = expanded.has(g.style)
             const isRej = rejectingStyle === g.style
             const isBackScm = backToScmStyleOpen === g.style
@@ -2073,7 +2160,7 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 font-medium">{item.so}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
-                            <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
+                            <td className="px-3 py-2">{getSplits(item).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "-"}</td>
                             <td className="px-3 py-2">{item.airFreight != null ? Number(item.airFreight).toLocaleString() : "-"}</td>
@@ -2196,7 +2283,7 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 font-medium">{item.so}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
-                            <td className="px-3 py-2">{item.claimDepartment || "-"}</td>
+                            <td className="px-3 py-2">{getSplits(item).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "-"}</td>
                             <td className="px-3 py-2">{item.airFreight != null ? Number(item.airFreight).toLocaleString() : "-"}</td>
@@ -3183,7 +3270,7 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{item.invoiceNo || "—"}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "—"}</td>
-                            <td className="px-3 py-2">{item.claimDepartment || "—"}</td>
+                            <td className="px-3 py-2">{getSplits(item).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "—"}</td>
                             <td className="px-3 py-2">{item.factory || "—"}</td>
                             <td className="px-3 py-2">{item.country || "—"}</td>
                           </tr>
@@ -5922,7 +6009,7 @@ export default function RequestDetailPage() {
                         {f.includes("Date") ? fmtDate(item[f])
                           : f === "grossWeight" ? fmtNum(item[f], 2)
                           : f === "airFreight" || f === "actualAirFreight" ? fmtNum(item[f])
-                          : f === "claimDepartment" ? (isGWRequest ? (getSplits(item).map((s: any) => `${s.dept} ${s.pct}%`).join(", ") || "-") : (item[f] ?? "-"))
+                          : f === "claimDepartment" ? (getSplits(item).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "-")
                           : item[f] ?? "-"}
                       </td>
                     ))}
