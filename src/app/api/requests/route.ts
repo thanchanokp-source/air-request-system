@@ -100,20 +100,27 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { items, assignedVpMer, assignedDvm, bu, isTest } = body
+    const { items, assignedVpMer, assignedDvm, bu, isTest, historical } = body
+    const role = (session.user as any).role
     // Only ADMIN may create TEST documents (all their emails reroute to the admin, hidden from users).
-    const isTestDoc = !!isTest && (session.user as any).role === "ADMIN"
+    const isTestDoc = !!isTest && role === "ADMIN"
+    // Admin can IMPORT old/completed documents as a record only — saved straight as COMPLETED,
+    // no approval flow, no emails, no first-approver pick required.
+    const isHistorical = !!historical && role === "ADMIN"
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "No items" }, { status: 400 })
     }
     const isGW = bu === "GW"
     const isEA = bu === "EA"   // EA = same flow as NYG, only the top-3 approvers differ
-    // MER picks the FIRST approver from master: GW → DPM (assignedVpMer), NYG/EA → DVM/ADVM (assignedDvm).
-    if (!assignedVpMer && isGW) {
-      return NextResponse.json({ error: "Please select a DPM (GW)" }, { status: 400 })
-    }
-    if (!assignedDvm && !isGW) {
-      return NextResponse.json({ error: isEA ? "Please select an ADVM (EA)" : "Please select a DVM Merchandise" }, { status: 400 })
+    // First-approver pick is required for the NORMAL flow only (historical imports skip approval).
+    if (!isHistorical) {
+      // MER picks the FIRST approver from master: GW → DPM (assignedVpMer), NYG/EA → DVM/ADVM (assignedDvm).
+      if (!assignedVpMer && isGW) {
+        return NextResponse.json({ error: "Please select a DPM (GW)" }, { status: 400 })
+      }
+      if (!assignedDvm && !isGW) {
+        return NextResponse.json({ error: isEA ? "Please select an ADVM (EA)" : "Please select a DVM Merchandise" }, { status: 400 })
+      }
     }
 
     // Case-insensitive column lookup (handles template header casing variations)
@@ -162,7 +169,8 @@ export async function POST(req: NextRequest) {
 
     // MER picked the 1st approver (assignedDvm) → route straight to that DVM/ADVM stage.
     // (Fallback to the VP stage only if — unexpectedly — no DVM was picked.)
-    const initialStatus = isGW ? "PENDING_VP_MER_GW"
+    const initialStatus = isHistorical ? "COMPLETED"
+      : isGW ? "PENDING_VP_MER_GW"
       : isEA ? (assignedDvm ? "PENDING_DVM_MER_EA" : "PENDING_VP_MER_EA")
       : (assignedDvm ? "PENDING_DVM_MER" : "PENDING_VP_MER")
 
@@ -179,8 +187,8 @@ export async function POST(req: NextRequest) {
         assignedDvmMer: !isGW ? (assignedDvm || null) : null,
         // Hold from the first approver until every Country has a rate AND every
         // description has a WT Charge (so Gross/Est. Air Freight can be computed).
-        pendingRate: missingRates.length > 0,
-        pendingWeight: missingDescriptions.length > 0,
+        pendingRate: !isHistorical && missingRates.length > 0,
+        pendingWeight: !isHistorical && missingDescriptions.length > 0,
         vpMerToken: crypto.randomUUID(),
         ...(isGW ? {
           gmToken: crypto.randomUUID(),
@@ -253,6 +261,7 @@ export async function POST(req: NextRequest) {
               grossWeight: gw,
               airFreight: gw * rate,
               marketRatePerKg: rate > 0 ? rate : null,
+              ...(isHistorical && { itemStatus: "COMPLETED" }),
               ...(isGW && { claimDepartment: claimDept, claimDepts, claimPercentage: claimPct }),
             }
           })
@@ -263,7 +272,9 @@ export async function POST(req: NextRequest) {
     // Only notify the first approver when BOTH the rate AND all WT Charges are complete.
     // If a country rate or a description WT Charge is missing, the doc is HELD and the
     // approver is notified later, once LG adds them (see releaseHeldDocs in lib/freight.ts).
-    if (missingRates.length === 0 && missingDescriptions.length === 0) {
+    if (isHistorical) {
+      // Historical import → saved as COMPLETED record, no approver notification.
+    } else if (missingRates.length === 0 && missingDescriptions.length === 0) {
       try {
         await notifyStatusChange(request.id, initialStatus)
       } catch (err) {

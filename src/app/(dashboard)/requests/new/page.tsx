@@ -27,6 +27,7 @@ export default function NewRequestPage() {
   const isAdmin = role === "ADMIN"
   // Admin can upload a TEST document for any BU (emails reroute to the admin, hidden from users).
   const [testMode, setTestMode] = useState(false)
+  const [historical, setHistorical] = useState(false) // admin: import old doc as COMPLETED (no approval)
   const [testBu, setTestBu] = useState<"NYG" | "GW" | "EA">("NYG")
   const userBu = (isAdmin && testMode) ? testBu : ((session?.user as any)?.bu || "NYG")
   const isGW = userBu === "GW"
@@ -203,8 +204,9 @@ export default function NewRequestPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file || preview.length === 0) return
-    // MER must pick the first approver: GW → DPM GW, NYG → DVM MER, EA → ADVM.
-    if (!vpMerSelected) {
+    const isHistorical = isAdmin && historical
+    // Approver pick required only for the normal flow (historical import skips approval).
+    if (!isHistorical && !vpMerSelected) {
       setError(isGW ? "Please select a DPM GW before submitting" : isEA ? "Please select an ADVM (EA) before submitting" : "Please select a DVM Merchandise before submitting")
       return
     }
@@ -219,6 +221,7 @@ export default function NewRequestPage() {
         assignedDvm: !isGW ? vpMerSelected?.email : null,     // NYG/EA: 1st merch approver (DVM/ADVM)
         bu: userBu,
         isTest: isAdmin && testMode,
+        historical: isHistorical,
       })
     })
     const data = await res.json()
@@ -275,6 +278,17 @@ export default function NewRequestPage() {
             </select>
           )}
           {testMode && <span className="text-xs text-amber-600">The document gets a TEST-… number · each role's magic link goes to your inbox</span>}
+        </div>
+      )}
+
+      {/* Admin: import OLD documents as a record — saved as COMPLETED, no approval, no emails. */}
+      {isAdmin && !testMode && (
+        <div className="bg-slate-50 border border-slate-300 rounded-xl p-4 flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
+            <input type="checkbox" checked={historical} onChange={e => setHistorical(e.target.checked)} className="w-4 h-4" />
+            📁 Import old document (save as COMPLETED — no approval flow, no emails)
+          </label>
+          {historical && <span className="text-xs text-slate-500">Saved straight as a completed record · no approver needed</span>}
         </div>
       )}
 
@@ -426,7 +440,7 @@ export default function NewRequestPage() {
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={loading || preview.length === 0 || !vpMerSelected}
+            disabled={loading || preview.length === 0 || (!vpMerSelected && !(isAdmin && historical))}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {loading ? "Submitting..." : "Submit Request"}
           </button>
