@@ -29,9 +29,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     !a.itemId && /\.xlsx?$/i.test(a.fileName || "") && !LG_CATS.includes(a.category) && a.uploadedBy?.role !== "SCM_USER")
   if (!att) return NextResponse.json({ error: "No original file found" }, { status: 404 })
 
-  const { data, error } = await supabase.storage.from(BUCKET).download(att.filePath)
-  if (error || !data) return NextResponse.json({ error: "Storage error" }, { status: 500 })
-  const buf = Buffer.from(await data.arrayBuffer())
+  // Fetch the file bytes server-side via a signed URL (proven to work; no client CORS issues).
+  const { data: signed, error } = await supabase.storage.from(BUCKET).createSignedUrl(att.filePath, 3600)
+  if (error || !signed) return NextResponse.json({ error: "Storage error" }, { status: 500 })
+  const fileRes = await fetch(signed.signedUrl)
+  if (!fileRes.ok) return NextResponse.json({ error: "Download failed" }, { status: 500 })
+  const buf = Buffer.from(await fileRes.arrayBuffer())
 
   const ExcelJSMod: any = await import("exceljs")
   const ExcelJS = ExcelJSMod.default || ExcelJSMod

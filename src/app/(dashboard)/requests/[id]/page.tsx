@@ -1246,16 +1246,13 @@ export default function RequestDetailPage() {
   // SCM_<documentNo>.xlsx. Same-origin fetch (no CORS) → we read the blob and force a download.
   // Returns true if downloaded; false → caller should fall back to generating a sheet.
   const downloadScmClaimFile = async (): Promise<boolean> => {
-    try {
-      const res = await fetch(`/api/requests/${id}/scm-claim-file`)
-      if (!res.ok) return false
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url; a.download = `SCM_${req.documentNo}.xlsx`; a.click()
-      URL.revokeObjectURL(url)
-      return true
-    } catch { return false }
+    // Direct <a download> to the same-origin endpoint (Content-Disposition: attachment). Most
+    // reliable — no blob/CORS, browser downloads straight to disk as SCM_<docNo>.xlsx.
+    const a = document.createElement("a")
+    a.href = `/api/requests/${id}/scm-claim-file`
+    a.download = `SCM_${req.documentNo}.xlsx`
+    document.body.appendChild(a); a.click(); a.remove()
+    return true
   }
 
   const rejectStyle = async (style: string) => {
@@ -2445,7 +2442,7 @@ export default function RequestDetailPage() {
                 const wb = XLSX.utils.book_new()
                 XLSX.utils.book_append_sheet(wb, ws, "SCM")
                 XLSX.writeFile(wb, `scm-claim-dept_${req.documentNo}.xlsx`)
-              }} className="flex items-center gap-1.5 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50">
+              }} className="flex items-center gap-1.5 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 cursor-pointer">
                 ↓ Export Excel
               </button>
               {/* Import */}
@@ -5364,7 +5361,7 @@ export default function RequestDetailPage() {
                     const a = document.createElement("a")
                     a.href = url; a.download = `scm-claim-dept_${req.documentNo}.xlsx`; a.click()
                     URL.revokeObjectURL(url)
-                  }} className="flex items-center gap-1 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50">
+                  }} className="flex items-center gap-1 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 cursor-pointer">
                     ↓ Export Excel
                   </button>
                   {/* Import */}
