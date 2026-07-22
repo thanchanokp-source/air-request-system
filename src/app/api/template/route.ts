@@ -23,7 +23,13 @@ export async function GET(req: NextRequest) {
       where: { isActive: true }, select: { name: true }, orderBy: { name: "asc" },
     })
     const names = descs.map(d => String(d.name)).filter(Boolean)
-    if (names.length) {
+    // Only inject the live dropdown into a LEAN template. A template bloated by column
+    // formulas filled down thousands of rows (e.g. an EA sheet with =IF(LEN(SO)>0,...))
+    // makes exceljs.load() block for a very long time → the download hangs. Above this
+    // size we skip injection and serve the raw file (the DESCRIPTION column still works,
+    // just without the warn-only dropdown).
+    const MAX_INJECT_BYTES = 30 * 1024
+    if (names.length && buf.length <= MAX_INJECT_BYTES) {
       const ExcelJSMod: any = await import("exceljs")
       const ExcelJS = ExcelJSMod.default || ExcelJSMod
       const wb = new ExcelJS.Workbook()
