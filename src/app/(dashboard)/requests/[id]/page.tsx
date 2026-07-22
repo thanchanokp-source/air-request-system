@@ -634,7 +634,11 @@ export default function RequestDetailPage() {
           i.itemStatus === "PRES_PASSED" || i.itemStatus === "LOG_PASSED" ||
           (d.status === "PENDING_LOGISTICS" && i.itemStatus === "PENDING") ||
           // LG runs in PARALLEL with Claim (NYG/EA) → reconstruct saved draft at those stages too.
-          (["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(d.status) && i.itemStatus !== "REJECTED")
+          (["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(d.status) && i.itemStatus !== "REJECTED") ||
+          // GW: LG ∥ Claim after GM. A GW SO whose claim is already fully approved (GW/SUPPLIER
+          // auto-approve) + has draft Actual becomes PRESIDENT_PENDING, so match by DOC stage
+          // (any non-rejected item) — else its saved INV/HAWB/booking date is dropped on re-entry.
+          (["PENDING_CLAIM_GW", "PENDING_LOGISTICS_GW", "PENDING_PRESIDENT_GW"].includes(d.status) && i.itemStatus !== "REJECTED")
         )
         if (logItems.length > 0) {
           const logistics: Record<string, { invoiceNo: string; bookingDate: string }> = {}
