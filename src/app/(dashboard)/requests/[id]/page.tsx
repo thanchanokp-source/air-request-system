@@ -294,10 +294,13 @@ function PersonPicker({ label, selected, onSelect, placeholder, position, positi
       }
     } catch { alert("Failed") } finally { setAdding(false) }
   }
-  // Hard filter: with a required position, ONLY people matching that position (exact
-  // role + BU) are selectable. "Show all" is an explicit override.
+  // With a required position, BROWSING (no query) shows only people matching that position.
+  // But once the user TYPES a name it's a FREE search — show every name match (tagged
+  // ✓/≠ position) so a person can be picked even when nobody holds the exact position role
+  // (e.g. "VP SCM NYG" with no one assigned to it yet).
   const matched = position ? results.filter(p => posMatches(p, position, bu, positionRole, posSpec)) : results
-  const shown = position && !showAll ? matched : results
+  const searching = q.trim().length >= 2
+  const shown = position && !showAll && !searching ? matched : results
   const notifyAdmin = async () => {
     setNotifyState("sending")
     try {
@@ -332,10 +335,12 @@ function PersonPicker({ label, selected, onSelect, placeholder, position, positi
             <div className="absolute top-full left-0 mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl z-50 w-96 max-w-[90vw] overflow-hidden">
               {position && (
                 <div className="px-3.5 py-1.5 bg-blue-50 border-b border-blue-100 text-[11px] text-blue-700 flex items-center justify-between">
-                  <span>{showAll ? "Showing all people" : `Position: ${position} only`}</span>
-                  <button onMouseDown={e => { e.preventDefault(); setShowAll(v => !v) }} className="underline hover:text-blue-900">
-                    {showAll ? `filter to ${position}` : `show all (${results.length})`}
-                  </button>
+                  <span>{showAll || searching ? "Search results — any person" : `Position: ${position} only`}</span>
+                  {!searching && (
+                    <button onMouseDown={e => { e.preventDefault(); setShowAll(v => !v) }} className="underline hover:text-blue-900">
+                      {showAll ? `filter to ${position}` : `show all (${results.length})`}
+                    </button>
+                  )}
                 </div>
               )}
               <div className="max-h-72 overflow-y-auto py-1.5">
