@@ -1573,7 +1573,9 @@ async function claimEntryUsersForDept(req: any, dept: string, items: any[]): Pro
   // PRODUCTION entry → priority-1 by factory G-group.
   if (dept === "PRODUCTION") {
     const byGroup = new Map<string, any[]>()
-    for (const it of items) { const g = vpProdGroup((it as any).factory); if (!g) continue; if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g)!.push(it) }
+    // No factory G-group (e.g. EA — one production approver, not per-G) → bucket "ALL" so an
+    // all-G claimer (claimDepartment="ALL", e.g. theerawee) still receives the LG-files alert.
+    for (const it of items) { const g = vpProdGroup((it as any).factory) || "ALL"; if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g)!.push(it) }
     for (const [g] of byGroup) {
       const usAll = await prisma.user.findMany({
         where: { isActive: true, bu: { in: [(req as any).bu, "ALL"] }, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] } as any,
