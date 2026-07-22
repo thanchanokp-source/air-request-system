@@ -1,6 +1,6 @@
 "use client"
 
-import { getSplits, chainFor, deptLabel, claimEntryDisplayRoles, vpProdGroup } from "@/lib/claim"
+import { getSplits, chainFor, deptLabel, claimEntryDisplayRoles, vpProdGroup, NO_APPROVAL_GW_DEPTS } from "@/lib/claim"
 
 // Visual approval progress chain.
 //  - Doc-level (pass `items`): overall document stage + aggregated claim depts.
@@ -261,15 +261,21 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   const parallelReached = completed || cur >= 2 // reached the Logistics∥Claim stage
 
   // Per-department claim status + overall claim/logistics completion.
+  // GW + SUPPLIER need NO approval (backend auto-passes them via deriveGwItemStatus and
+  // never alerts them). Their split stays CLAIM_PENDING in the DB, so treat them as DONE
+  // here too → the chip shows green "✓" (not amber "Waiting") the moment the claim exists.
+  const gwSplitDone = (s: any) =>
+    s.status === "DEPT_APPROVED" || s.status === "COMPLETED"
+    || (NO_APPROVAL_GW_DEPTS.includes(s.dept) && s.status !== "REJECTED")
   const map: Record<string, { total: number; done: number }> = {}
   for (const it of claimSource) for (const s of getSplits(it)) {
     if (!map[s.dept]) map[s.dept] = { total: 0, done: 0 }
     map[s.dept].total++
-    if (s.status === "DEPT_APPROVED" || s.status === "COMPLETED") map[s.dept].done++
+    if (gwSplitDone(s)) map[s.dept].done++
   }
   const claimDepts = Object.entries(map).map(([dept, c]) => ({ dept, done: c.done === c.total }))
   const allSplits = claimSource.flatMap(it => getSplits(it))
-  const claimDone = allSplits.length > 0 && allSplits.every(s => s.status === "DEPT_APPROVED" || s.status === "COMPLETED")
+  const claimDone = allSplits.length > 0 && allSplits.every(gwSplitDone)
   const lgDone = !!req?.logisticsSent
   // "Claim" turns green when ALL claim depts approved; "Logistics" only after LG Save & Send.
   const claimChip: "done" | "active" | "pending" = completed || claimDone ? "done" : parallelReached ? "active" : "pending"
