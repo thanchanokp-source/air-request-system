@@ -123,7 +123,7 @@ export const authOptions: NextAuthOptions = {
               if (asEmail) {
                 const asU = await (prisma.user as any).findUnique({ where: { email: asEmail } })
                 if (asU && asU.isActive && (asU.role === gwRole || (Array.isArray(asU.roles) && asU.roles.includes(gwRole)))) {
-                  return { id: asU.id, email: asU.email, name: asU.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (asU as any).claimDepartment ?? scopeDept ?? null, priority: (asU as any).priority ?? null }
+                  return { id: asU.id, email: asU.email, name: asU.name, role: gwRole, roles: Array.from(new Set([gwRole, ...(((asU as any).roles) || [])])), bu: cReq.bu || "GW", claimDepartment: (asU as any).claimDepartment ?? scopeDept ?? null, priority: (asU as any).priority ?? null }
                 }
               }
               // SCM NYK EVP / CR user: the Approver chose a specific person — resolve
@@ -132,7 +132,7 @@ export const authOptions: NextAuthOptions = {
                 : gwRole === "SCM_NYK" ? (cReq as any).assignedScmNykCr : null
               if (assignedEmail) {
                 const au = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
-                if (au) return { id: au.id, email: au.email, name: au.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (au as any).claimDepartment ?? null, priority: (au as any).priority ?? null }
+                if (au) return { id: au.id, email: au.email, name: au.name, role: gwRole, roles: Array.from(new Set([gwRole, ...(((au as any).roles) || [])])), bu: cReq.bu || "GW", claimDepartment: (au as any).claimDepartment ?? null, priority: (au as any).priority ?? null }
                 return { id: `nyk_guest_${token}`, email: assignedEmail, name: assignedEmail, role: gwRole, bu: cReq.bu || "GW", claimDepartment: null, priority: null }
               }
               // SCM_NYK_* and SCM_NYG are CROSS-BU (their holder's bu is often NYG or "ALL"
@@ -146,7 +146,7 @@ export const authOptions: NextAuthOptions = {
                 ...(isNykRole ? {} : { bu: { in: [cReq.bu, "ALL"] } }),
                 ...(scopeDept ? { claimDepartment: scopeDept } : {}),
               } })
-              if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, bu: cReq.bu || "GW", claimDepartment: (u as any).claimDepartment ?? scopeDept ?? null, priority: (u as any).priority ?? null }
+              if (u) return { id: u.id, email: u.email, name: u.name, role: gwRole, roles: Array.from(new Set([gwRole, ...(((u as any).roles) || [])])), bu: cReq.bu || "GW", claimDepartment: (u as any).claimDepartment ?? scopeDept ?? null, priority: (u as any).priority ?? null }
               return null
             }
           }
