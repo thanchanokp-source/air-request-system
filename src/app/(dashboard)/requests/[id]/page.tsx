@@ -3662,7 +3662,12 @@ export default function RequestDetailPage() {
                   {claimSelIds.length === gwFwdItems.length ? "Clear" : `Select All (${gwFwdItems.length})`}
                 </button>
               )}
-              <button onClick={() => { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }} disabled={claimFwdSaving}
+              <button onClick={() => {
+                  // Final position (e.g. Production EVP) → sign + finish directly (no next-person
+                  // picker to show). Earlier positions open the picker modal to forward.
+                  if (gwIsLastPos) { claimForward(true, claimActIds) }
+                  else { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }
+                }} disabled={claimFwdSaving}
                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40">
                 {claimFwdSaving ? "..." : (claimSelIds.length ? `✓ Approve Selected (${claimSelIds.length})` : `✓ Approve All (${gwFwdItems.length})`)}
               </button>
