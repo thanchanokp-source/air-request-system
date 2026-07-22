@@ -117,8 +117,8 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
   if (role === "CLAIM_GW") return claimDept === "SUPPLIER" ? "SUPPLIER" : "GW"
   if (role === "SCM_NYG") return "SCM NYG"
   if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return "SCM NYK"
-  // Commercial claim = MER's team (DVM MER / VP MER) → canonical dept COMMERCIAL.
-  if (role === "DVM_MER" || role === "VP_MER") return "COMMERCIAL"
+  // Commercial claim = MER's team (NYG DVM/VP MER, EA ADVM/DVM = *_MER_EA) → dept COMMERCIAL.
+  if (role === "DVM_MER" || role === "VP_MER" || role === "DVM_MER_EA" || role === "VP_MER_EA") return "COMMERCIAL"
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
   if (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") return role.replace("CLAIM_", "")
   return null
