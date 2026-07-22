@@ -129,6 +129,12 @@ export async function POST(req: NextRequest) {
       const k = Object.keys(item).find(k => k.toLowerCase() === key.toLowerCase()) ?? key
       return item[k]
     }
+    // Fuzzy header match — find a column whose header CONTAINS all given substrings.
+    const colLike = (item: any, ...subs: string[]) => {
+      const k = Object.keys(item).find(k => { const lk = k.toLowerCase(); return subs.every(s => lk.includes(s.toLowerCase())) })
+      return k ? item[k] : ""
+    }
+    const numOf = (v: any) => { const n = parseFloat(String(v ?? "").replace(/,/g, "")); return isNaN(n) ? 0 : n }
 
     // Freight rate is keyed by BRAND + COUNTRY (MER selects the country; the port
     // is not used). The same country can have different rates per brand.
@@ -297,6 +303,9 @@ export async function POST(req: NextRequest) {
               grossWeight: gw,
               airFreight: gw * rate,
               marketRatePerKg: rate > 0 ? rate : null,
+              // Historical import ONLY: the SO's ACTUAL air freight is the value in the
+              // "Total HAWB#" column. (Normal uploads leave Actual for Logistics to fill.)
+              ...(isHistorical && (() => { const a = numOf(colLike(item, "total", "hawb")); return a > 0 ? { actualAirFreight: a } : {} })()),
               ...(isHistorical && { itemStatus: "COMPLETED" }),
               ...(isGW && { claimDepartment: claimDept, claimDepts, claimPercentage: claimPct }),
             }

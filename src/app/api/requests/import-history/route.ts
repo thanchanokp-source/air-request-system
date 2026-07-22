@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
         // Actual per SO: admin/jariya's historical uploads carry the SO actual in the
         // "Total HAWB#" column → use that as the PRIMARY source. Fall back to a by-SO
         // "Actual Airfreight" column (any header with "actual" + "air"/"freight", excluding
-        // the per-dept "ACTUAL AIRFREIGHT1/2/3" which end in a digit), then the per-dept sum.
+        // per-dept "ACTUAL AIRFREIGHT1/2/3" which end in a digit), then the per-dept sum.
         const totalHawb = num(colLike(item, "total", "hawb"))
         const soActualKey = Object.keys(item).find(k => {
           const lk = k.toLowerCase().trim()
