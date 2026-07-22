@@ -10,6 +10,8 @@ export const SIG_APPROVE_ACTIONS = new Set([
 // Human-readable signatory label per role (used on the stamped PDF).
 export const SIG_ROLE_LABEL: Record<string, string> = {
   VP_MER: "VP Merchandise", DVM_MER: "DVM Merchandise", VP_MER_GW: "DPM (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)",
+  // EA merch approvers — backend roles reuse DVM_MER_EA/VP_MER_EA, but externally/print they are ADVM → DVM.
+  DVM_MER_EA: "ADVM", VP_MER_EA: "DVM",
   PRESIDENT: "President", PRESIDENT_GW: "President (GW)", VP_SCM: "VP SCM", SCM_USER: "SCM",
   CLAIM_GW: "Claim (GW)", SCM_NYK: "SCM NYK", SCM_NYK_APPROVER: "SCM NYK Approver", SCM_NYK_EVP: "SCM NYK EVP",
   SCM_NYG: "SCM NYG", CLAIM_COMMERCIAL: "Commercial", CLAIM_PRODUCTION: "Production", CLAIM_PROCUREMENT: "Procurement",

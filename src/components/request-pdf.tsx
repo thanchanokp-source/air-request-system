@@ -141,7 +141,9 @@ function computeSigners(req: any): Signer[] {
   if (!isGW && sigList.length) {
     // role → chain group. Same person may sign twice (e.g. VP MER for merch AND commercial
     // claim) → collapse per group to the last-signed, so each chain shows once.
-    const KEEP_GROUP: Record<string, string> = { VP_MER: "MERCH", VP_SCM: "SCM", PRESIDENT: "PRESIDENT" }
+    // VP_MER_EA = the LAST EA merch approver (peshan/"DVM"); keep it as the MERCH signatory
+    // (DVM_MER_EA / sally / "ADVM" is the intermediate step → collapsed, like NYG's DVM_MER).
+    const KEEP_GROUP: Record<string, string> = { VP_MER: "MERCH", VP_MER_EA: "MERCH", VP_SCM: "SCM", PRESIDENT: "PRESIDENT" }
     const CLAIM_DEPT: Record<string, string> = {
       CLAIM_PROCUREMENT: "PROCUREMENT", DVM_PROCUREMENT: "PROCUREMENT", VP_PROCUREMENT: "PROCUREMENT",
       CLAIM_PRODUCTION: "PRODUCTION", VP_PRODUCTION: "PRODUCTION",

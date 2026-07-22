@@ -986,9 +986,16 @@ export default function RequestDetailPage() {
     ? (gwBranchChoice === "Sourcing" ? gwCurrentPos + 1 : gwBranchChoice === "Self" ? gwCurrentPos + 2 : null)
     : gwCurrentPos + 1
   const gwNextSpec: PosSpec | null = gwFwdCanonicalDept && gwTargetPos != null ? positionSpec(gwFwdCanonicalDept, gwTargetPos, gwFactory) : null
-  const gwNextPosLabel = isProcRoute
-    ? (gwNextSpec ? `Procurement ${gwNextSpec.label}` : "select route")
-    : (gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFactory, gwBranch) : null)
+  const gwNextPosLabel = (() => {
+    if (isProcRoute) return gwNextSpec ? `Procurement ${gwNextSpec.label}` : "select route"
+    let lbl = gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFactory, gwBranch) : null
+    // EA COMMERCIAL reuses the NYG merch chain labels; show EA titles (ADVM → DVM) instead.
+    if (lbl && req?.bu === "EA" && gwFwdCanonicalDept === "COMMERCIAL") {
+      if (lbl === "VP Merchandise") lbl = "DVM"
+      else if (lbl === "DVM Merchandise") lbl = "ADVM"
+    }
+    return lbl
+  })()
   // EA reuses the COMMERCIAL chain (DVM Merch → VP Merch), but EA's merch approvers are the
   // _EA variants (sally = DVM_MER_EA, peshan = VP_MER_EA). Map the bare merch role to its EA
   // variant for EA documents so the next-position picker finds them.
