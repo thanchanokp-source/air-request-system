@@ -633,7 +633,8 @@ export default function RequestDetailPage() {
         const logItems = (d.items || []).filter((i: any) =>
           i.itemStatus === "PRES_PASSED" || i.itemStatus === "LOG_PASSED" ||
           (d.status === "PENDING_LOGISTICS" && i.itemStatus === "PENDING") ||
-          ((d.status === "PENDING_SCM" || d.status === "PENDING_PRESIDENT") && i.itemStatus !== "REJECTED")
+          // LG runs in PARALLEL with Claim (NYG/EA) → reconstruct saved draft at those stages too.
+          (["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(d.status) && i.itemStatus !== "REJECTED")
         )
         if (logItems.length > 0) {
           const logistics: Record<string, { invoiceNo: string; bookingDate: string }> = {}
@@ -657,18 +658,22 @@ export default function RequestDetailPage() {
           })
           setSoInvMap(restoredInvMap)
           // Reconstruct hawbGroups from saved hawbNo per item, summing actualAirFreight as totalCost
-          const hawbRestoreMap: Record<string, { hawbNo: string; invNos: Set<string>; totalCost: number }> = {}
+          const hawbRestoreMap: Record<string, { hawbNo: string; invNos: Set<string>; totalCost: number; bookingDate: string }> = {}
           logItems.forEach((item: any) => {
             if (item.hawbNo && item.invoiceNo) {
-              if (!hawbRestoreMap[item.hawbNo]) hawbRestoreMap[item.hawbNo] = { hawbNo: item.hawbNo, invNos: new Set(), totalCost: 0 }
+              if (!hawbRestoreMap[item.hawbNo]) hawbRestoreMap[item.hawbNo] = { hawbNo: item.hawbNo, invNos: new Set(), totalCost: 0, bookingDate: "" }
               hawbRestoreMap[item.hawbNo].invNos.add(item.invoiceNo)
               hawbRestoreMap[item.hawbNo].totalCost += item.actualAirFreight || 0
+              // Restore the saved booking date (was previously dropped → the field looked "lost").
+              if (item.bookingDate && !hawbRestoreMap[item.hawbNo].bookingDate) {
+                hawbRestoreMap[item.hawbNo].bookingDate = new Date(item.bookingDate).toISOString().slice(0, 10)
+              }
             }
           })
           setHawbGroups(Object.values(hawbRestoreMap).map(h => ({
             id: Math.random().toString(36).slice(2),
             hawbNo: h.hawbNo,
-            bookingDate: "",
+            bookingDate: h.bookingDate,
             totalCost: h.totalCost > 0 ? String(Math.round(h.totalCost * 100) / 100) : "",
             invNos: [...h.invNos]
           })))
