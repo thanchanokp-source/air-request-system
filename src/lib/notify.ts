@@ -1704,15 +1704,14 @@ async function notifyLgFilesToClaimersImpl(requestId: string) {
       }
     }
 
-    // FYI to EVERY OTHER party involved with this document (all BU): the creator + everyone
-    // who approved it. Logistics is done → all stakeholders get the completed doc/PDF, not
-    // just the claim depts. (Skips anyone already emailed above.)
+    // FYI when Logistics is done (all BU): only the person who ENTERED THE DATA (the document
+    // creator) + the FIRST person who APPROVED it. EXCLUDE the President. (Claim depts already
+    // got their own email above; anyone already emailed is skipped.)
     const involved = new Map<string, string>() // lower-email → display name
     if ((req as any).createdBy?.email) involved.set(String((req as any).createdBy.email).toLowerCase(), (req as any).createdBy.name || (req as any).createdBy.email)
-    for (const l of ((req as any).approvalLogs || [])) {
-      const e = l.user?.email
-      if (e) involved.set(String(e).toLowerCase(), l.user?.name || e)
-    }
+    const firstAppr = ((req as any).approvalLogs || []).find((l: any) =>
+      l.action === "APPROVE" && l.user?.email && l.user?.role !== "PRESIDENT" && l.user?.role !== "PRESIDENT_GW")
+    if (firstAppr?.user?.email) involved.set(String(firstAppr.user.email).toLowerCase(), firstAppr.user.name || firstAppr.user.email)
     const fyiLink = `${APP_URL}/requests/${requestId}`
     for (const [email, name] of involved) {
       if (emailedSet.has(email)) continue
