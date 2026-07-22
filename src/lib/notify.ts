@@ -130,7 +130,7 @@ const docBrands = (req: any) => {
   return bs.length ? bs.join(", ") : (req?.brandName || "-")
 }
 
-function buildHtml(req: any, newStatus: string, link: string, approveUrl?: string, rejectUrl?: string, magicLink?: string) {
+function buildHtml(req: any, newStatus: string, link: string, approveUrl?: string, rejectUrl?: string, magicLink?: string, statusOverride?: string) {
   const statusLabel: Record<string,string> = {
     PENDING_DVM_MER:"Pending DVM Merchandise",
     PENDING_VP_MER:"Pending VP Merchandise", PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
@@ -196,7 +196,7 @@ ${EMAIL_HEAD}
                 <tr>
                   <td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
                     <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">STATUS</span><br>
-                    <span style="color:#1d4ed8;font-size:14px;font-weight:600;font-family:Arial,sans-serif">${statusLabel[newStatus] || newStatus}</span>
+                    <span style="color:#1d4ed8;font-size:14px;font-weight:600;font-family:Arial,sans-serif">${statusOverride || statusLabel[newStatus] || newStatus}</span>
                   </td>
                 </tr>
                 <tr>
@@ -877,7 +877,8 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
             })
             for (const u of us) {
               if (!u.email) continue
-              const html = buildHtml(req, newStatus, docLink, undefined, undefined, await magicFor(u.id))
+              // Recipient is the SCM NYK Action Approver, NOT a DVM → show the correct status.
+              const html = buildHtml(req, newStatus, docLink, undefined, undefined, await magicFor(u.id), "Pending Claim — SCM NYK Approver")
               await sendMail(u.email, `[Claim – NYK]${brandTag} Pending Approval — ${items.length} SO — ${req.documentNo}`, html)
             }
             continue
