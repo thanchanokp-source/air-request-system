@@ -4024,10 +4024,12 @@ export default function RequestDetailPage() {
                 if (myTurnItems.length === 0) return null
                 const allSel = myTurnItems.every((i: any) => dvmSelected.has(i.id))
                 return (
-                  <button onClick={() => setDvmSelected(allSel ? new Set() : new Set(myTurnItems.map((i: any) => i.id)))}
-                    className="text-blue-600 hover:underline">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-gray-600 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-100">
+                    <input type="checkbox" checked={allSel}
+                      onChange={() => setDvmSelected(allSel ? new Set() : new Set(myTurnItems.map((i: any) => i.id)))}
+                      className="w-4 h-4 rounded border-gray-300 accent-blue-600 cursor-pointer" />
                     {allSel ? "Deselect All" : `Select All (${myTurnItems.length})`}
-                  </button>
+                  </label>
                 )
               })()}
               {/* Batch actions in the header (next to Select All) — same as other approve pages */}
@@ -4527,10 +4529,12 @@ export default function RequestDetailPage() {
                 if (myTurnItems.length === 0) return null
                 const allSel = myTurnItems.every((i: any) => vpSelected.has(i.id))
                 return (
-                  <button onClick={() => setVpSelected(allSel ? new Set() : new Set(myTurnItems.map((i: any) => i.id)))}
-                    className="text-blue-600 hover:underline">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-gray-600 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1 hover:bg-blue-100">
+                    <input type="checkbox" checked={allSel}
+                      onChange={() => setVpSelected(allSel ? new Set() : new Set(myTurnItems.map((i: any) => i.id)))}
+                      className="w-4 h-4 rounded border-gray-300 accent-blue-600 cursor-pointer" />
                     {allSel ? "Deselect All" : `Select All (${myTurnItems.length})`}
-                  </button>
+                  </label>
                 )
               })()}
             </div>
