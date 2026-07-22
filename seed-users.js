@@ -49,8 +49,11 @@ const users = [
   { email: "kimita.p@nanyangtextile.com", name: "Kimita P", role: "SCM_USER", roles: ["SCM_USER", "SCM_NYG"], bu: "ALL", priority: 1 },
   { email: "saji.t@nanyangtextile.com", name: "Saji T", role: "VP_SCM", roles: ["VP_SCM"], bu: "ALL", priority: 2 },
   { email: "chotik.c@nanyangtextile.com", name: "Chotik C", role: "PRESIDENT", roles: ["PRESIDENT", "PRESIDENT_GW"], bu: "ALL" },
-  { email: "rushan@nanyangtextile.com", name: "Rushan", role: "CLAIM_PRODUCTION", roles: ["CLAIM_PRODUCTION"], bu: "ALL", claimDepartment: "G1/G3", priority: 3 },
-  { email: "pk@nanyangtextile.com", name: "PK", role: "CLAIM_PRODUCTION", roles: ["CLAIM_PRODUCTION"], bu: "ALL", claimDepartment: "G2/G4", priority: 3 },
+  // Production claim ENTRY is BU-scoped: NYG = rushan (G1/G3) + pk (G2/G4); EA = theerawee (all G).
+  // EVP (khomkrit) is shared (bu="ALL") → both NYG and EA forward up to him.
+  { email: "rushan@nanyangtextile.com", name: "Rushan", role: "CLAIM_PRODUCTION", roles: ["CLAIM_PRODUCTION"], bu: "NYG", claimDepartment: "G1/G3", priority: 3 },
+  { email: "pk@nanyangtextile.com", name: "PK", role: "CLAIM_PRODUCTION", roles: ["CLAIM_PRODUCTION"], bu: "NYG", claimDepartment: "G2/G4", priority: 3 },
+  { email: "theerawee.s@nanyangtextile.com", name: "Theerawee S", role: "CLAIM_PRODUCTION", roles: ["CLAIM_PRODUCTION"], bu: "EA", claimDepartment: "ALL", priority: 3 }, // EA production (all G) → forwards to khomkrit
   { email: "khomkrit.h@nanyangtextile.com", name: "Khomkrit H", role: "VP_PRODUCTION", roles: ["VP_PRODUCTION"], bu: "ALL", claimDepartment: "ALL", priority: 4 },
 
   // ── GW ──

@@ -382,9 +382,11 @@ export default function UsersPage() {
     // NYK…) wrongly leaks into the EA tab. (EA reuses NYG's shared claim/downstream people,
     // but those carry bu="ALL" and already match the first check.)
     const set = bu === "GW" ? GW_ONLY_ROLES : bu === "EA" ? EA_ONLY_ROLES : NYG_ONLY_ROLES
-    // LOGISTICS is BU-SCOPED (NYG=aoyjai, EA=quynh — same role, placed by the `bu` field),
-    // so it must NOT surface across tabs by role like the truly NYG-exclusive roles.
-    return heldRolesOf(u).some(r => r !== "LOGISTICS" && set.has(r))
+    // BU-SCOPED roles use the SAME role name across NYG & EA but are separated by the `bu`
+    // field (LOGISTICS: aoyjai/quynh; CLAIM_PRODUCTION: rushan+pk / theerawee; VP_PRODUCTION
+    // shared). They must be placed by `bu`, not surfaced across tabs by role.
+    const BU_SCOPED = new Set(["LOGISTICS", "CLAIM_PRODUCTION", "VP_PRODUCTION"])
+    return heldRolesOf(u).some(r => !BU_SCOPED.has(r) && set.has(r))
   }
   const filtered = users.filter(u =>
     (!roleFilter || heldRolesOf(u).includes(roleFilter)) &&
