@@ -666,7 +666,9 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const depts = new Set<string>()
       for (const it of req.items) getSplits(it).forEach(s => depts.add(s.dept))
       for (const g of gwClaimGroups(depts, req)) {
-        const where: any = { role: g.role, isActive: true, bu: { in: [(req as any).bu, "ALL"] } }
+        // Match roles[] too — a claim role (e.g. SCM_NYG) is often a secondary role on a
+        // person whose PRIMARY role is something else (SCM_USER), so `role: g.role` alone misses them.
+        const where: any = { isActive: true, bu: { in: [(req as any).bu, "ALL"] }, OR: [{ role: g.role }, { roles: { has: g.role } }] }
         if (g.claimDept) where.claimDepartment = g.claimDept
         const us = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
         const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
@@ -771,7 +773,9 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
         // bu, or the NYK approver never gets the GW claim email. Match roles[] too (multi-role).
         const isNyk = g.role.startsWith("SCM_NYK")
         const where: any = { isActive: true, OR: [{ role: g.role }, { roles: { has: g.role } }] }
-        if (!isNyk) where.bu = (req as any).bu
+        // SCM_NYG is also cross-BU (the person handling GW's NYG claim usually has bu "NYG" or
+        // "ALL") → include "ALL" so a bu="ALL" holder isn't filtered out by the doc's bu ("GW").
+        if (!isNyk) where.bu = { in: [(req as any).bu, "ALL"] }
         if (g.claimDept) where.claimDepartment = g.claimDept
         const users = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
         const magicLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
