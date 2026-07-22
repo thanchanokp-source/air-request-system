@@ -46,6 +46,27 @@ export default function NewRequestPage() {
   const [masterDesc, setMasterDesc] = useState<any[]>([])
   const [showMaster, setShowMaster] = useState(false)
   useEffect(() => { fetch("/api/master/description").then(r => r.json()).then(d => setMasterDesc(Array.isArray(d) ? d : [])).catch(() => {}) }, [])
+
+  // Template freshness: fetch the current template version (a hash of the BU's valid data +
+  // file) and compare with the version this browser last downloaded → show a "please
+  // re-download" hint only when they differ. Cleared the moment they download the latest.
+  const [tplVersion, setTplVersion] = useState<string>("")
+  const [tplStale, setTplStale] = useState(false)
+  useEffect(() => {
+    let alive = true
+    setTplStale(false)
+    fetch(`/api/template/version?bu=${userBu}`).then(r => r.json()).then(d => {
+      if (!alive || !d?.version) return
+      setTplVersion(d.version)
+      const seen = typeof window !== "undefined" ? localStorage.getItem(`air-template-ver-${userBu}`) : null
+      setTplStale(!!seen && seen !== d.version) // only warn if they downloaded an OLDER one before
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [userBu])
+  const markTemplateDownloaded = () => {
+    if (tplVersion && typeof window !== "undefined") localStorage.setItem(`air-template-ver-${userBu}`, tplVersion)
+    setTplStale(false)
+  }
   const downloadMasterExcel = () => {
     const rows = masterDesc.map((m: any) => ({ "DESCRIPTION": m.name, "WT CHARGE/PC (KG)": m.weightPerUnit }))
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ "DESCRIPTION": "", "WT CHARGE/PC (KG)": "" }])
@@ -344,12 +365,20 @@ export default function NewRequestPage() {
 
         {/* Upload Excel */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h2 className="font-semibold text-gray-800">Upload Excel File</h2>
-            <a href={`/api/template?bu=${isGW ? "GW" : isEA ? "EA" : "NYG"}`} download
-              className="flex items-center gap-1.5 text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
-              ⬇ Download Template ({isGW ? "GW" : isEA ? "EA" : "NYG"})
-            </a>
+            <div className="flex items-center gap-2">
+              {tplStale && (
+                <span className="flex items-center gap-1 text-[11px] bg-amber-50 border border-amber-300 text-amber-700 px-2 py-1 rounded-lg font-medium animate-pulse">
+                  ⚠ เทมเพลตมีการอัปเดต — โปรดดาวน์โหลดใหม่
+                </span>
+              )}
+              <a href={`/api/template?bu=${isGW ? "GW" : isEA ? "EA" : "NYG"}`} download
+                onClick={markTemplateDownloaded}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium border ${tplStale ? "bg-amber-500 border-amber-500 text-white hover:bg-amber-600" : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"}`}>
+                ⬇ Download Template ({isGW ? "GW" : isEA ? "EA" : "NYG"})
+              </a>
+            </div>
           </div>
           <input
             type="file"
