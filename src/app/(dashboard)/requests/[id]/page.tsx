@@ -1178,7 +1178,7 @@ export default function RequestDetailPage() {
   const accountingItems = (req?.items || []).filter((i: any) => i.itemStatus === "ACCOUNTING_PENDING")
   const isAccounting = role === "ACCOUNTING" && req?.status === "PENDING_ACCOUNTING" && accountingItems.length > 0 && isGWRequest
   const isGWApprover = isVpMerGW || isGmGW || isPresidentGW || isLogisticsGW || isClaimGW || isScmGW || isAccounting
-  const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
+  const canReject = canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && !primaryIsClaimRole && req.status !== "PENDING_SCM" && req.status !== "PENDING_LOGISTICS" && req.status !== "PENDING_LOGISTICS_GW"
 
   const presidentNewFlow = role === "PRESIDENT" && req?.status === "PENDING_PRESIDENT"
   // Style-level Reject exists only at the NYG upload approvals (DVM MER / VP MER). GW (DPM/GM)
@@ -5805,7 +5805,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* Actions */}
-      {canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && role !== "PRESIDENT" && role !== "LOGISTICS" && !role.startsWith("DVM_") && !role.startsWith("CLAIM_") && !CLAIM_VP_ROLES_LOCAL.includes(role) && (
+      {canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && role !== "PRESIDENT" && role !== "LOGISTICS" && !primaryIsClaimRole && (
         <div className="bg-white rounded-xl border p-5 space-y-4">
           <div className="flex items-center gap-2 border-b pb-2">
             <h2 className="font-semibold text-gray-800">ACTIONS</h2>
