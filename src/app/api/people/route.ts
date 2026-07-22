@@ -3,6 +3,18 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+// Friendly position label per role (so the picker shows "DVM · EA", not "VP_MER_EA · VP_MER_EA · EA").
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Admin", MER_USER: "Merchandise", MER_GW: "Merchandise (GW)", MER_EA: "Merchandise (EA)",
+  DVM_MER: "DVM Merchandise", VP_MER: "VP Merchandise", DVM_MER_EA: "ADVM (EA)", VP_MER_EA: "DVM (EA)",
+  SCM_USER: "SCM", VP_SCM: "VP SCM", LOGISTICS: "Logistics", PRESIDENT: "President", ACCOUNTING: "Accounting",
+  VP_MER_GW: "DPM (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)", PRESIDENT_GW: "President (GW)",
+  LOGISTICS_GW: "Logistics (GW)", CLAIM_GW: "Claim (GW)", SCM_NYK: "SCM NYK", SCM_NYG: "SCM NYG",
+  SCM_NYK_APPROVER: "SCM NYK Approver", SCM_NYK_EVP: "SCM NYK EVP",
+  CLAIM_COMMERCIAL: "Claim-Commercial", CLAIM_PRODUCTION: "Claim-Production", CLAIM_PROCUREMENT: "Claim-Procurement",
+  VP_COMMERCIAL: "VP Claim-Commercial", VP_PRODUCTION: "VP Claim-Production", VP_PROCUREMENT: "VP Claim-Procurement",
+}
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -34,7 +46,7 @@ export async function GET(req: NextRequest) {
       take: listAll ? 300 : 30,
     })
     for (const u of users as any[]) {
-      results.push({ name: u.name || u.email, email: u.email, dept: u.role || "", bu: u.bu || "", pos: u.role || "", role: u.role || "", roles: Array.isArray(u.roles) ? u.roles : [], priority: u.priority ?? null, claimDepartment: u.claimDepartment ?? null, procurementType: u.procurementType ?? null })
+      results.push({ name: u.name || u.email, email: u.email, dept: "", bu: u.bu || "", pos: ROLE_LABEL[u.role] || u.role || "", role: u.role || "", roles: Array.isArray(u.roles) ? u.roles : [], priority: u.priority ?? null, claimDepartment: u.claimDepartment ?? null, procurementType: u.procurementType ?? null })
     }
   } catch {
     // ignore — fall through to directory
