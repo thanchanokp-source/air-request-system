@@ -204,7 +204,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await (prisma as any).claimForward.update({ where: { id: ownerRow.id }, data: { itemIds: remaining } })
     }
 
-    const posLabel = nextPositionLabel(forwarderDept, currentPos, undefined, branchVal) || forwarderDept
+    let posLabel = nextPositionLabel(forwarderDept, currentPos, undefined, branchVal) || forwarderDept
+    // EA reuses the NYG COMMERCIAL chain labels (DVM/VP Merchandise) but EA titles are ADVM → DVM.
+    if ((request as any).bu === "EA" && forwarderDept === "COMMERCIAL") {
+      if (posLabel === "VP Merchandise") posLabel = "DVM"
+      else if (posLabel === "DVM Merchandise") posLabel = "ADVM"
+    }
     await notifyClaimNext(id, nextEmail, nextName || nextEmail, forwarderName, token, `${forwarderDept} — ${posLabel} (${selIds.length} SO)`)
 
     // Signature snapshot: the forwarder approves their claim position before forwarding.
