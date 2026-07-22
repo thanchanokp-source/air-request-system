@@ -239,13 +239,14 @@ export default function ApprovalsPage() {
       seen.add(i.id); return true
     })
     let out = [...prim, ...extra]
-    // Claim-Production is split BY FACTORY G-GROUP — rushan handles G1/G3, pk handles G2/G4
-    // (VP with claimDepartment "ALL" sees every group). Drop PRODUCTION SOs whose factory
-    // group this person doesn't cover, so each claimer only sees their own G.
+    // Claim-Production is scoped BY BU then FACTORY G-GROUP: NYG splits per G (rushan G1/G3,
+    // pk G2/G4); EA has ONE approver (theerawee, no G-split). Show a PRODUCTION SO only if
+    // this claimer's BU covers the doc's BU AND (no G on the SO → all-G approver, or the G matches).
     if (isProdClaimer) {
       out = out.filter((i: any) => {
         const onProd = i.claimDepartment === "PRODUCTION" || getSplits(i).some((s: any) => s.dept === "PRODUCTION")
         if (!onProd) return true
+        if (userBu && userBu !== "ALL" && !requestInBu(r, userBu)) return false // theerawee(EA) vs rushan/pk(NYG)
         const g = vpProdGroup(i.factory)
         return !g || prodGroupCovers(userClaimDept, g)
       })

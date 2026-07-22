@@ -313,7 +313,9 @@ export function nextPositionRole(dept: string, currentPos: number, factory?: str
     const g = vpProdGroup(factory)
     if (g === "G1/G3") return `${next.role}_G1G3`
     if (g === "G2/G4") return `${next.role}_G2G4`
-    return null
+    // No G-group (e.g. EA production — one approver, not per-G) → precise-match the BASE
+    // role (the picker still filters by BU + claimDepartment "ALL").
+    return next.role
   }
   return next.role
 }

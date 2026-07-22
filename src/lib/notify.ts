@@ -834,8 +834,9 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
           if (!isVp && dept === "PRODUCTION") {
             const byGroup = new Map<string, any[]>()
             for (const it of items) {
-              const g = vpProdGroup((it as any).factory)
-              if (!g) continue
+              // No factory G-group (e.g. EA, which has ONE production approver, not per-G) →
+              // bucket "ALL" so an all-G claimer (claimDepartment="ALL") receives it.
+              const g = vpProdGroup((it as any).factory) || "ALL"
               if (!byGroup.has(g)) byGroup.set(g, [])
               byGroup.get(g)!.push(it)
             }
