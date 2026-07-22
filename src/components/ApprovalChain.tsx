@@ -76,6 +76,8 @@ function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string):
 const STAGE_INFO: Record<string, { label: string; roles: string[]; assigned?: (req: any, soItem: any) => string | null | undefined }> = {
   PENDING_DVM_MER:    { label: "DVM Merchandise",  roles: ["DVM_MER"],     assigned: (_r, s) => s?.assignedDvm },
   PENDING_VP_MER:     { label: "VP Merchandise",   roles: ["VP_MER"],      assigned: (r) => r?.assignedVpMer },
+  PENDING_DVM_MER_EA: { label: "ADVM",             roles: ["DVM_MER_EA"],  assigned: (_r, s) => s?.assignedDvm },
+  PENDING_VP_MER_EA:  { label: "DVM",              roles: ["VP_MER_EA"],   assigned: (r) => r?.assignedVpMer },
   PENDING_SCM:        { label: "SCM",      roles: ["SCM_USER"] },
   PENDING_VP_SCM:     { label: "VP SCM",   roles: ["VP_SCM"],      assigned: (r) => r?.assignedVpScm },
   PENDING_LOGISTICS:  { label: "Logistics",roles: ["LOGISTICS"] },
@@ -112,12 +114,14 @@ function entryPersonOf(dept: string, dir: any[] | undefined, bu?: string, factor
 // Per-dept "who are we waiting on now?" — the latest forward's person (name/email local-part),
 // scoped to this SO; else the resolved ENTRY approver's email; else the position label.
 function pendingWhoFor(depts: { dept: string; done: boolean }[], claimForwards: any[] | undefined, soId?: string,
-  opts?: { dir?: any[]; bu?: string; factory?: string | null }) {
+  opts?: { dir?: any[]; bu?: string; factory?: string | null; assignedDvmMer?: string | null }) {
   return depts.filter(d => !d.done).map(d => {
     const rows = (claimForwards || []).filter((f: any) => f.dept === d.dept &&
       (!Array.isArray(f.itemIds) || f.itemIds.length === 0 || !soId || f.itemIds.includes(soId)))
     const latest = rows.sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0))[0]
     const person = nameOf(latest?.nextName) || nameOf(latest?.nextEmail)
+      // COMMERCIAL claim = the merch person picked at upload (assignedDvmMer) — NYG or EA.
+      || (d.dept === "COMMERCIAL" ? nameOf(opts?.assignedDvmMer) : "")
       || entryPersonOf(d.dept, opts?.dir, opts?.bu, opts?.factory)
     const dl = deptLabel(d.dept)
     const label = person || (chainFor(d.dept)[0]?.label ?? "")
@@ -183,7 +187,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     const soId = soItem?.id
     const nonNyk = claimDepts.filter(d => d.dept !== "NYK" && d.dept !== "SCM NYK")
     const claimWho = claimReached && !completed
-      ? pendingWhoFor(nonNyk, claimForwards, soId, { dir: approvers, bu, factory: soItem?.factory })
+      ? pendingWhoFor(nonNyk, claimForwards, soId, { dir: approvers, bu, factory: soItem?.factory, assignedDvmMer: req?.assignedDvmMer })
       : []
     // NYK 3-role state: before the Action Approver approves → "NYK: Approver" (either of
     // the 2 can act, so don't name one); after → waiting on the EVP and/or CR user.
@@ -201,9 +205,9 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
         nykWho = `NYK: ${parts.join(" + ") || "finalizing"}`
       }
     }
-    const stageWho = !completed && !rejected ? currentStageWho(status, "NYG", soItem, req, approvers) : ""
+    const stageWho = !completed && !rejected ? currentStageWho(status, bu, soItem, req, approvers) : ""
     // LG runs parallel with Claim → surface it as pending until Actual is entered.
-    const lgName = resolveRoleEmail(approvers, ["LOGISTICS"], "NYG")
+    const lgName = resolveRoleEmail(approvers, ["LOGISTICS"], bu)
     const lgWho = !completed && !rejected && claimReached && !lgDone ? `Logistics${lgName ? `: ${lgName}` : ""}` : ""
     const pendingWho = [...(stageWho ? [stageWho] : []), ...(lgWho ? [lgWho] : []), ...claimWho, ...(nykWho ? [nykWho] : [])]
     return (

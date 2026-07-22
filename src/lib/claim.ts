@@ -129,7 +129,7 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
 // the factory G-group, PROCUREMENT needs procurementType=PURCHASING (handled by caller).
 export function claimEntryDisplayRoles(dept: string): string[] {
   switch (dept) {
-    case "COMMERCIAL": return ["DVM_MER"]
+    case "COMMERCIAL": return ["DVM_MER", "DVM_MER_EA"]
     case "PRODUCTION": return ["CLAIM_PRODUCTION"]
     case "PROCUREMENT": return ["CLAIM_PROCUREMENT"]
     case "NYK":
