@@ -4098,8 +4098,10 @@ export default function RequestDetailPage() {
           {role === "SCM_NYK_APPROVER" && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 space-y-2">
               <p className="text-[11px] text-amber-800 leading-relaxed">Choose who will handle this SCM NYK claim, then approve. Only these two people are alerted:</p>
-              <PersonPicker label="CR-entry person" selected={nykCr} onSelect={setNykCr} placeholder="Who enters the CR NO..." position="SCM NYK User" positionRole="SCM_NYK" bu={req?.bu} requestId={String(id)} />
-              <PersonPicker label="VP / EVP approver" selected={nykEvp} onSelect={setNykEvp} placeholder="Who approves (EVP)..." position="SCM NYK EVP" positionRole="SCM_NYK_EVP" bu={req?.bu} requestId={String(id)} />
+              {/* SCM NYK is a CROSS-BU team (one team serves NYG/GW/EA — stored bu="NYG"), so
+                  do NOT scope these pickers to the document's BU or EA docs find no one. */}
+              <PersonPicker label="CR-entry person" selected={nykCr} onSelect={setNykCr} placeholder="Who enters the CR NO..." position="SCM NYK User" positionRole="SCM_NYK" requestId={String(id)} />
+              <PersonPicker label="VP / EVP approver" selected={nykEvp} onSelect={setNykEvp} placeholder="Who approves (EVP)..." position="SCM NYK EVP" positionRole="SCM_NYK_EVP" requestId={String(id)} />
               {(!nykCr || !nykEvp) && <p className="text-[11px] text-amber-600">⚠ Select both before approving.</p>}
             </div>
           )}
