@@ -7,6 +7,7 @@ import { notifyStatusChange } from "@/lib/notify"
 import { sendMail } from "@/lib/email"
 import { canonCountry } from "@/lib/freight"
 import { attachGarmentPo } from "@/lib/bom"
+import { normalizeSo } from "@/lib/so"
 import crypto from "crypto"
 
 // Normalize a year that may be 2-digit or Thai Buddhist (B.E.) to Gregorian.
@@ -279,7 +280,7 @@ export async function POST(req: NextRequest) {
             }
             return {
               style: String(col(item, "STYLE") || ""),
-              so: String(col(item, "SO") || ""),
+              so: normalizeSo(col(item, "SO")),
               brand: itemBrand || null,
               sub: String(col(item, "SUB") || "") || null,
               customerPO: String(col(item, "CUSTOMER PO") || ""),

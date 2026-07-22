@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
 import { canonCountry } from "@/lib/freight"
+import { normalizeSo } from "@/lib/so"
 
 // Admin-only backfill of HISTORICAL, already-complete documents. Uses the same MER
 // template headers, but creates each doc as COMPLETED — no approval flow, no emails.
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest) {
 
         return {
           style: String(col(item, "STYLE") || ""),
-          so: String(col(item, "SO") || ""),
+          so: normalizeSo(col(item, "SO")),
           brand: String(col(item, "Brand name") || col(item, "BRAND") || "").trim() || null,
           sub: String(col(item, "SUB") || "") || null,
           customerPO: String(col(item, "CUSTOMER PO") || ""),

@@ -3,6 +3,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import * as XLSX from "xlsx"
+import { isValidSo } from "@/lib/so"
 
 // Port is no longer used — freight rate is keyed by Brand + Country.
 const NYG_REQUIRED = [
@@ -175,6 +176,13 @@ export default function NewRequestPage() {
     const errs: string[] = []
     rows.forEach((row: any, idx: number) => {
       const so = getVal(row, "SO") || `Row ${idx + 2}`
+      // ALL BU: SO must be 8 digits. Excel drops a leading zero (01250452 → 1250452), so a
+      // 7-digit SO is auto-padded on save and is fine; anything that still isn't 8 digits after
+      // that (6-digit, 9+, or non-numeric) is flagged for the MER to fix.
+      const soRaw = String(getVal(row, "SO") ?? "").trim()
+      if (soRaw && !isValidSo(soRaw)) {
+        errs.push(`SO ${soRaw}: ต้องเป็นตัวเลข 8 หลัก (ถ้าขึ้นต้นด้วย 0 แล้วเหลือ 7 หลัก ระบบจะเติม 0 ให้อัตโนมัติ)`)
+      }
       // GW: SO is normally 8 digits starting with 01 — 05 is not allowed (including the case where Excel truncates it to 7 digits starting with 5 = an 05 with the leading 0 dropped)
       if (isGW) {
         const soDigits = String(getVal(row, "SO") ?? "").trim().replace(/\D/g, "")
