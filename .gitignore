@@ -50,3 +50,6 @@ next-env.d.ts
 
 # Excel temp/lock files
 ~$*
+
+# Local DB/master backups — data, never commit
+backups/
