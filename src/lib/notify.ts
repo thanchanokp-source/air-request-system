@@ -1610,7 +1610,7 @@ async function notifyLgFilesToClaimersImpl(requestId: string) {
       include: {
         items: true,
         createdBy: { select: { name: true, email: true } },
-        approvalLogs: { include: { user: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
+        approvalLogs: { include: { user: { select: { name: true, role: true, email: true } } }, orderBy: { createdAt: "asc" } },
         attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
         approvalSignatures: { orderBy: { signedAt: "asc" } },
       } as any,
@@ -1666,7 +1666,7 @@ async function notifyLgFilesToClaimersImpl(requestId: string) {
       if (!deptSOs.has(s.dept)) deptSOs.set(s.dept, [])
       deptSOs.get(s.dept)!.push(it.so)
     }
-    if (deptSOs.size === 0) return
+    const emailedSet = new Set<string>() // lower-cased emails already notified (avoid dup)
     for (const [dept, sos] of deptSOs) {
       // Only the people who actually handle this dept's claim on THIS document — same
       // resolution as the PENDING_CLAIM alert (picked COMMERCIAL DVM, PURCHASING p1, etc.),
@@ -1700,7 +1700,45 @@ async function notifyLgFilesToClaimersImpl(requestId: string) {
   </table>
 </td></tr></table></body></html>`
       await sendMail(u.email, `[Claim – ${dept.replace(/_/g, " ")}] Logistics files ready — ${req.documentNo} (${sos.length} SO)`, html, fileAtts)
+      emailedSet.add(String(u.email).toLowerCase())
       }
+    }
+
+    // FYI to EVERY OTHER party involved with this document (all BU): the creator + everyone
+    // who approved it. Logistics is done → all stakeholders get the completed doc/PDF, not
+    // just the claim depts. (Skips anyone already emailed above.)
+    const involved = new Map<string, string>() // lower-email → display name
+    if ((req as any).createdBy?.email) involved.set(String((req as any).createdBy.email).toLowerCase(), (req as any).createdBy.name || (req as any).createdBy.email)
+    for (const l of ((req as any).approvalLogs || [])) {
+      const e = l.user?.email
+      if (e) involved.set(String(e).toLowerCase(), l.user?.name || e)
+    }
+    const fyiLink = `${APP_URL}/requests/${requestId}`
+    for (const [email, name] of involved) {
+      if (emailedSet.has(email)) continue
+      const fyiHtml = `
+<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 0"><tr><td align="center">
+  <table width="500" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#475569;padding:20px;text-align:center">
+      <p style="margin:0;color:#cbd5e1;font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif">FYI · LOGISTICS COMPLETE</p>
+      <h1 style="margin:6px 0 0;color:#fff;font-size:18px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">AIR REQUEST</h1>
+    </td></tr>
+    <tr><td style="padding:28px 32px">
+      <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 6px">Hello ${name},</p>
+      <p style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif;margin:0 0 6px">Document <strong>${req.documentNo}</strong> — Logistics has completed the data entry (INV / HAWB / Actual Air). This is an FYI to all parties involved — no action required.</p>
+      <p style="color:#64748b;font-size:12px;font-family:Arial,sans-serif;margin:0 0 14px">${attachPdf ? "Attached: the signed PDF document." : "Open the document below for the full details / PDF."}</p>
+      <div style="text-align:center;margin-top:8px">
+        <a href="${fyiLink}" style="display:inline-block;background:#475569;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;font-family:Arial,sans-serif">View Document →</a>
+      </div>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:12px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Air Request System · Nan Yang Textile Group</p>
+    </td></tr>
+  </table>
+</td></tr></table></body></html>`
+      await sendMail(email, `[FYI] Logistics complete — ${req.documentNo}`, fyiHtml, fileAtts)
+      emailedSet.add(email)
     }
   } catch (err) {
     console.error("[notify] LG-files-to-claimers error:", err)
