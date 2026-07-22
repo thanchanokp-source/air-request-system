@@ -133,6 +133,8 @@ const docBrands = (req: any) => {
 function buildHtml(req: any, newStatus: string, link: string, approveUrl?: string, rejectUrl?: string, magicLink?: string, statusOverride?: string) {
   const statusLabel: Record<string,string> = {
     PENDING_DVM_MER:"Pending DVM Merchandise",
+    // EA merch stages (backend roles DVM_MER_EA/VP_MER_EA; shown as ADVM → DVM)
+    PENDING_DVM_MER_EA:"Pending ADVM (EA)", PENDING_VP_MER_EA:"Pending DVM (EA)",
     PENDING_VP_MER:"Pending VP Merchandise", PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
     PENDING_PRESIDENT:"Pending President", PENDING_LOGISTICS:"Pending Logistics",
     PENDING_CLAIM:"Pending Claim (DVM)", PENDING_VP_CLAIM:"Pending VP Claim",
