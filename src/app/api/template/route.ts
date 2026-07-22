@@ -23,13 +23,17 @@ export async function GET(req: NextRequest) {
       where: { isActive: true }, select: { name: true }, orderBy: { name: "asc" },
     })
     const names = descs.map(d => String(d.name)).filter(Boolean)
-    // Only inject the live dropdown into a LEAN template. A template bloated by column
-    // formulas filled down thousands of rows (e.g. an EA sheet with =IF(LEN(SO)>0,...))
-    // makes exceljs.load() block for a very long time → the download hangs. Above this
-    // size we skip injection and serve the raw file (the DESCRIPTION column still works,
-    // just without the warn-only dropdown).
+    // Live-dropdown injection is DISABLED: every current template (NYG/GW/EA) carries
+    // native Excel dropdowns whose sqref spans a whole column (e.g. C2:C1048576). exceljs
+    // .load() materializes those into ~1M cells per column and hangs indefinitely — so the
+    // download never completes regardless of file SIZE (NYG is only 21KB and still hangs).
+    // We therefore serve the raw static template (its baked-in DESCRIPTION dropdown still
+    // works; a MER can also type a brand-new description → held-until-weight flow as before).
+    // To re-enable live injection, rebuild the templates with row-bounded validations
+    // (e.g. C2:C1000) and flip this guard back on.
+    const ALLOW_LIVE_INJECT = process.env.TEMPLATE_LIVE_DROPDOWN === "1"
     const MAX_INJECT_BYTES = 30 * 1024
-    if (names.length && buf.length <= MAX_INJECT_BYTES) {
+    if (ALLOW_LIVE_INJECT && names.length && buf.length <= MAX_INJECT_BYTES) {
       const ExcelJSMod: any = await import("exceljs")
       const ExcelJS = ExcelJSMod.default || ExcelJSMod
       const wb = new ExcelJS.Workbook()
