@@ -54,6 +54,33 @@ export async function POST(req: NextRequest) {
     const rates: Record<string, number> = {}
     for (const r of rateList) rates[rateKey(r.country)] = r.ratePerKg
 
+    // Gross Weight source: old files often leave the WEIGHT column blank, so fall back to
+    // QTY Original × WT Charge/pc of the DESCRIPTION from Master Description (same as a normal
+    // upload) → EST = Gross Weight × country rate. Fuzzy-match handles typos/plurals.
+    const descKey = (s: string) => String(s || "").trim().toUpperCase().replace(/\s*,\s*/g, ",").replace(/\s+/g, " ")
+    const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
+    const descWeights: Record<string, number> = {}
+    for (const d of descList) descWeights[descKey(d.name)] = d.weightPerUnit || 0
+    const descKeys = Object.keys(descWeights)
+    const lev = (a: string, b: string) => {
+      const m = a.length, n = b.length
+      if (!m) return n; if (!n) return m
+      const dp = Array.from({ length: n + 1 }, (_, j) => j)
+      for (let i = 1; i <= m; i++) {
+        let prev = dp[0]; dp[0] = i
+        for (let j = 1; j <= n; j++) { const tmp = dp[j]; dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = tmp }
+      }
+      return dp[n]
+    }
+    const wtChargeFor = (desc: string): number => {
+      const k = descKey(desc)
+      if (!k) return 0
+      if (descWeights[k] != null) return descWeights[k]
+      let best = "", ratio = 0
+      for (const mk of descKeys) { const r = 1 - lev(k, mk) / Math.max(k.length, mk.length, 1); if (r > ratio) { ratio = r; best = mk } }
+      return ratio >= 0.85 ? descWeights[best] : 0
+    }
+
     // ONE uploaded file = ONE document — every row becomes an SO of that single doc.
     const groups = new Map<string, any[]>([["__onedoc__", items]])
 
@@ -65,9 +92,12 @@ export async function POST(req: NextRequest) {
 
       const itemsData = rows.map((item: any) => {
         const country = String(col(item, "Country") || "").trim()
-        // Weight header varies a lot → match ANY column containing "weight".
-        const gw = num(colLike(item, "weight"))
-        const rate = rates[rateKey(country)] || 0   // EST = weight × country rate (0 if no rate in Master)
+        // Weight header varies a lot → match ANY column containing "weight". If the old file
+        // left it blank, compute Gross = QTY Original × WT Charge from Master Description.
+        const fileWeight = num(colLike(item, "weight"))
+        const qtyOrig = Math.round(num(col(item, "QTY Original Shipment (pcs)")))
+        const gw = fileWeight > 0 ? fileWeight : qtyOrig * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
+        const rate = rates[rateKey(country)] || 0   // EST = Gross Weight × country rate (0 if no rate in Master)
         // Claim splits (+ per-dept ACTUAL AIRFREIGHT → summed to the SO's total actual)
         const splits = [1, 2, 3].map(n => ({
           dept: String(col(item, `CLAIM DEPT ${n}`) || "").trim(),
