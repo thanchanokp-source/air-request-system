@@ -989,7 +989,14 @@ export default function RequestDetailPage() {
   const gwNextPosLabel = isProcRoute
     ? (gwNextSpec ? `Procurement ${gwNextSpec.label}` : "select route")
     : (gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFactory, gwBranch) : null)
-  const gwNextPosRole = gwNextSpec?.role || null
+  // EA reuses the COMMERCIAL chain (DVM Merch → VP Merch), but EA's merch approvers are the
+  // _EA variants (sally = DVM_MER_EA, peshan = VP_MER_EA). Map the bare merch role to its EA
+  // variant for EA documents so the next-position picker finds them.
+  const gwNextPosRole = (() => {
+    const r = gwNextSpec?.role || null
+    if (r && req?.bu === "EA" && (r === "DVM_MER" || r === "VP_MER")) return `${r}_EA`
+    return r
+  })()
   const myClaimItems = req?.items?.filter((i: any) => {
     const itemDeptList: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
       ? i.claimDepts.map((d: any) => d.dept)
