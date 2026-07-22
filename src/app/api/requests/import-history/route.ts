@@ -105,20 +105,19 @@ export async function POST(req: NextRequest) {
           reason: String(col(item, `REASON ${n}`) || "").trim() || null,
           actual: num(col(item, `ACTUAL AIRFREIGHT${n}`)),
         })).filter(s => s.dept)
-        // Actual per SO: GW files carry a by-SO "Actual Airfreight" column. Match header
-        // variants loosely (contains "actual" + "air"/"freight") but NOT the per-dept
-        // "ACTUAL AIRFREIGHT1/2/3" (those end in a digit) and NOT "Total HAWB".
+        // Actual per SO: admin/jariya's historical uploads carry the SO actual in the
+        // "Total HAWB#" column → use that as the PRIMARY source. Fall back to a by-SO
+        // "Actual Airfreight" column (any header with "actual" + "air"/"freight", excluding
+        // the per-dept "ACTUAL AIRFREIGHT1/2/3" which end in a digit), then the per-dept sum.
+        const totalHawb = num(colLike(item, "total", "hawb"))
         const soActualKey = Object.keys(item).find(k => {
           const lk = k.toLowerCase().trim()
           return lk.includes("actual") && (lk.includes("air") || lk.includes("freight")) && !/\d$/.test(lk)
         })
         const soActual = (soActualKey ? num(item[soActualKey]) : 0)
           || num(col(item, "ACTUAL (THB)")) || num(col(item, "Actual Freight (THB)"))
-        // else sum the per-dept ACTUAL AIRFREIGHT 1/2/3, else fall back to the "Total HAWB#"
-        // column (the total HAWB cost LG enters) if that's all the old file has.
         const perDeptActual = splits.reduce((s, x) => s + x.actual, 0)
-        const totalHawb = num(colLike(item, "total", "hawb"))
-        const totalActual = soActual > 0 ? soActual : perDeptActual > 0 ? perDeptActual : totalHawb
+        const totalActual = totalHawb > 0 ? totalHawb : soActual > 0 ? soActual : perDeptActual
         const claimDepts = splits.length ? splits.map(({ actual, ...rest }) => rest) : null
 
         return {
