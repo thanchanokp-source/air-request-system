@@ -414,11 +414,7 @@ export default function RequestsPage() {
                 <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
                   className="font-bold text-blue-700 hover:underline text-sm shrink-0">{dg.request.documentNo}</Link>
                 <AggBadge rows={dg.styles.flatMap((s: any) => s.rows)} />
-                {(() => {
-                  const brands = [...new Set(dg.styles.flatMap((s: any) => s.rows).map((r: any) => r.brand).filter(Boolean))]
-                  const label = brands.length ? brands.join(", ") : dg.request.brandName
-                  return <span className="text-xs text-gray-500 truncate" title={label}>{label} · {dg.request.buName}</span>
-                })()}
+                <span className="text-xs text-gray-500 truncate shrink-0">{dg.request.buName}</span>
                 {(dg.request.createdBy?.name || dg.request.createdBy?.email) && (
                   <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0" title="Uploaded by / Requested by">
                     👤 {dg.request.createdBy.name || dg.request.createdBy.email}
