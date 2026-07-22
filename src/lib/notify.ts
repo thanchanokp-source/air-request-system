@@ -1712,6 +1712,12 @@ async function notifyLgFilesToClaimersImpl(requestId: string) {
     const firstAppr = ((req as any).approvalLogs || []).find((l: any) =>
       l.action === "APPROVE" && l.user?.email && l.user?.role !== "PRESIDENT" && l.user?.role !== "PRESIDENT_GW")
     if (firstAppr?.user?.email) involved.set(String(firstAppr.user.email).toLowerCase(), firstAppr.user.name || firstAppr.user.email)
+    // NYK only: also let the CR-NO person (SCM NYK CR user) know Logistics is done.
+    const hasNyk = items.some((it: any) => getSplits(it).some((s: any) => s.dept === "NYK" || s.dept === "SCM NYK"))
+    if (hasNyk && (req as any).assignedScmNykCr) {
+      const cr = String((req as any).assignedScmNykCr)
+      involved.set(cr.toLowerCase(), cr.split("@")[0])
+    }
     const fyiLink = `${APP_URL}/requests/${requestId}`
     for (const [email, name] of involved) {
       if (emailedSet.has(email)) continue
