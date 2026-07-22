@@ -1,0 +1,1033 @@
+{
+  "takenAt": "2026-07-22T11:11:49.317Z",
+  "counts": {
+    "brands": 0,
+    "bus": 0,
+    "descriptions": 20,
+    "rates": 52,
+    "users": 42
+  },
+  "MasterBrand": [],
+  "MasterBU": [],
+  "MasterDescription": [
+    {
+      "id": "cmru7n55v000z12hm84g0ivp6",
+      "name": "BOXER",
+      "weightPerUnit": 0.12,
+      "isActive": true
+    },
+    {
+      "id": "cmru7n6o0001212hmysk8tau0",
+      "name": "GLOVES",
+      "weightPerUnit": 0.03,
+      "isActive": true
+    },
+    {
+      "id": "cmru7n668001112hmnvmhtuqx",
+      "name": "HEADBAND",
+      "weightPerUnit": 0.03,
+      "isActive": true
+    },
+    {
+      "id": "cmrucydyj0005pzklafzc3dth",
+      "name": "HOODIE",
+      "weightPerUnit": 0.45,
+      "isActive": true
+    },
+    {
+      "id": "cmrucxzow0004pzklckgxzxol",
+      "name": "JACKET",
+      "weightPerUnit": 0.45,
+      "isActive": true
+    },
+    {
+      "id": "cmruby31d0011up57bjtrtmig",
+      "name": "KNITTED POLO SHIRT",
+      "weightPerUnit": 0.3,
+      "isActive": true
+    },
+    {
+      "id": "cmruby3jm0012up57xcj8qlrg",
+      "name": "KNITTED SHIRT",
+      "weightPerUnit": 0.25,
+      "isActive": true
+    },
+    {
+      "id": "cmru7n5o6001012hm9mpjnpfy",
+      "name": "PANTS",
+      "weightPerUnit": 0.76,
+      "isActive": true
+    },
+    {
+      "id": "cmru7n4nv000y12hme00xxv8q",
+      "name": "POLO SHIRT",
+      "weightPerUnit": 0.37,
+      "isActive": true
+    },
+    {
+      "id": "cmruby54y0015up571nx2zpzy",
+      "name": "PULLOVER",
+      "weightPerUnit": 0.35,
+      "isActive": true
+    },
+    {
+      "id": "cmruby64n0017up57z2novgsr",
+      "name": "SHIRT",
+      "weightPerUnit": 0.38,
+      "isActive": true
+    },
+    {
+      "id": "cmru7n368000v12hm8ehd3rfx",
+      "name": "SHORTS",
+      "weightPerUnit": 0.39,
+      "isActive": true
+    },
+    {
+      "id": "cmru7n75w001312hm6el7c7bt",
+      "name": "SLEEVES",
+      "weightPerUnit": 0.07,
+      "isActive": true
+    },
+    {
+      "id": "cmruby2if0010up579m4alamm",
+      "name": "SWEATSHIRT",
+      "weightPerUnit": 0.65,
+      "isActive": true
+    },
+    {
+      "id": "cmruby7qh001aup576iruejey",
+      "name": "TANK",
+      "weightPerUnit": 0.25,
+      "isActive": true
+    },
+    {
+      "id": "cmruby88i001bup57rcm24zpj",
+      "name": "T-SHIRT",
+      "weightPerUnit": 0.26,
+      "isActive": true
+    },
+    {
+      "id": "cmrvy4o7n0000chivh8mujsns",
+      "name": "HEAD TIE",
+      "weightPerUnit": 0.09,
+      "isActive": true
+    },
+    {
+      "id": "cmrvy5ef60001chivgrqfx3bg",
+      "name": "DRIFIT SLEEVES",
+      "weightPerUnit": 0.09,
+      "isActive": true
+    },
+    {
+      "id": "cmrvy8smg0000145rt76vqepq",
+      "name": "SLEEVE",
+      "weightPerUnit": 0.09,
+      "isActive": true
+    },
+    {
+      "id": "cmrvy9eto0002chivnfhcmkaw",
+      "name": "NECKWRAP",
+      "weightPerUnit": 0.08,
+      "isActive": true
+    }
+  ],
+  "MasterFreightRate": [
+    {
+      "id": "cmru7n1og000s12hmvpdvvngl",
+      "country": "TURKEY",
+      "ratePerKg": 248,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.755Z"
+    },
+    {
+      "id": "cmrvecmcs001lq5ftqokd7jed",
+      "country": "INDIA",
+      "ratePerKg": 95,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:22:59.125Z"
+    },
+    {
+      "id": "cmru7msls000a12hm40l5lj5z",
+      "country": "UNITED KINGDOM",
+      "ratePerKg": 264,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.766Z"
+    },
+    {
+      "id": "cmrvecm3y000uq5ftlz9hv9g4",
+      "country": "BRAZIL",
+      "ratePerKg": 396,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.790Z"
+    },
+    {
+      "id": "cmrvecm49000vq5ft0dt4cv0w",
+      "country": "CHILE",
+      "ratePerKg": 396,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.802Z"
+    },
+    {
+      "id": "cmru7mz1u000n12hmp8so7x89",
+      "country": "U.A.E",
+      "ratePerKg": 75,
+      "isActive": true,
+      "updatedAt": "2026-07-21T08:26:15.343Z"
+    },
+    {
+      "id": "cmrvecm4k000wq5ftw8b83rwi",
+      "country": "COLOMBIA",
+      "ratePerKg": 380,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.813Z"
+    },
+    {
+      "id": "cmrvecm4y000xq5ft0kiqx2dj",
+      "country": "EL SALVADOR",
+      "ratePerKg": 363,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.827Z"
+    },
+    {
+      "id": "cmru7mt3h000b12hm2f8t2nql",
+      "country": "MEXICO",
+      "ratePerKg": 330,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.839Z"
+    },
+    {
+      "id": "cmrvecm5l000zq5ft262nnomv",
+      "country": "COSTA RICA",
+      "ratePerKg": 363,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.850Z"
+    },
+    {
+      "id": "cmru7n0nl000q12hm7zkxbd2m",
+      "country": "INDONESIA",
+      "ratePerKg": 75,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:23:07.392Z"
+    },
+    {
+      "id": "cmrvecm5y0010q5ftlcoqzjkl",
+      "country": "DOMINICA",
+      "ratePerKg": 462,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.862Z"
+    },
+    {
+      "id": "cmrvecm6a0011q5ftgm7ve6o5",
+      "country": "HAITI",
+      "ratePerKg": 462,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.874Z"
+    },
+    {
+      "id": "cmru7n15d000r12hm27v507xk",
+      "country": "ALGERIA",
+      "ratePerKg": 314,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.386Z"
+    },
+    {
+      "id": "cmru7ms3z000912hmlmnsxr73",
+      "country": "AUSTRALIA",
+      "ratePerKg": 182,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.410Z"
+    },
+    {
+      "id": "cmru7mx26000j12hm8r241g0p",
+      "country": "BELGIUM",
+      "ratePerKg": 231,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.424Z"
+    },
+    {
+      "id": "cmrvecmdg001nq5ftwkkwq50e",
+      "country": "CAMBODIA",
+      "ratePerKg": 75,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:25:18.260Z"
+    },
+    {
+      "id": "cmru7mo48000112hmbea4ryjg",
+      "country": "CANADA",
+      "ratePerKg": 325,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:25:27.066Z"
+    },
+    {
+      "id": "cmru7mp3z000312hm2w5ui8vk",
+      "country": "CHINA",
+      "ratePerKg": 85,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:25:34.870Z"
+    },
+    {
+      "id": "cmru7mukv000e12hmor35k87y",
+      "country": "JAPAN",
+      "ratePerKg": 75,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:25:55.450Z"
+    },
+    {
+      "id": "cmru7mrle000812hm03r0f67z",
+      "country": "IRELAND",
+      "ratePerKg": 264,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.519Z"
+    },
+    {
+      "id": "cmru7mnj4000012hmgxm3q2ca",
+      "country": "MALAYSIA",
+      "ratePerKg": 65,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:26:09.103Z"
+    },
+    {
+      "id": "cmru7mu2z000d12hm6fgba0mc",
+      "country": "KOREA",
+      "ratePerKg": 182,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.544Z"
+    },
+    {
+      "id": "cmrvecmbf001hq5ftvrftik7v",
+      "country": "LAOS",
+      "ratePerKg": 95,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:26:18.413Z"
+    },
+    {
+      "id": "cmru7mq3q000512hmxejsyrji",
+      "country": "MAURITIUS",
+      "ratePerKg": 314,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.569Z"
+    },
+    {
+      "id": "cmrvecma3001dq5fthc676xs4",
+      "country": "VIETNAM",
+      "ratePerKg": 75,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:26:28.921Z"
+    },
+    {
+      "id": "cmru7mznj000o12hmt8iobvem",
+      "country": "NEW ZEALAND",
+      "ratePerKg": 215,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.594Z"
+    },
+    {
+      "id": "cmru7mr3f000712hm11f8dxn8",
+      "country": "PAKISTAN",
+      "ratePerKg": 215,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.606Z"
+    },
+    {
+      "id": "cmru7mw29000h12hmai9ocw0z",
+      "country": "PANAMA",
+      "ratePerKg": 347,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.618Z"
+    },
+    {
+      "id": "cmru7n26f000t12hmd6xn6pvj",
+      "country": "PHILIPPINES",
+      "ratePerKg": 159,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.633Z"
+    },
+    {
+      "id": "cmru7myjy000m12hmn1cpg1xk",
+      "country": "SAUDI ARABIA",
+      "ratePerKg": 225,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.645Z"
+    },
+    {
+      "id": "cmrvecm3l000tq5ftdy2kcwyr",
+      "country": "UNITED STATES",
+      "ratePerKg": 305,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:26:38.241Z"
+    },
+    {
+      "id": "cmru7n05b000p12hmpds0duo0",
+      "country": "SOUTH AFRICA",
+      "ratePerKg": 330,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.672Z"
+    },
+    {
+      "id": "cmru7mxk4000k12hmstfg72lw",
+      "country": "TAIWAN",
+      "ratePerKg": 75,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:26:48.731Z"
+    },
+    {
+      "id": "cmru7n2oa000u12hmzm9m5eus",
+      "country": "SWEDEN",
+      "ratePerKg": 264,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.885Z"
+    },
+    {
+      "id": "cmrvecm6w0013q5ftfzkcnny3",
+      "country": "SPAIN",
+      "ratePerKg": 248,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.896Z"
+    },
+    {
+      "id": "cmrvecm760014q5ftb4hbszwk",
+      "country": "SWITZERLAND",
+      "ratePerKg": 264,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.907Z"
+    },
+    {
+      "id": "cmrvecm7h0015q5ftstk815id",
+      "country": "RUSSIA",
+      "ratePerKg": 297,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.918Z"
+    },
+    {
+      "id": "cmrvecm7u0016q5fty10kgkg8",
+      "country": "NORWAY",
+      "ratePerKg": 264,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.930Z"
+    },
+    {
+      "id": "cmrvecm850017q5ft1rlbmyuu",
+      "country": "POLAND",
+      "ratePerKg": 264,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.941Z"
+    },
+    {
+      "id": "cmrvecm8h0018q5ftve50k3te",
+      "country": "PORTUGAL",
+      "ratePerKg": 264,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.953Z"
+    },
+    {
+      "id": "cmrvecm2h000qq5ftkqtamsew",
+      "country": "NETHERLANDS",
+      "ratePerKg": 231,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.966Z"
+    },
+    {
+      "id": "cmrvecm94001aq5ftvz4wd144",
+      "country": "ITALY",
+      "ratePerKg": 248,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.977Z"
+    },
+    {
+      "id": "cmru7mvkf000g12hmi1h21qp5",
+      "country": "FRANCE",
+      "ratePerKg": 238,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.988Z"
+    },
+    {
+      "id": "cmru7mwkc000i12hmtzdf26i0",
+      "country": "GERMANY",
+      "ratePerKg": 231,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:27.999Z"
+    },
+    {
+      "id": "cmru7mqlj000612hmulgf71sc",
+      "country": "SINGAPORE",
+      "ratePerKg": 132,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:28.023Z"
+    },
+    {
+      "id": "cmrvecmb3001gq5ftynlcmea2",
+      "country": "SRI LANKA",
+      "ratePerKg": 182,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:28.048Z"
+    },
+    {
+      "id": "cmru7mplr000412hmt6xdkots",
+      "country": "THE NETHERLANDS",
+      "ratePerKg": 270,
+      "isActive": true,
+      "updatedAt": "2026-07-21T08:26:02.811Z"
+    },
+    {
+      "id": "cmrvecmcg001kq5ft2nq87z6t",
+      "country": "JORDAN",
+      "ratePerKg": 231,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:28.097Z"
+    },
+    {
+      "id": "cmru7my20000l12hmk7mk9lcf",
+      "country": "SOUTH KOREA",
+      "ratePerKg": 85,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:27:00.187Z"
+    },
+    {
+      "id": "cmrvecme5001pq5ftw7t274m5",
+      "country": "UNITED ARAB EMIRATES",
+      "ratePerKg": 215,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:21:28.157Z"
+    },
+    {
+      "id": "cmru7mtl8000c12hm22dhqt6l",
+      "country": "HONG KONG",
+      "ratePerKg": 60,
+      "isActive": true,
+      "updatedAt": "2026-07-22T01:22:48.536Z"
+    }
+  ],
+  "User": [
+    {
+      "name": "Wasa Su",
+      "email": "wasa.su@nanyangtextile.com",
+      "role": "DVM_MER",
+      "roles": [
+        "DVM_MER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Thanchanok P",
+      "email": "thanchanok.p@nanyangtextile.com",
+      "role": "ADMIN",
+      "roles": [
+        "ADMIN"
+      ],
+      "claimDepartment": null,
+      "bu": "ALL",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": null,
+      "email": "ekanong.f@nanyangtextile.com",
+      "role": "MER_USER",
+      "roles": [],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Atsadet N",
+      "email": "atsadet.n@nanyangtextile.com",
+      "role": "MER_USER",
+      "roles": [
+        "MER_USER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Apisit N",
+      "email": "apisit.n@nanyangtextile.com",
+      "role": "MER_GW",
+      "roles": [
+        "MER_GW"
+      ],
+      "claimDepartment": null,
+      "bu": "GW",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Pornpimol S",
+      "email": "pornpimol.s@nanyangtextile.com",
+      "role": "DVM_MER",
+      "roles": [
+        "DVM_MER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Asia C",
+      "email": "asia.c@nanyangtextile.com",
+      "role": "DVM_MER",
+      "roles": [
+        "DVM_MER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Watcharee B",
+      "email": "watcharee.b@nanyangtextile.com",
+      "role": "DVM_MER",
+      "roles": [
+        "DVM_MER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Onuma W",
+      "email": "onuma.w@nanyangtextile.com",
+      "role": "DVM_MER",
+      "roles": [
+        "DVM_MER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Isawaruk T",
+      "email": "isawaruk.t@nanyangtextile.com",
+      "role": "VP_MER",
+      "roles": [
+        "VP_MER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Nuttareeporn H",
+      "email": "nuttareeporn.h@nanyangtextile.com",
+      "role": "VP_MER",
+      "roles": [
+        "VP_MER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Aoyjai P",
+      "email": "aoyjai.p@nanyangtextile.com",
+      "role": "LOGISTICS",
+      "roles": [
+        "LOGISTICS"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Prapakorn S",
+      "email": "prapakorn.s@nanyangtextile.com",
+      "role": "VP_PROCUREMENT",
+      "roles": [
+        "VP_PROCUREMENT"
+      ],
+      "claimDepartment": null,
+      "bu": "ALL",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Sukanya S",
+      "email": "sukanya.s@nanyangtextile.com",
+      "role": "SCM_NYK_APPROVER",
+      "roles": [
+        "SCM_NYK_APPROVER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": 1,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Apissara L",
+      "email": "apissara.l@nanyangtextile.com",
+      "role": "SCM_NYK_APPROVER",
+      "roles": [
+        "SCM_NYK_APPROVER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": 1,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Benjamat J",
+      "email": "benjamat.j@nanyangtextile.com",
+      "role": "SCM_NYK",
+      "roles": [
+        "SCM_NYK"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": 2,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Wallop U",
+      "email": "wallop.u@nanyangtextile.com",
+      "role": "SCM_NYK_EVP",
+      "roles": [
+        "SCM_NYK_EVP"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": 2,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Kimita P",
+      "email": "kimita.p@nanyangtextile.com",
+      "role": "SCM_USER",
+      "roles": [
+        "SCM_USER",
+        "SCM_NYG"
+      ],
+      "claimDepartment": null,
+      "bu": "ALL",
+      "priority": 1,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Saji T",
+      "email": "saji.t@nanyangtextile.com",
+      "role": "VP_SCM",
+      "roles": [
+        "VP_SCM"
+      ],
+      "claimDepartment": null,
+      "bu": "ALL",
+      "priority": 2,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Jarunee Su",
+      "email": "jarunee.su@nanyangtextile.com",
+      "role": "CLAIM_PROCUREMENT",
+      "roles": [
+        "CLAIM_PROCUREMENT"
+      ],
+      "claimDepartment": null,
+      "bu": "ALL",
+      "priority": 1,
+      "procurementType": "SOURCING",
+      "isActive": true
+    },
+    {
+      "name": "Theerawee S",
+      "email": "theerawee.s@nanyangtextile.com",
+      "role": "CLAIM_PRODUCTION",
+      "roles": [
+        "CLAIM_PRODUCTION"
+      ],
+      "claimDepartment": "ALL",
+      "bu": "EA",
+      "priority": 3,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": null,
+      "email": "kunlanan.s@nanyangtextile.com",
+      "role": "MER_USER",
+      "roles": [],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Jariya T",
+      "email": "jariya.t@nanyangtextile.com",
+      "role": "ADMIN",
+      "roles": [
+        "ADMIN",
+        "CLAIM_PROCUREMENT"
+      ],
+      "claimDepartment": null,
+      "bu": "ALL",
+      "priority": 1,
+      "procurementType": "PURCHASING",
+      "isActive": true
+    },
+    {
+      "name": "Rattana L",
+      "email": "rattana.l@nanyangtextile.com",
+      "role": "DVM_MER",
+      "roles": [
+        "DVM_MER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": null,
+      "email": "supasinee.t@nanyangtextile.com",
+      "role": "MER_USER",
+      "roles": [],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Chotik C",
+      "email": "chotik.c@nanyangtextile.com",
+      "role": "PRESIDENT",
+      "roles": [
+        "PRESIDENT",
+        "PRESIDENT_GW"
+      ],
+      "claimDepartment": null,
+      "bu": "ALL",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Rushan",
+      "email": "rushan@nanyangtextile.com",
+      "role": "CLAIM_PRODUCTION",
+      "roles": [
+        "CLAIM_PRODUCTION"
+      ],
+      "claimDepartment": "G1/G3",
+      "bu": "NYG",
+      "priority": 3,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "PK",
+      "email": "pk@nanyangtextile.com",
+      "role": "CLAIM_PRODUCTION",
+      "roles": [
+        "CLAIM_PRODUCTION"
+      ],
+      "claimDepartment": "G2/G4",
+      "bu": "NYG",
+      "priority": 3,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Khomkrit H",
+      "email": "khomkrit.h@nanyangtextile.com",
+      "role": "VP_PRODUCTION",
+      "roles": [
+        "VP_PRODUCTION"
+      ],
+      "claimDepartment": "ALL",
+      "bu": "ALL",
+      "priority": 4,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Oranuch K",
+      "email": "oranuch.k@nanyangtextile.com",
+      "role": "DPM_GW",
+      "roles": [
+        "DPM_GW"
+      ],
+      "claimDepartment": null,
+      "bu": "GW",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": null,
+      "email": "arpaporn.w@nanyangtextile.com",
+      "role": "MER_USER",
+      "roles": [],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Urairat D",
+      "email": "urairat.d@nanyangtextile.com",
+      "role": "LOGISTICS_GW",
+      "roles": [
+        "LOGISTICS_GW"
+      ],
+      "claimDepartment": null,
+      "bu": "GW",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": null,
+      "email": "tanarat.s@nanyangtextile.com",
+      "role": "MER_USER",
+      "roles": [],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": null,
+      "email": "chutrawee.k@nanyangtextile.com",
+      "role": "MER_USER",
+      "roles": [],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Peshan P",
+      "email": "peshan.p@nanyangtextile.com",
+      "role": "VP_MER_EA",
+      "roles": [
+        "VP_MER_EA"
+      ],
+      "claimDepartment": null,
+      "bu": "EA",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Sally",
+      "email": "sally@nanyangtextile.com",
+      "role": "DVM_MER_EA",
+      "roles": [
+        "DVM_MER_EA"
+      ],
+      "claimDepartment": null,
+      "bu": "EA",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": null,
+      "email": "nanmanus.d@nanyangtextile.com",
+      "role": "MER_USER",
+      "roles": [],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Quynh Nguyen",
+      "email": "quynh.nguyen@nanyangtextile.com",
+      "role": "LOGISTICS",
+      "roles": [
+        "LOGISTICS"
+      ],
+      "claimDepartment": null,
+      "bu": "EA",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "Poonyisa P",
+      "email": "poonyisa.p@nanyangtextile.com",
+      "role": "GM_GW",
+      "roles": [
+        "GM_GW"
+      ],
+      "claimDepartment": null,
+      "bu": "GW",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": null,
+      "email": "supranee.b@nanyangtextile.com",
+      "role": "MER_USER",
+      "roles": [],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": "puttachart.w",
+      "email": "puttachart.w@nanyangtextile.com",
+      "role": "DVM_MER",
+      "roles": [
+        "DVM_MER"
+      ],
+      "claimDepartment": null,
+      "bu": "NYG",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    },
+    {
+      "name": null,
+      "email": "rattanakorn.p@nanyangtextile.com",
+      "role": "MER_EA",
+      "roles": [],
+      "claimDepartment": null,
+      "bu": "EA",
+      "priority": null,
+      "procurementType": null,
+      "isActive": true
+    }
+  ]
+}

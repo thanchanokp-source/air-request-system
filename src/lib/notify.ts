@@ -653,7 +653,6 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
     // Notify 3 groups: Logistics (booking), Claim departments (per split), Accounting (read alert).
     if (newStatus === "PENDING_LOGISTICS_GW") {
       const link = `${APP_URL}/requests/${requestId}`
-      const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
       // 1) Logistics GW
       const lgUsers = await (prisma.user as any).findMany({ where: { role: "LOGISTICS_GW", isActive: true }, select: { email: true } })
       const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
@@ -662,34 +661,9 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
         const ml = t ? `${APP_URL}/api/magic-login?token=${t}&redirect=/approvals` : undefined
         await sendMail(lgEmails, `[Logistics – GW] GM Approved — Please prepare Booking — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
       }
-      // 2) Claim departments (parallel) — per-dept recipients (GW≠SUPPLIER)
-      const depts = new Set<string>()
-      for (const it of req.items) getSplits(it).forEach(s => depts.add(s.dept))
-      for (const g of gwClaimGroups(depts, req)) {
-        // Match roles[] too — a claim role (e.g. SCM_NYG) is often a secondary role on a
-        // person whose PRIMARY role is something else (SCM_USER), so `role: g.role` alone misses them.
-        const where: any = { isActive: true, bu: { in: [(req as any).bu, "ALL"] }, OR: [{ role: g.role }, { roles: { has: g.role } }] }
-        if (g.claimDept) where.claimDepartment = g.claimDept
-        const us = await (prisma.user as any).findMany({ where, select: { email: true, priority: true }, orderBy: { priority: "asc" } })
-        const ml = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
-        if (g.role === "SCM_NYK_APPROVER") {
-          // 2 approvers (by brand) → send EACH their OWN link (?as=email) so clicking
-          // logs in as THEM (not the first user). Show brand(s).
-          const subj = `[Claim – SCM NYK] GM Approved — Pending Approval — Brand: ${nykBrandLabel(req)} — ${req.documentNo}`
-          for (const u of us) {
-            if (!u.email) continue
-            const perLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&as=${encodeURIComponent(u.email)}&redirect=/approvals` : undefined
-            await sendMail(u.email, subj, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, perLink))
-          }
-          continue
-        }
-        // Priority chain: alert only priority 1; approvals cascade upward.
-        const usP = us.filter((u: any) => u.priority != null)
-        const firstUs = usP.length ? usP.filter((u: any) => u.priority === usP[0].priority) : us
-        const em = firstUs.map((u: any) => u.email).filter(Boolean)
-        if (!em.length) continue
-        await sendMail(em, `[Claim – ${g.label}] GM Approved — Pending Claim — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link, undefined, undefined, ml))
-      }
+      // 2) Claim departments are notified by the PENDING_CLAIM_GW block (the GM-approve flow
+      // fires that status too). Do NOT alert them here as well, or each claim approver gets
+      // TWO emails ("GM Approved — Pending Claim" + "Pending Approval") for one document.
       // 3) Accounting (read alert) — this BU only (GW → ACCOUNTING_GW).
       const acUsers = await (prisma.user as any).findMany({ where: { role: { in: ["ACCOUNTING", "ACCOUNTING_GW"] }, isActive: true, bu: { in: [(req as any).bu, "ALL"] } }, select: { email: true } })
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
