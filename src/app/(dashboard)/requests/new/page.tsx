@@ -145,7 +145,9 @@ export default function NewRequestPage() {
     const numFields = ["QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)"]
     const dateFields = ["Original Shipment Date", "Plan Shipment Date"]
     const validDepts = (isGW
-      ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+      // Accept the SHORT labels shown on screen (NYK / NYG) as well as the canonical
+      // "SCM NYK" / "SCM NYG" — the server normalizes NYK→SCM NYK, NYG→SCM NYG on import.
+      ? ["SCM NYK", "SCM NYG", "NYK", "NYG", "GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
       : ["COMMERCIAL", "PRODUCTION", "PROCUREMENT", "NYK", "SCM NYK"]
     ).map(d => d.toUpperCase().replace(/\s+/g, " ").trim())
 
