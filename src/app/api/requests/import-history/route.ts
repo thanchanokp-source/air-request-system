@@ -105,10 +105,13 @@ export async function POST(req: NextRequest) {
           reason: String(col(item, `REASON ${n}`) || "").trim() || null,
           actual: num(col(item, `ACTUAL AIRFREIGHT${n}`)),
         })).filter(s => s.dept)
-        // Actual per SO: prefer a single SO-level column if the file has one,
-        // else sum the per-dept ACTUAL AIRFREIGHT 1/2/3.
+        // Actual per SO: prefer a single SO-level column if the file has one, else sum the
+        // per-dept ACTUAL AIRFREIGHT 1/2/3, else fall back to the "Total HAWB#" column — the
+        // total HAWB cost LG enters (old files often fill only that, not the per-dept splits).
         const soActual = num(col(item, "Actual Airfreight")) || num(col(item, "ACTUAL AIRFREIGHT")) || num(col(item, "ACTUAL (THB)")) || num(col(item, "Actual Freight (THB)"))
-        const totalActual = soActual > 0 ? soActual : splits.reduce((s, x) => s + x.actual, 0)
+        const perDeptActual = splits.reduce((s, x) => s + x.actual, 0)
+        const totalHawb = num(colLike(item, "total", "hawb"))
+        const totalActual = soActual > 0 ? soActual : perDeptActual > 0 ? perDeptActual : totalHawb
         const claimDepts = splits.length ? splits.map(({ actual, ...rest }) => rest) : null
 
         return {
