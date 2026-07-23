@@ -13,7 +13,7 @@ import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 // Delay reasons come from the claim splits (REASON 1/2/3); fall back to the SO's reasonDelay.
 function rowReasonEntries(r: any): { reason: string; cost: number; qty: number }[] {
   const withReason = getSplits(r).filter((s: any) => s.reason && String(s.reason).trim())
-  if (withReason.length === 0) return [{ reason: r.reasonDelay || "N/A", cost: r.actualAirFreight || 0, qty: Number(r.qtyRequestAir) || 0 }]
+  if (withReason.length === 0) return [{ reason: r.reasonDelay || "No Reason", cost: r.actualAirFreight || 0, qty: Number(r.qtyRequestAir) || 0 }]
   const qty = Number(r.qtyRequestAir) || 0
   return withReason.map((s: any) => ({ reason: String(s.reason).trim(), cost: splitAirCost(r, s), qty: Math.round(qty * (Number(s.pct) || 0) / 100) }))
 }
@@ -290,7 +290,7 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
   const [mode, setMode] = useState<'count'|'cost'|'qty'>('count')
   const data = useMemo(()=>{
     const m:Record<string,{count:number;cost:number;qty:number}>={}
-    rows.forEach(r=>{ rowReasonEntries(r).forEach(e=>{ const k=(e.reason||"N/A").trim(); if(!m[k])m[k]={count:0,cost:0,qty:0}; m[k].count++; m[k].cost+=e.cost; m[k].qty+=e.qty }) })
+    rows.forEach(r=>{ rowReasonEntries(r).forEach(e=>{ const k=(e.reason||"No Reason").trim(); if(!m[k])m[k]={count:0,cost:0,qty:0}; m[k].count++; m[k].cost+=e.cost; m[k].qty+=e.qty }) })
     return mergeReasonTally(m).map(g=>({name:g.label,count:g.count,cost:Math.round(g.cost),qty:Math.round(g.qty)}))
       .sort((a,b)=>mode==='cost'?b.cost-a.cost:mode==='qty'?b.qty-a.qty:b.count-a.count)
   },[rows,mode])
@@ -341,7 +341,7 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
             <BarChart data={data} layout="vertical" margin={{top:4,right:48,left:4,bottom:8}}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
               <XAxis type="number" tick={{fontSize:12}} tickFormatter={mode==='cost'?fmtK:undefined} allowDecimals={false}/>
-              <YAxis type="category" dataKey="name" tick={{fontSize:12}} width={100} interval={0}/>
+              <YAxis type="category" dataKey="name" tick={{fontSize:10}} width={132} interval={0}/>
               <Tooltip formatter={(v:any)=>mode==='cost'?[fmtNum(v)+' THB','Actual Cost']:[fmtNum(v)+' pcs','QTY Air']}/>
               <Bar dataKey={mode==='cost'?'cost':'qty'} fill={mode==='cost'?C_ACT:C_AIR} radius={[0,3,3,0]}>
                 <LabelList dataKey={mode==='cost'?'cost':'qty'} position="right" style={{fontSize:11,fill:'#374151',fontWeight:600}} formatter={(v:any)=>mode==='cost'?fmtK(v):fmtNum(v)}/>
@@ -362,7 +362,7 @@ function DelayDaysPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
       if(isNaN(plan.getTime())||isNaN(orig.getTime())) return
       const days=Math.round((plan.getTime()-orig.getTime())/86400000)
       if(days<=0) return
-      const keys=[...new Set(rowReasonEntries(r).map(e=>e.reason||"N/A"))]
+      const keys=[...new Set(rowReasonEntries(r).map(e=>e.reason||"No Reason"))]
       keys.forEach(k=>{ if(!m[k])m[k]={total:0,count:0}; m[k].total+=days; m[k].count++ })
     })
     return Object.entries(m).map(([name,v])=>({name,avgDays:Math.round(v.total/v.count),count:v.count}))
