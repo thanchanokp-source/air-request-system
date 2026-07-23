@@ -125,9 +125,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Merchandise to edit + resubmit. Allowed at any stage before it is finished.
   if (action === "recall") {
     const email = String((session.user as any).email || "").toLowerCase()
-    const isRecaller = userRole === "ADMIN" || request.createdById === userId || email === "jariya.t@nanyangtextile.com"
+    const isAdminRecaller = userRole === "ADMIN" || email === "jariya.t@nanyangtextile.com"
+    const isRecaller = isAdminRecaller || request.createdById === userId
     if (!isRecaller) return NextResponse.json({ error: "You are not allowed to recall this document" }, { status: 403 })
-    if (["COMPLETED", "REJECTED", "PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(request.status)) {
+    // At-MER / draft = nothing to pull back. Admin/Jariya may recall a finished doc too
+    // (COMPLETED / REJECTED → resets it); the creator only while it's still in-flight.
+    const blocked = ["PENDING_MER", "PENDING_MER_GW", "DRAFT"]
+    if (!isAdminRecaller) blocked.push("COMPLETED", "REJECTED")
+    if (blocked.includes(request.status)) {
       return NextResponse.json({ error: `Cannot recall a document at status ${request.status}` }, { status: 400 })
     }
     // Alert the CURRENT holder(s) + FYI prior approvers + confirm to creator — BEFORE the

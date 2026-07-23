@@ -1699,8 +1699,11 @@ export default function RequestDetailPage() {
         {(() => {
           const myEmail = String((session?.user as any)?.email || "").toLowerCase()
           const isCreator = !!myEmail && !!req?.createdBy?.email && myEmail === String(req.createdBy.email).toLowerCase()
-          const canRecall = !!req && !["COMPLETED", "REJECTED", "PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(req.status)
-            && (role === "ADMIN" || isCreator || myEmail === "jariya.t@nanyangtextile.com")
+          const isAdminRecaller = role === "ADMIN" || myEmail === "jariya.t@nanyangtextile.com"
+          // At-MER / draft = nothing to pull back. Admin/Jariya can recall ANY other status
+          // (incl. Done/Rejected → resets the doc); creator (MER) only while still in-flight.
+          const canRecall = !!req && !["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(req.status)
+            && (isAdminRecaller || (isCreator && !["COMPLETED", "REJECTED"].includes(req.status)))
           if (!canRecall) return null
           return (
             <button onClick={() => { setRecallOpen(true); setRecallReason("") }}
@@ -1719,6 +1722,11 @@ export default function RequestDetailPage() {
               <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest">Recall document</p>
               <h2 className="text-lg font-bold text-gray-900 mt-1">{req.documentNo}</h2>
               <p className="text-xs text-gray-500 mt-1">ดึงเอกสารกลับมาที่ Merchandise เพื่อแก้ไข แล้ว Re-submit ใหม่ — คนที่ถือเอกสารอยู่จะได้รับการแจ้งเตือน</p>
+              {["COMPLETED","REJECTED"].includes(req.status) && (
+                <p className="text-[11px] text-red-600 font-medium mt-2 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
+                  ⚠ เอกสารนี้{req.status==="COMPLETED"?"เสร็จแล้ว":"ถูก reject"} — recall จะรีเซ็ตข้อมูล claim / logistics / actual แล้วเริ่ม flow ใหม่
+                </p>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-gray-600">เหตุผล (optional)</label>
