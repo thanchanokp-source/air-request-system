@@ -717,13 +717,12 @@ export default function DashboardPage() {
       </div>
 
       {/* ── KPI ─────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {([
-          ["TOTAL SO","SO",totalSO,"text-blue-700","bg-blue-50 border-blue-200",`${compDone} completed`],
+          ["QTY SHIP AIR","pcs",fmtNum(totalQAir),"text-orange-700","bg-orange-50 border-orange-200","Requested air"],
           ["EST. AIRFREIGHT","THB",fmtK(totalEst),"text-sky-700","bg-sky-50 border-sky-200",`${fmtNum(totalEst)} THB`],
           ["ACTUAL AIRFREIGHT","THB",fmtK(totalAct),"text-teal-700","bg-teal-50 border-teal-200",`${fmtNum(totalAct)} THB`],
           ["ACTUAL vs EST","%",varPct!=null?(varPct>0?"↑":"↓")+Math.abs(varPct).toFixed(1)+"%":"N/A",varPct!=null&&varPct>0?"text-red-600":varPct!=null&&varPct<0?"text-green-600":"text-gray-400","bg-orange-50 border-orange-200",varPct!=null?`Variance ${fmtPct(varPct)}`:"Actual N/A"],
-          ["QTY SHIP AIR","pcs",fmtNum(totalQAir),"text-orange-700","bg-orange-50 border-orange-200","Requested air"],
         ] as [string,string,any,string,string,string][]).map(([label,unit,value,tc,bg,sub])=>(
           <div key={label} className={`${bg} border rounded-xl p-4`}>
             <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide leading-tight">{label}</p>
