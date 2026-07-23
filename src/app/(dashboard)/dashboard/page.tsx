@@ -533,7 +533,8 @@ export default function DashboardPage() {
   const allSOs = useMemo(()=>buRequests.flatMap(r=>(r.items||[]).map((item:any)=>({...item,request:r}))), [buRequests])
 
   const filtered = useMemo(()=>allSOs.filter(row=>{
-    const d = row.originalShipmentDate ? new Date(row.originalShipmentDate) : null
+    // Period filter is by ACTUAL ship = Plan Shipment Date (not the original date).
+    const d = row.planShipmentDate ? new Date(row.planShipmentDate) : null
     const yr = d&&!isNaN(d.getTime()) ? String(d.getFullYear()) : ""
     const mo = d&&!isNaN(d.getTime()) ? String(d.getMonth()+1).padStart(2,"0") : ""
     return (!yearFilter  || yr===yearFilter) &&
@@ -589,12 +590,12 @@ export default function DashboardPage() {
   }
 
   const moKey = (r:any) => {
-    if(!r.originalShipmentDate) return "N/A"
-    const d=new Date(r.originalShipmentDate); if(isNaN(d.getTime())) return "N/A"
+    if(!r.planShipmentDate) return "N/A"
+    const d=new Date(r.planShipmentDate); if(isNaN(d.getTime())) return "N/A"
     return fmtMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`)
   }
   const moSort = (r:any) => {
-    if(!r.originalShipmentDate) return ""; const d=new Date(r.originalShipmentDate)
+    if(!r.planShipmentDate) return ""; const d=new Date(r.planShipmentDate)
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`
   }
 
@@ -655,7 +656,7 @@ export default function DashboardPage() {
   }
 
   // Filter options
-  const years    = useMemo(()=>[...new Set(allSOs.map(r=>r.originalShipmentDate?String(new Date(r.originalShipmentDate).getFullYear()):"").filter(Boolean))].sort().reverse(),[allSOs])
+  const years    = useMemo(()=>[...new Set(allSOs.map(r=>r.planShipmentDate?String(new Date(r.planShipmentDate).getFullYear()):"").filter(Boolean))].sort().reverse(),[allSOs])
   const brands   = [...new Set(allSOs.map((r:any)=>brandKey(r)).filter((b:string)=>b&&b!=="N/A"))].sort()
   const sos      = [...new Set(allSOs.map(r=>r.so).filter(Boolean))].sort()
   const cps      = [...new Set(allSOs.map(r=>r.customerPO).filter(Boolean))].sort()
