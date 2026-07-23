@@ -128,12 +128,11 @@ export default function ApprovalsPage() {
     // President (GW) is now the FINAL approver — items sit at PRESIDENT_PENDING
     // (claim + logistics already complete) awaiting the whole-doc approval.
     if (myRoles.includes("PRESIDENT_GW") && r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW") return items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
-    // Logistics ∥ Claim run in parallel after President → doc sits at
-    // PENDING_CLAIM_GW while LG still needs to enter HAWB data. Include it.
-    // Show only while LG still has SO to fill (actualAirFreight not entered yet).
-    // Once LG has entered actuals for all SO, the doc drops from their queue even
-    // if Claim is still running in parallel.
-    if (myRoles.includes("LOGISTICS_GW") && (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PRES_PASSED" && i.actualAirFreight == null)) return true
+    // Logistics ∥ Claim run in parallel after President → doc sits at PENDING_CLAIM_GW while LG
+    // enters HAWB data. Show until LG has pressed "Save & Send" (logisticsSent) — NOT until actuals
+    // are entered, otherwise a "Save Draft" (which fills actuals) would drop the doc from the queue
+    // before LG has actually submitted. Mirrors the NYG LG rule above.
+    if (myRoles.includes("LOGISTICS_GW") && (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && !r.logisticsSent && items.some((i: any) => i.itemStatus === "PRES_PASSED")) return true
     // SCM NYK 3-role claim works in BOTH BU (dept "SCM NYK" in GW, "NYK" in NYG).
     // TWO approvers split work BY BRAND — both see the doc; each approves their own
     // brand's SO. An SO drops (for everyone) once ANY approver approves it. So we do NOT
@@ -216,7 +215,7 @@ export default function ApprovalsPage() {
     if ((myRoles.includes("DPM_GW") || myRoles.includes("VP_MER_GW")) && (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW")) return items.filter((i: any) => i.itemStatus === "PENDING")
     if (myRoles.includes("GM_GW") && r.status === "PENDING_GM_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (myRoles.includes("MER_GW") && r.bu === "GW") return items.filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
-    if (myRoles.includes("LOGISTICS_GW") && r.bu === "GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED" && i.actualAirFreight == null)
+    if (myRoles.includes("LOGISTICS_GW") && r.bu === "GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
     if (myRoles.includes("SCM_NYK_APPROVER")) {
       const myDepts = gwDeptsForRole("SCM_NYK_APPROVER", userClaimDept)
       return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts))
