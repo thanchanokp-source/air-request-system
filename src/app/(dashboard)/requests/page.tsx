@@ -430,7 +430,7 @@ export default function RequestsPage() {
                 )}
                 <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ml-auto">EST {fmtNum(dg.estTotal)} THB</span>
                 <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {fmtNum(dg.actTotal)} THB</span>
-                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{dg.styles.length} style(s) · {dg.total} SO(s)</span>
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{dg.styles.length} style(s) · {dg.total} transactions</span>
                 {(dg.request.attachments || []).filter((a: any) => ["MER_USER","VP_MER"].includes(a.uploadedBy?.role)).map((att: any) => (
                   <span key={att.id} className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full whitespace-nowrap font-medium shrink-0">
                     <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="hover:underline">
@@ -452,7 +452,7 @@ export default function RequestsPage() {
                           <span className="text-gray-300 text-xs w-4">{isStyleExp ? "▼" : "▶"}</span>
                           <span className="font-semibold text-gray-700 text-sm">{sg.style}</span>
                           <AggBadge rows={sg.rows} />
-                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{sg.rows.length} SO(s)</span>
+                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{sg.rows.length} transactions</span>
                         </div>
                         {isStyleExp && (
                           <div className="overflow-x-auto border-t border-gray-50">
@@ -506,7 +506,7 @@ export default function RequestsPage() {
           )
         })}
       </div>
-      <p className="text-xs text-gray-400">{docGroups.length} document(s) · {filtered.length} SO(s)</p>
+      <p className="text-xs text-gray-400">{docGroups.length} document(s) · {filtered.length} transactions</p>
     </div>
   )
 }
