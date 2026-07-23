@@ -70,6 +70,8 @@ const soBrand = (r: any) => r?.brand || r?.request?.brandName || r?.brandName ||
 // Normalised brand key for matching — uppercase + collapse spaces so MER's inconsistent
 // entries ("rhone", "RHONE ", "RHONE  X") group together. Filtering uses CONTAINS on this.
 const brandKey = (r: any) => soBrand(r).trim().toUpperCase().replace(/\s+/g, " ")
+// Normalised country key — same idea, so "United States" and "UNITED STATES" group as one.
+const countryKey = (c: any) => String(c || "").trim().toUpperCase().replace(/\s+/g, " ")
 const CLAIM_DEPTS = ["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]
 const MONTH_OPTS = [
   {value:"01",label:"Jan"},{value:"02",label:"Feb"},{value:"03",label:"Mar"},{value:"04",label:"Apr"},
@@ -560,7 +562,7 @@ export default function DashboardPage() {
            (!soF.length   || soF.includes(row.so)) &&
            (!cpF.length   || cpF.includes(row.customerPO)) &&
            (!portFilter   || row.port===portFilter) &&
-           (!countryFilter|| row.country===countryFilter) &&
+           (!countryFilter|| countryKey(row.country)===countryFilter) &&
            (!claimF.length|| claimF.includes(row.claimDepartment))
   }), [allSOs,yearFilter,monthFilter,statusFilter,brandFilter,soF,cpF,portFilter,countryFilter,claimF])
 
@@ -628,7 +630,7 @@ export default function DashboardPage() {
   const brandDelay = useMemo(()=>buildDelay(filtered,r=>brandKey(r)),[filtered])
 
   const cRows = (_r:any) => true
-  const cKey  = (r:any) => r.country
+  const cKey  = (r:any) => countryKey(r.country)
   const countryCost  = useMemo(()=>buildCost(filtered.filter(cRows),cKey),[filtered,drillCountry])
   const countryQty   = useMemo(()=>buildQty(filtered.filter(cRows),cKey),[filtered,drillCountry])
   const countryDelay = useMemo(()=>buildDelay(filtered.filter(cRows),cKey),[filtered,drillCountry])
@@ -673,7 +675,7 @@ export default function DashboardPage() {
   const sos      = [...new Set(allSOs.map(r=>r.so).filter(Boolean))].sort()
   const cps      = [...new Set(allSOs.map(r=>r.customerPO).filter(Boolean))].sort()
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
-  const countries= [...new Set(allSOs.map(r=>r.country).filter(Boolean))].sort()
+  const countries= [...new Set(allSOs.map(r=>countryKey(r.country)).filter(Boolean))].sort()
   const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||brandFilter||soF.length||cpF.length||portFilter||countryFilter||claimF.length)
   const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setBrandFilter(""); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]) }
 
