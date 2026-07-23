@@ -133,6 +133,28 @@ export default function RequestsPage() {
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set())
   const [deletingAtt, setDeletingAtt] = useState<string | null>(null)
   const [claimDir, setClaimDir] = useState<any[]>([])
+  // Recall straight from the list — Admin/Jariya any status (except at-MER/draft), creator while in-flight.
+  const myEmail = String((session?.user as any)?.email || "").toLowerCase()
+  const [recallDoc, setRecallDoc] = useState<any>(null)
+  const [recallReason, setRecallReason] = useState("")
+  const [recalling, setRecalling] = useState(false)
+  const canRecallDoc = (req: any) => {
+    const isAdminRecaller = role === "ADMIN" || myEmail === "jariya.t@nanyangtextile.com"
+    const isCreator = !!myEmail && !!req?.createdBy?.email && myEmail === String(req.createdBy.email).toLowerCase()
+    return !!req && !["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(req.status)
+      && (isAdminRecaller || (isCreator && !["COMPLETED", "REJECTED"].includes(req.status)))
+  }
+  const doRecall = async () => {
+    if (!recallDoc) return
+    setRecalling(true)
+    const res = await fetch(`/api/requests/${recallDoc.id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "recall", comment: recallReason.trim() }),
+    })
+    if (res.ok) { setRecallDoc(null); setRecallReason(""); const d = await fetch("/api/requests").then(r => r.json()); setRequests(d) }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Recall failed") }
+    setRecalling(false)
+  }
 
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
@@ -443,6 +465,12 @@ export default function RequestsPage() {
                     </a>
                   </span>
                 ))}
+                {canRecallDoc(dg.request) && (
+                  <button onClick={e => { e.stopPropagation(); setRecallDoc(dg.request); setRecallReason("") }}
+                    className="text-[11px] text-purple-700 border border-purple-300 px-2 py-0.5 rounded-full hover:bg-purple-50 font-medium shrink-0 whitespace-nowrap">
+                    ↩ Recall
+                  </button>
+                )}
               </div>
 
               {/* Style groups */}
@@ -512,6 +540,38 @@ export default function RequestsPage() {
         })}
       </div>
       <p className="text-xs text-gray-400">{docGroups.length} document(s) · {filtered.length} transactions</p>
+
+      {/* Recall — reason modal (from the list) */}
+      {recallDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !recalling && setRecallDoc(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full mx-4 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest">Recall document</p>
+              <h2 className="text-lg font-bold text-gray-900 mt-1">{recallDoc.documentNo}</h2>
+              <p className="text-xs text-gray-500 mt-1">ดึงเอกสารกลับมาที่ Merchandise เพื่อแก้ไข แล้ว Re-submit ใหม่ — คนที่ถือเอกสารอยู่จะได้รับการแจ้งเตือน</p>
+              {["COMPLETED", "REJECTED"].includes(recallDoc.status) && (
+                <p className="text-[11px] text-red-600 font-medium mt-2 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
+                  ⚠ เอกสารนี้{recallDoc.status === "COMPLETED" ? "เสร็จแล้ว" : "ถูก reject"} — recall จะรีเซ็ตข้อมูล claim / logistics / actual แล้วเริ่ม flow ใหม่
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">เหตุผล (optional)</label>
+              <textarea value={recallReason} onChange={e => setRecallReason(e.target.value)} rows={3} disabled={recalling}
+                placeholder="ระบุเหตุผลการ recall (จะแสดงในเมลแจ้งเตือน)..."
+                className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300" />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setRecallDoc(null)} disabled={recalling}
+                className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-50">ยกเลิก</button>
+              <button onClick={doRecall} disabled={recalling}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50">
+                {recalling ? "กำลัง Recall..." : "↩ Confirm Recall"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
