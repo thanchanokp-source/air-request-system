@@ -49,6 +49,12 @@ const C_ORIG = "#f5b8c8"
 const C_AIR  = "#f0907a"
 const C_RSN  = ["#e07878","#f0907a","#f9c2c2","#d96060","#f5b8c8","#c8a0a0"]
 const C_PIE  = ["#e07878","#f0907a","#f9c2c2","#d96060","#f5b8c8","#e8a090","#fad0d0","#c89090","#dab0b0"]
+// Distinct color per claim department (labeled bars → color is redundant with the axis text).
+const DEPT_COLOR: Record<string,string> = {
+  COMMERCIAL:"#4e79a7", PRODUCTION:"#f28e2b", NYK:"#e15759", NYG:"#b07aa1",
+  PROCUREMENT:"#59a14f", GW:"#76b7b2", SUPPLIER:"#edc948",
+}
+const deptColor = (name: any) => DEPT_COLOR[String(name||"").trim().toUpperCase()] || "#9aa0a6"
 
 // ─── Formatters ────────────────────────────────────────────────────────────
 const fmtK  = (v: any) => { const n = Number(v); if (n>=1e6) return `${(n/1e6).toFixed(1)}M`; if (n>=1e3) return `${(n/1e3).toFixed(0)}K`; return String(Math.round(n)) }
@@ -389,8 +395,9 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
                     <XAxis type="number" tick={{fontSize:12}} tickFormatter={mode==='cost'?fmtK:undefined} allowDecimals={false}/>
                     <YAxis type="category" dataKey="name" tick={{fontSize:10}} width={132} interval={0}/>
                     <Tooltip formatter={(v:any)=>mode==='cost'?[fmtNum(v)+' THB','Actual Cost']:[fmtNum(v)+' pcs','QTY Air']}/>
-                    <Bar dataKey={mode==='cost'?'cost':'qty'} fill={mode==='cost'?C_ACT:C_AIR} radius={[0,3,3,0]}
+                    <Bar dataKey={mode==='cost'?'cost':'qty'} radius={[0,3,3,0]}
                       cursor={drillDept?undefined:'pointer'} onClick={(d:any)=>{ if(!drillDept && d?.name) setDrillDept(d.name) }}>
+                      {chartData.map((d:any,i:number)=><Cell key={i} fill={drillDept?deptColor(drillDept):deptColor(d.name)}/>)}
                       <LabelList dataKey={mode==='cost'?'cost':'qty'} position="right" style={{fontSize:11,fill:'#374151',fontWeight:600}} formatter={(v:any)=>mode==='cost'?fmtK(v):fmtNum(v)}/>
                     </Bar>
                   </BarChart>
