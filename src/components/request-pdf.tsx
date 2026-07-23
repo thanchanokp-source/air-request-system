@@ -25,7 +25,7 @@ const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US"
 // Signature title cleanup (all BU): the SCM NYG chain's final (EVP PROD) → "EVP"; drop the
 // "(GW)" suffix on President. Everything else prints as captured.
 const cleanTitle = (t: any) => {
-  const s = String(t || "").trim()
+  const s = String(t || "").trim().replace(/\s*\(GW\)\s*$/i, "")  // drop the "(GW)" suffix (GM/President/DPM…)
   if (/^president/i.test(s)) return "President"
   if (/claim approver/i.test(s) || /^evp\b/i.test(s)) return "EVP"
   return s
