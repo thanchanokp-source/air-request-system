@@ -302,6 +302,19 @@ const gradRange = (n: number, dark: string, light: string) => {
 
 function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
   const [mode, setMode] = useState<'count'|'cost'|'qty'>('count')
+  const [drillDept, setDrillDept] = useState<string|null>(null)   // cost/qty: which claim dept is drilled into
+  // Actual Cost / Actual QTY: top level = by claim department; click a bar → its reasons.
+  const deptData = useMemo(()=>{
+    const m:Record<string,{cost:number;qty:number}>={}
+    rows.forEach(r=>rowReasonEntries(r).forEach(e=>{ const k=e.dept||"-"; if(!m[k])m[k]={cost:0,qty:0}; m[k].cost+=e.cost; m[k].qty+=e.qty }))
+    return Object.entries(m).map(([name,v])=>({name,cost:Math.round(v.cost),qty:Math.round(v.qty)})).sort((a,b)=>mode==='cost'?b.cost-a.cost:b.qty-a.qty)
+  },[rows,mode])
+  const drillReasonData = useMemo(()=>{
+    if(!drillDept) return []
+    const m:Record<string,{cost:number;qty:number}>={}
+    rows.forEach(r=>rowReasonEntries(r).forEach(e=>{ if((e.dept||"-")!==drillDept) return; const k=(e.reason||"No Reason").trim(); if(!m[k])m[k]={cost:0,qty:0}; m[k].cost+=e.cost; m[k].qty+=e.qty }))
+    return Object.entries(m).map(([name,v])=>({name,cost:Math.round(v.cost),qty:Math.round(v.qty)})).sort((a,b)=>mode==='cost'?b.cost-a.cost:b.qty-a.qty)
+  },[rows,mode,drillDept])
   const data = useMemo(()=>{
     const m:Record<string,{count:number;cost:number;qty:number;dept:string}>={}
     rows.forEach(r=>{ rowReasonEntries(r).forEach(e=>{ const k=(e.reason||"No Reason").trim(); if(!m[k])m[k]={count:0,cost:0,qty:0,dept:e.dept}; m[k].count++; m[k].cost+=e.cost; m[k].qty+=e.qty }) })
@@ -311,14 +324,13 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
   },[rows,mode])
   // "Reason" mode shows QTY (pieces), not the SO/line count.
   const total = data.reduce((s,d)=>s+(mode==='cost'?d.cost:d.qty),0)
-  const barH = Math.max(height, data.length*30+80)
   const MODES:[string,string,string][] = [['count','Reason','#e07878'],['cost','Actual Cost','#d96060'],['qty','Actual QTY','#f0907a']]
   return (
     <div className="bg-white rounded-xl border p-3">
       <p className="text-[11px] font-extrabold mb-2 uppercase tracking-wide" style={{color:"#6b1a1a"}}>DELAY REASON</p>
       <div className="flex gap-1 mb-3">
         {MODES.map(([m,label,color])=>(
-          <button key={m} onClick={()=>setMode(m as any)}
+          <button key={m} onClick={()=>{setMode(m as any); setDrillDept(null)}}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${mode===m?'text-white border-transparent':'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
             style={mode===m?{background:color}:{}}>
             {label}
@@ -355,17 +367,31 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
               ))}
             </div>
           </div>
-        : <ResponsiveContainer width="100%" height={barH}>
-            <BarChart data={data} layout="vertical" margin={{top:4,right:48,left:4,bottom:8}}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
-              <XAxis type="number" tick={{fontSize:12}} tickFormatter={mode==='cost'?fmtK:undefined} allowDecimals={false}/>
-              <YAxis type="category" dataKey="name" tick={{fontSize:10}} width={132} interval={0}/>
-              <Tooltip formatter={(v:any)=>mode==='cost'?[fmtNum(v)+' THB','Actual Cost']:[fmtNum(v)+' pcs','QTY Air']}/>
-              <Bar dataKey={mode==='cost'?'cost':'qty'} fill={mode==='cost'?C_ACT:C_AIR} radius={[0,3,3,0]}>
-                <LabelList dataKey={mode==='cost'?'cost':'qty'} position="right" style={{fontSize:11,fill:'#374151',fontWeight:600}} formatter={(v:any)=>mode==='cost'?fmtK(v):fmtNum(v)}/>
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        : (()=>{
+            const chartData = drillDept ? drillReasonData : deptData
+            const barH2 = Math.max(height, chartData.length*30+80)
+            return (
+              <div>
+                <div className="flex items-center justify-between mb-1 text-[11px] min-h-[18px]">
+                  {drillDept
+                    ? <><span className="text-gray-500">Reasons — <b className="text-gray-700">{drillDept}</b></span><button onClick={()=>setDrillDept(null)} className="text-blue-500 hover:underline">← Back to departments</button></>
+                    : <span className="text-gray-400">By claim department · click a bar to drill into reasons</span>}
+                </div>
+                <ResponsiveContainer width="100%" height={barH2}>
+                  <BarChart data={chartData} layout="vertical" margin={{top:4,right:48,left:4,bottom:8}}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
+                    <XAxis type="number" tick={{fontSize:12}} tickFormatter={mode==='cost'?fmtK:undefined} allowDecimals={false}/>
+                    <YAxis type="category" dataKey="name" tick={{fontSize:10}} width={132} interval={0}/>
+                    <Tooltip formatter={(v:any)=>mode==='cost'?[fmtNum(v)+' THB','Actual Cost']:[fmtNum(v)+' pcs','QTY Air']}/>
+                    <Bar dataKey={mode==='cost'?'cost':'qty'} fill={mode==='cost'?C_ACT:C_AIR} radius={[0,3,3,0]}
+                      cursor={drillDept?undefined:'pointer'} onClick={(d:any)=>{ if(!drillDept && d?.name) setDrillDept(d.name) }}>
+                      <LabelList dataKey={mode==='cost'?'cost':'qty'} position="right" style={{fontSize:11,fill:'#374151',fontWeight:600}} formatter={(v:any)=>mode==='cost'?fmtK(v):fmtNum(v)}/>
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )
+          })()
       }
     </div>
   )
