@@ -53,3 +53,6 @@ next-env.d.ts
 
 # Local DB/master backups — data, never commit
 backups/
+
+# local design preview (throwaway)
+delay-reason-preview.html
