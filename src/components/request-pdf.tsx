@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/renderer"
-import { getSplits, deptLabel } from "@/lib/claim"
+import { getSplits, deptLabel, chainFor } from "@/lib/claim"
 
 // Thai-capable font (Sarabun) so Thai text (reasons, names, remarks) renders.
 // Registered as two families to keep the existing regular/bold style split.
@@ -21,13 +21,15 @@ const fmtDate = (v: any) => {
   const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
   return `${String(d.getDate()).padStart(2, "0")} ${M[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`
 }
-const fmtDateTime = (v: any) => {
-  if (!v) return "-"
-  const d = new Date(v)
-  if (isNaN(d.getTime())) return "-"
-  return `${fmtDate(v)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
-}
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
+// Signature title cleanup (all BU): the SCM NYG chain's final (EVP PROD) → "EVP"; drop the
+// "(GW)" suffix on President. Everything else prints as captured.
+const cleanTitle = (t: any) => {
+  const s = String(t || "").trim()
+  if (/^president/i.test(s)) return "President"
+  if (/claim approver/i.test(s) || /^evp\b/i.test(s)) return "EVP"
+  return s
+}
 
 // Spell a THB amount in English words (for the "Say total" line, like a formal note).
 function bahtInWords(n: number): string {
@@ -162,6 +164,31 @@ function computeSigners(req: any): Signer[] {
       .map(g => ({ ...g[g.length - 1], crNo: g[g.length - 1].crNo || g.map(x => x.crNo).filter(Boolean).pop() || null }))
       .sort((a, b) => new Date(a.signedAt).getTime() - new Date(b.signedAt).getTime())
   }
+
+  // GW: stamp GM + President (DPM dropped) + the FINAL signer of each claim department chain
+  // (e.g. SCM NYG → EVP PROD; NYK → SCM NYK EVP). Intermediate claim signers (entry, VP SCM NYG,
+  // VP PROD …) are collapsed away. In GW a CLAIM_NEXT_APPROVER is always the SCM NYG chain, so
+  // group them under "SCM NYG"; SCM NYK's 3 roles group under "SCM NYK".
+  if (isGW && sigList.length) {
+    const LINEAR = new Set(["GM_GW", "PRESIDENT_GW"])
+    const linear = sigList.filter((sg: any) => LINEAR.has(sg.role))
+    const claim = sigList.filter((sg: any) => !LINEAR.has(sg.role) && sg.role !== "VP_MER_GW" && sg.role !== "DPM_GW")
+    const deptKey = (sg: any): string =>
+      (sg.role === "CLAIM_NEXT_APPROVER" || sg.positionLabel === "Claim Approver") ? "SCM NYG"
+      : /SCM_NYK/.test(sg.role) ? "SCM NYK"
+      : (sg.positionLabel || sg.role)
+    const byDept = new Map<string, any>()
+    for (const sg of claim) {
+      const k = deptKey(sg); const prev = byDept.get(k)
+      if (!prev || new Date(sg.signedAt).getTime() >= new Date(prev.signedAt).getTime()) byDept.set(k, sg)
+    }
+    // Title = the LAST position of that dept's forced chain (EVP PROD / VP …) when it has one.
+    const claimKept = [...byDept.entries()].map(([k, sg]) => {
+      const chain = chainFor(k); const lastLbl = chain.length > 1 ? chain[chain.length - 1]?.label : null
+      return { ...sg, positionLabel: lastLbl || sg.positionLabel }
+    })
+    sigList = [...linear, ...claimKept].sort((a, b) => new Date(a.signedAt).getTime() - new Date(b.signedAt).getTime())
+  }
   const signers: Signer[] = []
   if (sigList.length) {
     for (const sg of sigList) {
@@ -169,7 +196,7 @@ function computeSigners(req: any): Signer[] {
     }
   } else {
     const chain: [string, string][] = isGW
-      ? [["PENDING_VP_MER_GW", "DPM"], ["PENDING_GM_GW", "GM"], ["PENDING_PRESIDENT_GW", "President"]]
+      ? [["PENDING_GM_GW", "GM"], ["PENDING_PRESIDENT_GW", "President"]]
       : [["PENDING_VP_MER", "VP Merchandise"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
     for (const [status, label] of chain) {
       const log = approveLogs.find((l: any) => l.fromStatus === status)
@@ -190,8 +217,8 @@ function SignatureRow({ signers, flow }: { signers: Signer[]; flow?: boolean }) 
             <View style={s.sigLine} />
           </View>
           <Text style={s.sigName}>( {sg.name || "-"} )</Text>
-          <Text style={s.sigTitle}>{sg.title}</Text>
-          <Text style={s.sigDate}>{sg.verb ? `${sg.verb} ${fmtDateTime(sg.date)}` : "Pending"}</Text>
+          <Text style={s.sigTitle}>{cleanTitle(sg.title)}</Text>
+          <Text style={s.sigDate}>{sg.verb ? `${sg.verb} ${fmtDate(sg.date)}` : "Pending"}</Text>
           {sg.crNo ? <Text style={s.sigDate}>CR: {sg.crNo}</Text> : null}
         </View>
       ))}
