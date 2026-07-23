@@ -184,8 +184,10 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
   "SCM NYG": [
     { label: "SCM NYG", role: "SCM_NYG" },
     { label: "VP SCM NYG", role: "SCM_NYG_VP" },
-    { label: "VP PROD", factoryBased: true, role: "SCM_NYG_VP_PROD" },
-    { label: "SCM EVP", role: "SCM_NYG_EVP" },
+    // VP PROD / EVP PROD = the real Production approvers (reuse their existing roles so the
+    // picker finds them — Rushan G1/G3, PK G2/G4 = CLAIM_PRODUCTION; Khomkrit = VP_PRODUCTION).
+    { label: "VP PROD", factoryBased: true, role: "CLAIM_PRODUCTION" },
+    { label: "EVP PROD", role: "VP_PRODUCTION" },
   ],
   "GW": [{ label: "GW" }],
   "SUPPLIER": [{ label: "SUPPLIER" }],
