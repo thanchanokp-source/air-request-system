@@ -176,6 +176,69 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
+  // EDIT ITEMS — the creator / MER edits SO rows while the document sits back at Merchandise
+  // (PENDING_MER / PENDING_MER_GW, after a recall or an SCM/DPM send-back), then resubmits.
+  // Editable: NYG/EA → style, original ship date, qty original, factory, country.
+  //           GW      → the above + per-SO claim dept / % / reason (splits must total 100).
+  if (action === "edit_items") {
+    const email = String((session.user as any).email || "").toLowerCase()
+    const isAdmin = userRole === "ADMIN" || email === "jariya.t@nanyangtextile.com"
+    const isMerRole = ["MER_USER", "MER_EA", "MER_GW"].includes(userRole)
+    const canEdit = ["PENDING_MER", "PENDING_MER_GW"].includes(request.status)
+      && (isAdmin || isMerRole || request.createdById === userId)
+    if (!canEdit) return NextResponse.json({ error: "You cannot edit this document now" }, { status: 403 })
+    const isGW = request.bu === "GW"
+    const edits: any[] = Array.isArray(body.edits) ? body.edits : []
+    const byId = new Map((request.items as any[]).map((it: any) => [it.id, it]))
+    // GW template short labels → canonical dept values the app matches on.
+    const normGwDept = (raw: string) => {
+      const s = String(raw || "").trim()
+      const u = s.toUpperCase()
+      if (u === "NYK") return "SCM NYK"
+      if (u === "NYG") return "SCM NYG"
+      return s
+    }
+    for (const e of edits) {
+      const cur = byId.get(e.itemId)
+      if (!cur) continue
+      const data: any = {}
+      if (typeof e.style === "string") data.style = e.style.trim()
+      if (typeof e.factory === "string") data.factory = e.factory.trim()
+      if (typeof e.country === "string") data.country = e.country.trim()
+      if (e.originalShipmentDate !== undefined) {
+        const d = e.originalShipmentDate ? new Date(e.originalShipmentDate) : null
+        data.originalShipmentDate = d && !isNaN(d.getTime()) ? d : null
+      }
+      if (e.qtyOriginalShipment !== undefined && e.qtyOriginalShipment !== null && String(e.qtyOriginalShipment) !== "") {
+        const q = Number(String(e.qtyOriginalShipment).replace(/,/g, ""))
+        if (!isNaN(q) && q >= 0) data.qtyOriginalShipment = Math.round(q)
+      }
+      if (isGW && Array.isArray(e.claimDepts)) {
+        const splits = e.claimDepts
+          .map((s: any) => ({ dept: normGwDept(s.dept), pct: Number(s.pct) || 0, reason: (s.reason ?? "").toString().trim() || null }))
+          .filter((s: any) => s.dept)
+        const sum = splits.reduce((a: number, s: any) => a + (Number(s.pct) || 0), 0)
+        if (splits.length && Math.round(sum) !== 100) {
+          return NextResponse.json({ error: `SO ${cur.so || cur.style}: claim % ต้องรวมได้ 100 (ตอนนี้ ${sum})` }, { status: 400 })
+        }
+        if (splits.length) {
+          data.claimDepts = splits as any
+          data.claimDepartment = splits[0].dept
+          data.claimPercentage = splits[0].pct || null
+        }
+      }
+      if (Object.keys(data).length) {
+        await prisma.airRequestItem.update({ where: { id: e.itemId }, data })
+      }
+    }
+    // Gross / Est. Air Freight depend on qty original + country → recompute the whole doc.
+    await recomputeRequestFreight(id).catch(() => {})
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "EDIT_ITEMS", fromStatus: request.status, toStatus: request.status, comment: `Edited ${edits.length} SO(s) before resubmit` },
+    }).catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
   // LG saves logistics data as draft at PENDING_SCM (parallel with SCM — no status change)
   if (action === "save_logistics_draft" && userRole === "LOGISTICS") {
     if (itemActuals && typeof itemActuals === "object") {

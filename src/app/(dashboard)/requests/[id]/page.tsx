@@ -492,6 +492,11 @@ export default function RequestDetailPage() {
   const [crNoInput, setCrNoInput] = useState("")
   const [savingCr, setSavingCr] = useState(false)
   const [reassign, setReassign] = useState<Record<string, { dept: string; pct: string; reason: string }[]>>({})
+  // Resubmit edit (at PENDING_MER / PENDING_MER_GW) — per-item field overrides the MER can change
+  // before re-submitting. Empty = unchanged (reads from the item). GW also edits claim splits.
+  const [editRows, setEditRows] = useState<Record<string, any>>({})
+  const [editingItems, setEditingItems] = useState(false)
+  const [editSaved, setEditSaved] = useState(false)
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selectedStyles, setSelectedStyles] = useState<Set<string>>(new Set())
@@ -1389,6 +1394,144 @@ export default function RequestDetailPage() {
     if (res.ok) setReq(await res.json())
     else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
     setSubmitting(null)
+  }
+
+  // ---- Resubmit inline edit (PENDING_MER / PENDING_MER_GW) --------------------------------
+  const GW_CLAIM_DEPTS = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
+  const toDateInput = (d: any) => { if (!d) return ""; const dt = new Date(d); return isNaN(dt.getTime()) ? "" : dt.toISOString().slice(0, 10) }
+  // Current value for an editable field — the override if the user touched it, else the item's value.
+  const editVal = (item: any, field: string): any => {
+    const o = editRows[item.id] || {}
+    if (field in o) return o[field]
+    if (field === "originalShipmentDate") return toDateInput(item.originalShipmentDate)
+    if (field === "qtyOriginalShipment") return item.qtyOriginalShipment ?? ""
+    return item[field] ?? ""
+  }
+  const setEdit = (itemId: string, field: string, value: any) =>
+    setEditRows(p => ({ ...p, [itemId]: { ...(p[itemId] || {}), [field]: value } }))
+  // GW claim splits being edited for an item (defaults to the item's current splits).
+  const editSplits = (item: any): { dept: string; pct: string; reason: string }[] => {
+    const o = editRows[item.id] || {}
+    if (o.claimDepts) return o.claimDepts
+    return getSplits(item).map((s: any) => ({ dept: s.dept, pct: String(s.pct ?? ""), reason: s.reason || "" }))
+  }
+  const setSplits = (itemId: string, rows: { dept: string; pct: string; reason: string }[]) =>
+    setEditRows(p => ({ ...p, [itemId]: { ...(p[itemId] || {}), claimDepts: rows } }))
+
+  const saveEdits = async (isGWDoc: boolean) => {
+    const edits = (req.items || []).map((it: any) => {
+      const o = editRows[it.id]; if (!o) return null
+      const e: any = { itemId: it.id }
+      if ("style" in o) e.style = o.style
+      if ("factory" in o) e.factory = o.factory
+      if ("country" in o) e.country = o.country
+      if ("originalShipmentDate" in o) e.originalShipmentDate = o.originalShipmentDate || null
+      if ("qtyOriginalShipment" in o) e.qtyOriginalShipment = o.qtyOriginalShipment
+      if (isGWDoc && "claimDepts" in o) e.claimDepts = (o.claimDepts as any[]).map(r => ({ dept: r.dept, pct: Number(r.pct) || 0, reason: r.reason || null }))
+      return Object.keys(e).length > 1 ? e : null
+    }).filter(Boolean)
+    if (!edits.length) return
+    // Client guard: GW claim % must total 100 per edited SO.
+    if (isGWDoc) {
+      for (const e of edits as any[]) {
+        if (e.claimDepts) {
+          const sum = e.claimDepts.reduce((a: number, r: any) => a + (Number(r.pct) || 0), 0)
+          if (Math.round(sum) !== 100) { alert(`SO ${(req.items || []).find((i: any) => i.id === e.itemId)?.so || ""}: claim % ต้องรวมได้ 100 (ตอนนี้ ${sum})`); return }
+        }
+      }
+    }
+    setEditingItems(true)
+    const res = await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "edit_items", edits })
+    })
+    if (res.ok) { setReq(await res.json()); setEditRows({}); setEditSaved(true); setTimeout(() => setEditSaved(false), 3000) }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "Save failed") }
+    setEditingItems(false)
+  }
+
+  // The editable SO table shown on the resubmit panel. NYG/EA: style/date/qty/factory/country.
+  // GW: the above + claim dept / % / reason (per SO, total 100).
+  const renderEditTable = (isGWDoc: boolean) => {
+    const items = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
+    if (!items.length) return null
+    const dirty = Object.keys(editRows).length > 0
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <p className="text-xs font-semibold text-gray-700">แก้ไขข้อมูล SO (แล้วกด Save)</p>
+          <div className="flex items-center gap-2">
+            {editSaved && <span className="text-[11px] text-green-600 font-medium">✓ บันทึกแล้ว</span>}
+            {dirty && <button onClick={() => setEditRows({})} disabled={editingItems}
+              className="text-[11px] text-gray-500 border border-gray-300 px-2 py-1 rounded-lg hover:bg-gray-50 disabled:opacity-50">ยกเลิกที่แก้</button>}
+            <button onClick={() => saveEdits(isGWDoc)} disabled={editingItems || !dirty}
+              className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-40">
+              {editingItems ? "กำลังบันทึก..." : "💾 Save changes"}</button>
+          </div>
+        </div>
+        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-gray-500">
+              <tr className="text-left">
+                <th className="px-2 py-1.5 font-medium">SO</th>
+                <th className="px-2 py-1.5 font-medium">Style</th>
+                <th className="px-2 py-1.5 font-medium">Original ship date</th>
+                <th className="px-2 py-1.5 font-medium">QTY Original</th>
+                <th className="px-2 py-1.5 font-medium">Factory</th>
+                <th className="px-2 py-1.5 font-medium">Country</th>
+                {isGWDoc && <th className="px-2 py-1.5 font-medium">Claim (dept / % / reason)</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it: any) => {
+                const rows = isGWDoc ? editSplits(it) : []
+                const sum = rows.reduce((a: number, r: any) => a + (Number(r.pct) || 0), 0)
+                return (
+                  <tr key={it.id} className="border-t border-gray-100 align-top">
+                    <td className="px-2 py-1.5 font-mono text-gray-700 whitespace-nowrap">{it.so || "-"}</td>
+                    <td className="px-2 py-1.5"><input value={editVal(it, "style")} onChange={e => setEdit(it.id, "style", e.target.value)}
+                      className="w-24 border border-gray-200 rounded px-1.5 py-1" /></td>
+                    <td className="px-2 py-1.5"><input type="date" value={editVal(it, "originalShipmentDate")} onChange={e => setEdit(it.id, "originalShipmentDate", e.target.value)}
+                      className="border border-gray-200 rounded px-1.5 py-1" /></td>
+                    <td className="px-2 py-1.5"><input type="number" min={0} value={editVal(it, "qtyOriginalShipment")} onChange={e => setEdit(it.id, "qtyOriginalShipment", e.target.value)}
+                      className="w-20 border border-gray-200 rounded px-1.5 py-1 text-right" /></td>
+                    <td className="px-2 py-1.5"><input value={editVal(it, "factory")} onChange={e => setEdit(it.id, "factory", e.target.value)}
+                      className="w-20 border border-gray-200 rounded px-1.5 py-1" /></td>
+                    <td className="px-2 py-1.5"><input value={editVal(it, "country")} onChange={e => setEdit(it.id, "country", e.target.value)}
+                      className="w-24 border border-gray-200 rounded px-1.5 py-1" /></td>
+                    {isGWDoc && (
+                      <td className="px-2 py-1.5">
+                        <div className="space-y-1">
+                          {rows.map((r, idx) => (
+                            <div key={idx} className="flex items-center gap-1">
+                              <select value={r.dept} onChange={e => { const n = [...rows]; n[idx] = { ...n[idx], dept: e.target.value }; setSplits(it.id, n) }}
+                                className="border border-gray-200 rounded px-1 py-1">
+                                <option value="">— dept —</option>
+                                {GW_CLAIM_DEPTS.map(d => <option key={d} value={d}>{deptLabel(d)}</option>)}
+                              </select>
+                              <input type="number" min={0} max={100} value={r.pct} onChange={e => { const n = [...rows]; n[idx] = { ...n[idx], pct: e.target.value }; setSplits(it.id, n) }}
+                                className="w-14 border border-gray-200 rounded px-1 py-1 text-right" placeholder="%" />
+                              <input value={r.reason} onChange={e => { const n = [...rows]; n[idx] = { ...n[idx], reason: e.target.value }; setSplits(it.id, n) }}
+                                className="w-32 border border-gray-200 rounded px-1 py-1" placeholder="reason" />
+                              {rows.length > 1 && <button onClick={() => setSplits(it.id, rows.filter((_, i) => i !== idx))} className="text-red-400 px-1">✕</button>}
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-2">
+                            {rows.length < 4 && <button onClick={() => setSplits(it.id, [...rows, { dept: "", pct: "", reason: "" }])} className="text-[11px] text-blue-600">+ dept</button>}
+                            <span className={`text-[11px] font-medium ${Math.round(sum) === 100 ? "text-green-600" : "text-red-500"}`}>รวม {sum}%</span>
+                          </div>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-gray-400">แก้เยอะ? ใช้ปุ่ม “อัปโหลดไฟล์ใหม่ (แทนที่ทั้งหมด)” ด้านล่างแทนได้</p>
+      </div>
+    )
   }
 
   // Ask the SERVER for the original uploaded file + injected claim-dept dropdown, named
@@ -3635,10 +3778,12 @@ export default function RequestDetailPage() {
               <p className="text-sm text-orange-800 mt-0.5 whitespace-pre-wrap">{req.rejectionReason}</p>
             </div>
           )}
-          <button onClick={resubmitMerGw} disabled={submitting === "_"}
+          {renderEditTable(true)}
+          <button onClick={resubmitMerGw} disabled={submitting === "_" || Object.keys(editRows).length > 0}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
             {submitting === "_" ? "..." : "Re-submit to DPM"}
           </button>
+          {Object.keys(editRows).length > 0 && <p className="text-[11px] text-orange-600">กด “Save changes” ก่อน แล้วจึง Re-submit</p>}
         </div>
       )}
 
@@ -3655,10 +3800,12 @@ export default function RequestDetailPage() {
               <p className="text-sm text-orange-800 mt-0.5 whitespace-pre-wrap">{req.rejectionReason}</p>
             </div>
           )}
-          <button onClick={resubmitMerNyg} disabled={submitting === "_"}
+          {renderEditTable(false)}
+          <button onClick={resubmitMerNyg} disabled={submitting === "_" || Object.keys(editRows).length > 0}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
             {submitting === "_" ? "..." : "Re-submit"}
           </button>
+          {Object.keys(editRows).length > 0 && <p className="text-[11px] text-orange-600">กด “Save changes” ก่อน แล้วจึง Re-submit</p>}
         </div>
       )}
 
