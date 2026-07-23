@@ -52,18 +52,22 @@ export default function NewRequestPage() {
   // file) and compare with the version this browser last downloaded → show a "please
   // re-download" hint only when they differ. Cleared the moment they download the latest.
   const [tplVersion, setTplVersion] = useState<string>("")
-  const [tplStale, setTplStale] = useState(false)
+  const [tplUpdatedAt, setTplUpdatedAt] = useState<string>("")
+  const [tplStale, setTplStale] = useState(false)   // needs download: never downloaded OR have an older version
   useEffect(() => {
     let alive = true
     setTplStale(false)
     fetch(`/api/template/version?bu=${userBu}`).then(r => r.json()).then(d => {
       if (!alive || !d?.version) return
       setTplVersion(d.version)
+      setTplUpdatedAt(d.updatedAt || "")
       const seen = typeof window !== "undefined" ? localStorage.getItem(`air-template-ver-${userBu}`) : null
-      setTplStale(!!seen && seen !== d.version) // only warn if they downloaded an OLDER one before
+      setTplStale(seen !== d.version)   // red when they've never downloaded this version (incl. first time)
     }).catch(() => {})
     return () => { alive = false }
   }, [userBu])
+  // "2026-07-23" → "23/07/2026"
+  const fmtTplDate = (s: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? `${m[3]}/${m[2]}/${m[1]}` : s }
   const markTemplateDownloaded = () => {
     if (tplVersion && typeof window !== "undefined") localStorage.setItem(`air-template-ver-${userBu}`, tplVersion)
     setTplStale(false)
@@ -377,12 +381,12 @@ export default function NewRequestPage() {
             <h2 className="font-semibold text-gray-800">Upload Excel File</h2>
             <div className="flex items-center gap-2">
               {tplStale ? (
-                <span className="flex items-center gap-1 text-[11px] bg-amber-50 border border-amber-300 text-amber-700 px-2 py-1 rounded-lg font-medium animate-pulse">
-                  ⚠ เทมเพลตอัปเดตเวอร์ชันใหม่ — โปรดดาวน์โหลดใหม่
+                <span className="flex items-center gap-1 text-[11px] bg-red-50 border border-red-300 text-red-700 px-2 py-1 rounded-lg font-semibold animate-pulse">
+                  ⚠ เทมเพลตอัปเดต{tplUpdatedAt ? ` (${fmtTplDate(tplUpdatedAt)})` : ""} — โปรดดาวน์โหลดล่าสุด
                 </span>
               ) : tplVersion ? (
-                <span className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 font-medium tabular-nums" title="เวอร์ชันเทมเพลตปัจจุบัน — เปลี่ยนเมื่อมีการอัปเดต data validation / master">
-                  🏷 เวอร์ชัน {tplVersion.slice(0, 6)}
+                <span className="flex items-center gap-1 text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1 font-medium" title={`เวอร์ชัน ${tplVersion.slice(0,8)}`}>
+                  ✓ เทมเพลตล่าสุด{tplUpdatedAt ? ` · อัปเดต ${fmtTplDate(tplUpdatedAt)}` : ""}
                 </span>
               ) : null}
               <a href={`/api/template?bu=${isGW ? "GW" : isEA ? "EA" : "NYG"}`} download

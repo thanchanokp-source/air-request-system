@@ -33,5 +33,12 @@ export async function GET(req: NextRequest) {
     parts.push("r:" + rates.map(r => `${r.country}=${r.ratePerKg}`).join("|"))
   } catch { /* db read failed → version still reflects the file */ }
   const version = crypto.createHash("sha1").update(parts.join("~")).digest("hex").slice(0, 12)
-  return NextResponse.json({ version })
+  // Human-readable "last updated" date, maintained in public/template-meta.json (bumped when
+  // templates are replaced) — more reliable than file mtime, which resets on every deploy.
+  let updatedAt = ""
+  try {
+    const meta = JSON.parse(readFileSync(path.join(process.cwd(), "public", "template-meta.json"), "utf8"))
+    updatedAt = String(meta.updatedAt || "")
+  } catch { /* no meta → omit date */ }
+  return NextResponse.json({ version, updatedAt })
 }
