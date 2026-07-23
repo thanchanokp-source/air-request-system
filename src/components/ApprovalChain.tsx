@@ -74,9 +74,9 @@ function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string):
 // Current linear-stage → {label, roles, assigned-email getter}. Claim stages are handled
 // separately (per-department). assigned email (chosen at upload) wins over role lookup.
 const STAGE_INFO: Record<string, { label: string; roles: string[]; assigned?: (req: any, soItem: any) => string | null | undefined }> = {
-  PENDING_DVM_MER:    { label: "DVM Merchandise",  roles: ["DVM_MER"],     assigned: (_r, s) => s?.assignedDvm },
+  PENDING_DVM_MER:    { label: "DVM Merchandise",  roles: ["DVM_MER"],     assigned: (r) => r?.assignedDvmMer },
   PENDING_VP_MER:     { label: "VP Merchandise",   roles: ["VP_MER"],      assigned: (r) => r?.assignedVpMer },
-  PENDING_DVM_MER_EA: { label: "ADVM",             roles: ["DVM_MER_EA"],  assigned: (_r, s) => s?.assignedDvm },
+  PENDING_DVM_MER_EA: { label: "ADVM",             roles: ["DVM_MER_EA"],  assigned: (r) => r?.assignedDvmMer },
   PENDING_VP_MER_EA:  { label: "DVM",              roles: ["VP_MER_EA"],   assigned: (r) => r?.assignedVpMer },
   PENDING_SCM:        { label: "SCM",      roles: ["SCM_USER"] },
   PENDING_VP_SCM:     { label: "VP SCM",   roles: ["VP_SCM"],      assigned: (r) => r?.assignedVpScm },
