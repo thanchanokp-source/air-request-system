@@ -298,15 +298,15 @@ export default function RequestsPage() {
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <div className="border rounded-xl p-3 sm:p-4 bg-green-50 border-green-200 flex items-center gap-2 sm:gap-4">
           <div className="text-2xl sm:text-3xl font-bold text-green-600">{totalCompleted}</div>
-          <div><div className="text-xs sm:text-sm font-semibold text-green-700">COMPLETED</div><div className="text-xs text-green-500">SO(s)</div></div>
+          <div><div className="text-xs sm:text-sm font-semibold text-green-700">COMPLETED</div><div className="text-xs text-green-500">transactions</div></div>
         </div>
         <div className="border rounded-xl p-3 sm:p-4 bg-yellow-50 border-yellow-200 flex items-center gap-2 sm:gap-4">
           <div className="text-2xl sm:text-3xl font-bold text-yellow-600">{totalPending}</div>
-          <div><div className="text-xs sm:text-sm font-semibold text-yellow-700">PENDING</div><div className="text-xs text-yellow-500">SO(s)</div></div>
+          <div><div className="text-xs sm:text-sm font-semibold text-yellow-700">PENDING</div><div className="text-xs text-yellow-500">transactions</div></div>
         </div>
         <div className="border rounded-xl p-3 sm:p-4 bg-red-50 border-red-200 flex items-center gap-2 sm:gap-4">
           <div className="text-2xl sm:text-3xl font-bold text-red-600">{totalRejected}</div>
-          <div><div className="text-xs sm:text-sm font-semibold text-red-700">REJECTED</div><div className="text-xs text-red-500">SO(s)</div></div>
+          <div><div className="text-xs sm:text-sm font-semibold text-red-700">REJECTED</div><div className="text-xs text-red-500">transactions</div></div>
         </div>
       </div>
 
