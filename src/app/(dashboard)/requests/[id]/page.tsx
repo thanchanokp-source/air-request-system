@@ -3962,7 +3962,7 @@ export default function RequestDetailPage() {
                 {(!gwNeedsBranch || gwBranchChoice) && (
                   <div className="space-y-2">
                     <p className="text-sm font-semibold text-blue-800">Please select <span className="text-blue-900 underline">{gwNextPosLabel}</span> for approve <span className="text-red-500">*</span></p>
-                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} position={gwNextPosLabel || undefined} positionRole={gwNextPosRole} posSpec={gwNextSpec ? { priority: gwNextSpec.priority, group: gwNextSpec.group, procurementType: gwNextSpec.procurementType } : null} requestId={String(id)} bu={req?.bu} onRequestAdd={requestNewApprover} />
+                    <PersonPicker label={gwNextPosLabel || "Next"} selected={claimFwdSelected} onSelect={setClaimFwdSelected} placeholder={`Search a name for ${gwNextPosLabel}...`} position={gwNextPosLabel || undefined} positionRole={gwNextPosRole} posSpec={gwNextSpec ? { priority: gwNextSpec.priority, group: gwNextSpec.group, procurementType: gwNextSpec.procurementType } : null} requestId={String(id)} bu={gwFwdCanonicalDept === "SCM NYG" ? "NYG" : req?.bu} onRequestAdd={requestNewApprover} />
                   </div>
                 )}
               </div>
