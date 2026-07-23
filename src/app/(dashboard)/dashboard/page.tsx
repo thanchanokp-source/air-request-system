@@ -842,11 +842,14 @@ export default function DashboardPage() {
             <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtK(claimAmtTotal)} · Est {fmtK(claimEstTotal)} THB</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {claimByDept.map(d=>{
+            {(()=>{ const barMax = Math.max(...claimByDept.map(d=>d.amt||d.est), 1); return claimByDept.map(d=>{
+              // % label = this dept's share of the TOTAL claim (all depts sum ~100%).
               const share = claimAmtTotal>0 ? d.amt/claimAmtTotal*100 : (claimEstTotal>0 ? d.est/claimEstTotal*100 : 0)
+              // Bar length = relative to the LARGEST dept (biggest = full) so the ranking reads at a glance.
+              const barPct = (d.amt||d.est)/barMax*100
               const c = deptColor(d.dept)
               return (
-                <div key={d.dept} title={`${fmtNum(d.qty)} pcs`}
+                <div key={d.dept} title={`${fmtNum(d.qty)} pcs · ${share.toFixed(0)}% of total claim`}
                   className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-colors">
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:c}}/>
@@ -854,15 +857,15 @@ export default function DashboardPage() {
                   </div>
                   <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums">{fmtK(d.amt)}<span className="text-[11px] font-medium text-gray-300 ml-1">THB</span></p>
                   <div className="mt-3 h-1 rounded-full bg-gray-100 overflow-hidden">
-                    <div className="h-full rounded-full" style={{width:`${Math.max(2,Math.min(100,share))}%`, background:c}}/>
+                    <div className="h-full rounded-full" style={{width:`${Math.max(2,Math.min(100,barPct))}%`, background:c}}/>
                   </div>
                   <div className="flex items-center justify-between mt-2 text-[10px] text-gray-400 tabular-nums">
-                    <span className="font-medium text-gray-500">{share.toFixed(0)}%</span>
+                    <span className="font-medium text-gray-500">{share.toFixed(0)}% of total</span>
                     <span>est {fmtK(d.est)}</span>
                   </div>
                 </div>
               )
-            })}
+            }) })()}
           </div>
         </div>
       )}
