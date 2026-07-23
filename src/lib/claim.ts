@@ -157,6 +157,20 @@ export function expandClaimDept(dept: string): string[] {
   return [dept]
 }
 
+// IMPORT ONLY: force a claim split's REASON to a fixed per-department value, overriding
+// whatever the file had. Depts not listed keep their original reason.
+const IMPORT_FORCE_REASON: Record<string, string> = {
+  "NYK": "Fabric issue, delay",
+  "SCM NYK": "Fabric issue, delay",
+  "PROCUREMENT": "Supplier delay, Quality issue",
+  "PRODUCTION": "Quality issue, size spec, workmanship, delay",
+  "COMMERCIAL": "Release Bom delay, information incorrect",
+}
+export function forceImportReason(dept: string, orig: string | null): string | null {
+  const k = String(dept || "").trim().toUpperCase().replace(/\s+/g, " ")
+  return IMPORT_FORCE_REASON[k] ?? orig
+}
+
 // ── Forced-position claim chains ───────────────────────────────────
 // Each claim department approves through a FIXED sequence of positions. At each
 // step the current approver must forward to the NEXT position (person chosen by

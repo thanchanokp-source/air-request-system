@@ -8,6 +8,7 @@ import { sendMail } from "@/lib/email"
 import { canonCountry } from "@/lib/freight"
 import { attachGarmentPo } from "@/lib/bom"
 import { normalizeSo } from "@/lib/so"
+import { forceImportReason } from "@/lib/claim"
 import crypto from "crypto"
 
 // Normalize a year that may be 2-digit or Thai Buddhist (B.E.) to Gregorian.
@@ -272,11 +273,16 @@ export async function POST(req: NextRequest) {
                 return s
               }
               const splits = [1, 2, 3]
-                .map(n => ({
-                  dept: normGwDept(String(col(item, `CLAIM DEPT ${n}`) || "")),
-                  pct: parseFloat(String(col(item, `%CLAIM${n}`) ?? "")) || 0,
-                  reason: String(col(item, `REASON ${n}`) || "").trim() || null,
-                }))
+                .map(n => {
+                  const dept = normGwDept(String(col(item, `CLAIM DEPT ${n}`) || ""))
+                  const rawReason = String(col(item, `REASON ${n}`) || "").trim() || null
+                  return {
+                    dept,
+                    pct: parseFloat(String(col(item, `%CLAIM${n}`) ?? "")) || 0,
+                    // Historical import only: force the reason to the standard per-dept value.
+                    reason: isHistorical ? forceImportReason(dept, rawReason) : rawReason,
+                  }
+                })
                 .filter(s => s.dept)
               if (splits.length > 0) {
                 claimDepts = splits

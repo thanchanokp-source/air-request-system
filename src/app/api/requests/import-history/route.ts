@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
 import { canonCountry } from "@/lib/freight"
 import { normalizeSo } from "@/lib/so"
+import { forceImportReason } from "@/lib/claim"
 
 // Admin-only backfill of HISTORICAL, already-complete documents. Uses the same MER
 // template headers, but creates each doc as COMPLETED — no approval flow, no emails.
@@ -100,12 +101,16 @@ export async function POST(req: NextRequest) {
         const gw = fileWeight > 0 ? fileWeight : qtyOrig * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
         const rate = rates[rateKey(country)] || 0   // EST = Gross Weight × country rate (0 if no rate in Master)
         // Claim splits (+ per-dept ACTUAL AIRFREIGHT → summed to the SO's total actual)
-        const splits = [1, 2, 3].map(n => ({
-          dept: String(col(item, `CLAIM DEPT ${n}`) || "").trim(),
-          pct: num(col(item, `%CLAIM${n}`)),
-          reason: String(col(item, `REASON ${n}`) || "").trim() || null,
-          actual: num(col(item, `ACTUAL AIRFREIGHT${n}`)),
-        })).filter(s => s.dept)
+        const splits = [1, 2, 3].map(n => {
+          const dept = String(col(item, `CLAIM DEPT ${n}`) || "").trim()
+          return {
+            dept,
+            pct: num(col(item, `%CLAIM${n}`)),
+            // Import: force the reason to the standard per-department value.
+            reason: forceImportReason(dept, String(col(item, `REASON ${n}`) || "").trim() || null),
+            actual: num(col(item, `ACTUAL AIRFREIGHT${n}`)),
+          }
+        }).filter(s => s.dept)
         // Actual per SO: admin/jariya's historical uploads carry the SO actual in the
         // "Total HAWB#" column → use that as the PRIMARY source. Fall back to a by-SO
         // "Actual Airfreight" column (any header with "actual" + "air"/"freight", excluding
