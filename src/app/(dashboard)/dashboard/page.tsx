@@ -4,7 +4,7 @@ import { useSession } from "next-auth/react"
 import * as XLSX from "xlsx"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
-  ResponsiveContainer, PieChart, Pie, Cell
+  ResponsiveContainer, Cell
 } from "recharts"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits, splitAirCost, deptLabel } from "@/lib/claim"
@@ -339,34 +339,40 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
       </div>
       {data.length===0?<div className="flex items-center justify-center text-xs text-gray-300" style={{height}}>No data</div>
       : mode==='count'
-        ? <div className="flex items-center gap-4">
-            <div className="shrink-0 relative" style={{width:160,height:160}}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={data.map(d=>({name:d.name,value:d.qty}))} dataKey="value" cx="50%" cy="50%" outerRadius={72} innerRadius={42}>
-                    {data.map((_,i)=><Cell key={i} fill={gradRed(data.length)[i]}/>)}
-                  </Pie>
-                  <Tooltip formatter={(v:any)=>[`${v} (${total>0?((v/total)*100).toFixed(1):0}%)`]}/>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-2xl font-extrabold text-gray-800 leading-none">{data.length}</span>
-                <span className="text-[10px] font-medium text-gray-400 mt-0.5">Reasons</span>
-              </div>
-            </div>
-            <div className="flex-1 space-y-1.5 min-w-0 max-h-[220px] overflow-y-auto pr-1">
-              {data.map((d,i)=>(
-                <div key={d.name} className="flex items-center gap-2 text-sm">
-                  <span className="w-3 h-3 rounded-sm shrink-0" style={{background:gradRed(data.length)[i]}}/>
-                  <span className="flex-1 truncate text-gray-700 font-medium" title={`${d.name} · ${d.dept}`}>
-                    {d.name}{d.dept && d.dept!=="-" && <span className="ml-1 text-[10px] font-semibold text-rose-500">· {d.dept}</span>}
-                  </span>
-                  <span className="font-bold text-gray-800 shrink-0" title="pieces">{fmtNum(d.qty)}</span>
-                  <span className="text-gray-400 w-10 text-right shrink-0 text-xs">{total>0?((d.qty/total)*100).toFixed(0):0}%</span>
+        ? (()=>{
+            const maxQty = Math.max(1, ...data.map(d=>d.qty))
+            return (
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center justify-between text-[11px] text-gray-400 px-0.5">
+                  <span><b className="text-gray-600">{data.length}</b> reasons</span>
+                  <span><b className="text-gray-600">{fmtNum(total)}</b> pcs total</span>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                  {data.map((d,i)=>{
+                    const pct = total>0 ? d.qty/total*100 : 0
+                    const barPct = Math.max(2, d.qty/maxQty*100)
+                    return (
+                      <div key={d.name}>
+                        <div className="flex items-end justify-between gap-2 mb-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-[13px] font-medium text-gray-700 truncate" title={d.name}>{d.name}</span>
+                            {d.dept && d.dept!=="-" && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 shrink-0 whitespace-nowrap uppercase tracking-wide">{d.dept}</span>}
+                          </div>
+                          <div className="flex items-baseline gap-1.5 shrink-0">
+                            <span className="text-[13px] font-bold text-gray-800 tabular-nums">{fmtNum(d.qty)}</span>
+                            <span className="text-[11px] text-gray-400 tabular-nums w-8 text-right">{pct.toFixed(0)}%</span>
+                          </div>
+                        </div>
+                        <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                          <div className="h-full rounded-full" style={{width:`${barPct}%`, background:gradRed(data.length)[i]}}/>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()
         : (()=>{
             const chartData = drillDept ? drillReasonData : deptData
             const barH2 = Math.max(height, chartData.length*30+80)
