@@ -935,11 +935,19 @@ export default function RequestDetailPage() {
       const myEmail = String((session?.user as any)?.email || "").toLowerCase()
       const myRows = (req?.claimForwards || []).filter((f: any) =>
         String(f.nextEmail || "").toLowerCase() === myEmail && f.dept === gwFwdCanonicalDept)
+      const myPos = myClaimFwdRow?.position ?? 0
+      // SOs I already forwarded ON to a LATER position are no longer mine — subtract them even
+      // if my own row is now empty (which would otherwise read as "whole dept"). This stops a
+      // forwarder (e.g. Saji → VP PROD) from seeing / re-forwarding SOs they already sent on.
+      const forwardedOn = new Set<string>((req?.claimForwards || [])
+        .filter((f: any) => f.dept === gwFwdCanonicalDept && (f.position ?? 0) > myPos)
+        .flatMap((f: any) => (Array.isArray(f.itemIds) ? f.itemIds : [])))
       // Empty itemIds on any row = whole-department scope (legacy rows stored []), NOT "no SO".
       const wholeDept = myRows.some((f: any) => !Array.isArray(f.itemIds) || f.itemIds.length === 0)
-      if (wholeDept || myRows.length === 0) return gwFwdBase
-      const ids = new Set<string>(myRows.flatMap((f: any) => Array.isArray(f.itemIds) ? f.itemIds : []))
-      return gwFwdBase.filter((i: any) => ids.has(i.id))
+      const base = (wholeDept || myRows.length === 0)
+        ? gwFwdBase
+        : gwFwdBase.filter((i: any) => new Set<string>(myRows.flatMap((f: any) => Array.isArray(f.itemIds) ? f.itemIds : [])).has(i.id))
+      return base.filter((i: any) => !forwardedOn.has(i.id))
     }
     const covered = new Set<string>((req?.claimForwards || [])
       .filter((f: any) => f.dept === gwFwdCanonicalDept)
@@ -1781,6 +1789,9 @@ export default function RequestDetailPage() {
         if (!res.ok) { const e = await res.json().catch(() => ({})); alert(`${g.group}: ${e.error || "forward failed"}`); setSplitBusy(false); return }
         first = false
       }
+      // Mark done so the forward panel hides (same as the normal forward) — otherwise the
+      // forwarder's now-empty row reads as "whole dept" and the SOs reappear for them.
+      setClaimFwdDone(`forwarded:${splitFwd.groups.map(g => `${g.person!.name} (${g.group})`).join(", ")}`)
       setSplitFwd(null)
       const r = await fetch(`/api/requests/${id}`); if (r.ok) setReq(await r.json())
     } catch { alert("Forward failed") }
