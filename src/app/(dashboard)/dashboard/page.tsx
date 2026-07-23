@@ -784,6 +784,8 @@ export default function DashboardPage() {
         "AIR RATE%":      Number(ar.toFixed(1)),
         "EST. (THB)":     row.airFreight ?? 0,
         "ACTUAL (THB)":   row.actualAirFreight ?? 0,
+        "INV NO":         row.invoiceNo ?? "",
+        "HAWB NO":        row.hawbNo ?? "",
         "VAR%":           vp != null ? Number(vp.toFixed(1)) : "",
         "COUNTRY":        row.country,
         "FACTORY":        row.factory,
@@ -972,12 +974,12 @@ export default function DashboardPage() {
         <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
-              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","SUB","DESCRIPTION","GMT TYPE","CUSTOMER PO","BRAND","BU","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","VAR%","FACTORY","COUNTRY","CLAIM DEPT","REASON"].map(h=>
+              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","SUB","DESCRIPTION","GMT TYPE","CUSTOMER PO","BRAND","BU","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","REASON"].map(h=>
                 <th key={h} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && <tr><td colSpan={21} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+              {loading && <tr><td colSpan={23} className="text-center py-10 text-gray-400">Loading...</td></tr>}
               {!loading && filtered.map((row,i)=>{
                 const ar = row.qtyOriginalShipment>0 ? row.qtyRequestAir/row.qtyOriginalShipment*100 : 0
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
@@ -1003,6 +1005,8 @@ export default function DashboardPage() {
                     </td>
                     <td className="px-3 py-1.5 text-blue-700">{fmtNum(row.airFreight)}</td>
                     <td className="px-3 py-1.5 text-green-700 font-medium">{fmtNum(row.actualAirFreight)}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{row.hawbNo || "-"}</td>
                     <td className="px-3 py-1.5">
                       {vp!=null&&<span className={`font-medium ${vp>10?"text-red-600":vp<-10?"text-green-600":"text-gray-500"}`}>{fmtPct(vp)}</span>}
                     </td>
@@ -1013,7 +1017,7 @@ export default function DashboardPage() {
                   </tr>
                 )
               })}
-              {!loading&&filtered.length===0&&<tr><td colSpan={21} className="text-center py-10 text-gray-400">No data</td></tr>}
+              {!loading&&filtered.length===0&&<tr><td colSpan={23} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
           </table>
         </div>
