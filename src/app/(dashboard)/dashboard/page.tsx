@@ -435,10 +435,10 @@ function LogisticsCostBar({ rows }: { rows:any[] }) {
     return Object.entries(m)
       .filter(([,v])=>v.qty>0)
       .map(([name,v])=>({name,costPerUnit:Math.round(v.cost/v.qty*100)/100,totalCost:Math.round(v.cost),totalQty:v.qty,soCount:v.soCount}))
-      .sort((a,b)=>b.costPerUnit-a.costPerUnit)
+      .sort((a,b)=>b.totalCost-a.totalCost)
   },[rows])
 
-  const max = data[0]?.costPerUnit || 1
+  const max = Math.max(1, ...data.map(d=>d.costPerUnit))   // true max (rows now sorted by TOTAL, not cost/pcs)
 
   return (
     <div className="bg-white rounded-xl border p-3 flex flex-col">
