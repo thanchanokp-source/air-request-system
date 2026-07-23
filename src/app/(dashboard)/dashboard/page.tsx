@@ -296,7 +296,7 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
   },[rows,mode])
   const total = data.reduce((s,d)=>s+(mode==='cost'?d.cost:mode==='qty'?d.qty:d.count),0)
   const barH = Math.max(height, data.length*30+80)
-  const MODES:[string,string,string][] = [['count','SO Count','#e07878'],['cost','Actual Cost','#d96060'],['qty','Actual QTY','#f0907a']]
+  const MODES:[string,string,string][] = [['count','Reason','#e07878'],['cost','Actual Cost','#d96060'],['qty','Actual QTY','#f0907a']]
   return (
     <div className="bg-white rounded-xl border p-3">
       <p className="text-[11px] font-extrabold mb-2 uppercase tracking-wide" style={{color:"#6b1a1a"}}>DELAY REASON</p>
