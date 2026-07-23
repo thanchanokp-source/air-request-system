@@ -18,6 +18,30 @@ function rowReasonEntries(r: any): { reason: string; cost: number; qty: number }
   return withReason.map((s: any) => ({ reason: String(s.reason).trim(), cost: splitAirCost(r, s), qty: Math.round(qty * (Number(s.pct) || 0) / 100) }))
 }
 
+// Group delay reasons that are the SAME but typed differently — case, spacing, punctuation,
+// or small typos (e.g. "Release Bom delay" / "Release BOM delay" / "Releasey Bom delay").
+// Normalise, then merge by Levenshtein similarity; the most-frequent original spelling
+// becomes the group's display label.
+const _normReason = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+const _lev = (a: string, b: string) => {
+  const m = a.length, n = b.length
+  if (!m) return n; if (!n) return m
+  const dp = Array.from({ length: n + 1 }, (_, j) => j)
+  for (let i = 1; i <= m; i++) { let pr = dp[0]; dp[0] = i; for (let j = 1; j <= n; j++) { const t = dp[j]; dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, pr + (a[i - 1] === b[j - 1] ? 0 : 1)); pr = t } }
+  return dp[n]
+}
+const _simReason = (a: string, b: string) => 1 - _lev(a, b) / Math.max(a.length, b.length, 1)
+function mergeReasonTally(raw: Record<string, { count: number; cost: number; qty: number }>) {
+  const groups: { norm: string; label: string; count: number; cost: number; qty: number }[] = []
+  for (const [orig, v] of Object.entries(raw).sort((a, b) => b[1].count - a[1].count)) {
+    const n = _normReason(orig)
+    const g = groups.find(g => g.norm === n || _simReason(g.norm, n) >= 0.85)
+    if (g) { g.count += v.count; g.cost += v.cost; g.qty += v.qty }
+    else groups.push({ norm: n, label: orig, count: v.count, cost: v.cost, qty: v.qty })
+  }
+  return groups
+}
+
 // ─── Colors (red pastel) ───────────────────────────────────────────────────
 const C_EST  = "#f9c2c2"
 const C_ACT  = "#e07878"
@@ -266,8 +290,8 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
   const [mode, setMode] = useState<'count'|'cost'|'qty'>('count')
   const data = useMemo(()=>{
     const m:Record<string,{count:number;cost:number;qty:number}>={}
-    rows.forEach(r=>{ rowReasonEntries(r).forEach(e=>{ const k=e.reason||"N/A"; if(!m[k])m[k]={count:0,cost:0,qty:0}; m[k].count++; m[k].cost+=e.cost; m[k].qty+=e.qty }) })
-    return Object.entries(m).map(([name,v])=>({name,count:v.count,cost:Math.round(v.cost),qty:Math.round(v.qty)}))
+    rows.forEach(r=>{ rowReasonEntries(r).forEach(e=>{ const k=(e.reason||"N/A").trim(); if(!m[k])m[k]={count:0,cost:0,qty:0}; m[k].count++; m[k].cost+=e.cost; m[k].qty+=e.qty }) })
+    return mergeReasonTally(m).map(g=>({name:g.label,count:g.count,cost:Math.round(g.cost),qty:Math.round(g.qty)}))
       .sort((a,b)=>mode==='cost'?b.cost-a.cost:mode==='qty'?b.qty-a.qty:b.count-a.count)
   },[rows,mode])
   const total = data.reduce((s,d)=>s+(mode==='cost'?d.cost:mode==='qty'?d.qty:d.count),0)
@@ -302,7 +326,7 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
                 <span className="text-[10px] font-medium text-gray-400 mt-0.5">Reasons</span>
               </div>
             </div>
-            <div className="flex-1 space-y-1.5 min-w-0">
+            <div className="flex-1 space-y-1.5 min-w-0 max-h-[220px] overflow-y-auto pr-1">
               {data.map((d,i)=>(
                 <div key={d.name} className="flex items-center gap-2 text-sm">
                   <span className="w-3 h-3 rounded-sm shrink-0" style={{background:gradRed(data.length)[i]}}/>
@@ -389,14 +413,14 @@ function LogisticsCostBar({ rows }: { rows:any[] }) {
       <p className="text-[10px] text-gray-400 mb-2">Actual Air Freight ÷ QTY Air shipped</p>
       {data.length===0
         ?<div className="flex items-center justify-center text-xs text-gray-300 h-40">No data</div>
-        :<div className="flex-1 overflow-auto">
+        :<div className="flex-1 overflow-y-auto max-h-[340px]">
           <table className="w-full text-xs border-collapse">
-            <thead>
+            <thead className="sticky top-0 bg-white z-10">
               <tr className="border-b border-gray-200">
-                <th className="text-left py-1.5 px-2 text-gray-500 font-semibold text-[11px] w-1/2">BRAND</th>
-                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px]">COST/PCS (THB)</th>
-                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px]">TOTAL (THB)</th>
-                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px]">QTY</th>
+                <th className="text-left py-1.5 px-2 text-gray-500 font-semibold text-[11px] w-1/2 bg-white">BRAND</th>
+                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">COST/PCS (THB)</th>
+                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">TOTAL (THB)</th>
+                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">QTY</th>
               </tr>
             </thead>
             <tbody>
