@@ -7,15 +7,15 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits, splitAirCost } from "@/lib/claim"
+import { getSplits, splitAirCost, deptLabel } from "@/lib/claim"
 import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 
 // Delay reasons come from the claim splits (REASON 1/2/3); fall back to the SO's reasonDelay.
-function rowReasonEntries(r: any): { reason: string; cost: number; qty: number }[] {
+function rowReasonEntries(r: any): { reason: string; cost: number; qty: number; dept: string }[] {
   const withReason = getSplits(r).filter((s: any) => s.reason && String(s.reason).trim())
-  if (withReason.length === 0) return [{ reason: r.reasonDelay || "No Reason", cost: r.actualAirFreight || 0, qty: Number(r.qtyRequestAir) || 0 }]
+  if (withReason.length === 0) return [{ reason: r.reasonDelay || "No Reason", cost: r.actualAirFreight || 0, qty: Number(r.qtyRequestAir) || 0, dept: deptLabel(r.claimDepartment || "") || "-" }]
   const qty = Number(r.qtyRequestAir) || 0
-  return withReason.map((s: any) => ({ reason: String(s.reason).trim(), cost: splitAirCost(r, s), qty: Math.round(qty * (Number(s.pct) || 0) / 100) }))
+  return withReason.map((s: any) => ({ reason: String(s.reason).trim(), cost: splitAirCost(r, s), qty: Math.round(qty * (Number(s.pct) || 0) / 100), dept: deptLabel(s.dept) || "-" }))
 }
 
 // Group delay reasons that are the SAME but typed differently — case, spacing, punctuation,
@@ -31,13 +31,13 @@ const _lev = (a: string, b: string) => {
   return dp[n]
 }
 const _simReason = (a: string, b: string) => 1 - _lev(a, b) / Math.max(a.length, b.length, 1)
-function mergeReasonTally(raw: Record<string, { count: number; cost: number; qty: number }>) {
-  const groups: { norm: string; label: string; count: number; cost: number; qty: number }[] = []
+function mergeReasonTally(raw: Record<string, { count: number; cost: number; qty: number; dept?: string }>) {
+  const groups: { norm: string; label: string; count: number; cost: number; qty: number; dept: string }[] = []
   for (const [orig, v] of Object.entries(raw).sort((a, b) => b[1].count - a[1].count)) {
     const n = _normReason(orig)
     const g = groups.find(g => g.norm === n || _simReason(g.norm, n) >= 0.85)
     if (g) { g.count += v.count; g.cost += v.cost; g.qty += v.qty }
-    else groups.push({ norm: n, label: orig, count: v.count, cost: v.cost, qty: v.qty })
+    else groups.push({ norm: n, label: orig, count: v.count, cost: v.cost, qty: v.qty, dept: v.dept || "-" })
   }
   return groups
 }
@@ -303,12 +303,14 @@ const gradRange = (n: number, dark: string, light: string) => {
 function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
   const [mode, setMode] = useState<'count'|'cost'|'qty'>('count')
   const data = useMemo(()=>{
-    const m:Record<string,{count:number;cost:number;qty:number}>={}
-    rows.forEach(r=>{ rowReasonEntries(r).forEach(e=>{ const k=(e.reason||"No Reason").trim(); if(!m[k])m[k]={count:0,cost:0,qty:0}; m[k].count++; m[k].cost+=e.cost; m[k].qty+=e.qty }) })
-    return mergeReasonTally(m).map(g=>({name:g.label,count:g.count,cost:Math.round(g.cost),qty:Math.round(g.qty)}))
-      .sort((a,b)=>mode==='cost'?b.cost-a.cost:mode==='qty'?b.qty-a.qty:b.count-a.count)
+    const m:Record<string,{count:number;cost:number;qty:number;dept:string}>={}
+    rows.forEach(r=>{ rowReasonEntries(r).forEach(e=>{ const k=(e.reason||"No Reason").trim(); if(!m[k])m[k]={count:0,cost:0,qty:0,dept:e.dept}; m[k].count++; m[k].cost+=e.cost; m[k].qty+=e.qty }) })
+    return mergeReasonTally(m).map(g=>({name:g.label,count:g.count,cost:Math.round(g.cost),qty:Math.round(g.qty),dept:g.dept}))
+      // "Reason" mode now ranks by pieces (qty); cost mode by cost.
+      .sort((a,b)=>mode==='cost'?b.cost-a.cost:b.qty-a.qty)
   },[rows,mode])
-  const total = data.reduce((s,d)=>s+(mode==='cost'?d.cost:mode==='qty'?d.qty:d.count),0)
+  // "Reason" mode shows QTY (pieces), not the SO/line count.
+  const total = data.reduce((s,d)=>s+(mode==='cost'?d.cost:d.qty),0)
   const barH = Math.max(height, data.length*30+80)
   const MODES:[string,string,string][] = [['count','Reason','#e07878'],['cost','Actual Cost','#d96060'],['qty','Actual QTY','#f0907a']]
   return (
@@ -329,7 +331,7 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
             <div className="shrink-0 relative" style={{width:160,height:160}}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data.map(d=>({name:d.name,value:d.count}))} dataKey="value" cx="50%" cy="50%" outerRadius={72} innerRadius={42}>
+                  <Pie data={data.map(d=>({name:d.name,value:d.qty}))} dataKey="value" cx="50%" cy="50%" outerRadius={72} innerRadius={42}>
                     {data.map((_,i)=><Cell key={i} fill={gradRed(data.length)[i]}/>)}
                   </Pie>
                   <Tooltip formatter={(v:any)=>[`${v} (${total>0?((v/total)*100).toFixed(1):0}%)`]}/>
@@ -344,9 +346,11 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
               {data.map((d,i)=>(
                 <div key={d.name} className="flex items-center gap-2 text-sm">
                   <span className="w-3 h-3 rounded-sm shrink-0" style={{background:gradRed(data.length)[i]}}/>
-                  <span className="flex-1 truncate text-gray-700 font-medium" title={d.name}>{d.name}</span>
-                  <span className="font-bold text-gray-800 shrink-0">{d.count}</span>
-                  <span className="text-gray-400 w-10 text-right shrink-0 text-xs">{total>0?((d.count/total)*100).toFixed(0):0}%</span>
+                  <span className="flex-1 truncate text-gray-700 font-medium" title={`${d.name} · ${d.dept}`}>
+                    {d.name}{d.dept && d.dept!=="-" && <span className="ml-1 text-[10px] font-semibold text-rose-500">· {d.dept}</span>}
+                  </span>
+                  <span className="font-bold text-gray-800 shrink-0" title="pieces">{fmtNum(d.qty)}</span>
+                  <span className="text-gray-400 w-10 text-right shrink-0 text-xs">{total>0?((d.qty/total)*100).toFixed(0):0}%</span>
                 </div>
               ))}
             </div>
