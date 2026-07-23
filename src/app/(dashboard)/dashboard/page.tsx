@@ -844,11 +844,11 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","BRAND","BU","ORIG. DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","VAR%","COUNTRY","CLAIM DEPT","REASON"].map(h=>
-                <th key={h} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
+                <th key={h} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
