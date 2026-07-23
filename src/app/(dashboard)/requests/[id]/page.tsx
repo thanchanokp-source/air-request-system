@@ -1700,10 +1700,15 @@ export default function RequestDetailPage() {
           const myEmail = String((session?.user as any)?.email || "").toLowerCase()
           const isCreator = !!myEmail && !!req?.createdBy?.email && myEmail === String(req.createdBy.email).toLowerCase()
           const isAdminRecaller = role === "ADMIN" || myEmail === "jariya.t@nanyangtextile.com"
-          // At-MER / draft = nothing to pull back. Admin/Jariya can recall ANY other status
-          // (incl. Done/Rejected → resets the doc); creator (MER) only while still in-flight.
-          const canRecall = !!req && !["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(req.status)
-            && (isAdminRecaller || (isCreator && !["COMPLETED", "REJECTED"].includes(req.status)))
+          // Admin/Jariya can recall ANY status except at-MER/draft (incl. Done/Rejected → resets the doc).
+          // Creator (MER) only within the merch-review window — before VP MER / GM approves; after that
+          // they must ask the current approver to reject it.
+          const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
+          const canRecall = !!req && (
+            isAdminRecaller
+              ? !["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(req.status)
+              : (isCreator && MER_RECALL_WINDOW.includes(req.status))
+          )
           if (!canRecall) return null
           return (
             <button onClick={() => { setRecallOpen(true); setRecallReason("") }}

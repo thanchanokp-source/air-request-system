@@ -133,16 +133,20 @@ export default function RequestsPage() {
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set())
   const [deletingAtt, setDeletingAtt] = useState<string | null>(null)
   const [claimDir, setClaimDir] = useState<any[]>([])
-  // Recall straight from the list — Admin/Jariya any status (except at-MER/draft), creator while in-flight.
+  // Recall straight from the list — Admin/Jariya any status (except at-MER/draft), creator only in the merch window.
   const myEmail = String((session?.user as any)?.email || "").toLowerCase()
   const [recallDoc, setRecallDoc] = useState<any>(null)
   const [recallReason, setRecallReason] = useState("")
   const [recalling, setRecalling] = useState(false)
+  // Statuses the CREATOR may still recall from — the merch-review window before VP MER / GM approves.
+  const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
   const canRecallDoc = (req: any) => {
+    if (!req) return false
     const isAdminRecaller = role === "ADMIN" || myEmail === "jariya.t@nanyangtextile.com"
     const isCreator = !!myEmail && !!req?.createdBy?.email && myEmail === String(req.createdBy.email).toLowerCase()
-    return !!req && !["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(req.status)
-      && (isAdminRecaller || (isCreator && !["COMPLETED", "REJECTED"].includes(req.status)))
+    // Admin/Jariya: any stage except at-MER/draft. Creator: only within the merch-review window.
+    if (isAdminRecaller) return !["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(req.status)
+    return isCreator && MER_RECALL_WINDOW.includes(req.status)
   }
   const doRecall = async () => {
     if (!recallDoc) return

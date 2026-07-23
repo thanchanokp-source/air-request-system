@@ -121,19 +121,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   })
 
-  // RECALL — MER (own doc only) / Admin / Jariya pulls an in-flight document back to
-  // Merchandise to edit + resubmit. Allowed at any stage before it is finished.
+  // RECALL — the creator (MER) or Admin / Jariya pulls a document back to Merchandise to
+  // edit + resubmit. The creator may recall ONLY while it is still in early merch review —
+  // before VP MER (NYG/EA) / GM (GW) approves; once it has passed that point they must ask
+  // the current approver to reject it. Admin / Jariya may recall at any stage (incl. finished).
   if (action === "recall") {
     const email = String((session.user as any).email || "").toLowerCase()
     const isAdminRecaller = userRole === "ADMIN" || email === "jariya.t@nanyangtextile.com"
     const isRecaller = isAdminRecaller || request.createdById === userId
     if (!isRecaller) return NextResponse.json({ error: "You are not allowed to recall this document" }, { status: 403 })
-    // At-MER / draft = nothing to pull back. Admin/Jariya may recall a finished doc too
-    // (COMPLETED / REJECTED → resets it); the creator only while it's still in-flight.
-    const blocked = ["PENDING_MER", "PENDING_MER_GW", "DRAFT"]
-    if (!isAdminRecaller) blocked.push("COMPLETED", "REJECTED")
-    if (blocked.includes(request.status)) {
-      return NextResponse.json({ error: `Cannot recall a document at status ${request.status}` }, { status: 400 })
+    // Statuses the CREATOR may still recall from — the merch-review window before VP MER / GM approves.
+    const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
+    if (isAdminRecaller) {
+      // At-MER / draft = nothing to pull back; everything else (incl. COMPLETED / REJECTED) is fine.
+      if (["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(request.status)) {
+        return NextResponse.json({ error: `Cannot recall a document at status ${request.status}` }, { status: 400 })
+      }
+    } else if (!MER_RECALL_WINDOW.includes(request.status)) {
+      return NextResponse.json({ error: `Cannot recall — the document has passed Merchandise review (status ${request.status}). Please ask the current approver to reject it.` }, { status: 400 })
     }
     // Alert the CURRENT holder(s) + FYI prior approvers + confirm to creator — BEFORE the
     // status changes, so the resolver still sees who currently holds it.
