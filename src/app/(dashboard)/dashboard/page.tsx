@@ -78,6 +78,18 @@ const MONTH_OPTS = [
 ]
 
 // ─── Chart Components ──────────────────────────────────────────────────────
+// Angled X-axis tick that truncates long category names (e.g. brands) with an ellipsis so
+// they don't get clipped off the chart; the full name shows on hover (<title>).
+const AngledTick = ({ x, y, payload }: any) => {
+  const s = String(payload?.value ?? "")
+  const t = s.length > 16 ? s.slice(0, 15) + "…" : s
+  return (
+    <text x={x} y={y} dy={2} textAnchor="end" transform={`rotate(-35, ${x}, ${y})`} fontSize={9} fill="#6b7280">
+      <title>{s}</title>{t}
+    </text>
+  )
+}
+
 function CostBar({ data, height=200, onBarClick, drillLabel, onBack }: {
   data:{name:string;est:number;actual:number}[]; height?:number
   onBarClick?:(n:string)=>void; drillLabel?:string; onBack?:()=>void
@@ -115,7 +127,7 @@ function CostBar({ data, height=200, onBarClick, drillLabel, onBack }: {
         <ResponsiveContainer width="100%" height={height}>
           <BarChart data={data} margin={{top:20,right:8,left:0,bottom:52}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-            <XAxis dataKey="name" tick={{fontSize:10}} angle={-35} textAnchor="end" interval={0}/>
+            <XAxis dataKey="name" tick={<AngledTick/>} interval={0} height={56}/>
             <YAxis tick={{fontSize:10}} tickFormatter={fmtK} width={48}/>
             <Tooltip formatter={(v:any,n:any)=>[fmtNum(v),n]}/>
             <Bar dataKey="est" name="Est. (THB)" fill="#c05050" radius={[2,2,0,0]}
@@ -150,7 +162,7 @@ function QtyBar({ data, height=200 }: { data:any[]; height?:number }) {
         <ResponsiveContainer width="100%" height={height}>
           <BarChart data={data} margin={{top:20,right:8,left:0,bottom:52}}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-            <XAxis dataKey="name" tick={{fontSize:10}} angle={-35} textAnchor="end" interval={0}/>
+            <XAxis dataKey="name" tick={<AngledTick/>} interval={0} height={56}/>
             <YAxis tick={{fontSize:10}} tickFormatter={fmtK} width={44}/>
             <Tooltip formatter={(v:any)=>[fmtNum(v)+" pcs","QTY Air"]}/>
             <Bar dataKey="air" name="QTY Air" fill="#e07878" radius={[2,2,0,0]}>
@@ -234,7 +246,7 @@ function DelayBar({ data: topData, rows, groupFn, height=200 }: {
             <ResponsiveContainer width="100%" height={height}>
               <BarChart data={chartData} margin={{top:20,right:8,left:0,bottom:52}}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                <XAxis dataKey="name" tick={{fontSize:10}} angle={-35} textAnchor="end" interval={0}/>
+                <XAxis dataKey="name" tick={<AngledTick/>} interval={0} height={56}/>
                 <YAxis tick={{fontSize:10}} width={40} unit="d"/>
                 <Tooltip formatter={(v:any,_:any,p:any)=>[`${v}d avg (${p?.payload?.count} SO)`,'Avg Delay']}/>
                 <Bar dataKey="avgDays" fill={FILL[0]} radius={[2,2,0,0]} cursor="pointer"
