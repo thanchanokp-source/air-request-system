@@ -1767,8 +1767,8 @@ export default function RequestDetailPage() {
   // signature captured once on the first call).
   const confirmFactorySplit = async () => {
     if (!splitFwd) return
-    if (splitFwd.groups.some(g => g.group === "?")) { alert("มี SO ที่ factory ไม่ระบุกลุ่ม G (1–4) — แก้ factory ก่อน หรือ forward แบบเลือกคนเองผ่านปุ่มปกติ"); return }
-    if (splitFwd.groups.some(g => !g.person)) { alert("ยังหาไม่เจอผู้รับของบางกลุ่ม — เลือกชื่อให้ครบก่อนยืนยัน"); return }
+    if (splitFwd.groups.some(g => g.group === "?")) { alert("Some SOs have a factory with no G-group (1–4) — fix the factory first, or forward by picking the person manually via the normal button."); return }
+    if (splitFwd.groups.some(g => !g.person)) { alert("A recipient is still missing for some group — select all recipients before confirming."); return }
     const sig = await askSignature(); if (!sig) return
     setSplitBusy(true)
     try {
@@ -4203,15 +4203,15 @@ export default function RequestDetailPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => !splitBusy && setSplitFwd(null)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div>
-              <h3 className="text-base font-bold text-gray-800">Forward to {gwNextSpec?.label || "VP PROD"} — แยกตาม Factory</h3>
-              <p className="text-xs text-gray-500 mt-0.5">ระบบแบ่ง SO ตามกลุ่มโรงงานให้อัตโนมัติ — ตรวจชื่อผู้รับแล้วกดยืนยัน</p>
+              <h3 className="text-base font-bold text-gray-800">Forward to {gwNextSpec?.label || "VP PROD"} — split by Factory</h3>
+              <p className="text-xs text-gray-500 mt-0.5">SOs are grouped by factory automatically — check each recipient, then confirm.</p>
             </div>
             <div className="space-y-2">
               {splitFwd.groups.map((g, gi) => (
                 <div key={g.group} className={`border rounded-xl p-3 ${g.group === "?" || !g.person ? "border-red-200 bg-red-50/50" : "border-gray-200"}`}>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-gray-800">
-                      {g.group === "?" ? "⚠ ไม่ระบุกลุ่ม" : `Factory ${g.group}`}
+                      {g.group === "?" ? "⚠ No factory group" : `Factory ${g.group}`}
                       <span className="ml-2 text-xs font-normal text-gray-400">{g.ids.length} SO</span>
                     </span>
                     <span className="text-xs text-gray-400">→</span>
@@ -4219,13 +4219,13 @@ export default function RequestDetailPage() {
                       <select value={g.person?.email || ""}
                         onChange={e => { const c = g.candidates.find(c => c.email === e.target.value) || null; setSplitFwd(s => s ? { groups: s.groups.map((x, i) => i === gi ? { ...x, person: c } : x) } : s) }}
                         className="border border-gray-300 rounded-lg px-2 py-1 text-sm">
-                        <option value="">— เลือกผู้รับ —</option>
+                        <option value="">— select recipient —</option>
                         {g.candidates.map(c => <option key={c.email} value={c.email}>{c.name}</option>)}
                       </select>
                     ) : g.person ? (
                       <span className="text-sm font-semibold text-blue-700">{g.person.name}</span>
                     ) : (
-                      <span className="text-sm font-semibold text-red-600">ไม่พบผู้รับ (เพิ่มใน master)</span>
+                      <span className="text-sm font-semibold text-red-600">No recipient found (add in master)</span>
                     )}
                   </div>
                 </div>
@@ -4233,10 +4233,10 @@ export default function RequestDetailPage() {
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => setSplitFwd(null)} disabled={splitBusy}
-                className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-50">ยกเลิก</button>
+                className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-50">Cancel</button>
               <button onClick={confirmFactorySplit} disabled={splitBusy || splitFwd.groups.some(g => g.group === "?" || !g.person)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-40">
-                {splitBusy ? "กำลังส่ง..." : "✓ ยืนยันส่งต่อ"}
+                {splitBusy ? "Sending..." : "✓ Confirm forward"}
               </button>
             </div>
           </div>
