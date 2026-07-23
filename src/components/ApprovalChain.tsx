@@ -303,7 +303,13 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     }
   }
   const gwStageWho = !completed && !rejected ? currentStageWho(status, "GW", soItem, req, approvers) : ""
-  const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwClaimWho, ...(gwNykWho ? [gwNykWho] : [])]
+  // Logistics runs in PARALLEL with Claim at PENDING_CLAIM_GW — that status has no linear STAGE_INFO
+  // entry, so surface LG here (until Save & Send sets logisticsSent). At PENDING_LOGISTICS_GW the
+  // linear stageWho already names Logistics, so only add it for the parallel status to avoid a dup.
+  const gwLgWho = (status === "PENDING_CLAIM_GW" && !lgDone && !completed && !rejected)
+    ? (() => { const n = resolveRoleEmail(approvers, ["LOGISTICS_GW"], "GW"); return [n ? `Logistics: ${n}` : "Logistics"] })()
+    : []
+  const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwLgWho, ...gwClaimWho, ...(gwNykWho ? [gwNykWho] : [])]
 
   return (
     <div className="py-1">
