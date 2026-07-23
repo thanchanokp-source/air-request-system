@@ -389,6 +389,30 @@ function DelayDaysPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
   )
 }
 
+// Paginate a long category chart: show `size` items at a time with ← / → arrows
+// (click-through, not a scrollbar). Keeps the chart readable when there are many brands.
+function Paged({ data, size=5, children }: { data:any[]; size?:number; children:(slice:any[])=>any }) {
+  const [page, setPage] = useState(0)
+  const total = data?.length || 0
+  const pages = Math.max(1, Math.ceil(total / size))
+  const p = Math.min(page, pages - 1)
+  const slice = (data || []).slice(p * size, p * size + size)
+  return (
+    <div>
+      {children(slice)}
+      {total > size && (
+        <div className="flex items-center justify-center gap-2 mt-1.5">
+          <button onClick={() => setPage(Math.max(0, p - 1))} disabled={p === 0}
+            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-sm">←</button>
+          <span className="text-[11px] text-gray-400 tabular-nums">{p * size + 1}–{Math.min((p + 1) * size, total)} / {total}</span>
+          <button onClick={() => setPage(Math.min(pages - 1, p + 1))} disabled={p >= pages - 1}
+            className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-sm">→</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function LogisticsCostBar({ rows }: { rows:any[] }) {
   const data = useMemo(()=>{
     const m:Record<string,{cost:number;qty:number;soCount:number}>={}
@@ -763,17 +787,17 @@ export default function DashboardPage() {
       {/* ── Row 2: By Brand ─────────────────────────────────────────────── */}
       <SectionRow label="By Brand"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <CostBar  data={brandCost}  height={H}/>
-        <QtyBar   data={brandQty}   height={H}/>
-        <DelayBar data={brandDelay} rows={filtered} groupFn={(r:any)=>brandKey(r)} height={H}/>
+        <Paged data={brandCost}>{(s)=><CostBar data={s} height={H}/>}</Paged>
+        <Paged data={brandQty}>{(s)=><QtyBar data={s} height={H}/>}</Paged>
+        <Paged data={brandDelay}>{(s)=><DelayBar data={s} rows={filtered} groupFn={(r:any)=>brandKey(r)} height={H}/>}</Paged>
       </div>
 
       {/* ── Row 3: By Country ────────────────────────────────────────────── */}
       <SectionRow label="By Country"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <CostBar data={countryCost} height={H}/>
-        <QtyBar   data={countryQty}   height={H}/>
-        <DelayBar data={countryDelay} rows={filtered.filter(cRows)} groupFn={cKey} height={H}/>
+        <Paged data={countryCost}>{(s)=><CostBar data={s} height={H}/>}</Paged>
+        <Paged data={countryQty}>{(s)=><QtyBar data={s} height={H}/>}</Paged>
+        <Paged data={countryDelay}>{(s)=><DelayBar data={s} rows={filtered.filter(cRows)} groupFn={cKey} height={H}/>}</Paged>
       </div>
 
       {/* ── Row 4: By BU ────────────────────────────────────────────────── */}
