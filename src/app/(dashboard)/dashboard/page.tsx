@@ -836,22 +836,30 @@ export default function DashboardPage() {
 
       {/* ── Claim by department (each claim's share of the airfreight) ────── */}
       {claimByDept.length>0 && (
-        <div className="bg-white rounded-xl border p-4 space-y-2.5">
-          <div className="flex items-center justify-between flex-wrap gap-1">
-            <p className="text-xs font-semibold text-gray-600">CLAIM BY DEPARTMENT</p>
-            <p className="text-[11px] text-gray-400">Actual {fmtK(claimAmtTotal)} · Est {fmtK(claimEstTotal)} THB</p>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+          <div className="flex items-baseline justify-between flex-wrap gap-1">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.15em]">Claim by department</p>
+            <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtK(claimAmtTotal)} · Est {fmtK(claimEstTotal)} THB</p>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {claimByDept.map(d=>{
               const share = claimAmtTotal>0 ? d.amt/claimAmtTotal*100 : (claimEstTotal>0 ? d.est/claimEstTotal*100 : 0)
+              const c = deptColor(d.dept)
               return (
-                <div key={d.dept} className="border rounded-xl p-3" style={{borderColor:deptColor(d.dept)+"55", background:deptColor(d.dept)+"0f"}}>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{background:deptColor(d.dept)}}/>
-                    <span className="text-[11px] font-extrabold uppercase tracking-wide truncate" style={{color:deptColor(d.dept)}}>Claim {d.dept}</span>
+                <div key={d.dept} title={`${fmtNum(d.qty)} pcs`}
+                  className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-colors">
+                  <div className="flex items-center gap-1.5 mb-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:c}}/>
+                    <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide truncate">{d.dept}</span>
                   </div>
-                  <p className="text-2xl font-extrabold text-gray-800 mt-1 leading-none">{fmtK(d.amt)}<span className="text-[11px] font-medium text-gray-400 ml-1">THB</span></p>
-                  <p className="text-[10px] text-gray-400 mt-1">Est {fmtK(d.est)} · {share.toFixed(0)}% share · {fmtNum(d.qty)} pcs</p>
+                  <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums">{fmtK(d.amt)}<span className="text-[11px] font-medium text-gray-300 ml-1">THB</span></p>
+                  <div className="mt-3 h-1 rounded-full bg-gray-100 overflow-hidden">
+                    <div className="h-full rounded-full" style={{width:`${Math.max(2,Math.min(100,share))}%`, background:c}}/>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-[10px] text-gray-400 tabular-nums">
+                    <span className="font-medium text-gray-500">{share.toFixed(0)}%</span>
+                    <span>est {fmtK(d.est)}</span>
+                  </div>
                 </div>
               )
             })}
