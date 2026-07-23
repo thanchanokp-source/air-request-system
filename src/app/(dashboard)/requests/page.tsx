@@ -459,11 +459,11 @@ export default function RequestsPage() {
                 <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {fmtNum(dg.actTotal)} THB</span>
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{dg.styles.length} style(s) · {dg.total} transactions</span>
                 {(dg.request.attachments || []).filter((a: any) => ["MER_USER","VP_MER"].includes(a.uploadedBy?.role)).map((att: any) => (
-                  <span key={att.id} className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full whitespace-nowrap font-medium shrink-0">
-                    <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="hover:underline">
-                      📎 {att.fileName}
-                    </a>
-                  </span>
+                  <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                    title={att.fileName}
+                    className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full font-medium shrink-0 w-[150px] hover:bg-orange-100">
+                    <span className="shrink-0">📎</span><span className="truncate">{att.fileName}</span>
+                  </a>
                 ))}
                 {canRecallDoc(dg.request) && (
                   <button onClick={e => { e.stopPropagation(); setRecallDoc(dg.request); setRecallReason("") }}
