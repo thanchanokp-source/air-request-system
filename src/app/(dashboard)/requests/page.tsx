@@ -323,6 +323,7 @@ export default function RequestsPage() {
             SCM_GW_PENDING: "PENDING_SCM_GW",
             PRESIDENT_PENDING: "PENDING_PRESIDENT_GW", // claim + LG done → President (final)
           } : {
+            DVM_MER_PASSED: "PENDING_VP_MER", // DVM approved → now at VP Merchandise
             VP_MER_PASSED: "PENDING_SCM",
             PASSED: "PENDING_VP_SCM",
             VP_PASSED: "PENDING_LOGISTICS",
@@ -344,9 +345,13 @@ export default function RequestsPage() {
             }
             let step: string | undefined
             if (st === "PENDING") {
+              // A PENDING item's stage IS the document's current status. Map EA merch
+              // statuses onto the shared NYG bucket keys.
               step = activeBu === "GW"
                 ? r.request.status // PENDING_VP_MER_GW / PENDING_GM_GW / PENDING_PRESIDENT_GW
-                : (r.request.status === "PENDING_SCM" ? "PENDING_SCM" : "PENDING_VP_MER")
+                : r.request.status === "PENDING_DVM_MER_EA" ? "PENDING_DVM_MER"
+                : r.request.status === "PENDING_VP_MER_EA" ? "PENDING_VP_MER"
+                : r.request.status
             } else {
               step = ITEM_TO_STEP[st]
             }
