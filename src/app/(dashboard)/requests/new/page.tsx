@@ -376,11 +376,15 @@ export default function NewRequestPage() {
           <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h2 className="font-semibold text-gray-800">Upload Excel File</h2>
             <div className="flex items-center gap-2">
-              {tplStale && (
+              {tplStale ? (
                 <span className="flex items-center gap-1 text-[11px] bg-amber-50 border border-amber-300 text-amber-700 px-2 py-1 rounded-lg font-medium animate-pulse">
-                  ⚠ เทมเพลตมีการอัปเดต — โปรดดาวน์โหลดใหม่
+                  ⚠ เทมเพลตอัปเดตเวอร์ชันใหม่ — โปรดดาวน์โหลดใหม่
                 </span>
-              )}
+              ) : tplVersion ? (
+                <span className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 font-medium tabular-nums" title="เวอร์ชันเทมเพลตปัจจุบัน — เปลี่ยนเมื่อมีการอัปเดต data validation / master">
+                  🏷 เวอร์ชัน {tplVersion.slice(0, 6)}
+                </span>
+              ) : null}
               <a href={`/api/template?bu=${isGW ? "GW" : isEA ? "EA" : "NYG"}`} download
                 onClick={markTemplateDownloaded}
                 className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium border ${tplStale ? "bg-amber-500 border-amber-500 text-white hover:bg-amber-600" : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"}`}>
