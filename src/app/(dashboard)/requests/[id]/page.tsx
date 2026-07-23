@@ -9,7 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, type PosSpec } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, chainFor, type PosSpec } from "@/lib/claim"
 import { validateUploadRows } from "@/lib/upload-validate"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -573,6 +573,10 @@ export default function RequestDetailPage() {
   // Claim approver (NYG/GW/Supplier) action popup: forward to next person, or finish.
   const [gwModalOpen, setGwModalOpen] = useState(false)
   const [gwBranchChoice, setGwBranchChoice] = useState<string | null>(null)
+  // GW SCM NYG → VP PROD forward: auto-split the SOs by factory G-group (G1/G3 → one VP PROD
+  // person, G2/G4 → another) and confirm in one popup instead of picking a single person.
+  const [splitFwd, setSplitFwd] = useState<null | { groups: { group: string; ids: string[]; person: { name: string; email: string } | null; candidates: { name: string; email: string }[] }[] }>(null)
+  const [splitBusy, setSplitBusy] = useState(false)
   // SCM NYK Approver picks the CR-entry person + VP/EVP approver (one per doc).
   const [nykCr, setNykCr] = useState<{name:string,email:string}|null>(null)
   const [nykEvp, setNykEvp] = useState<{name:string,email:string}|null>(null)
@@ -1011,6 +1015,9 @@ export default function RequestDetailPage() {
     ? (gwBranchChoice === "Sourcing" ? gwCurrentPos + 1 : gwBranchChoice === "Self" ? gwCurrentPos + 2 : null)
     : gwCurrentPos + 1
   const gwNextSpec: PosSpec | null = gwFwdCanonicalDept && gwTargetPos != null ? positionSpec(gwFwdCanonicalDept, gwTargetPos, gwFactory) : null
+  // Is the next chain position factory-based (VP PROD, split G1/G3 vs G2/G4)? GW only —
+  // this drives the auto-split forward popup (SCM NYG → VP PROD Rushan / PK).
+  const gwNextIsFactory = !!(isGWRequest && gwFwdCanonicalDept && gwTargetPos != null && chainFor(gwFwdCanonicalDept)[gwTargetPos]?.factoryBased)
   const gwNextPosLabel = (() => {
     if (isProcRoute) return gwNextSpec ? `Procurement ${gwNextSpec.label}` : "select route"
     let lbl = gwFwdCanonicalDept ? nextPositionLabel(gwFwdCanonicalDept, gwCurrentPos, gwFactory, gwBranch) : null
@@ -1721,6 +1728,63 @@ export default function RequestDetailPage() {
       alert(err.error || "Forward failed")
     }
     setClaimFwdSaving(false)
+  }
+
+  // GW SCM NYG → VP PROD: group the acted SOs by factory G-group, auto-resolve the VP PROD
+  // person for each group (Rushan = G1/G3, PK = G2/G4, matched on role CLAIM_PRODUCTION +
+  // claimDepartment group), then open the confirm popup. One person still handled cleanly.
+  const openFactorySplitForward = async () => {
+    const dept = gwFwdCanonicalDept
+    const baseRole = gwNextSpec?.role || null
+    const label = gwNextSpec?.label || "VP PROD"
+    if (!dept || !baseRole) { setGwModalOpen(true); return }
+    // Bucket the acted SOs by G-group.
+    const buckets: Record<string, string[]> = {}
+    for (const it of gwFwdItems) {
+      if (!claimActIds.includes(it.id)) continue
+      const g = vpProdGroup(it.factory) || "?"
+      ;(buckets[g] ||= []).push(it.id)
+    }
+    // Candidate people for the VP PROD role (SCM NYG picker uses bu=NYG).
+    const bu = dept === "SCM NYG" ? "NYG" : req?.bu
+    let people: any[] = []
+    try {
+      const r = await fetch(`/api/people?all=1${bu ? `&bu=${encodeURIComponent(bu)}` : ""}`)
+      people = await r.json(); if (!Array.isArray(people)) people = []
+    } catch { people = [] }
+    const groups = Object.entries(buckets).map(([group, ids]) => {
+      const cands = group === "?" ? [] : people.filter((p: any) => posMatches(p, `${label} (${group})`, bu, baseRole, { group }))
+      return {
+        group, ids,
+        person: cands[0] ? { name: cands[0].name, email: cands[0].email } : null,
+        candidates: cands.map((p: any) => ({ name: p.name, email: p.email })),
+      }
+    })
+    setSplitFwd({ groups })
+  }
+
+  // Forward each factory group to its VP PROD person (one claim-forward call per group;
+  // signature captured once on the first call).
+  const confirmFactorySplit = async () => {
+    if (!splitFwd) return
+    if (splitFwd.groups.some(g => g.group === "?")) { alert("มี SO ที่ factory ไม่ระบุกลุ่ม G (1–4) — แก้ factory ก่อน หรือ forward แบบเลือกคนเองผ่านปุ่มปกติ"); return }
+    if (splitFwd.groups.some(g => !g.person)) { alert("ยังหาไม่เจอผู้รับของบางกลุ่ม — เลือกชื่อให้ครบก่อนยืนยัน"); return }
+    const sig = await askSignature(); if (!sig) return
+    setSplitBusy(true)
+    try {
+      let first = true
+      for (const g of splitFwd.groups) {
+        const res = await fetch(`/api/requests/${id}/claim-forward`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ final: false, nextEmail: g.person!.email, nextName: g.person!.name, itemIds: g.ids, targetPos: gwTargetPos, ...(first ? { signatureData: sig } : {}) })
+        })
+        if (!res.ok) { const e = await res.json().catch(() => ({})); alert(`${g.group}: ${e.error || "forward failed"}`); setSplitBusy(false); return }
+        first = false
+      }
+      setSplitFwd(null)
+      const r = await fetch(`/api/requests/${id}`); if (r.ok) setReq(await r.json())
+    } catch { alert("Forward failed") }
+    finally { setSplitBusy(false) }
   }
 
   const act = async (action: string) => {
@@ -3931,8 +3995,11 @@ export default function RequestDetailPage() {
               )}
               <button onClick={() => {
                   // Final position (e.g. Production EVP) → sign + finish directly (no next-person
-                  // picker to show). Earlier positions open the picker modal to forward.
+                  // picker to show). Forward to a FACTORY-BASED position (SCM NYG → VP PROD) opens
+                  // the auto-split popup (G1/G3 → Rushan, G2/G4 → PK). Other positions open the
+                  // normal single-person picker modal.
                   if (gwIsLastPos) { claimForward(true, claimActIds) }
+                  else if (gwNextIsFactory) { openFactorySplitForward() }
                   else { setClaimFwdSelected(null); setClaimFwdQ(""); setGwModalOpen(true) }
                 }} disabled={claimFwdSaving}
                 className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-40">
@@ -4128,6 +4195,51 @@ export default function RequestDetailPage() {
           <p className="text-[11px] text-gray-400">
             {gwIsLastPos ? "Final position — approve to finish the process." : <>Approve, then forward to the next position: <b className="text-gray-600">{gwNextPosLabel}</b></>}
           </p>
+        </div>
+      )}
+
+      {/* Factory-split forward popup (SCM NYG → VP PROD): G1/G3 → one person, G2/G4 → another */}
+      {splitFwd && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => !splitBusy && setSplitFwd(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <h3 className="text-base font-bold text-gray-800">Forward to {gwNextSpec?.label || "VP PROD"} — แยกตาม Factory</h3>
+              <p className="text-xs text-gray-500 mt-0.5">ระบบแบ่ง SO ตามกลุ่มโรงงานให้อัตโนมัติ — ตรวจชื่อผู้รับแล้วกดยืนยัน</p>
+            </div>
+            <div className="space-y-2">
+              {splitFwd.groups.map((g, gi) => (
+                <div key={g.group} className={`border rounded-xl p-3 ${g.group === "?" || !g.person ? "border-red-200 bg-red-50/50" : "border-gray-200"}`}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-800">
+                      {g.group === "?" ? "⚠ ไม่ระบุกลุ่ม" : `Factory ${g.group}`}
+                      <span className="ml-2 text-xs font-normal text-gray-400">{g.ids.length} SO</span>
+                    </span>
+                    <span className="text-xs text-gray-400">→</span>
+                    {g.candidates.length > 1 ? (
+                      <select value={g.person?.email || ""}
+                        onChange={e => { const c = g.candidates.find(c => c.email === e.target.value) || null; setSplitFwd(s => s ? { groups: s.groups.map((x, i) => i === gi ? { ...x, person: c } : x) } : s) }}
+                        className="border border-gray-300 rounded-lg px-2 py-1 text-sm">
+                        <option value="">— เลือกผู้รับ —</option>
+                        {g.candidates.map(c => <option key={c.email} value={c.email}>{c.name}</option>)}
+                      </select>
+                    ) : g.person ? (
+                      <span className="text-sm font-semibold text-blue-700">{g.person.name}</span>
+                    ) : (
+                      <span className="text-sm font-semibold text-red-600">ไม่พบผู้รับ (เพิ่มใน master)</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setSplitFwd(null)} disabled={splitBusy}
+                className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-50">ยกเลิก</button>
+              <button onClick={confirmFactorySplit} disabled={splitBusy || splitFwd.groups.some(g => g.group === "?" || !g.person)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-40">
+                {splitBusy ? "กำลังส่ง..." : "✓ ยืนยันส่งต่อ"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
