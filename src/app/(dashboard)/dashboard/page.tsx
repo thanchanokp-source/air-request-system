@@ -706,6 +706,25 @@ export default function DashboardPage() {
   const deptQty   = useMemo(()=>buildQty(filtered,r=>r.claimDepartment||"Unassigned"),[filtered])
   const deptDelay = useMemo(()=>buildDelay(filtered,r=>r.claimDepartment||"Unassigned"),[filtered])
 
+  // Claim amount per claim department (each split's share): actual = actualAirFreight × claim%,
+  // est = airFreight × claim%. Summed across all filtered SO, biggest first.
+  const claimByDept = useMemo(()=>{
+    const m: Record<string,{amt:number,est:number,qty:number}> = {}
+    filtered.forEach(r=>{
+      const est=Number(r.airFreight)||0
+      for(const s of getSplits(r)){
+        const lbl=deptLabel(s.dept)||"-"; const pct=Number(s.pct)||0
+        if(!m[lbl]) m[lbl]={amt:0,est:0,qty:0}
+        m[lbl].amt+=splitAirCost(r,s)
+        m[lbl].est+=Math.round(est*pct/100)
+        m[lbl].qty+=Math.round((Number(r.qtyRequestAir)||0)*pct/100)
+      }
+    })
+    return Object.entries(m).map(([dept,v])=>({dept,...v})).sort((a,b)=>(b.amt||b.est)-(a.amt||a.est))
+  },[filtered])
+  const claimAmtTotal = claimByDept.reduce((s,d)=>s+d.amt,0)
+  const claimEstTotal = claimByDept.reduce((s,d)=>s+d.est,0)
+
   const monthlyDelay = useMemo(()=>{
     const m:Record<string,{total:number;count:number;ym:string}>={}
     filtered.forEach(r=>{
@@ -812,6 +831,31 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* ── Claim by department (each claim's share of the airfreight) ────── */}
+      {claimByDept.length>0 && (
+        <div className="bg-white rounded-xl border p-4 space-y-2.5">
+          <div className="flex items-center justify-between flex-wrap gap-1">
+            <p className="text-xs font-semibold text-gray-600">CLAIM BY DEPARTMENT</p>
+            <p className="text-[11px] text-gray-400">Actual {fmtK(claimAmtTotal)} · Est {fmtK(claimEstTotal)} THB</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
+            {claimByDept.map(d=>{
+              const share = claimAmtTotal>0 ? d.amt/claimAmtTotal*100 : (claimEstTotal>0 ? d.est/claimEstTotal*100 : 0)
+              return (
+                <div key={d.dept} className="border rounded-xl p-3" style={{borderColor:deptColor(d.dept)+"55", background:deptColor(d.dept)+"0f"}}>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{background:deptColor(d.dept)}}/>
+                    <span className="text-[11px] font-extrabold uppercase tracking-wide truncate" style={{color:deptColor(d.dept)}}>Claim {d.dept}</span>
+                  </div>
+                  <p className="text-2xl font-extrabold text-gray-800 mt-1 leading-none">{fmtK(d.amt)}<span className="text-[11px] font-medium text-gray-400 ml-1">THB</span></p>
+                  <p className="text-[10px] text-gray-400 mt-1">Est {fmtK(d.est)} · {share.toFixed(0)}% share · {fmtNum(d.qty)} pcs</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Filters ──────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border p-4 space-y-3">
