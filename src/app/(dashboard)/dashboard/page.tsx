@@ -390,22 +390,31 @@ function DelayDaysPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
 }
 
 // Paginate a long category chart: show `size` items at a time with ← / → arrows
-// (click-through, not a scrollbar). Keeps the chart readable when there are many brands.
-function Paged({ data, size=5, children }: { data:any[]; size?:number; children:(slice:any[])=>any }) {
-  const [page, setPage] = useState(0)
+// (click-through, not a scrollbar). `fromEnd` starts on the LAST window (e.g. the 5 most
+// recent months) and keeps items in their original order within each window; ← steps to
+// older items, → back toward the latest.
+function Paged({ data, size=5, fromEnd=false, children }: { data:any[]; size?:number; fromEnd?:boolean; children:(slice:any[])=>any }) {
+  const [page, setPage] = useState(0)   // 0 = default window (last one when fromEnd)
   const total = data?.length || 0
   const pages = Math.max(1, Math.ceil(total / size))
   const p = Math.min(page, pages - 1)
-  const slice = (data || []).slice(p * size, p * size + size)
+  const start = fromEnd ? Math.max(0, total - (p + 1) * size) : p * size
+  const end = fromEnd ? total - p * size : Math.min(total, p * size + size)
+  const slice = (data || []).slice(start, end)
+  // In fromEnd mode ← goes older (higher page) and → goes newer (lower page); normal mode is the reverse.
+  const onLeft = () => setPage(x => fromEnd ? Math.min(pages - 1, x + 1) : Math.max(0, x - 1))
+  const onRight = () => setPage(x => fromEnd ? Math.max(0, x - 1) : Math.min(pages - 1, x + 1))
+  const leftDisabled = fromEnd ? p >= pages - 1 : p === 0
+  const rightDisabled = fromEnd ? p === 0 : p >= pages - 1
   return (
     <div>
       {children(slice)}
       {total > size && (
         <div className="flex items-center justify-center gap-2 mt-1.5">
-          <button onClick={() => setPage(Math.max(0, p - 1))} disabled={p === 0}
+          <button onClick={onLeft} disabled={leftDisabled}
             className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-sm">←</button>
-          <span className="text-[11px] text-gray-400 tabular-nums">{p * size + 1}–{Math.min((p + 1) * size, total)} / {total}</span>
-          <button onClick={() => setPage(Math.min(pages - 1, p + 1))} disabled={p >= pages - 1}
+          <span className="text-[11px] text-gray-400 tabular-nums">{start + 1}–{end} / {total}</span>
+          <button onClick={onRight} disabled={rightDisabled}
             className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-sm">→</button>
         </div>
       )}
@@ -779,9 +788,9 @@ export default function DashboardPage() {
       {/* ── Row 1: By Ship Month ─────────────────────────────────────────── */}
       <SectionRow label="By Ship Month"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <CostBar  data={monthlyCost}  height={H}/>
-        <QtyBar   data={monthlyQty}   height={H}/>
-        <DelayBar data={monthlyDelay} rows={filtered} groupFn={moKey} height={H}/>
+        <Paged data={monthlyCost} fromEnd>{(s)=><CostBar data={s} height={H}/>}</Paged>
+        <Paged data={monthlyQty} fromEnd>{(s)=><QtyBar data={s} height={H}/>}</Paged>
+        <Paged data={monthlyDelay} fromEnd>{(s)=><DelayBar data={s} rows={filtered} groupFn={moKey} height={H}/>}</Paged>
       </div>
 
       {/* ── Row 2: By Brand ─────────────────────────────────────────────── */}
