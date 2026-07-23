@@ -10,6 +10,7 @@ import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
 import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, type PosSpec } from "@/lib/claim"
+import { validateUploadRows } from "@/lib/upload-validate"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -497,6 +498,8 @@ export default function RequestDetailPage() {
   const [editRows, setEditRows] = useState<Record<string, any>>({})
   const [editingItems, setEditingItems] = useState(false)
   const [editSaved, setEditSaved] = useState(false)
+  const [reupBusy, setReupBusy] = useState(false)
+  const [reupErr, setReupErr] = useState("")
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [selectedStyles, setSelectedStyles] = useState<Set<string>>(new Set())
@@ -1533,6 +1536,40 @@ export default function RequestDetailPage() {
       </div>
     )
   }
+
+  // Re-upload a corrected Excel file → parse (+ validate exactly like a normal upload) → replace ALL SO rows.
+  const reuploadReplace = async (f: File, isGWDoc: boolean) => {
+    setReupErr("")
+    setReupBusy(true)
+    try {
+      const form = new FormData(); form.append("file", f)
+      const up = await fetch("/api/upload", { method: "POST", body: form })
+      const data = await up.json()
+      const { rows, error: verr } = validateUploadRows(data.rows, isGWDoc)
+      if (verr) { setReupErr(verr); return }
+      if (!confirm(`ยืนยันแทนที่ SO ทั้งหมดด้วย ${rows.length} แถวจากไฟล์ใหม่? (ข้อมูล SO เดิมทั้งหมดจะถูกลบ)`)) return
+      const res = await fetch(`/api/requests/${id}/approve`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "replace_items", rows })
+      })
+      if (res.ok) { setReq(await res.json()); setEditRows({}); setEditSaved(true); setTimeout(() => setEditSaved(false), 3000) }
+      else { const e = await res.json().catch(() => ({})); setReupErr(e.error || "Replace failed") }
+    } catch { setReupErr("อัปโหลดไม่สำเร็จ ลองใหม่อีกครั้ง") }
+    finally { setReupBusy(false) }
+  }
+
+  const renderReupload = (isGWDoc: boolean) => (
+    <div className="border border-dashed border-gray-300 rounded-lg p-3 space-y-2 bg-gray-50/60">
+      <p className="text-xs font-semibold text-gray-700">หรือ อัปโหลดไฟล์ใหม่ (แทนที่ SO ทั้งหมด)</p>
+      <p className="text-[11px] text-gray-500">ใช้เทมเพลตเดิม แก้ในไฟล์แล้วอัปกลับ — validate เข้มเท่าอัปโหลดปกติ (SO 8 หลัก, claim รวม 100% ฯลฯ) และ <b>ลบ SO เดิมทั้งหมด</b> แล้วสร้างใหม่จากไฟล์</p>
+      <label className={`inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg font-medium cursor-pointer ${reupBusy ? "bg-gray-200 text-gray-400" : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"}`}>
+        {reupBusy ? "กำลังประมวลผล..." : "📄 เลือกไฟล์ .xlsx"}
+        <input type="file" accept=".xlsx,.xls" className="hidden" disabled={reupBusy}
+          onChange={e => { const f = e.target.files?.[0]; if (f) reuploadReplace(f, isGWDoc); e.target.value = "" }} />
+      </label>
+      {reupErr && <pre className="text-[11px] text-red-600 whitespace-pre-wrap bg-red-50 border border-red-200 rounded-lg px-2 py-1.5 max-h-40 overflow-auto">{reupErr}</pre>}
+    </div>
+  )
 
   // Ask the SERVER for the original uploaded file + injected claim-dept dropdown, named
   // SCM_<documentNo>.xlsx. Same-origin fetch (no CORS) → we read the blob and force a download.
@@ -3779,6 +3816,7 @@ export default function RequestDetailPage() {
             </div>
           )}
           {renderEditTable(true)}
+          {renderReupload(true)}
           <button onClick={resubmitMerGw} disabled={submitting === "_" || Object.keys(editRows).length > 0}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
             {submitting === "_" ? "..." : "Re-submit to DPM"}
@@ -3801,6 +3839,7 @@ export default function RequestDetailPage() {
             </div>
           )}
           {renderEditTable(false)}
+          {renderReupload(false)}
           <button onClick={resubmitMerNyg} disabled={submitting === "_" || Object.keys(editRows).length > 0}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
             {submitting === "_" ? "..." : "Re-submit"}

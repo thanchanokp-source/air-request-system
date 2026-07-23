@@ -7,6 +7,7 @@ import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, n
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 import { recomputeRequestFreight } from "@/lib/freight"
+import { buildRequestItems } from "@/lib/build-items"
 
 const getClaimDept = (role: string) => {
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
@@ -235,6 +236,41 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await recomputeRequestFreight(id).catch(() => {})
     await prisma.approvalLog.create({
       data: { requestId: id, userId, action: "EDIT_ITEMS", fromStatus: request.status, toStatus: request.status, comment: `Edited ${edits.length} SO(s) before resubmit` },
+    }).catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
+  // REPLACE ITEMS — the creator / MER re-uploads a corrected Excel file while the document sits
+  // back at Merchandise (PENDING_MER / PENDING_MER_GW). All existing SO rows are deleted and
+  // rebuilt from the new file (same mapping/validation as a fresh upload), then they resubmit.
+  if (action === "replace_items") {
+    const email = String((session.user as any).email || "").toLowerCase()
+    const isAdmin = userRole === "ADMIN" || email === "jariya.t@nanyangtextile.com"
+    const isMerRole = ["MER_USER", "MER_EA", "MER_GW"].includes(userRole)
+    const canEdit = ["PENDING_MER", "PENDING_MER_GW"].includes(request.status)
+      && (isAdmin || isMerRole || request.createdById === userId)
+    if (!canEdit) return NextResponse.json({ error: "You cannot replace this document's data now" }, { status: 403 })
+    const rows: any[] = Array.isArray(body.rows) ? body.rows : []
+    if (!rows.length) return NextResponse.json({ error: "No rows in the uploaded file" }, { status: 400 })
+    const isGW = request.bu === "GW"
+    const isEA = request.bu === "EA"
+    const { items: built, missingRates, missingDescriptions } = await buildRequestItems(rows, { isGW, isEA })
+    // Wipe the old rows + any per-item claim state, then recreate from the new file.
+    await (prisma as any).claimApproval.deleteMany({ where: { item: { requestId: id } } })
+    await (prisma as any).claimForward.deleteMany({ where: { requestId: id } })
+    await (prisma as any).hawbGroup.deleteMany({ where: { requestId: id } })
+    await prisma.airRequestItem.deleteMany({ where: { requestId: id } })
+    await prisma.airRequestItem.createMany({ data: built.map((b: any) => ({ ...b, requestId: id })) })
+    await prisma.airRequest.update({
+      where: { id },
+      data: {
+        brandName: String(built[0]?.brand || request.brandName || ""),
+        pendingRate: missingRates.length > 0,
+        pendingWeight: missingDescriptions.length > 0,
+      },
+    })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "REPLACE_ITEMS", fromStatus: request.status, toStatus: request.status, comment: `Re-uploaded file → replaced with ${built.length} SO(s)` },
     }).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
