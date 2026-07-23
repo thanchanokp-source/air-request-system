@@ -451,9 +451,9 @@ function LogisticsCostBar({ rows }: { rows:any[] }) {
             <thead className="sticky top-0 bg-white z-10">
               <tr className="border-b border-gray-200">
                 <th className="text-left py-1.5 px-2 text-gray-500 font-semibold text-[11px] w-1/2 bg-white">BRAND</th>
-                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">COST/PCS (THB)</th>
-                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">TOTAL (THB)</th>
                 <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">QTY</th>
+                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">TOTAL (THB)</th>
+                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">COST/PCS (THB)</th>
               </tr>
             </thead>
             <tbody>
@@ -467,9 +467,9 @@ function LogisticsCostBar({ rows }: { rows:any[] }) {
                         <span className="font-medium text-gray-800 truncate">{d.name}</span>
                       </div>
                     </td>
-                    <td className="py-2 px-2 text-right font-bold" style={{color:"#a04020"}}>{fmtNum(d.costPerUnit,2)}</td>
-                    <td className="py-2 px-2 text-right text-gray-600">{fmtNum(d.totalCost)}</td>
                     <td className="py-2 px-2 text-right text-gray-500">{fmtNum(d.totalQty)}</td>
+                    <td className="py-2 px-2 text-right text-gray-600">{fmtNum(d.totalCost)}</td>
+                    <td className="py-2 px-2 text-right font-bold" style={{color:"#a04020"}}>{fmtNum(d.costPerUnit,2)}</td>
                   </tr>
                 )
               })}
