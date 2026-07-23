@@ -384,7 +384,7 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
                             <div key={r.reason}>
                               <div className="flex justify-between gap-2 text-[12px] mb-1">
                                 <span className="text-gray-500 truncate" title={r.reason}>{r.reason}</span>
-                                <span className="text-gray-400 shrink-0 tabular-nums"><b className="text-gray-700">{fmtNum(r.qty)}</b> · {d.qty>0?(r.qty/d.qty*100).toFixed(0):0}%</span>
+                                <span className="text-gray-400 shrink-0 tabular-nums"><b className="text-gray-700">{fmtNum(r.qty)}</b></span>
                               </div>
                               <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
                                 <div className="h-full rounded-full" style={{width:`${Math.max(3,r.qty/maxR*100)}%`, background:deptColor(d.dept), opacity:.85}}/>
