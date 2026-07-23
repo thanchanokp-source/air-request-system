@@ -1351,6 +1351,90 @@ export async function notifyBackToMerGw(requestId: string, reason: string, byNam
   } catch (e) { console.error("[notify] back-to-mer (GW) failed:", e) }
 }
 
+// Recall — MER (creator) / Admin / Jariya pulls an in-flight document back to Merchandise.
+// Alert whoever is CURRENTLY holding it (so they stop), FYI everyone who already approved,
+// and confirm to the creator. TEST docs reroute to the admin.
+export async function notifyRecall(requestId: string, byName?: string, reason?: string) {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyRecallImpl(requestId, byName, reason))
+}
+async function notifyRecallImpl(requestId: string, byName?: string, reason?: string) {
+  try {
+    const req: any = await prisma.airRequest.findUnique({
+      where: { id: requestId },
+      include: { items: true, createdBy: { select: { name: true, email: true } }, approvalLogs: { include: { user: { select: { email: true } } } } },
+    })
+    if (!req) return
+    const bu = req.bu || "NYG"
+    const holders = new Set<string>()
+    const add = (e?: string | null) => { if (e) holders.add(String(e).toLowerCase()) }
+    const addRole = async (roles: string[], scopeBu = true) => {
+      const where: any = { isActive: true, OR: [{ role: { in: roles } }, { roles: { hasSome: roles } }] }
+      if (scopeBu) where.bu = { in: [bu, "ALL"] }
+      const us = await (prisma.user as any).findMany({ where, select: { email: true } })
+      us.forEach((u: any) => add(u.email))
+    }
+    switch (req.status) {
+      case "PENDING_DVM_MER": req.assignedDvmMer ? add(req.assignedDvmMer) : await addRole(["DVM_MER"]); break
+      case "PENDING_DVM_MER_EA": req.assignedDvmMer ? add(req.assignedDvmMer) : await addRole(["DVM_MER_EA"]); break
+      case "PENDING_VP_MER": req.assignedVpMer ? add(req.assignedVpMer) : await addRole(["VP_MER"]); break
+      case "PENDING_VP_MER_EA": req.assignedVpMer ? add(req.assignedVpMer) : await addRole(["VP_MER_EA"]); break
+      case "PENDING_SCM": await addRole(["SCM_USER"]); break
+      case "PENDING_VP_SCM": req.assignedVpScm ? add(req.assignedVpScm) : await addRole(["VP_SCM"]); break
+      case "PENDING_PRESIDENT": await addRole(["PRESIDENT"]); break
+      case "PENDING_LOGISTICS": await addRole(["LOGISTICS"]); break
+      case "PENDING_VP_MER_GW": req.assignedVpMer ? add(req.assignedVpMer) : await addRole(["DPM_GW", "VP_MER_GW"]); break
+      case "PENDING_GM_GW": await addRole(["GM_GW"]); break
+      case "PENDING_PRESIDENT_GW": await addRole(["PRESIDENT_GW"]); break
+      case "PENDING_ACCOUNTING": await addRole(["ACCOUNTING", "ACCOUNTING_GW"]); break
+      case "PENDING_LOGISTICS_GW":
+      case "PENDING_CLAIM_GW": {
+        await addRole(["LOGISTICS_GW"])
+        const depts = new Set<string>(); for (const it of req.items) getSplits(it).forEach((s: any) => depts.add(s.dept))
+        for (const g of gwClaimGroups(depts, req)) await addRole([g.role], !g.role.startsWith("SCM_NYK"))
+        break
+      }
+      case "PENDING_CLAIM":
+      case "PENDING_VP_CLAIM": {
+        await addRole(["LOGISTICS"])
+        const depts = new Set<string>(); for (const it of req.items) getSplits(it).forEach((s: any) => depts.add(s.dept))
+        for (const d of depts) { const roles = [...claimEntryRoles(d), ...claimVpRoles(d)]; if (roles.length) await addRole(roles) }
+        break
+      }
+    }
+    // Forwarded claim approvers currently holding SO(s)
+    const fwds = await (prisma as any).claimForward.findMany({ where: { requestId }, select: { nextEmail: true } })
+    fwds.forEach((f: any) => add(f.nextEmail))
+
+    const creator = req.createdBy?.email ? String(req.createdBy.email).toLowerCase() : null
+    const priorApprovers = new Set<string>()
+    for (const l of (req.approvalLogs || [])) if (l.action === "APPROVE" && l.user?.email) priorApprovers.add(String(l.user.email).toLowerCase())
+    const holderList = [...holders].filter(e => e !== creator)
+    const fyiList = [...priorApprovers].filter(e => e !== creator && !holders.has(e))
+
+    const link = `${APP_URL}/requests/${requestId}`
+    const reasonBlock = reason ? `<p style="margin:8px 0 0;color:#7c2d12;font-size:13px;font-family:Arial"><b>Reason:</b> ${reason}</p>` : ""
+    const mk = (headline: string, sub: string) => `<!DOCTYPE html><html>${EMAIL_HEAD}<body style="margin:0;padding:0;background:#f1f5f9">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 0"><tr><td align="center">
+  <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden">
+    <tr><td style="background:#7c3aed;padding:18px 24px">
+      <p style="margin:0;color:#ede9fe;font-size:10px;letter-spacing:2px;font-family:Arial;text-transform:uppercase">Air Request · Recalled</p>
+      <h1 style="margin:4px 0 0;color:#fff;font-size:18px;font-family:Arial;font-weight:800">${req.documentNo}</h1>
+    </td></tr>
+    <tr><td style="padding:20px 24px">
+      <p style="margin:0;color:#334155;font-size:14px;font-family:Arial;font-weight:700">${headline}</p>
+      <p style="margin:6px 0 0;color:#64748b;font-size:13px;font-family:Arial">${sub}${byName ? ` — by ${byName}` : ""}</p>
+      ${reasonBlock}
+      <p style="margin:16px 0 0"><a href="${link}" style="background:#7c3aed;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:13px;font-family:Arial;font-weight:700">Open Document</a></p>
+    </td></tr>
+    <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group</p></td></tr>
+  </table></td></tr></table></body></html>`
+    if (holderList.length) await sendMail(holderList, `[Recalled] ${req.documentNo} — recalled, no action needed`, mk("This document was recalled.", "It has been pulled back to Merchandise — you don't need to act on it"))
+    if (fyiList.length) await sendMail(fyiList, `[Recalled · FYI] ${req.documentNo}`, mk("A document you approved was recalled.", "It has been pulled back to Merchandise and will restart approval"))
+    if (creator) await sendMail([creator], `[Recalled] ${req.documentNo} — returned to you`, mk("Your document was recalled.", "Edit it and press Re-submit to send it back for approval"))
+  } catch (e) { console.error("[notify] recall failed:", e) }
+}
+
 // Topic 6 — Logistics rejected an SO and bounced it back before the claim split. FYI-alert every
 // person who already approved this document (distinct approvers from the approval log) + the creator.
 export async function notifyLgRejectFyi(requestId: string, so: string, reason: string, byName?: string) {

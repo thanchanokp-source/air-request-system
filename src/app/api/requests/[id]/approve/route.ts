@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
-import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi } from "@/lib/notify"
+import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi, notifyRecall } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 import { recomputeRequestFreight } from "@/lib/freight"
@@ -120,6 +120,51 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } }
     }
   })
+
+  // RECALL — MER (own doc only) / Admin / Jariya pulls an in-flight document back to
+  // Merchandise to edit + resubmit. Allowed at any stage before it is finished.
+  if (action === "recall") {
+    const email = String((session.user as any).email || "").toLowerCase()
+    const isRecaller = userRole === "ADMIN" || request.createdById === userId || email === "jariya.t@nanyangtextile.com"
+    if (!isRecaller) return NextResponse.json({ error: "You are not allowed to recall this document" }, { status: 403 })
+    if (["COMPLETED", "REJECTED", "PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(request.status)) {
+      return NextResponse.json({ error: `Cannot recall a document at status ${request.status}` }, { status: 400 })
+    }
+    // Alert the CURRENT holder(s) + FYI prior approvers + confirm to creator — BEFORE the
+    // status changes, so the resolver still sees who currently holds it.
+    await notifyRecall(id, (session.user as any).name || email || undefined, comment || undefined).catch(() => {})
+    const backStatus = request.bu === "GW" ? "PENDING_MER_GW" : "PENDING_MER"
+    // Clear the in-flight state so the resubmitted flow starts clean.
+    await (prisma as any).claimForward.deleteMany({ where: { requestId: id } })
+    await (prisma as any).approvalSignature.deleteMany({ where: { requestId: id } })
+    await (prisma as any).claimApproval.deleteMany({ where: { item: { requestId: id } } })
+    await (prisma as any).hawbGroup.deleteMany({ where: { requestId: id } })
+    for (const it of request.items as any[]) {
+      const splits = Array.isArray(it.claimDepts)
+        ? (it.claimDepts as any[]).map((s: any) => ({ dept: s.dept, pct: s.pct, reason: s.reason ?? null }))
+        : it.claimDepts
+      await prisma.airRequestItem.update({
+        where: { id: it.id },
+        data: {
+          itemStatus: it.itemStatus === "REJECTED" ? "REJECTED" : "PENDING",
+          actualAirFreight: null, invoiceNo: null, hawbNo: null, bookingDate: null, qtyActualShip: null, hawbGroupId: null,
+          claimDepts: splits as any,
+        },
+      })
+    }
+    await prisma.airRequest.update({
+      where: { id },
+      data: {
+        status: backStatus, logisticsSent: false, crNo: null,
+        claimNextEmail: null, claimNextToken: null, claimNextName: null,
+        rejectionReason: comment ? `Recalled: ${comment}` : null,
+      },
+    })
+    await prisma.approvalLog.create({
+      data: { requestId: id, userId, action: "RECALL", fromStatus: request.status, toStatus: backStatus, comment: `Recalled${comment ? `: ${comment}` : ""}` },
+    })
+    return NextResponse.json(await getUpdated())
+  }
 
   // LG saves logistics data as draft at PENDING_SCM (parallel with SCM — no status change)
   if (action === "save_logistics_draft" && userRole === "LOGISTICS") {
