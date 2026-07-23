@@ -773,7 +773,6 @@ export default function DashboardPage() {
         "STYLE":          row.style,
         "SUB":            row.sub ?? "",
         "DESCRIPTION":    row.description ?? "",
-        "GMT TYPE":       row.gmtType ?? "",
         "CUSTOMER PO":    row.customerPO ?? "",
         "BRAND":          soBrand(row),
         "BU":             row.request.buName,
@@ -975,12 +974,12 @@ export default function DashboardPage() {
         <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
-              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","SUB","DESCRIPTION","GMT TYPE","CUSTOMER PO","BRAND","BU","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
+              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
                 <th key={h} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && <tr><td colSpan={24} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+              {loading && <tr><td colSpan={23} className="text-center py-10 text-gray-400">Loading...</td></tr>}
               {!loading && filtered.map((row,i)=>{
                 const ar = row.qtyOriginalShipment>0 ? row.qtyRequestAir/row.qtyOriginalShipment*100 : 0
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
@@ -991,7 +990,6 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5">{row.style}</td>
                     <td className="px-3 py-1.5">{row.sub || "-"}</td>
                     <td className="px-3 py-1.5 max-w-[200px]"><span className="truncate block" title={row.description || ""}>{row.description || "-"}</span></td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">{row.gmtType || "-"}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.customerPO || "-"}</td>
                     <td className="px-3 py-1.5">{soBrand(row)}</td>
                     <td className="px-3 py-1.5">{row.request.buName}</td>
@@ -1019,7 +1017,7 @@ export default function DashboardPage() {
                   </tr>
                 )
               })}
-              {!loading&&filtered.length===0&&<tr><td colSpan={24} className="text-center py-10 text-gray-400">No data</td></tr>}
+              {!loading&&filtered.length===0&&<tr><td colSpan={23} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
           </table>
         </div>
