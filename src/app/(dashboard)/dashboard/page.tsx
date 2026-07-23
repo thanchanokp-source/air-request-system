@@ -289,14 +289,6 @@ function DelayBar({ data: topData, rows, groupFn, height=200 }: {
   )
 }
 
-const gradRed = (n: number) => Array.from({length: n}, (_,i) => {
-  const t = n <= 1 ? 0 : i / (n - 1)
-  const r = Math.round(184 + (252-184)*t)
-  const g = Math.round(48  + (228-48)*t)
-  const b = Math.round(48  + (228-48)*t)
-  return `rgb(${r},${g},${b})`
-})
-
 const gradRange = (n: number, dark: string, light: string) => {
   const px = (h: string) => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)] as [number,number,number]
   const [dr,dg,db]=px(dark), [lr,lg,lb]=px(light)
@@ -321,6 +313,18 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
     rows.forEach(r=>rowReasonEntries(r).forEach(e=>{ if((e.dept||"-")!==drillDept) return; const k=(e.reason||"No Reason").trim(); if(!m[k])m[k]={cost:0,qty:0}; m[k].cost+=e.cost; m[k].qty+=e.qty }))
     return Object.entries(m).map(([name,v])=>({name,cost:Math.round(v.cost),qty:Math.round(v.qty)})).sort((a,b)=>mode==='cost'?b.cost-a.cost:b.qty-a.qty)
   },[rows,mode,drillDept])
+  // "Reason" mode: claim department first, then the reasons that make up each dept.
+  const deptGroups = useMemo(()=>{
+    const m:Record<string,{qty:number;reasons:Record<string,number>}>={}
+    rows.forEach(r=>rowReasonEntries(r).forEach(e=>{
+      const d=e.dept||"-"; if(!m[d])m[d]={qty:0,reasons:{}}; m[d].qty+=e.qty
+      const rk=(e.reason||"No Reason").trim(); m[d].reasons[rk]=(m[d].reasons[rk]||0)+e.qty
+    }))
+    return Object.entries(m).map(([dept,v])=>({
+      dept, qty:Math.round(v.qty),
+      reasons:Object.entries(v.reasons).map(([reason,q])=>({reason,qty:Math.round(q)})).sort((a,b)=>b.qty-a.qty),
+    })).sort((a,b)=>b.qty-a.qty)
+  },[rows])
   const data = useMemo(()=>{
     const m:Record<string,{count:number;cost:number;qty:number;dept:string}>={}
     rows.forEach(r=>{ rowReasonEntries(r).forEach(e=>{ const k=(e.reason||"No Reason").trim(); if(!m[k])m[k]={count:0,cost:0,qty:0,dept:e.dept}; m[k].count++; m[k].cost+=e.cost; m[k].qty+=e.qty }) })
@@ -328,8 +332,6 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
       // "Reason" mode now ranks by pieces (qty); cost mode by cost.
       .sort((a,b)=>mode==='cost'?b.cost-a.cost:b.qty-a.qty)
   },[rows,mode])
-  // "Reason" mode shows QTY (pieces), not the SO/line count.
-  const total = data.reduce((s,d)=>s+(mode==='cost'?d.cost:d.qty),0)
   const MODES:[string,string,string][] = [['count','Reason','#e07878'],['cost','Actual Cost','#d96060'],['qty','Actual QTY','#f0907a']]
   return (
     <div className="bg-white rounded-xl border p-3">
@@ -346,31 +348,49 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
       {data.length===0?<div className="flex items-center justify-center text-xs text-gray-300" style={{height}}>No data</div>
       : mode==='count'
         ? (()=>{
-            const maxQty = Math.max(1, ...data.map(d=>d.qty))
+            const totalQ = deptGroups.reduce((s,d)=>s+d.qty,0)
             return (
-              <div className="space-y-3 pt-1">
-                <div className="flex items-center justify-between text-[11px] text-gray-400 px-0.5">
-                  <span><b className="text-gray-600">{data.length}</b> reasons</span>
-                  <span><b className="text-gray-600">{fmtNum(total)}</b> pcs total</span>
+              <div className="pt-1">
+                <div className="flex items-center justify-between text-[11px] text-gray-400 mb-2">
+                  <span>share by claim department</span>
+                  <span><b className="text-gray-600">{fmtNum(totalQ)}</b> pcs total</span>
                 </div>
-                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-                  {data.map((d,i)=>{
-                    const pct = total>0 ? d.qty/total*100 : 0
-                    const barPct = Math.max(2, d.qty/maxQty*100)
+                {/* share bar — one segment per claim department */}
+                <div className="flex h-8 rounded-lg overflow-hidden gap-0.5">
+                  {deptGroups.map(d=>{ const p=totalQ>0?d.qty/totalQ*100:0; return (
+                    <div key={d.dept} title={`${d.dept}: ${fmtNum(d.qty)} (${p.toFixed(0)}%)`}
+                      className="h-full flex items-center justify-center text-white text-[11px] font-bold whitespace-nowrap overflow-hidden"
+                      style={{flex:d.qty, minWidth:22, background:deptColor(d.dept)}}>
+                      {p>=8 ? `${p.toFixed(0)}%` : ""}
+                    </div>
+                  )})}
+                </div>
+                {/* per-department breakdown into reasons */}
+                <div className="flex flex-col gap-3.5 mt-4 max-h-[260px] overflow-y-auto pr-1">
+                  {deptGroups.map(d=>{
+                    const maxR = Math.max(1, ...d.reasons.map(r=>r.qty))
                     return (
-                      <div key={d.name}>
-                        <div className="flex items-end justify-between gap-2 mb-1">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-[13px] font-medium text-gray-700 truncate" title={d.name}>{d.name}</span>
-                            {d.dept && d.dept!=="-" && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.5 shrink-0 whitespace-nowrap uppercase tracking-wide">{d.dept}</span>}
-                          </div>
-                          <div className="flex items-baseline gap-1.5 shrink-0">
+                      <div key={d.dept}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{background:deptColor(d.dept)}}/>
+                          <span className="text-[12px] font-extrabold uppercase tracking-wide" style={{color:deptColor(d.dept)}}>{d.dept}</span>
+                          <span className="ml-auto flex items-baseline gap-2">
                             <span className="text-[13px] font-bold text-gray-800 tabular-nums">{fmtNum(d.qty)}</span>
-                            <span className="text-[11px] text-gray-400 tabular-nums w-8 text-right">{pct.toFixed(0)}%</span>
-                          </div>
+                            <span className="text-[11px] text-gray-400 tabular-nums w-9 text-right">{totalQ>0?(d.qty/totalQ*100).toFixed(0):0}%</span>
+                          </span>
                         </div>
-                        <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <div className="h-full rounded-full" style={{width:`${barPct}%`, background:gradRed(data.length)[i]}}/>
+                        <div className="flex flex-col gap-2 pl-4 border-l-2 border-gray-100 ml-1">
+                          {d.reasons.map(r=>(
+                            <div key={r.reason}>
+                              <div className="flex justify-between gap-2 text-[12px] mb-1">
+                                <span className="text-gray-500 truncate" title={r.reason}>{r.reason}</span>
+                                <span className="text-gray-400 shrink-0 tabular-nums"><b className="text-gray-700">{fmtNum(r.qty)}</b> · {d.qty>0?(r.qty/d.qty*100).toFixed(0):0}%</span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                <div className="h-full rounded-full" style={{width:`${Math.max(3,r.qty/maxR*100)}%`, background:deptColor(d.dept), opacity:.85}}/>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )
