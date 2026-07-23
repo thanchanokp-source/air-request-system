@@ -129,17 +129,21 @@ function pendingWhoFor(depts: { dept: string; done: boolean }[], claimForwards: 
   })
 }
 
-function WaitingLine({ items }: { items: string[] }) {
+function WaitingLine({ items, days }: { items: string[]; days?: number | null }) {
   if (!items.length) return null
   return (
     <div className="mt-1 text-[10px] text-amber-700 flex items-center gap-1 flex-wrap">
       <span>⏳ Waiting:</span>
       {items.map((w, i) => <span key={i} className="bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">{w}</span>)}
+      {days != null && <span className={`font-semibold ${days >= 7 ? "text-red-600" : days >= 3 ? "text-amber-600" : "text-gray-400"}`}>· รอ {days} วัน</span>}
     </div>
   )
 }
 
 export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, approvers, req }: { status: string; bu: string; items?: any[]; soItem?: any; sm?: boolean; claimForwards?: any[]; approvers?: any[]; req?: any }) {
+  // Days the doc has sat in its current stage (updatedAt bumps on each stage change).
+  const _ws = req?.updatedAt || req?.createdAt
+  const waitDays = _ws ? Math.max(0, Math.floor((Date.now() - new Date(_ws).getTime()) / 86400000)) : null
   const rejected = soItem ? soItem.itemStatus === "REJECTED" : status === "REJECTED"
   const completed = soItem ? soItem.itemStatus === "COMPLETED" : status === "COMPLETED"
   const claimSource: any[] = soItem ? [soItem] : (Array.isArray(items) ? items : [])
@@ -249,7 +253,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
           {rejected && <span title={rejectReason || undefined} className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium max-w-[260px] truncate inline-block align-bottom">✕ {rejectReason || "Rejected"}</span>}
           {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
         </div>
-        <WaitingLine items={pendingWho} />
+        <WaitingLine items={pendingWho} days={waitDays} />
       </div>
     )
   }
@@ -334,7 +338,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
       {rejected && <span title={rejectReason || undefined} className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium max-w-[260px] truncate inline-block align-bottom">✕ {rejectReason || "Rejected"}</span>}
       {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
     </div>
-    <WaitingLine items={gwPendingWho} />
+    <WaitingLine items={gwPendingWho} days={waitDays} />
     </div>
   )
 }

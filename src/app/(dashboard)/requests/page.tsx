@@ -425,6 +425,11 @@ export default function RequestsPage() {
                     👤 {dg.request.createdBy.name || dg.request.createdBy.email}
                   </span>
                 )}
+                {dg.request.createdAt && (
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0" title="วันที่สร้างเอกสาร">
+                    📅 {new Date(dg.request.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                  </span>
+                )}
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
                   <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
                 )}
