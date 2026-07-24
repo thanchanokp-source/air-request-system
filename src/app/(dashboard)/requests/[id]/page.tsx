@@ -723,10 +723,10 @@ export default function RequestDetailPage() {
   // At the DVM/ADVM stage, load the master list of the NEXT approver (VP MER / EA DVM) to pick from.
   useEffect(() => {
     if (!req || !role) return
-    const atDvm = (role === "DVM_MER" && req.status === "PENDING_DVM_MER") || (role === "DVM_MER_EA" && req.status === "PENDING_DVM_MER_EA")
+    const atDvm = (role === "DVM_MER" && req.status === "PENDING_DVM_MER") || (role === "DVM_MER_EA" && req.status === "PENDING_DVM_MER_EA") || (role === "DVM_MER_TRM" && req.status === "PENDING_DVM_MER_TRM")
     if (!atDvm) return
     if ((req as any).assignedVpMer) setVpPick(p => p || (req as any).assignedVpMer)
-    const nextRole = role === "DVM_MER_EA" ? "VP_MER_EA" : "VP_MER"
+    const nextRole = role === "DVM_MER_EA" ? "VP_MER_EA" : role === "DVM_MER_TRM" ? "VP_MER_TRM" : "VP_MER"
     fetch(`/api/users/by-role?role=${nextRole}`).then(r => r.json()).then(d => setVpPickList(Array.isArray(d) ? d : [])).catch(() => {})
   }, [req, role])
 
@@ -1042,6 +1042,7 @@ export default function RequestDetailPage() {
   const gwNextPosRole = (() => {
     const r = gwNextSpec?.role || null
     if (r && req?.bu === "EA" && (r === "DVM_MER" || r === "VP_MER")) return `${r}_EA`
+    if (r && req?.bu === "TRM" && (r === "DVM_MER" || r === "VP_MER")) return `${r}_TRM`
     return r
   })()
   const myClaimItems = req?.items?.filter((i: any) => {
@@ -1219,7 +1220,7 @@ export default function RequestDetailPage() {
   // Style-level Reject exists only at the NYG upload approvals (DVM MER / VP MER). GW (DPM/GM)
   // has NO hard reject — it uses a whole-document "Back to Merchandise" instead. Later stages
   // (VP SCM, President) have no Reject (use Back to SCM / approve-only).
-  const showStyleReject = ["DVM_MER", "VP_MER", "DVM_MER_EA", "VP_MER_EA"].includes(role)
+  const showStyleReject = ["DVM_MER", "VP_MER", "DVM_MER_EA", "VP_MER_EA", "DVM_MER_TRM", "VP_MER_TRM"].includes(role)
   // President approves only — no Reject, no Back-to-SCM.
   const isPresidentStage = role === "PRESIDENT" || role === "PRESIDENT_GW"
 
@@ -1254,10 +1255,10 @@ export default function RequestDetailPage() {
   }
 
   // DVM/ADVM must pick the next approver (VP) before approving; other merch stages don't.
-  const needsVpPick = (role === "DVM_MER" && req?.status === "PENDING_DVM_MER") || (role === "DVM_MER_EA" && req?.status === "PENDING_DVM_MER_EA")
+  const needsVpPick = (role === "DVM_MER" && req?.status === "PENDING_DVM_MER") || (role === "DVM_MER_EA" && req?.status === "PENDING_DVM_MER_EA") || (role === "DVM_MER_TRM" && req?.status === "PENDING_DVM_MER_TRM")
 
   const approveStyle = async (style: string) => {
-    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "Please select the next approver (DVM – EA) first" : "Please select the next approver (VP Merchandise) first"); return }
+    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "Please select the next approver (DVM – EA) first" : role === "DVM_MER_TRM" ? "Please select the next approver (VP – TRM) first" : "Please select the next approver (VP Merchandise) first"); return }
     const sig = await askSignature(); if (!sig) return
     setSubmitting(style)
     const res = await fetch(`/api/requests/${id}/approve`, {
@@ -1272,7 +1273,7 @@ export default function RequestDetailPage() {
   const approveSelectedStyles = async () => {
     const toApprove = styleGroups.filter(g => (g.status === "PENDING" || g.status === "PASSED" || (presidentNewFlow && g.status === "VP_MER_PASSED")) && selectedStyles.has(g.style)).map(g => g.style)
     if (toApprove.length === 0) return
-    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "Please select the next approver (DVM – EA) first" : "Please select the next approver (VP Merchandise) first"); return }
+    if (needsVpPick && !vpPick) { alert(role === "DVM_MER_EA" ? "Please select the next approver (DVM – EA) first" : role === "DVM_MER_TRM" ? "Please select the next approver (VP – TRM) first" : "Please select the next approver (VP Merchandise) first"); return }
     const sig = await askSignature(); if (!sig) return
     for (const style of toApprove) {
       setSubmitting(style)
@@ -1958,7 +1959,7 @@ export default function RequestDetailPage() {
           // Admin/Jariya can recall ANY status except at-MER/draft (incl. Done/Rejected → resets the doc).
           // Creator (MER) only within the merch-review window — before VP MER / GM approves; after that
           // they must ask the current approver to reject it.
-          const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
+          const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_DVM_MER_TRM", "PENDING_VP_MER_TRM", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
           const canRecall = !!req && (
             isAdminRecaller
               ? !["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(req.status)
@@ -2134,10 +2135,10 @@ export default function RequestDetailPage() {
       {canAct && needsVpPick && (
         <div className="bg-white rounded-xl border border-blue-200 p-4 space-y-2">
           <label className="text-sm font-semibold text-blue-800">
-            Select next {role === "DVM_MER_EA" ? "DVM (EA)" : "VP Merchandise"} approver <span className="text-red-500">*</span>
+            Select next {role === "DVM_MER_EA" ? "DVM (EA)" : role === "DVM_MER_TRM" ? "VP (TRM)" : "VP Merchandise"} approver <span className="text-red-500">*</span>
           </label>
           {vpPickList.length === 0 ? (
-            <p className="text-sm text-red-500">No {role === "DVM_MER_EA" ? "VP_MER_EA" : "VP_MER"} in Master — please add one in User Management first</p>
+            <p className="text-sm text-red-500">No {role === "DVM_MER_EA" ? "VP_MER_EA" : role === "DVM_MER_TRM" ? "VP_MER_TRM" : "VP_MER"} in Master — please add one in User Management first</p>
           ) : (
             <select value={vpPick} onChange={e => setVpPick(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
@@ -3901,7 +3902,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* NYG/EA MER re-submits after SCM sent the document back */}
-      {["MER_USER", "MER_EA"].includes(role) && !isGWRequest && req.status === "PENDING_MER" && (
+      {["MER_USER", "MER_EA", "MER_TRM"].includes(role) && !isGWRequest && req.status === "PENDING_MER" && (
         <div className="bg-white rounded-xl border border-orange-200 p-4 space-y-3">
           <div>
             <h2 className="font-semibold text-orange-700">↩ Back to Merchandise — edit and resend</h2>
@@ -6680,7 +6681,7 @@ export default function RequestDetailPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="text-sm font-semibold text-gray-700">LOGISTICS UPLOAD</label>
-                <a href={`/api/template?bu=${req?.bu === "GW" ? "GW" : req?.bu === "EA" ? "EA" : "NYG"}`} download className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">⬇ Download Template</a>
+                <a href={`/api/template?bu=${req?.bu === "GW" ? "GW" : req?.bu === "EA" ? "EA" : req?.bu === "TRM" ? "TRM" : "NYG"}`} download className="text-xs bg-green-50 border border-green-200 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">⬇ Download Template</a>
               </div>
               <div className="border-2 border-dashed border-blue-200 rounded-xl p-4 bg-blue-50 text-center space-y-2">
                 <p className="text-xs text-blue-600">Upload the Excel with Invoice No / QTY Actual / Actual Air Freight / Booking Date filled in</p>
@@ -6852,8 +6853,8 @@ export default function RequestDetailPage() {
       {/* Attachments */}
       {(() => {
         const allAttachments: any[] = req.attachments || []
-        const canAttach = role === "MER_USER" || role === "SCM_USER" || role === "MER_EA"
-        const canDelete = role === "MER_USER" || role === "MER_GW" || role === "MER_EA"
+        const canAttach = role === "MER_USER" || role === "SCM_USER" || role === "MER_EA" || role === "MER_TRM"
+        const canDelete = role === "MER_USER" || role === "MER_GW" || role === "MER_EA" || role === "MER_TRM"
         const isUploadingReq = uploadingItem === "_req"
         // LG file categories → grouped as a "LOGISTICS FILES" folder, split by type.
         const LG_CATS: Record<string, { label: string; icon: string }> = {

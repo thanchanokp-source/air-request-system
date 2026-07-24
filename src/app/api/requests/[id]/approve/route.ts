@@ -132,7 +132,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const isRecaller = isAdminRecaller || request.createdById === userId
     if (!isRecaller) return NextResponse.json({ error: "You are not allowed to recall this document" }, { status: 403 })
     // Statuses the CREATOR may still recall from — the merch-review window before VP MER / GM approves.
-    const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
+    const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_DVM_MER_TRM", "PENDING_VP_MER_TRM", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
     if (isAdminRecaller) {
       // At-MER / draft = nothing to pull back; everything else (incl. COMPLETED / REJECTED) is fine.
       if (["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(request.status)) {
@@ -184,7 +184,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (action === "edit_items") {
     const email = String((session.user as any).email || "").toLowerCase()
     const isAdmin = userRole === "ADMIN" || email === "jariya.t@nanyangtextile.com"
-    const isMerRole = ["MER_USER", "MER_EA", "MER_GW"].includes(userRole)
+    const isMerRole = ["MER_USER", "MER_EA", "MER_GW", "MER_TRM"].includes(userRole)
     const canEdit = ["PENDING_MER", "PENDING_MER_GW"].includes(request.status)
       && (isAdmin || isMerRole || request.createdById === userId)
     if (!canEdit) return NextResponse.json({ error: "You cannot edit this document now" }, { status: 403 })
@@ -246,7 +246,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (action === "replace_items") {
     const email = String((session.user as any).email || "").toLowerCase()
     const isAdmin = userRole === "ADMIN" || email === "jariya.t@nanyangtextile.com"
-    const isMerRole = ["MER_USER", "MER_EA", "MER_GW"].includes(userRole)
+    const isMerRole = ["MER_USER", "MER_EA", "MER_GW", "MER_TRM"].includes(userRole)
     const canEdit = ["PENDING_MER", "PENDING_MER_GW"].includes(request.status)
       && (isAdmin || isMerRole || request.createdById === userId)
     if (!canEdit) return NextResponse.json({ error: "You cannot replace this document's data now" }, { status: 403 })
@@ -545,8 +545,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // NYG/EA MER re-submits after a "Back to Merchandise" → restart approval from the first merch approver.
-  if (action === "resubmit_mer_nyg" && ["MER_USER", "MER_EA"].includes(userRole) && request.status === "PENDING_MER") {
-    const firstStatus = request.bu === "EA" ? "PENDING_DVM_MER_EA" : "PENDING_DVM_MER"
+  if (action === "resubmit_mer_nyg" && ["MER_USER", "MER_EA", "MER_TRM"].includes(userRole) && request.status === "PENDING_MER") {
+    const firstStatus = request.bu === "EA" ? "PENDING_DVM_MER_EA" : request.bu === "TRM" ? "PENDING_DVM_MER_TRM" : "PENDING_DVM_MER"
     await prisma.airRequestItem.updateMany({
       where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
       data: { itemStatus: "PENDING" },
@@ -578,17 +578,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // reject → REJECTED. When every style is processed, hand the whole doc to VP MER.
   // ADVM step — NYG (PENDING_DVM_MER) and EA (PENDING_DVM_MER_EA) share the same logic; EA
   // just advances to its own VP step. (EA = NYG flow, only the top-3 approvers differ.)
-  if ((request.status === "PENDING_DVM_MER" || request.status === "PENDING_DVM_MER_EA") && (action === "approve_style" || action === "reject_style")) {
+  if ((request.status === "PENDING_DVM_MER" || request.status === "PENDING_DVM_MER_EA" || request.status === "PENDING_DVM_MER_TRM") && (action === "approve_style" || action === "reject_style")) {
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
     if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })
     const dvmStatus = request.status
-    const nextVpStatus = dvmStatus === "PENDING_DVM_MER_EA" ? "PENDING_VP_MER_EA" : "PENDING_VP_MER"
+    const nextVpStatus = dvmStatus === "PENDING_DVM_MER_EA" ? "PENDING_VP_MER_EA" : dvmStatus === "PENDING_DVM_MER_TRM" ? "PENDING_VP_MER_TRM" : "PENDING_VP_MER"
 
     // The DVM/ADVM must pick the NEXT approver (VP MER / EA DVM) from master before approving.
     // Selection is per-document (assignedVpMer); the picked VP is the only one notified next.
     if (action === "approve_style") {
       const vpEmail = assignedVp || (request as any).assignedVpMer
-      if (!vpEmail) return NextResponse.json({ error: dvmStatus === "PENDING_DVM_MER_EA" ? "Please select the next approver, DVM (EA), before approving" : "Please select VP Merchandise (the next approver) before approving" }, { status: 400 })
+      if (!vpEmail) return NextResponse.json({ error: dvmStatus === "PENDING_DVM_MER_EA" ? "Please select the next approver, DVM (EA), before approving" : dvmStatus === "PENDING_DVM_MER_TRM" ? "Please select the next approver, VP (TRM), before approving" : "Please select VP Merchandise (the next approver) before approving" }, { status: 400 })
       if (assignedVp && assignedVp !== (request as any).assignedVpMer) {
         await prisma.airRequest.update({ where: { id }, data: { assignedVpMer: assignedVp } })
       }
@@ -637,7 +637,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // DVM (2nd merch) step — NYG (PENDING_VP_MER) and EA (PENDING_VP_MER_EA). Both approve →
   // PENDING_SCM (EA merges into the shared NYG SCM/Claim/President pipeline from here on).
-  if ((request.status === "PENDING_VP_MER" || request.status === "PENDING_VP_MER_EA") && (action === "approve_style" || action === "reject_style")) {
+  if ((request.status === "PENDING_VP_MER" || request.status === "PENDING_VP_MER_EA" || request.status === "PENDING_VP_MER_TRM") && (action === "approve_style" || action === "reject_style")) {
     const vpMerStatus = request.status
     if (!style) return NextResponse.json({ error: "Style required" }, { status: 400 })
     if (action === "reject_style" && !comment) return NextResponse.json({ error: "Please provide a reason before rejecting" }, { status: 400 })

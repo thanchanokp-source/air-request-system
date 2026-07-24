@@ -9,7 +9,7 @@ import { sendVerificationEmail } from "@/lib/notify"
 // MER_GW (not MER_USER, which is NYG). Getting this wrong makes a GW user register as NYG.
 function resolveRole(position: string, bu: string): string | null {
   if (position === "ACCOUNTING") return "ACCOUNTING" // cross-BU (both NYG & GW)
-  if (position === "MER") return bu === "GW" ? "MER_GW" : bu === "EA" ? "MER_EA" : "MER_USER"
+  if (position === "MER") return bu === "GW" ? "MER_GW" : bu === "EA" ? "MER_EA" : bu === "TRM" ? "MER_TRM" : "MER_USER"
   if (position === "VISITOR") return "VISITOR" // read-only viewer (all BU, no actions)
   return null
 }
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A company email is required (@nanyangtextile.com)" }, { status: 400 })
   }
 
-  if (bu !== "NYG" && bu !== "GW" && bu !== "EA") {
+  if (bu !== "NYG" && bu !== "GW" && bu !== "EA" && bu !== "TRM") {
     return NextResponse.json({ error: "Invalid BU" }, { status: 400 })
   }
   const role = resolveRole(position, bu)

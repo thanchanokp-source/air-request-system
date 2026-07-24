@@ -5,6 +5,9 @@ export const STATUS_LABELS: Record<string, string> = {
   // EA — same flow as NYG, only the top-3 approvers differ (merges into SCM after these 2 steps)
   PENDING_DVM_MER_EA: "Pending ADVM (EA)",
   PENDING_VP_MER_EA: "Pending DVM (EA)",
+  // TRM — same flow as NYG, only the top-3 approvers differ (merges into SCM after these 2 steps)
+  PENDING_DVM_MER_TRM: "Pending DVM (TRM)",
+  PENDING_VP_MER_TRM: "Pending VP (TRM)",
   PENDING_SCM: "Pending SCM",
   PENDING_VP_SCM: "Pending VP SCM",
   PENDING_PRESIDENT: "Pending President",
@@ -33,6 +36,8 @@ export const STATUS_COLORS: Record<string, string> = {
   PENDING_VP_MER: "bg-yellow-100 text-yellow-700",
   PENDING_DVM_MER_EA: "bg-lime-100 text-lime-700",
   PENDING_VP_MER_EA: "bg-yellow-100 text-yellow-700",
+  PENDING_DVM_MER_TRM: "bg-lime-100 text-lime-700",
+  PENDING_VP_MER_TRM: "bg-yellow-100 text-yellow-700",
   PENDING_SCM: "bg-orange-100 text-orange-700",
   PENDING_VP_SCM: "bg-amber-100 text-amber-700",
   PENDING_PRESIDENT: "bg-purple-100 text-purple-700",
@@ -61,6 +66,9 @@ export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> =
   // EA merch steps → merge into the shared NYG SCM pipeline
   PENDING_DVM_MER_EA: { approve: "PENDING_VP_MER_EA", reject: "REJECTED" },
   PENDING_VP_MER_EA: { approve: "PENDING_SCM", reject: "REJECTED" },
+  // TRM merch steps → merge into the shared NYG SCM pipeline
+  PENDING_DVM_MER_TRM: { approve: "PENDING_VP_MER_TRM", reject: "REJECTED" },
+  PENDING_VP_MER_TRM: { approve: "PENDING_SCM", reject: "REJECTED" },
   PENDING_SCM: { approve: "PENDING_VP_SCM" },
   PENDING_MER: { approve: "PENDING_DVM_MER" }, // NYG MER re-submits after SCM sent it back → restart approvals
 
@@ -81,7 +89,7 @@ export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> =
   PENDING_ACCOUNTING: { approve: "COMPLETED", reject: "REJECTED" },
 }
 
-export const STYLE_APPROVER_STATUSES = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_VP_SCM", "PENDING_PRESIDENT"]
+export const STYLE_APPROVER_STATUSES = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_DVM_MER_TRM", "PENDING_VP_MER_TRM", "PENDING_VP_SCM", "PENDING_PRESIDENT"]
 
 export const CLAIM_VP_ROLES = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
 
@@ -100,6 +108,9 @@ export const ROLE_ACTIONS: Record<string, string[]> = {
   // EA — top-3 approvers (ADVM / DVM); MER_EA uploads, rest of the flow is shared with NYG
   DVM_MER_EA: ["PENDING_DVM_MER_EA"],
   VP_MER_EA: ["PENDING_VP_MER_EA"],
+  // TRM — top-3 approvers (DVM / VP); MER_TRM uploads, rest of the flow is shared with NYG
+  DVM_MER_TRM: ["PENDING_DVM_MER_TRM"],
+  VP_MER_TRM: ["PENDING_VP_MER_TRM"],
   SCM_USER: ["PENDING_SCM", "PENDING_VP_MER"],
   VP_SCM: ["PENDING_SCM", "PENDING_VP_SCM"],
   PRESIDENT: ["PENDING_SCM", "PENDING_PRESIDENT"],

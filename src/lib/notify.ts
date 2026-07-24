@@ -53,6 +53,8 @@ const STATUS_SUBJECT: Record<string, string> = {
   PENDING_VP_CLAIM:    "[VP Claim] Pending Approval",
   PENDING_DVM_MER_EA:  "[ADVM – EA] Pending Approval",
   PENDING_VP_MER_EA:   "[DVM – EA] Pending Approval",
+  PENDING_DVM_MER_TRM: "[DVM – TRM] Pending Approval",
+  PENDING_VP_MER_TRM:  "[VP – TRM] Pending Approval",
   PENDING_VP_NYK:      "[VP NYK] Pending Approval",
   // GW
   PENDING_VP_MER_GW:   "[DPM – GW] Pending Approval",
@@ -72,6 +74,8 @@ const STATUS_ROLES: Record<string, string[]> = {
   PENDING_VP_MER:       ["VP_MER"],
   PENDING_DVM_MER_EA:   ["DVM_MER_EA"],
   PENDING_VP_MER_EA:    ["VP_MER_EA"],
+  PENDING_DVM_MER_TRM:  ["DVM_MER_TRM"],
+  PENDING_VP_MER_TRM:   ["VP_MER_TRM"],
   PENDING_SCM:          ["SCM_USER"],
   PENDING_VP_SCM:       ["VP_SCM"],
   PENDING_PRESIDENT:    ["PRESIDENT"],
@@ -135,6 +139,7 @@ function buildHtml(req: any, newStatus: string, link: string, approveUrl?: strin
     PENDING_DVM_MER:"Pending DVM Merchandise",
     // EA merch stages (backend roles DVM_MER_EA/VP_MER_EA; shown as ADVM → DVM)
     PENDING_DVM_MER_EA:"Pending ADVM (EA)", PENDING_VP_MER_EA:"Pending DVM (EA)",
+    PENDING_DVM_MER_TRM:"Pending DVM (TRM)", PENDING_VP_MER_TRM:"Pending VP (TRM)",
     PENDING_VP_MER:"Pending VP Merchandise", PENDING_SCM:"Pending SCM", PENDING_VP_SCM:"Pending VP SCM",
     PENDING_PRESIDENT:"Pending President", PENDING_LOGISTICS:"Pending Logistics",
     PENDING_CLAIM:"Pending Claim (DVM)", PENDING_VP_CLAIM:"Pending VP Claim",
@@ -921,6 +926,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
     const MERCH_ROLE: Record<string, string> = {
       PENDING_DVM_MER: "DVM_MER", PENDING_VP_MER: "VP_MER",
       PENDING_DVM_MER_EA: "DVM_MER_EA", PENDING_VP_MER_EA: "VP_MER_EA",
+      PENDING_DVM_MER_TRM: "DVM_MER_TRM", PENDING_VP_MER_TRM: "VP_MER_TRM",
     }
     if (MERCH_ROLE[newStatus]) {
       const mrole = MERCH_ROLE[newStatus]
@@ -929,8 +935,8 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const subject = STATUS_SUBJECT[newStatus] || "Air Request Update"
       // EA: MER picked ADVM (assignedDvmMer, step 1), ADVM picked DVM (assignedVpMer, step 2) →
       // notify only that chosen person. Fallback (no pick) → all holders of the stage role.
-      const assignedEmail = newStatus === "PENDING_DVM_MER_EA" ? (req as any).assignedDvmMer
-        : newStatus === "PENDING_VP_MER_EA" ? (req as any).assignedVpMer : null
+      const assignedEmail = (newStatus === "PENDING_DVM_MER_EA" || newStatus === "PENDING_DVM_MER_TRM") ? (req as any).assignedDvmMer
+        : (newStatus === "PENDING_VP_MER_EA" || newStatus === "PENDING_VP_MER_TRM") ? (req as any).assignedVpMer : null
       const mUsers = assignedEmail
         ? [{ email: assignedEmail }]
         : await (prisma.user as any).findMany({
@@ -1376,8 +1382,10 @@ async function notifyRecallImpl(requestId: string, byName?: string, reason?: str
     switch (req.status) {
       case "PENDING_DVM_MER": req.assignedDvmMer ? add(req.assignedDvmMer) : await addRole(["DVM_MER"]); break
       case "PENDING_DVM_MER_EA": req.assignedDvmMer ? add(req.assignedDvmMer) : await addRole(["DVM_MER_EA"]); break
+      case "PENDING_DVM_MER_TRM": req.assignedDvmMer ? add(req.assignedDvmMer) : await addRole(["DVM_MER_TRM"]); break
       case "PENDING_VP_MER": req.assignedVpMer ? add(req.assignedVpMer) : await addRole(["VP_MER"]); break
       case "PENDING_VP_MER_EA": req.assignedVpMer ? add(req.assignedVpMer) : await addRole(["VP_MER_EA"]); break
+      case "PENDING_VP_MER_TRM": req.assignedVpMer ? add(req.assignedVpMer) : await addRole(["VP_MER_TRM"]); break
       case "PENDING_SCM": await addRole(["SCM_USER"]); break
       case "PENDING_VP_SCM": req.assignedVpScm ? add(req.assignedVpScm) : await addRole(["VP_SCM"]); break
       case "PENDING_PRESIDENT": await addRole(["PRESIDENT"]); break

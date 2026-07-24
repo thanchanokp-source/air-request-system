@@ -43,6 +43,18 @@ const ROLES_BY_BU: Record<string, { role: string; label: string }[]> = {
     { role: "PRESIDENT", label: "President (shared)" },
     { role: "ACCOUNTING", label: "Accounting (shared)" },
   ],
+  TRM: [
+    { role: "MER_TRM", label: "Merchandise (TRM)" },
+    { role: "DVM_MER_TRM", label: "DVM (TRM)" },
+    { role: "VP_MER_TRM", label: "VP (TRM)" },
+    // From SCM onward TRM shares the NYG people
+    { role: "SCM_USER", label: "SCM User (shared)" },
+    { role: "VP_SCM", label: "VP SCM (shared)" },
+    { role: "CLAIM_PROCUREMENT", label: "Claim – Procurement (shared)" },
+    { role: "LOGISTICS", label: "Logistics (shared)" },
+    { role: "PRESIDENT", label: "President (shared)" },
+    { role: "ACCOUNTING", label: "Accounting (shared)" },
+  ],
 }
 
 export default function ImpersonateBar({ isAdmin, isImpersonating, actingLabel }: {
@@ -80,6 +92,7 @@ export default function ImpersonateBar({ isAdmin, isImpersonating, actingLabel }
             <option value="NYG">BU: NYG</option>
             <option value="GW">BU: GW</option>
             <option value="EA">BU: EA</option>
+            <option value="TRM">BU: TRM</option>
           </select>
           <select value={role} onChange={e => setRole(e.target.value)}
             className="text-gray-800 rounded-md px-2 py-1 text-xs min-w-[220px]">

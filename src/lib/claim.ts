@@ -117,8 +117,8 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
   if (role === "CLAIM_GW") return claimDept === "SUPPLIER" ? "SUPPLIER" : "GW"
   if (role === "SCM_NYG") return "SCM NYG"
   if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return "SCM NYK"
-  // Commercial claim = MER's team (NYG DVM/VP MER, EA ADVM/DVM = *_MER_EA) → dept COMMERCIAL.
-  if (role === "DVM_MER" || role === "VP_MER" || role === "DVM_MER_EA" || role === "VP_MER_EA") return "COMMERCIAL"
+  // Commercial claim = MER's team (NYG DVM/VP MER, EA *_MER_EA, TRM *_MER_TRM) → dept COMMERCIAL.
+  if (role === "DVM_MER" || role === "VP_MER" || role === "DVM_MER_EA" || role === "VP_MER_EA" || role === "DVM_MER_TRM" || role === "VP_MER_TRM") return "COMMERCIAL"
   if (role.startsWith("DVM_")) return role.replace("DVM_", "")
   if (role.startsWith("CLAIM_") && role !== "CLAIM_NEXT_APPROVER") return role.replace("CLAIM_", "")
   return null
@@ -129,7 +129,7 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
 // the factory G-group, PROCUREMENT needs procurementType=PURCHASING (handled by caller).
 export function claimEntryDisplayRoles(dept: string): string[] {
   switch (dept) {
-    case "COMMERCIAL": return ["DVM_MER", "DVM_MER_EA"]
+    case "COMMERCIAL": return ["DVM_MER", "DVM_MER_EA", "DVM_MER_TRM"]
     case "PRODUCTION": return ["CLAIM_PRODUCTION"]
     case "PROCUREMENT": return ["CLAIM_PROCUREMENT"]
     case "NYK":
@@ -233,7 +233,7 @@ export const PROCUREMENT_BRANCHES = ["Purchasing", "Sourcing"]
 export const CLAIM_DEPT_ROLE_MAP: Record<string, { entry: string[]; vp: string[] }> = {
   // NYG merch = DVM_MER/VP_MER; EA merch = DVM_MER_EA/VP_MER_EA. Both listed so the acting-role
   // resolver recognises either — the SPECIFIC person is still scoped by assignedDvmMer/assignedVpMer.
-  COMMERCIAL: { entry: ["DVM_MER", "DVM_MER_EA"], vp: ["VP_MER", "VP_MER_EA"] },
+  COMMERCIAL: { entry: ["DVM_MER", "DVM_MER_EA", "DVM_MER_TRM"], vp: ["VP_MER", "VP_MER_EA", "VP_MER_TRM"] },
 }
 export function claimEntryRoles(dept: string): string[] {
   return CLAIM_DEPT_ROLE_MAP[dept]?.entry ?? [`DVM_${dept}`, `CLAIM_${dept}`]

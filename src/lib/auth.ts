@@ -38,6 +38,8 @@ export const authOptions: NextAuthOptions = {
               : st === "PENDING_VP_MER" ? "VP_MER"
               : st === "PENDING_DVM_MER_EA" ? "DVM_MER_EA"
               : st === "PENDING_VP_MER_EA" ? "VP_MER_EA"
+              : st === "PENDING_DVM_MER_TRM" ? "DVM_MER_TRM"
+              : st === "PENDING_VP_MER_TRM" ? "VP_MER_TRM"
               : isGW ? "VP_MER_GW" : "VP_MER"
             // Per-recipient (?as=email) → log in AS that specific approver (each real approver's
             // email link resolves to THEM, not the first user). Falls through otherwise.
@@ -50,8 +52,8 @@ export const authOptions: NextAuthOptions = {
             }
             // A specific approver chosen from master: DVM/ADVM (assignedDvmMer, picked by MER) or
             // VP/EA-DVM/GW-DPM (assignedVpMer, picked by the 1st approver).
-            const assignedEmail = (stageRole === "DVM_MER" || stageRole === "DVM_MER_EA") ? airReq.assignedDvmMer : airReq.assignedVpMer
-            if (assignedEmail && ["VP_MER", "VP_MER_GW", "VP_MER_EA", "DVM_MER", "DVM_MER_EA"].includes(stageRole)) {
+            const assignedEmail = (stageRole === "DVM_MER" || stageRole === "DVM_MER_EA" || stageRole === "DVM_MER_TRM") ? airReq.assignedDvmMer : airReq.assignedVpMer
+            if (assignedEmail && ["VP_MER", "VP_MER_GW", "VP_MER_EA", "DVM_MER", "DVM_MER_EA", "DVM_MER_TRM", "VP_MER_TRM"].includes(stageRole)) {
               const user = await (prisma.user as any).findUnique({ where: { email: assignedEmail } })
               if (user) return { id: user.id, email: user.email, name: user.name, role: stageRole, bu: buFor, claimDepartment: null, priority: null }
               return { id: `vp_mer_guest_${token}`, email: assignedEmail, name: assignedEmail, role: stageRole, bu: buFor, claimDepartment: null, priority: null }

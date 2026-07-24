@@ -12,10 +12,11 @@ export default function NewRequestPage() {
   // Admin can upload a TEST document for any BU (emails reroute to the admin, hidden from users).
   const [testMode, setTestMode] = useState(false)
   const [historical, setHistorical] = useState(false) // admin: import old doc as COMPLETED (no approval)
-  const [testBu, setTestBu] = useState<"NYG" | "GW" | "EA">("NYG")
+  const [testBu, setTestBu] = useState<"NYG" | "GW" | "EA" | "TRM">("NYG")
   const userBu = (isAdmin && (testMode || historical)) ? testBu : ((session?.user as any)?.bu || "NYG")
   const isGW = userBu === "GW"
   const isEA = userBu === "EA"
+  const isTRM = userBu === "TRM"
 
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<any[]>([])
@@ -70,6 +71,8 @@ export default function NewRequestPage() {
       ? ["DPM_GW", "VP_MER_GW"].map(r => fetch(`/api/users/by-role?role=${r}&bu=${userBu}`).then(res => res.json()).catch(() => []))
       : isEA
       ? [fetch(`/api/users/by-role?role=DVM_MER_EA`).then(res => res.json()).catch(() => [])]
+      : isTRM
+      ? [fetch(`/api/users/by-role?role=DVM_MER_TRM`).then(res => res.json()).catch(() => [])]
       : [fetch(`/api/users/by-role?role=DVM_MER`).then(res => res.json()).catch(() => [])]
     Promise.all(fetches)
       .then(results => {
@@ -82,7 +85,7 @@ export default function NewRequestPage() {
         setVpMerUsers(list)
         if (list.length === 1) setVpMerSelected({ name: list[0].name, email: list[0].email })
       })
-  }, [isGW, isEA, userBu])
+  }, [isGW, isEA, isTRM, userBu])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -107,7 +110,7 @@ export default function NewRequestPage() {
     const isHistorical = isAdmin && historical
     // Approver pick required only for the normal flow (historical import skips approval).
     if (!isHistorical && !vpMerSelected) {
-      setError(isGW ? "Please select a DPM GW before submitting" : isEA ? "Please select an ADVM (EA) before submitting" : "Please select a DVM Merchandise before submitting")
+      setError(isGW ? "Please select a DPM GW before submitting" : isEA ? "Please select an ADVM (EA) before submitting" : isTRM ? "Please select a DVM (TRM) before submitting" : "Please select a DVM Merchandise before submitting")
       return
     }
     setLoading(true)
@@ -175,6 +178,7 @@ export default function NewRequestPage() {
               <option value="NYG">BU: NYG</option>
               <option value="GW">BU: GW</option>
               <option value="EA">BU: EA</option>
+              <option value="TRM">BU: TRM</option>
             </select>
           )}
           {testMode && <span className="text-xs text-amber-600">The document gets a TEST-… number · each role's magic link goes to your inbox</span>}
@@ -194,6 +198,7 @@ export default function NewRequestPage() {
               <option value="NYG">BU: NYG</option>
               <option value="GW">BU: GW</option>
               <option value="EA">BU: EA</option>
+              <option value="TRM">BU: TRM</option>
             </select>
           )}
           {historical && <span className="text-xs text-slate-500">Saved as a completed record · pick the BU that matches the file</span>}
@@ -205,8 +210,8 @@ export default function NewRequestPage() {
         {/* Select first approver from Master — GW: DPM · NYG: DVM MER · EA: ADVM. The picked
             person is the ONLY one notified; they in turn pick the next approver (VP / DVM). */}
         {(() => {
-          const firstLabel = isGW ? "DPM GW" : isEA ? "ADVM (EA)" : "DVM Merchandise"
-          const firstRole = isGW ? "DPM_GW" : isEA ? "DVM_MER_EA" : "DVM_MER"
+          const firstLabel = isGW ? "DPM GW" : isEA ? "ADVM (EA)" : isTRM ? "DVM (TRM)" : "DVM Merchandise"
+          const firstRole = isGW ? "DPM_GW" : isEA ? "DVM_MER_EA" : isTRM ? "DVM_MER_TRM" : "DVM_MER"
           return (
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
               <h2 className="font-semibold text-gray-800">
@@ -254,10 +259,10 @@ export default function NewRequestPage() {
                   ✓ เทมเพลตล่าสุด{tplUpdatedAt ? ` · อัปเดต ${fmtTplDate(tplUpdatedAt)}` : ""}
                 </span>
               ) : null}
-              <a href={`/api/template?bu=${isGW ? "GW" : isEA ? "EA" : "NYG"}`} download
+              <a href={`/api/template?bu=${isGW ? "GW" : isEA ? "EA" : isTRM ? "TRM" : "NYG"}`} download
                 onClick={markTemplateDownloaded}
                 className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium border ${tplStale ? "bg-amber-500 border-amber-500 text-white hover:bg-amber-600" : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"}`}>
-                ⬇ Download Template ({isGW ? "GW" : isEA ? "EA" : "NYG"})
+                ⬇ Download Template ({isGW ? "GW" : isEA ? "EA" : isTRM ? "TRM" : "NYG"})
               </a>
             </div>
           </div>

@@ -48,7 +48,13 @@ const MASTER_ROLES_EA = [
   { role: "VP_MER_EA",  label: "DVM (EA)",  hint: "Approves 2nd → then shared NYG SCM/Claim/President", needsPriority: false, bu: "EA" },
 ]
 
-const ALL_MASTER_ROLES = [...MASTER_ROLES_NYG, ...MASTER_ROLES_GW, ...MASTER_ROLES_EA]
+// TRM = same flow as NYG; ONLY the top-3 approvers differ. From SCM onward TRM re-uses NYG people.
+const MASTER_ROLES_TRM = [
+  { role: "DVM_MER_TRM", label: "DVM (TRM)", hint: "Approves 1st after Merchandise upload (TRM)", needsPriority: false, bu: "TRM" },
+  { role: "VP_MER_TRM",  label: "VP (TRM)",  hint: "Approves 2nd → then shared NYG SCM/Claim/President", needsPriority: false, bu: "TRM" },
+]
+
+const ALL_MASTER_ROLES = [...MASTER_ROLES_NYG, ...MASTER_ROLES_GW, ...MASTER_ROLES_EA, ...MASTER_ROLES_TRM]
 
 // Legacy alias used elsewhere
 const MASTER_ROLES = MASTER_ROLES_NYG
@@ -66,7 +72,8 @@ const ALL_ROLES = [
   ...MASTER_ROLES_NYG.map(r => r.role),
   ...MASTER_ROLES_GW.map(r => r.role),
   ...MASTER_ROLES_EA.map(r => r.role),
-  "MER_USER", "MER_GW", "MER_EA", "ADMIN",
+  ...MASTER_ROLES_TRM.map(r => r.role),
+  "MER_USER", "MER_GW", "MER_EA", "MER_TRM", "ADMIN",
 ]
 
 // Which BU each APPROVER role belongs to (SCM_NYK_* appear in BOTH master lists → both sets).
@@ -81,6 +88,8 @@ const NYG_ONLY_ROLES = new Set<string>([...NYG_ROLE_SET].filter(r => !GW_ROLE_SE
 const GW_ONLY_ROLES = new Set<string>([...GW_ROLE_SET].filter(r => !NYG_ROLE_SET.has(r)))
 // EA-exclusive roles = the 3 EA top approvers (rest of EA flow re-uses NYG people).
 const EA_ONLY_ROLES = new Set<string>([...MASTER_ROLES_EA.map(r => r.role), "MER_EA"])
+// TRM-exclusive roles = the 3 TRM top approvers (rest of TRM flow re-uses NYG people).
+const TRM_ONLY_ROLES = new Set<string>([...MASTER_ROLES_TRM.map(r => r.role), "MER_TRM"])
 // Effective BU for display: "ALL" when the person holds exclusive roles of both BUs
 // (or bu is already ALL); "EA" for EA-exclusive; otherwise the stored bu.
 function effectiveBu(u: any): string {
@@ -88,8 +97,10 @@ function effectiveBu(u: any): string {
   const inNyg = u.bu === "NYG" || u.bu === "ALL" || u.role === "MER_USER" || held.some(r => NYG_ONLY_ROLES.has(r))
   const inGw = u.bu === "GW" || u.bu === "ALL" || u.role === "MER_GW" || held.some(r => GW_ONLY_ROLES.has(r))
   const inEa = u.bu === "EA" || u.role === "MER_EA" || held.some(r => EA_ONLY_ROLES.has(r))
+  const inTrm = u.bu === "TRM" || u.role === "MER_TRM" || held.some(r => TRM_ONLY_ROLES.has(r))
   if (inNyg && inGw) return "ALL"
   if (inEa) return "EA"
+  if (inTrm) return "TRM"
   if (inGw) return "GW"
   if (inNyg) return "NYG"
   return u.bu || "NYG"
@@ -104,6 +115,8 @@ const FLOW_ORDER: string[] = [
   "LOGISTICS", "ACCOUNTING",
   // EA flow (top-3 only)
   "MER_EA", "DVM_MER_EA", "VP_MER_EA",
+  // TRM flow (top-3 only)
+  "MER_TRM", "DVM_MER_TRM", "VP_MER_TRM",
   // GW flow
   "MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW",
   "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK", "SCM_NYK_EVP",
@@ -118,6 +131,7 @@ const ROLE_ACTION: Record<string, ActionType> = {
   // Approvers — click to approve
   DVM_MER: "Approver", VP_MER: "Approver", PRESIDENT: "Approver", VP_SCM: "Approver",
   DVM_MER_EA: "Approver", VP_MER_EA: "Approver",
+  DVM_MER_TRM: "Approver", VP_MER_TRM: "Approver",
   DPM_GW: "Approver", GM_GW: "Approver", PRESIDENT_GW: "Approver",
   CLAIM_COMMERCIAL: "Approver", CLAIM_PRODUCTION: "Approver",
   CLAIM_NYG: "Approver", CLAIM_NYK: "Approver", CLAIM_PROCUREMENT: "Approver",
@@ -126,7 +140,7 @@ const ROLE_ACTION: Record<string, ActionType> = {
   SCM_NYK_APPROVER: "Approver", SCM_NYK: "User", SCM_NYK_EVP: "Approver", SCM_NYG: "Approver", SCM_NYG_VP: "Approver",
   SCM_NYG_VP_PROD_G1G3: "Approver", SCM_NYG_VP_PROD_G2G4: "Approver", SCM_NYG_EVP: "Approver",
   // Users — enter data / upload
-  MER_USER: "User", MER_GW: "User", MER_EA: "User", SCM_USER: "User",
+  MER_USER: "User", MER_GW: "User", MER_EA: "User", MER_TRM: "User", SCM_USER: "User",
   LOGISTICS: "User", LOGISTICS_GW: "User",
   // Read — receive files / view only
   ACCOUNTING: "Read", ACCOUNTING_GW: "Read",
@@ -154,6 +168,8 @@ const ROLE_LABEL: Record<string, string> = {
   MER_USER: "Merchandise User",
   // EA (top-3 only; rest shared with NYG)
   MER_EA: "Merchandise (EA)", DVM_MER_EA: "ADVM (EA)", VP_MER_EA: "DVM (EA)",
+  // TRM (top-3 only; rest shared with NYG)
+  MER_TRM: "Merchandise (TRM)", DVM_MER_TRM: "DVM (TRM)", VP_MER_TRM: "VP (TRM)",
   // GW
   MER_GW: "Merchandise (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)",
   PRESIDENT_GW: "President (GW)", LOGISTICS_GW: "Logistics (GW)", ACCOUNTING_GW: "Account (GW)",
@@ -231,7 +247,7 @@ export default function UsersPage() {
   const [error, setError] = useState("")
   const [tab, setTab] = useState<"setup"|"all">("setup")
   const [showConfigured, setShowConfigured] = useState(false) // Setup Guide: collapse the long "Configured Master Users" list
-  const [buFilter, setBuFilter] = useState<"NYG"|"GW"|"EA"|"">("")
+  const [buFilter, setBuFilter] = useState<"NYG"|"GW"|"EA"|"TRM"|"">("")
   const [roleFilter, setRoleFilter] = useState("")
   const [peopleQ, setPeopleQ] = useState("")
   const [peopleResults, setPeopleResults] = useState<any[]>([])
@@ -366,7 +382,7 @@ export default function UsersPage() {
   // NYG Production claim routes by factory G-group, stored in claimDepartment (G1G3 / G2G4).
   const isProductionClaim = form.role === "CLAIM_PRODUCTION" || form.role === "VP_PRODUCTION"
 
-  const visibleMasterRoles = buFilter === "NYG" ? MASTER_ROLES_NYG : buFilter === "GW" ? MASTER_ROLES_GW : buFilter === "EA" ? MASTER_ROLES_EA : ALL_MASTER_ROLES
+  const visibleMasterRoles = buFilter === "NYG" ? MASTER_ROLES_NYG : buFilter === "GW" ? MASTER_ROLES_GW : buFilter === "EA" ? MASTER_ROLES_EA : buFilter === "TRM" ? MASTER_ROLES_TRM : ALL_MASTER_ROLES
   const visibleFinderRoles = buFilter === "GW" ? FINDER_ROLES_GW : buFilter === "NYG" ? FINDER_ROLES_NYG : [...FINDER_ROLES_NYG, ...FINDER_ROLES_GW]
 
   // A person belongs to a BU tab if: their primary bu matches, bu = ALL, OR they hold
@@ -381,7 +397,7 @@ export default function UsersPage() {
     // EA must use EA_ONLY_ROLES — otherwise every NYG-role holder (DVM_MER, VP_MER,
     // NYK…) wrongly leaks into the EA tab. (EA reuses NYG's shared claim/downstream people,
     // but those carry bu="ALL" and already match the first check.)
-    const set = bu === "GW" ? GW_ONLY_ROLES : bu === "EA" ? EA_ONLY_ROLES : NYG_ONLY_ROLES
+    const set = bu === "GW" ? GW_ONLY_ROLES : bu === "EA" ? EA_ONLY_ROLES : bu === "TRM" ? TRM_ONLY_ROLES : NYG_ONLY_ROLES
     // BU-SCOPED roles use the SAME role name across NYG & EA but are separated by the `bu`
     // field (LOGISTICS: aoyjai/quynh; CLAIM_PRODUCTION: rushan+pk / theerawee; VP_PRODUCTION
     // shared). They must be placed by `bu`, not surfaced across tabs by role.
@@ -637,12 +653,13 @@ export default function UsersPage() {
         <div className="flex items-center gap-3">
           {/* BU Filter */}
           <div className="flex items-center gap-1.5 bg-gray-100 rounded-lg p-1">
-            {([["NYG","NYG"],["GW","GW"],["EA","EA"],["","All"]] as const).map(([val, label]) => (
+            {([["NYG","NYG"],["GW","GW"],["EA","EA"],["TRM","TRM"],["","All"]] as const).map(([val, label]) => (
               <button key={val} onClick={() => setBuFilter(val as any)}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${buFilter === val
                   ? val === "NYG" ? "bg-blue-600 text-white shadow"
                   : val === "GW" ? "bg-emerald-600 text-white shadow"
                   : val === "EA" ? "bg-rose-600 text-white shadow"
+                  : val === "TRM" ? "bg-purple-600 text-white shadow"
                   : "bg-white text-gray-900 shadow"
                   : "text-gray-500 hover:text-gray-700"}`}>
                 {label}

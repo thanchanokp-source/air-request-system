@@ -114,6 +114,7 @@ export async function POST(req: NextRequest) {
     }
     const isGW = bu === "GW"
     const isEA = bu === "EA"   // EA = same flow as NYG, only the top-3 approvers differ
+    const isTRM = bu === "TRM" // TRM = same flow as NYG, only the top-3 approvers differ
     // First-approver pick is required for the NORMAL flow only (historical imports skip approval).
     if (!isHistorical) {
       // MER picks the FIRST approver from master: GW → DPM (assignedVpMer), NYG/EA → DVM/ADVM (assignedDvm).
@@ -121,7 +122,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Please select a DPM (GW)" }, { status: 400 })
       }
       if (!assignedDvm && !isGW) {
-        return NextResponse.json({ error: isEA ? "Please select an ADVM (EA)" : "Please select a DVM Merchandise" }, { status: 400 })
+        return NextResponse.json({ error: isEA ? "Please select an ADVM (EA)" : isTRM ? "Please select a DVM (TRM)" : "Please select a DVM Merchandise" }, { status: 400 })
       }
     }
 
@@ -197,7 +198,7 @@ export async function POST(req: NextRequest) {
       .filter((d: string) => d && wtChargeFor(d) <= 0))] as string[]
 
     const first = items[0]
-    const buCodeForNo = isGW ? "GW" : isEA ? "EA" : "NYG"
+    const buCodeForNo = isGW ? "GW" : isEA ? "EA" : isTRM ? "TRM" : "NYG"
     // TEST docs get their own throwaway number (timestamp) so they never touch the real per-BU
     // running sequence and never collide with each other.
     const docNo = isTestDoc
@@ -209,6 +210,7 @@ export async function POST(req: NextRequest) {
     const initialStatus = isHistorical ? "COMPLETED"
       : isGW ? "PENDING_VP_MER_GW"
       : isEA ? (assignedDvm ? "PENDING_DVM_MER_EA" : "PENDING_VP_MER_EA")
+      : isTRM ? (assignedDvm ? "PENDING_DVM_MER_TRM" : "PENDING_VP_MER_TRM")
       : (assignedDvm ? "PENDING_DVM_MER" : "PENDING_VP_MER")
 
     const request = await prisma.airRequest.create({
@@ -216,7 +218,7 @@ export async function POST(req: NextRequest) {
         documentNo: docNo,
         brandName: String(col(first, "Brand name") || col(first, "BRAND") || ""),
         buName: String(col(first, "BU") || ""),
-        bu: isGW ? "GW" : isEA ? "EA" : "NYG",
+        bu: isGW ? "GW" : isEA ? "EA" : isTRM ? "TRM" : "NYG",
         status: initialStatus,
         isTest: isTestDoc,
         createdById: userId,

@@ -139,7 +139,7 @@ export default function RequestsPage() {
   const [recallReason, setRecallReason] = useState("")
   const [recalling, setRecalling] = useState(false)
   // Statuses the CREATOR may still recall from — the merch-review window before VP MER / GM approves.
-  const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
+  const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_DVM_MER_TRM", "PENDING_VP_MER_TRM", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
   const canRecallDoc = (req: any) => {
     if (!req) return false
     const isAdminRecaller = role === "ADMIN" || myEmail === "jariya.t@nanyangtextile.com"
@@ -308,7 +308,7 @@ export default function RequestsPage() {
         </div>
         {/* Actions grouped on the right (New Request next to Import History) */}
         <div className="flex items-center gap-2">
-          {(role === "MER_USER" || role === "MER_GW" || role === "MER_EA" || role === "ADMIN") && (
+          {(role === "MER_USER" || role === "MER_GW" || role === "MER_EA" || role === "MER_TRM" || role === "ADMIN") && (
             <Link href="/requests/new" className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
               + New Request
             </Link>
@@ -377,6 +377,8 @@ export default function RequestsPage() {
                 ? r.request.status // PENDING_VP_MER_GW / PENDING_GM_GW / PENDING_PRESIDENT_GW
                 : r.request.status === "PENDING_DVM_MER_EA" ? "PENDING_DVM_MER"
                 : r.request.status === "PENDING_VP_MER_EA" ? "PENDING_VP_MER"
+                : r.request.status === "PENDING_DVM_MER_TRM" ? "PENDING_DVM_MER"
+                : r.request.status === "PENDING_VP_MER_TRM" ? "PENDING_VP_MER"
                 : r.request.status
             } else {
               step = ITEM_TO_STEP[st]
@@ -462,7 +464,7 @@ export default function RequestsPage() {
                 <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ml-auto">EST {fmtNum(dg.estTotal)} THB</span>
                 <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {fmtNum(dg.actTotal)} THB</span>
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{dg.styles.length} style(s) · {dg.total} transactions</span>
-                {(dg.request.attachments || []).filter((a: any) => ["MER_USER","MER_GW","MER_EA","VP_MER","ADMIN"].includes(a.uploadedBy?.role) && !["INV","AWB","EXPENSE","COMBINE"].includes(a.category)).map((att: any) => (
+                {(dg.request.attachments || []).filter((a: any) => ["MER_USER","MER_GW","MER_EA","MER_TRM","VP_MER","ADMIN"].includes(a.uploadedBy?.role) && !["INV","AWB","EXPENSE","COMBINE"].includes(a.category)).map((att: any) => (
                   <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                     title={att.fileName}
                     className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full font-medium shrink-0 w-[150px] hover:bg-orange-100">

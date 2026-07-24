@@ -102,6 +102,9 @@ export default function ApprovalsPage() {
     // EA top-3 approvers (same as NYG DVM/VP MER, own statuses)
     if (myRoles.includes("DVM_MER_EA") && r.status === "PENDING_DVM_MER_EA" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
     if (myRoles.includes("VP_MER_EA") && r.status === "PENDING_VP_MER_EA" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
+    // TRM top-3 approvers (same as NYG DVM/VP MER, own statuses)
+    if (myRoles.includes("DVM_MER_TRM") && r.status === "PENDING_DVM_MER_TRM" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
+    if (myRoles.includes("VP_MER_TRM") && r.status === "PENDING_VP_MER_TRM" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
     // Match via held roles so one person can be SCM User in NYG AND another role in GW.
     if (myRoles.includes("SCM_USER")) {
       if ((r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||
@@ -199,6 +202,8 @@ export default function ApprovalsPage() {
     if (myRoles.includes("VP_MER") && r.status === "PENDING_VP_MER") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (myRoles.includes("DVM_MER_EA") && r.status === "PENDING_DVM_MER_EA") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (myRoles.includes("VP_MER_EA") && r.status === "PENDING_VP_MER_EA") return items.filter((i: any) => i.itemStatus === "PENDING")
+    if (myRoles.includes("DVM_MER_TRM") && r.status === "PENDING_DVM_MER_TRM") return items.filter((i: any) => i.itemStatus === "PENDING")
+    if (myRoles.includes("VP_MER_TRM") && r.status === "PENDING_VP_MER_TRM") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (myRoles.includes("SCM_USER") && r.bu !== "GW" && (r.status === "PENDING_SCM" || r.status === "PENDING_VP_MER")) {
       if (r.status === "PENDING_VP_MER") return items.filter((i: any) => i.itemStatus === "VP_MER_PASSED")
       return items.filter((i: any) => i.itemStatus === "PENDING")
