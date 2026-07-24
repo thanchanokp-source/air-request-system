@@ -6247,6 +6247,8 @@ export default function RequestDetailPage() {
                       const ws2 = wb2.Sheets[wb2.SheetNames[0]]
                       const rows2 = XLSX.utils.sheet_to_json(ws2, { defval: "" }) as any[]
                       const labelToCode = Object.fromEntries(Object.entries(CLAIM_DEPT_LABEL).map(([k, v]) => [v, k]))
+                      // SO match is leading-zero tolerant (Excel drops a leading 0: 01262592 → 1262592).
+                      const soK = (x: any) => String(x ?? "").replace(/\D/g, "").replace(/^0+/, "")
                       const newDepts: Record<string, {dept: string, pct: number, reason: string}[]> = {}
                       const newComments: Record<string, string> = {}
                       const errorList: {so: string, issues: string[]}[] = []
@@ -6255,7 +6257,7 @@ export default function RequestDetailPage() {
                         const sub = String(row["SUB"] || "").trim()
                         if (!so) return
                         const soLabel = sub ? `${so}/${sub}` : so
-                        const found = pendingScmItems.find((i: any) => i.so === so && (i.sub || "") === sub)
+                        const found = pendingScmItems.find((i: any) => soK(i.so) === soK(so) && (i.sub || "") === sub)
                         const issues: string[] = []
                         if (!found) { issues.push("This SO was not found in the list"); errorList.push({ so: soLabel, issues }); return }
                         const slots = [1,2,3].map(n => ({
@@ -6285,7 +6287,16 @@ export default function RequestDetailPage() {
                         if (r1) newComments[(found as any).id] = r1
                       })
                       if (errorList.length > 0) { setImportErrors(errorList); e.target.value = ""; return }
-                      if (Object.keys(newDepts).length > 0) setSoClaimDepts(p => ({ ...p, ...newDepts }))
+                      // No errors AND nothing parsed → the file had no CLAIM DEPT data → tell the user
+                      // instead of silently doing nothing (looks like "import didn't work").
+                      if (Object.keys(newDepts).length === 0) {
+                        setImportErrors([{ so: "—", issues: [
+                          `ไม่พบข้อมูล claim ในไฟล์ (${rows2.length} แถว) — ต้องมีคอลัมน์ "SO" + "CLAIM DEPT 1" + "%CLAIM1" + "REASON 1" (สูงสุด 3 ชุด) และ SO ต้องตรงกับในเอกสาร`,
+                        ] }])
+                        e.target.value = ""; return
+                      }
+                      setImportErrors([])
+                      setSoClaimDepts(p => ({ ...p, ...newDepts }))
                       if (Object.keys(newComments).length > 0) setSoClaimComments(p => ({ ...p, ...newComments }))
                       e.target.value = ""
                     }} />
