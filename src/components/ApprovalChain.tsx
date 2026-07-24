@@ -1,6 +1,6 @@
 "use client"
 
-import { getSplits, chainFor, deptLabel, claimEntryDisplayRoles, vpProdGroup, NO_APPROVAL_GW_DEPTS } from "@/lib/claim"
+import { getSplits, chainFor, deptLabel, claimEntryDisplayRoles, vpProdGroup, prodGroupCovers, NO_APPROVAL_GW_DEPTS } from "@/lib/claim"
 
 // Visual approval progress chain.
 //  - Doc-level (pass `items`): overall document stage + aggregated claim depts.
@@ -107,9 +107,12 @@ function entryPersonOf(dept: string, dir: any[] | undefined, bu?: string, factor
   if (!dir || !dir.length) return ""
   const roles = claimEntryDisplayRoles(dept)
   let cands = dir.filter((u: any) =>
-    (!bu || u.bu === bu) &&
+    // Cross-BU claim holders (bu="ALL", e.g. Procurement/NYK) match any document's BU.
+    (!bu || u.bu === bu || u.bu === "ALL") &&
     (roles.includes(u.role) || (Array.isArray(u.roles) && u.roles.some((r: string) => roles.includes(r)))))
-  if (dept === "PRODUCTION") { const g = vpProdGroup(factory); cands = cands.filter((u: any) => vpProdGroup(u.claimDepartment) === g) }
+  // PRODUCTION: match the SO's factory G-group via prodGroupCovers so an "ALL"-group approver
+  // (e.g. TRM's chandra, EA's theerawee — one person covering every factory) is included.
+  if (dept === "PRODUCTION") { const g = vpProdGroup(factory); cands = cands.filter((u: any) => prodGroupCovers(u.claimDepartment, g)) }
   if (dept === "PROCUREMENT") cands = cands.filter((u: any) => u.procurementType === "PURCHASING")
   cands.sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
   const u = cands[0]
