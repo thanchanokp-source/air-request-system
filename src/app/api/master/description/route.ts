@@ -26,6 +26,8 @@ export async function POST(req: NextRequest) {
     if ((Number(weightPerUnit) || 0) > 0) await releaseHeldDocs().catch(() => {})
     return NextResponse.json(item)
   } catch (e: any) {
+    // Unique-constraint (duplicate name) → friendly 409 so the UI can tell the user why it didn't add.
+    if (e?.code === "P2002") return NextResponse.json({ error: `"${name}" already exists in Master Description` }, { status: 409 })
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

@@ -28,26 +28,33 @@ export default function MasterDescriptionPage() {
 
   const saveEdit = async () => {
     setSaving(true)
-    await fetch(`/api/master/description/${editId}`, {
+    const res = await fetch(`/api/master/description/${editId}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...editData, weightPerUnit: Number(editData.weightPerUnit) })
     })
-    setSaving(false); setEditId(null); load()
+    setSaving(false)
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Save failed"); return }
+    setEditId(null); load()
   }
 
   const deleteItem = async (id: string) => {
     if (!confirm("Delete this description?")) return
-    await fetch(`/api/master/description/${id}`, { method: "DELETE" })
+    const res = await fetch(`/api/master/description/${id}`, { method: "DELETE" })
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Delete failed"); return }
     load()
   }
 
   const addItem = async () => {
     setSaving(true)
-    await fetch("/api/master/description", {
+    const res = await fetch("/api/master/description", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...newData, weightPerUnit: Number(newData.weightPerUnit) })
     })
-    setSaving(false); setAdding(false); setNewData({ name: "", weightPerUnit: "" }); load()
+    setSaving(false)
+    // Surface failures (duplicate name → 409, no permission → 403) instead of silently
+    // closing the form as if it saved — that made adds "vanish" with no explanation.
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Add failed"); return }
+    setAdding(false); setNewData({ name: "", weightPerUnit: "" }); load()
   }
 
   return (
