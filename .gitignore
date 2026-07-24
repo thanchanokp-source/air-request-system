@@ -56,3 +56,7 @@ backups/
 
 # local design preview (throwaway)
 delay-reason-preview.html
+
+# Ad-hoc data files (claim/PO mapping) — not source
+May-Jun*.xlsx
+*_with_PO.xlsx
