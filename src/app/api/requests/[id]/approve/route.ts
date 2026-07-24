@@ -514,7 +514,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // GW MER re-submits after a "Back to Merchandise" → restart approval from DPM.
-  if (action === "resubmit_mer_gw" && userRole === "MER_GW" && request.status === "PENDING_MER_GW") {
+  if (action === "resubmit_mer_gw" && (userRole === "MER_GW" || userRole === "ADMIN") && request.status === "PENDING_MER_GW") {
     // Keep styles that DPM/GM already approved (VP_MER_PASSED) approved — only the style(s)
     // that were sent back sit at PENDING and need DPM re-approval. (Whole-doc back had already
     // set every style to PENDING, so this is a no-op there.)
@@ -547,7 +547,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // NYG/EA MER re-submits after a "Back to Merchandise" → restart approval from the first merch approver.
-  if (action === "resubmit_mer_nyg" && ["MER_USER", "MER_EA", "MER_TRM"].includes(userRole) && request.status === "PENDING_MER") {
+  if (action === "resubmit_mer_nyg" && ["MER_USER", "MER_EA", "MER_TRM", "ADMIN"].includes(userRole) && request.status === "PENDING_MER") {
     const firstStatus = request.bu === "EA" ? "PENDING_DVM_MER_EA" : request.bu === "TRM" ? "PENDING_DVM_MER_TRM" : "PENDING_DVM_MER"
     await prisma.airRequestItem.updateMany({
       where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },

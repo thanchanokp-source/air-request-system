@@ -3882,7 +3882,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* MER (GW): DPM/GM sent the whole document back — review reason, fix, and re-submit to DPM */}
-      {role === "MER_GW" && isGWRequest && req.status === "PENDING_MER_GW" && (
+      {(role === "MER_GW" || role === "ADMIN") && isGWRequest && req.status === "PENDING_MER_GW" && (
         <div className="bg-white rounded-xl border border-orange-200 p-4 space-y-3">
           <div>
             <h2 className="font-semibold text-orange-700">↩ Back to Merchandise — edit and resend</h2>
@@ -3905,7 +3905,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* NYG/EA MER re-submits after SCM sent the document back */}
-      {["MER_USER", "MER_EA", "MER_TRM"].includes(role) && !isGWRequest && req.status === "PENDING_MER" && (
+      {["MER_USER", "MER_EA", "MER_TRM", "ADMIN"].includes(role) && !isGWRequest && req.status === "PENDING_MER" && (
         <div className="bg-white rounded-xl border border-orange-200 p-4 space-y-3">
           <div>
             <h2 className="font-semibold text-orange-700">↩ Back to Merchandise — edit and resend</h2>
