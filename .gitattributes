@@ -1,0 +1,13 @@
+# Treat Excel templates (and other binaries) as binary so Git never applies
+# line-ending / text normalization — that corrupts the .xlsx zip container.
+*.xlsx binary
+*.xls binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
