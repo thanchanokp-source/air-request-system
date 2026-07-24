@@ -5942,7 +5942,21 @@ export default function RequestDetailPage() {
                     <th className="px-3 py-2 sticky top-0 left-0 z-20 bg-orange-50 border-b border-orange-100">
                       <input type="checkbox"
                         checked={allLgItems.length > 0 && allLgItems.every((i: any) => lgSelectedSoIds.has(i.id) || !!soInvMap[i.id])}
-                        onChange={e => setLgSelectedSoIds(e.target.checked ? new Set(allLgItems.map((i: any) => i.id)) : new Set())}
+                        onChange={e => {
+                          // Mirror the per-row behaviour: when an INV is typed, select-all ASSIGNS that
+                          // INV to every SO (uncheck removes it); otherwise it just toggles selection.
+                          if (lgQuickInv.trim()) {
+                            const v = lgQuickInv.trim()
+                            setSoInvMap(p => {
+                              const n = { ...p }
+                              if (e.target.checked) allLgItems.forEach((i: any) => { n[i.id] = v })
+                              else allLgItems.forEach((i: any) => { if (n[i.id] === v) delete n[i.id] })
+                              return n
+                            })
+                          } else {
+                            setLgSelectedSoIds(e.target.checked ? new Set(allLgItems.map((i: any) => i.id)) : new Set())
+                          }
+                        }}
                         className="accent-orange-500" />
                     </th>
                     {["SO No.","Sub","Style","Customer PO","Description","QTY Orig","QTY Air","Weight (KG)","Est. Freight (THB)","Country","Factory","INV NO.","Actual Freight (THB)"].map(h =>
