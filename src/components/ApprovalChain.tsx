@@ -214,7 +214,10 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
         nykWho = `NYK: ${parts.join(" + ") || "finalizing"}`
       }
     }
-    const stageWho = !completed && !rejected ? currentStageWho(status, bu, soItem, req, approvers) : ""
+    // Per-SO rows: when THIS SO has advanced to President (ord 6) but the DOC status still lags
+    // (other styles mid-claim), resolve the President name from the SO's own stage, not the doc's.
+    const soStageKey = (soItem && cur === 6) ? "PENDING_PRESIDENT" : status
+    const stageWho = !completed && !rejected ? currentStageWho(soStageKey, bu, soItem, req, approvers) : ""
     // LG runs parallel with Claim → surface it as pending until Actual is entered.
     const lgName = resolveRoleEmail(approvers, ["LOGISTICS"], bu)
     const lgWho = !completed && !rejected && claimReached && !lgDone ? `Logistics${lgName ? `: ${lgName}` : ""}` : ""
