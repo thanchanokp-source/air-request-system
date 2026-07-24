@@ -702,7 +702,9 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const acMagicLink = acToken ? `${APP_URL}/api/magic-login?token=${acToken}&redirect=/approvals` : undefined
       const lgHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, lgMagicLink)
       const acHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, acMagicLink)
-      const lgUsers = await (prisma.user as any).findMany({ where: { isActive: true, bu: { in: [(req as any).bu || "NYG", "ALL"] }, OR: [{ role: "LOGISTICS" }, { roles: { has: "LOGISTICS" } }] }, select: { email: true } })
+      const lgUsers = await (prisma.user as any).findMany({ where: (req as any).bu === "TRM"
+        ? { isActive: true, OR: [{ role: "LOGISTICS_TRM" }, { roles: { has: "LOGISTICS_TRM" } }] }
+        : { isActive: true, bu: { in: [(req as any).bu || "NYG", "ALL"] }, OR: [{ role: "LOGISTICS" }, { roles: { has: "LOGISTICS" } }] }, select: { email: true } })
       const acUsers = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "ACCOUNTING" }, { roles: { has: "ACCOUNTING" } }] }, select: { email: true } })
       const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
@@ -910,7 +912,9 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       // when the doc first enters the claim stage. Only at the DVM step (PENDING_CLAIM).
       if (!isVp && (req as any).bu !== "GW") {
         // BU-scoped: NYG docs → NYG Logistics; EA docs → EA Logistics (quynh). Cross-BU LG (bu="ALL") sees both.
-        const lgUsers = await prisma.user.findMany({ where: { isActive: true, role: "LOGISTICS", bu: { in: [(req as any).bu || "NYG", "ALL"] } } as any, select: { id: true, email: true } })
+        const lgUsers = await prisma.user.findMany({ where: ((req as any).bu === "TRM"
+          ? { isActive: true, OR: [{ role: "LOGISTICS_TRM" }, { roles: { has: "LOGISTICS_TRM" } }] }
+          : { isActive: true, role: "LOGISTICS", bu: { in: [(req as any).bu || "NYG", "ALL"] } }) as any, select: { id: true, email: true } })
         for (const u of lgUsers) {
           if (!u.email) continue
           const html = buildHtml(req, "PENDING_LOGISTICS", docLink, undefined, undefined, await magicFor(u.id))
@@ -1379,6 +1383,10 @@ async function notifyRecallImpl(requestId: string, byName?: string, reason?: str
       const us = await (prisma.user as any).findMany({ where, select: { email: true } })
       us.forEach((u: any) => add(u.email))
     }
+    // TRM logistics = the LOGISTICS_TRM role (Urairat, whose bu=GW) → query by role, NOT bu.
+    // Other non-GW BUs use the shared LOGISTICS role scoped by the doc's BU.
+    const lgRoles = bu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS"]
+    const lgScope = bu !== "TRM"
     switch (req.status) {
       case "PENDING_DVM_MER": req.assignedDvmMer ? add(req.assignedDvmMer) : await addRole(["DVM_MER"]); break
       case "PENDING_DVM_MER_EA": req.assignedDvmMer ? add(req.assignedDvmMer) : await addRole(["DVM_MER_EA"]); break
@@ -1389,7 +1397,7 @@ async function notifyRecallImpl(requestId: string, byName?: string, reason?: str
       case "PENDING_SCM": await addRole(["SCM_USER"]); break
       case "PENDING_VP_SCM": req.assignedVpScm ? add(req.assignedVpScm) : await addRole(["VP_SCM"]); break
       case "PENDING_PRESIDENT": await addRole(["PRESIDENT"]); break
-      case "PENDING_LOGISTICS": await addRole(["LOGISTICS"]); break
+      case "PENDING_LOGISTICS": await addRole(lgRoles, lgScope); break
       case "PENDING_VP_MER_GW": req.assignedVpMer ? add(req.assignedVpMer) : await addRole(["DPM_GW", "VP_MER_GW"]); break
       case "PENDING_GM_GW": await addRole(["GM_GW"]); break
       case "PENDING_PRESIDENT_GW": await addRole(["PRESIDENT_GW"]); break
@@ -1403,7 +1411,7 @@ async function notifyRecallImpl(requestId: string, byName?: string, reason?: str
       }
       case "PENDING_CLAIM":
       case "PENDING_VP_CLAIM": {
-        await addRole(["LOGISTICS"])
+        await addRole(lgRoles, lgScope)
         const depts = new Set<string>(); for (const it of req.items) getSplits(it).forEach((s: any) => depts.add(s.dept))
         for (const d of depts) { const roles = [...claimEntryRoles(d), ...claimVpRoles(d)]; if (roles.length) await addRole(roles) }
         break

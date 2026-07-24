@@ -7,6 +7,7 @@ import { deptLabel } from "@/lib/claim"
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin", MER_USER: "Merchandise", MER_GW: "Merchandise (GW)", MER_EA: "Merchandise (EA)",
   MER_TRM: "Merchandise (TRM)", DVM_MER_TRM: "DVM (TRM)", VP_MER_TRM: "VP (TRM)",
+  LOGISTICS_TRM: "Logistics (TRM)",
   DVM_MER: "DVM Merchandise", VP_MER: "VP Merchandise", SCM_USER: "SCM", VP_SCM: "VP SCM",
   DVM_MER_EA: "ADVM (EA)", VP_MER_EA: "DVM (EA)",
   LOGISTICS: "Logistics", PRESIDENT: "President", ACCOUNTING: "Accounting",

@@ -47,11 +47,11 @@ const ROLES_BY_BU: Record<string, { role: string; label: string }[]> = {
     { role: "MER_TRM", label: "Merchandise (TRM)" },
     { role: "DVM_MER_TRM", label: "DVM (TRM)" },
     { role: "VP_MER_TRM", label: "VP (TRM)" },
+    { role: "LOGISTICS_TRM", label: "Logistics (TRM)" },
     // From SCM onward TRM shares the NYG people
     { role: "SCM_USER", label: "SCM User (shared)" },
     { role: "VP_SCM", label: "VP SCM (shared)" },
     { role: "CLAIM_PROCUREMENT", label: "Claim – Procurement (shared)" },
-    { role: "LOGISTICS", label: "Logistics (shared)" },
     { role: "PRESIDENT", label: "President (shared)" },
     { role: "ACCOUNTING", label: "Accounting (shared)" },
   ],

@@ -120,6 +120,8 @@ export default function ApprovalsPage() {
     // (logisticsSent). After that LG's work is done → drop it from the queue.
     // Logistics is BU-scoped: NYG LG sees NYG docs, EA LG (quynh) sees EA docs. (GW uses LOGISTICS_GW.)
     if (myRoles.includes("LOGISTICS") && r.bu !== "GW" && requestInBu(r, userBu || "NYG") && !r.logisticsSent && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
+    // TRM logistics — same NYG-style parallel/logistics stages, scoped to TRM docs (Urairat).
+    if (myRoles.includes("LOGISTICS_TRM") && r.bu === "TRM" && !r.logisticsSent && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }
@@ -211,6 +213,7 @@ export default function ApprovalsPage() {
     if (myRoles.includes("VP_SCM") && r.status === "PENDING_SCM") return items.filter((i: any) => i.itemStatus === "PASSED")
     if (myRoles.includes("PRESIDENT") || myRoles.includes("PRESIDENT_GW")) return items.filter((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     if (myRoles.includes("LOGISTICS") && r.bu !== "GW") return items.filter((i: any) => i.itemStatus !== "REJECTED")
+    if (myRoles.includes("LOGISTICS_TRM") && r.bu === "TRM") return items.filter((i: any) => i.itemStatus !== "REJECTED")
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.filter((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }

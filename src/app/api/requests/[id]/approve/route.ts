@@ -275,8 +275,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
-  // LG saves logistics data as draft at PENDING_SCM (parallel with SCM — no status change)
-  if (action === "save_logistics_draft" && userRole === "LOGISTICS") {
+  // LG saves logistics data as draft at PENDING_SCM (parallel with SCM — no status change).
+  // TRM logistics (Urairat = LOGISTICS_TRM in roles[]) uses the SAME NYG-style flow → accept it too,
+  // but only for non-GW docs so her GW logistics still routes to the LOGISTICS_GW branch below.
+  if (action === "save_logistics_draft" && (userRole === "LOGISTICS" || (heldRoles.includes("LOGISTICS_TRM") && request.bu !== "GW"))) {
     if (itemActuals && typeof itemActuals === "object") {
       for (const [iid, val] of Object.entries(itemActuals)) {
         const num = parseFloat(String(val))

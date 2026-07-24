@@ -8,6 +8,7 @@ const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin", MER_USER: "Merchandise", MER_GW: "Merchandise (GW)", MER_EA: "Merchandise (EA)",
   DVM_MER: "DVM Merchandise", VP_MER: "VP Merchandise", DVM_MER_EA: "ADVM (EA)", VP_MER_EA: "DVM (EA)",
   MER_TRM: "Merchandise (TRM)", DVM_MER_TRM: "DVM (TRM)", VP_MER_TRM: "VP (TRM)",
+  LOGISTICS_TRM: "Logistics (TRM)",
   SCM_USER: "SCM", VP_SCM: "VP SCM", LOGISTICS: "Logistics", PRESIDENT: "President", ACCOUNTING: "Accounting",
   VP_MER_GW: "DPM (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)", PRESIDENT_GW: "President (GW)",
   LOGISTICS_GW: "Logistics (GW)", CLAIM_GW: "Claim (GW)", SCM_NYK: "SCM NYK", SCM_NYG: "SCM NYG",

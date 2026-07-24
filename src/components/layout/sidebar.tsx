@@ -21,6 +21,7 @@ const ROLE_LABEL: Record<string, string> = {
   ACCOUNTING: "Accounting", MER_USER: "Merchandise", MER_GW: "Merchandise (GW)",
   MER_EA: "Merchandise (EA)", DVM_MER_EA: "ADVM (EA)", VP_MER_EA: "DVM (EA)",
   MER_TRM: "Merchandise (TRM)", DVM_MER_TRM: "DVM (TRM)", VP_MER_TRM: "VP (TRM)",
+  LOGISTICS_TRM: "Logistics (TRM)",
 }
 
 export default function Sidebar({ role, onClose }: { role: string; onClose?: () => void }) {

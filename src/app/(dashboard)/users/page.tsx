@@ -168,8 +168,8 @@ const ROLE_LABEL: Record<string, string> = {
   MER_USER: "Merchandise User",
   // EA (top-3 only; rest shared with NYG)
   MER_EA: "Merchandise (EA)", DVM_MER_EA: "ADVM (EA)", VP_MER_EA: "DVM (EA)",
-  // TRM (top-3 only; rest shared with NYG)
-  MER_TRM: "Merchandise (TRM)", DVM_MER_TRM: "DVM (TRM)", VP_MER_TRM: "VP (TRM)",
+  // TRM (top-3 only; rest shared with NYG). LOGISTICS_TRM = dedicated TRM logistics (Urairat).
+  MER_TRM: "Merchandise (TRM)", DVM_MER_TRM: "DVM (TRM)", VP_MER_TRM: "VP (TRM)", LOGISTICS_TRM: "Logistics (TRM)",
   // GW
   MER_GW: "Merchandise (GW)", DPM_GW: "DPM (GW)", GM_GW: "GM (GW)",
   PRESIDENT_GW: "President (GW)", LOGISTICS_GW: "Logistics (GW)", ACCOUNTING_GW: "Account (GW)",
