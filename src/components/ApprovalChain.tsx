@@ -95,7 +95,9 @@ function currentStageWho(status: string, bu: string, soItem: any, req: any, dir?
   const info = STAGE_INFO[status]
   if (!info) return ""
   const who = nameOf(info.assigned?.(req, soItem)) || resolveRoleEmail(dir, info.roles, bu)
-  return who ? `${info.label}: ${who}` : ""
+  // Always surface the current stage even when the specific person can't be resolved (e.g. SCM /
+  // President / Logistics — role-based, not per-doc assigned) so an in-flight doc always shows Waiting.
+  return who ? `${info.label}: ${who}` : info.label
 }
 
 // Resolve the ENTRY (auto-notified) approver's email name for a dept from the directory.
