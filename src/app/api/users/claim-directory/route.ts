@@ -12,7 +12,9 @@ const ENTRY_ROLES = [
   "SCM_NYK_APPROVER", "SCM_NYG", "CLAIM_GW",
   // Main linear-stage approvers (so the chain can show who each stage waits on)
   "VP_MER", "VP_MER_GW", "GM_GW", "SCM_USER", "VP_SCM",
-  "LOGISTICS", "LOGISTICS_GW", "PRESIDENT", "PRESIDENT_GW",
+  "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "PRESIDENT", "PRESIDENT_GW",
+  // TRM merch approvers (so their names resolve in the Waiting line)
+  "DVM_MER_TRM", "VP_MER_TRM",
 ]
 
 export async function GET() {

@@ -209,7 +209,10 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
       const appr: any[] = soItem?.claimApprovals || []
       const approverDone = appr.some((a: any) => a.role === "SCM_NYK_APPROVER")
       if (!approverDone) {
-        nykWho = "NYK: Approver"
+        // Name the SCM NYK action approver(s) — cross-BU (bu=NYG) so resolved from the dir by role,
+        // regardless of the doc's BU. Two approvers (by brand) → show both.
+        const nm = (approvers || []).filter((u: any) => u.role === "SCM_NYK_APPROVER" || (Array.isArray(u.roles) && u.roles.includes("SCM_NYK_APPROVER"))).map((u: any) => nameOf(u.email) || nameOf(u.name)).filter(Boolean)
+        nykWho = nm.length ? `NYK: ${[...new Set(nm)].join(" / ")}` : "NYK: Approver"
       } else {
         const parts: string[] = []
         if (!appr.some((a: any) => a.role === "SCM_NYK_EVP")) parts.push(`EVP ${nameOf(req?.assignedScmNykEvp)}`.trim())
@@ -222,7 +225,11 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     const soStageKey = (soItem && cur === 6) ? "PENDING_PRESIDENT" : status
     const stageWho = !completed && !rejected ? currentStageWho(soStageKey, bu, soItem, req, approvers) : ""
     // LG runs parallel with Claim → surface it as pending until Actual is entered.
-    const lgName = resolveRoleEmail(approvers, ["LOGISTICS"], bu)
+    // TRM logistics = LOGISTICS_TRM (Urairat, whose bu=GW) → look up by that role with NO bu filter
+    // (the role already encodes TRM). Other BUs use the shared LOGISTICS scoped by the doc's BU.
+    const lgName = bu === "TRM"
+      ? resolveRoleEmail(approvers, ["LOGISTICS_TRM"], undefined)
+      : resolveRoleEmail(approvers, ["LOGISTICS"], bu)
     const lgWho = !completed && !rejected && claimReached && !lgDone ? `Logistics${lgName ? `: ${lgName}` : ""}` : ""
     const pendingWho = [...(stageWho ? [stageWho] : []), ...(lgWho ? [lgWho] : []), ...claimWho, ...(nykWho ? [nykWho] : [])]
     return (
