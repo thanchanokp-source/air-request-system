@@ -65,7 +65,8 @@ const nameOf = (s?: string | null) => (s ? (s.includes("@") ? s.split("@")[0] : 
 function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string): string {
   if (!dir || !dir.length) return ""
   const cands = dir.filter((u: any) =>
-    (!bu || u.bu === bu) &&
+    // Cross-BU holders (SCM / VP SCM / President carry bu="ALL") match any document's BU.
+    (!bu || u.bu === bu || u.bu === "ALL") &&
     (roles.includes(u.role) || (Array.isArray(u.roles) && u.roles.some((r: string) => roles.includes(r)))))
   cands.sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
   return cands[0] ? nameOf(cands[0].email) || nameOf(cands[0].name) : ""
