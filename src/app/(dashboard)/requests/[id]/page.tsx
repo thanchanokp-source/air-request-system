@@ -2470,7 +2470,7 @@ export default function RequestDetailPage() {
             <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
               <table className="w-full text-xs whitespace-nowrap">
                 <thead className="bg-gray-50 border-b border-gray-200"><tr>
-                  {["", "STYLE", "BRAND", "SO", "CUSTOMER PO", "DESCRIPTION", "PLAN DATE", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)", "CLAIM DEPT", "FACTORY", "COUNTRY", "STATUS", "ACTION"].map((h, i) =>
+                  {["", "STYLE", "BRAND", "SO", "CUSTOMER PO", "DESCRIPTION", "PLAN DATE", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)", "CLAIM DEPT", "DELAY CODE", "DETAIL", "FACTORY", "COUNTRY", "STATUS", "ACTION"].map((h, i) =>
                     <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
                 </tr></thead>
                 <tbody className="divide-y divide-gray-100">
@@ -2497,7 +2497,9 @@ export default function RequestDetailPage() {
                         <td className="px-3 py-2 text-right">{item.qtyRequestAir}</td>
                         <td className="px-3 py-2 text-right">{fmtNum(item.grossWeight, 2)}</td>
                         <td className="px-3 py-2 text-right text-blue-600">{fmtNum(item.airFreight)}</td>
-                        <td className="px-3 py-2">{getSplits(item).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "-"}</td>
+                        <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i}>{deptLabel(s.dept)} {s.pct}%</div>) : "-"}</td>
+                        <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="font-medium text-amber-800">{s.reason || "-"}</div>) : "-"}</td>
+                        <td className="px-3 py-2 whitespace-normal max-w-[16rem]">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="text-gray-500">{(s as any).reasonDetail || "-"}</div>) : "-"}</td>
                         <td className="px-3 py-2">{item.factory}</td>
                         <td className="px-3 py-2">{item.country}</td>
                         {idx === 0 && <td rowSpan={n} className="px-3 py-2 align-top">
@@ -2515,7 +2517,7 @@ export default function RequestDetailPage() {
                       </tr>
                     ))
                     if (isRej && isReady) rows.push(
-                      <tr key={g.style + "_rej"}><td colSpan={15} className="px-4 py-3 bg-red-50 border-t border-red-100">
+                      <tr key={g.style + "_rej"}><td colSpan={17} className="px-4 py-3 bg-red-50 border-t border-red-100">
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-red-700">Rejection Reason — {g.style} *</label>
                           <textarea value={rejectComment} onChange={e => setRejectComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
@@ -2527,7 +2529,7 @@ export default function RequestDetailPage() {
                       </td></tr>
                     )
                     if (isBackScm && isReady) rows.push(
-                      <tr key={g.style + "_bts"}><td colSpan={15} className="px-4 py-3 bg-orange-50 border-t border-orange-100">
+                      <tr key={g.style + "_bts"}><td colSpan={17} className="px-4 py-3 bg-orange-50 border-t border-orange-100">
                         <div className="space-y-2">
                           <label className="text-xs font-medium text-orange-700">Back to SCM — {g.style} — Reason *</label>
                           <textarea value={backToScmStyleComment} onChange={e => setBackToScmStyleComment(e.target.value)} rows={2} placeholder="Enter reason..." className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
