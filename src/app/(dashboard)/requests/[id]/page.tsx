@@ -2618,7 +2618,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50"><tr>
-                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
+                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY CODE","DETAIL","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-gray-50">
@@ -2627,7 +2627,9 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 font-medium">{item.so}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
-                            <td className="px-3 py-2">{getSplits(item).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "-"}</td>
+                            <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i}>{deptLabel(s.dept)} {s.pct}%</div>) : "-"}</td>
+                            <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="font-medium text-amber-800">{s.reason || "-"}</div>) : "-"}</td>
+                            <td className="px-3 py-2 whitespace-normal max-w-[16rem]">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="text-gray-500">{(s as any).reasonDetail || "-"}</div>) : "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "-"}</td>
                             <td className="px-3 py-2">{item.airFreight != null ? Number(item.airFreight).toLocaleString() : "-"}</td>
@@ -2741,7 +2743,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50"><tr>
-                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
+                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY CODE","DETAIL","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-gray-50">
@@ -2750,7 +2752,9 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 font-medium">{item.so}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.originalShipmentDate)}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
-                            <td className="px-3 py-2">{getSplits(item).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "-"}</td>
+                            <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i}>{deptLabel(s.dept)} {s.pct}%</div>) : "-"}</td>
+                            <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="font-medium text-amber-800">{s.reason || "-"}</div>) : "-"}</td>
+                            <td className="px-3 py-2 whitespace-normal max-w-[16rem]">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="text-gray-500">{(s as any).reasonDetail || "-"}</div>) : "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "-"}</td>
                             <td className="px-3 py-2">{item.airFreight != null ? Number(item.airFreight).toLocaleString() : "-"}</td>
