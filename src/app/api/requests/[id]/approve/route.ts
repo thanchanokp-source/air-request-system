@@ -1094,17 +1094,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const upd: any = { status: toStatus }
   if (claimDepartment) upd.claimDepartment = claimDepartment
   if (soClaimData && typeof soClaimData === "object") {
-    for (const [itemId, dept] of Object.entries(soClaimData)) {
-      if (dept) await prisma.airRequestItem.update({
+    for (const [itemId, deptVal] of Object.entries(soClaimData)) {
+      if (!deptVal) continue
+      const isArr = Array.isArray(deptVal)
+      const firstDept = isArr ? (deptVal as any[])[0]?.dept : String(deptVal)
+      if (!firstDept) continue
+      await prisma.airRequestItem.update({
         where: { id: itemId },
         data: {
-          claimDepartment: String(dept),
+          claimDepartment: firstDept,
+          // Persist the FULL splits (dept/pct/reason=Delay Code/reasonDetail) right here on
+          // approve — don't rely on the debounced auto-save, which is canceled when this
+          // request navigates away, silently dropping the detail (and sometimes the split).
+          ...(isArr ? { claimDepts: deptVal as any } : {}),
           itemComment: soClaimComments?.[itemId] ? String(soClaimComments[itemId]) : undefined,
-        }
+        } as any
       })
     }
-    const depts = [...new Set(Object.values(soClaimData).filter(Boolean))]
-    if (depts.length === 1) upd.claimDepartment = depts[0] as string
+    // Scalar-value case only (legacy single-dept forward): pick a doc-level dept.
+    const scalarDepts = [...new Set(Object.values(soClaimData).filter(v => v && !Array.isArray(v)))]
+    if (scalarDepts.length === 1) upd.claimDepartment = scalarDepts[0] as string
   }
 
   if (action === "reject" && comment) upd.rejectionReason = comment
