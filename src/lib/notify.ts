@@ -1544,11 +1544,20 @@ export async function notifyMissingMaster(requestId: string, missingCountries: s
 // been sitting at the current stage + days since it was first submitted.
 export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSent: number }> {
   const ACTIVE_STATUSES = [
-    "PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_SCM", "PENDING_VP_SCM", "PENDING_PRESIDENT",
+    "PENDING_DVM_MER", "PENDING_VP_MER",
+    "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_DVM_MER_TRM", "PENDING_VP_MER_TRM",
+    "PENDING_SCM", "PENDING_VP_SCM", "PENDING_PRESIDENT",
     "PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_LOGISTICS",
     "PENDING_VP_MER_GW", "PENDING_DPM_GW", "PENDING_GM_GW", "PENDING_PRESIDENT_GW",
     "PENDING_CLAIM_GW", "PENDING_LOGISTICS_GW",
   ]
+  // Stages with a SPECIFIC assigned person (picked per-document) → remind only THAT person,
+  // not every holder of the role. Everything else stays role-based (SCM/President/Logistics/Claim).
+  const ASSIGNED_FOR: Record<string, (d: any) => string | null | undefined> = {
+    PENDING_DVM_MER: d => d.assignedDvmMer, PENDING_DVM_MER_EA: d => d.assignedDvmMer, PENDING_DVM_MER_TRM: d => d.assignedDvmMer,
+    PENDING_VP_MER: d => d.assignedVpMer, PENDING_VP_MER_EA: d => d.assignedVpMer, PENDING_VP_MER_TRM: d => d.assignedVpMer,
+    PENDING_VP_MER_GW: d => d.assignedVpMer, PENDING_VP_SCM: d => d.assignedVpScm,
+  }
   const docs = await (prisma.airRequest as any).findMany({
     where: { status: { in: ACTIVE_STATUSES } },
     include: { approvalLogs: { orderBy: { createdAt: "desc" }, take: 1 } },
@@ -1559,14 +1568,23 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
 
   const digest = new Map<string, { docNo: string; stage: string; daysStage: number; daysTotal: number; bu: string }[]>()
   for (const doc of docs) {
-    const rolesToNotify: string[] | undefined = STATUS_ROLES[doc.status]
-    if (!rolesToNotify || !rolesToNotify.length) continue
-    const users = await (prisma.user as any).findMany({
-      where: { isActive: true, OR: [{ role: { in: rolesToNotify } }, { roles: { hasSome: rolesToNotify } }] },
-      select: { email: true, bu: true },
-    })
     const docBu = doc.bu || "NYG"
-    const recips = users.filter((u: any) => !u.bu || u.bu === "ALL" || u.bu === docBu).map((u: any) => u.email).filter(Boolean)
+    let recips: string[]
+    const assignedGetter = ASSIGNED_FOR[doc.status]
+    const assignedEmail = assignedGetter?.(doc)
+    if (assignedEmail) {
+      // Merch / VP SCM stages → only the specific person picked on this document.
+      recips = [assignedEmail]
+    } else {
+      // Role-based stages (or no assignee set) → all active holders of the role, scoped by BU.
+      const rolesToNotify: string[] | undefined = STATUS_ROLES[doc.status]
+      if (!rolesToNotify || !rolesToNotify.length) continue
+      const users = await (prisma.user as any).findMany({
+        where: { isActive: true, OR: [{ role: { in: rolesToNotify } }, { roles: { hasSome: rolesToNotify } }] },
+        select: { email: true, bu: true },
+      })
+      recips = users.filter((u: any) => !u.bu || u.bu === "ALL" || u.bu === docBu).map((u: any) => u.email).filter(Boolean)
+    }
     if (!recips.length) continue
     const lastAction = doc.approvalLogs?.[0]?.createdAt || doc.createdAt
     const row = {
