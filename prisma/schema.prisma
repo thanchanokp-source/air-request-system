@@ -54,6 +54,17 @@ model MasterDescription {
   isActive      Boolean @default(true)
 }
 
+// SCM delay-reason codes (col E) + their sub-detail definitions (col F). Admin/SCM editable.
+// Used as the dropdown source for the SCM claim-assignment (web + Export/Import Excel).
+model MasterDelayCode {
+  id          String   @id @default(cuid())
+  code        String   @unique                 // e.g. "2C_Buy Not Ready"
+  definitions String[] @default([])            // e.g. ["2.1 Fabric approval, trim approval", ...]
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  updatedAt   DateTime @updatedAt @default(now())
+}
+
 // MasterGMTType + MasterPort removed — unused (Port kept only as a display field on items;
 // freight rate is keyed by Country via MasterFreightRate).
 
