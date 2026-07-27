@@ -3079,23 +3079,26 @@ export default function RequestDetailPage() {
                 if (await downloadScmClaimFile()) return
                 // Same layout as the file MER uploaded (upload template) so SCM works in a familiar
                 // format: original columns + CLAIM DEPT 1-3 / %CLAIM / REASON for SCM to fill.
-                const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
+                const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","CLAIM DEPT 1","%CLAIM1","REASON 1","DETAIL 1","CLAIM DEPT 2","%CLAIM2","REASON 2","DETAIL 2","CLAIM DEPT 3","%CLAIM3","REASON 3","DETAIL 3"]
                 const aoa = [headers, ...vpMerPassedItems.map((item: any) => {
                   const d: any[] = soClaimDepts[item.id] || []
-                  const cmt = soClaimComments[item.id] || ""
                   return [
                     req?.documentNo || "", req?.brandName || item.brand || "", "NYG", item.style || "", item.so || "", item.sub || "", item.customerPO || "",
                     item.description || "", fmtDate(item.originalShipmentDate), fmtDate(item.planShipmentDate),
                     item.qtyOriginalShipment ?? "", item.qtyRequestAir ?? "", item.reasonDelay || "", item.factory || "", item.country || "",
-                    d[0]?.dept ? deptLabel(d[0].dept) : "", d[0]?.pct ?? "", d[0]?.reason || cmt || "",
-                    d[1]?.dept ? deptLabel(d[1].dept) : "", d[1]?.pct ?? "", d[1]?.reason || "",
-                    d[2]?.dept ? deptLabel(d[2].dept) : "", d[2]?.pct ?? "", d[2]?.reason || "",
+                    d[0]?.dept ? deptLabel(d[0].dept) : "", d[0]?.pct ?? "", d[0]?.reason || "", d[0]?.reasonDetail || "",
+                    d[1]?.dept ? deptLabel(d[1].dept) : "", d[1]?.pct ?? "", d[1]?.reason || "", d[1]?.reasonDetail || "",
+                    d[2]?.dept ? deptLabel(d[2].dept) : "", d[2]?.pct ?? "", d[2]?.reason || "", d[2]?.reasonDetail || "",
                   ]
                 })]
                 const ws = XLSX.utils.aoa_to_sheet(aoa)
-                ws["!cols"] = [16,14,6,14,10,8,14,22,18,18,20,20,16,14,12,14,8,16,14,8,16,14,8,16].map(w => ({ wch: w }))
+                ws["!cols"] = [16,14,6,14,10,8,14,22,18,18,20,20,16,14,12,14,8,16,24,14,8,16,24,14,8,16,24].map(w => ({ wch: w }))
                 const wb = XLSX.utils.book_new()
                 XLSX.utils.book_append_sheet(wb, ws, "SCM")
+                // Reference sheet: valid Delay Codes + their detail definitions (SCM copies into REASON/DETAIL).
+                const refAoa = [["DELAY CODE", "DETAIL DEFINITIONS"], ...delayCodes.map(c => [c.code, (c.definitions || []).join("\n")])]
+                const refWs = XLSX.utils.aoa_to_sheet(refAoa); refWs["!cols"] = [{ wch: 26 }, { wch: 80 }]
+                XLSX.utils.book_append_sheet(wb, refWs, "Delay Codes")
                 XLSX.writeFile(wb, `scm-claim-dept_${req.documentNo}.xlsx`)
               }} className="flex items-center gap-1.5 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 cursor-pointer">
                 ↓ Export Excel
@@ -6268,7 +6271,8 @@ export default function RequestDetailPage() {
                         const slots = [1,2,3].map(n => ({
                           raw: String(row[`CLAIM DEPT ${n}`] || "").trim(),
                           pct: Number(row[`%CLAIM${n}`] || row[`%Claim${n}`] || row[`%${n}`] || 0),
-                          reason: String(row[`REASON ${n}`] || "").trim(),
+                          reason: String(row[`REASON ${n}`] || "").trim(),          // = DELAY CODE
+                          detail: String(row[`DETAIL ${n}`] || row[`DETAIL REASON ${n}`] || "").trim(),
                           n
                         }))
                         const filledSlots = slots.filter(s => s.raw)
@@ -6276,7 +6280,7 @@ export default function RequestDetailPage() {
                           const code = labelToCode[s.raw] || s.raw
                           if (!CLAIM_DEPTS.includes(code)) issues.push(`CLAIM DEPT ${s.n}: "${s.raw}" is not recognized`)
                           if (!s.pct) issues.push(`CLAIM DEPT ${s.n} (${s.raw}): missing %CLAIM${s.n}`)
-                          if (!s.reason) issues.push(`CLAIM DEPT ${s.n} (${s.raw}): missing REASON ${s.n}`)
+                          if (!s.reason) issues.push(`CLAIM DEPT ${s.n} (${s.raw}): missing REASON ${s.n} (Delay Code)`)
                         })
                         if (filledSlots.length > 0) {
                           const total = filledSlots.reduce((sum, s) => sum + s.pct, 0)
@@ -6285,7 +6289,7 @@ export default function RequestDetailPage() {
                         if (issues.length > 0) { errorList.push({ so: soLabel, issues }); return }
                         const parsed = filledSlots.flatMap(s => {
                           const dept = labelToCode[s.raw] || s.raw
-                          return CLAIM_DEPTS.includes(dept) && s.pct > 0 ? [{ dept, pct: s.pct, reason: s.reason }] : []
+                          return CLAIM_DEPTS.includes(dept) && s.pct > 0 ? [{ dept, pct: s.pct, reason: s.reason, reasonDetail: s.detail }] : []
                         })
                         if (parsed.length > 0) newDepts[(found as any).id] = parsed
                         const r1 = String(row["SCM REASON"] || row["REASON 1"] || "").trim()
