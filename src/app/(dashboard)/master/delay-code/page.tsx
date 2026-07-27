@@ -1,11 +1,11 @@
 "use client"
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { canEditMaster } from "@/lib/master-access"
+import { canEditDelayCode } from "@/lib/master-access"
 
 export default function MasterDelayCodePage() {
   const { data: session } = useSession()
-  const canEdit = canEditMaster(session?.user)
+  const canEdit = canEditDelayCode(session?.user)
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)

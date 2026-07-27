@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { canEditMaster } from "@/lib/master-access"
+import { canEditDelayCode } from "@/lib/master-access"
 
 // SCM delay-reason codes (dropdown source for claim assignment — web + Export/Import Excel).
 export async function GET() {
@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (!canEditMaster(session.user)) return NextResponse.json({ error: "Read only — only Admin/Logistics can edit" }, { status: 403 })
+  if (!canEditDelayCode(session.user)) return NextResponse.json({ error: "Read only — only Admin/Logistics can edit" }, { status: 403 })
   const { code, definitions } = await req.json()
   if (!code || !String(code).trim()) return NextResponse.json({ error: "Missing code" }, { status: 400 })
   const defs = Array.isArray(definitions) ? definitions.map((d: any) => String(d).trim()).filter(Boolean)

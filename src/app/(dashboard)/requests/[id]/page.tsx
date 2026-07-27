@@ -6243,8 +6243,31 @@ export default function RequestDetailPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Export removed — SCM downloads the original file from the Attachments section below. */}
-                  <span className="text-[11px] text-gray-400 self-center">↓ Download the original files from Attachments below</span>
+                  {/* Export — MER data + claim columns (CLAIM DEPT/%/REASON=code/DETAIL) + a Delay Codes reference sheet. */}
+                  <button type="button" onClick={() => {
+                    const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","CLAIM DEPT 1","%CLAIM1","REASON 1","DETAIL 1","CLAIM DEPT 2","%CLAIM2","REASON 2","DETAIL 2","CLAIM DEPT 3","%CLAIM3","REASON 3","DETAIL 3"]
+                    const aoa = [headers, ...pendingScmItems.map((item: any) => {
+                      const d: any[] = soClaimDepts[item.id] || []
+                      return [
+                        req?.documentNo || "", req?.brandName || item.brand || "", req?.bu || "NYG", item.style || "", item.so || "", item.sub || "", item.customerPO || "",
+                        item.description || "", fmtDate(item.originalShipmentDate), fmtDate(item.planShipmentDate),
+                        item.qtyOriginalShipment ?? "", item.qtyRequestAir ?? "", item.reasonDelay || "", item.factory || "", item.country || "",
+                        d[0]?.dept ? deptLabel(d[0].dept) : "", d[0]?.pct ?? "", d[0]?.reason || "", d[0]?.reasonDetail || "",
+                        d[1]?.dept ? deptLabel(d[1].dept) : "", d[1]?.pct ?? "", d[1]?.reason || "", d[1]?.reasonDetail || "",
+                        d[2]?.dept ? deptLabel(d[2].dept) : "", d[2]?.pct ?? "", d[2]?.reason || "", d[2]?.reasonDetail || "",
+                      ]
+                    })]
+                    const ws = XLSX.utils.aoa_to_sheet(aoa)
+                    ws["!cols"] = [16,14,6,14,10,8,14,22,18,18,20,20,16,14,12,14,8,16,24,14,8,16,24,14,8,16,24].map(w => ({ wch: w }))
+                    const wb = XLSX.utils.book_new()
+                    XLSX.utils.book_append_sheet(wb, ws, "SCM")
+                    const refAoa = [["DELAY CODE", "DETAIL DEFINITIONS"], ...delayCodes.map(c => [c.code, (c.definitions || []).join("\n")])]
+                    const refWs = XLSX.utils.aoa_to_sheet(refAoa); refWs["!cols"] = [{ wch: 26 }, { wch: 80 }]
+                    XLSX.utils.book_append_sheet(wb, refWs, "Delay Codes")
+                    XLSX.writeFile(wb, `scm-claim-dept_${req.documentNo}.xlsx`)
+                  }} className="flex items-center gap-1 border border-blue-300 bg-white text-blue-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50">
+                    ⬇ Export (SCM)
+                  </button>
                   {/* Import */}
                   <label className="flex items-center gap-1 border border-gray-300 bg-white text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 cursor-pointer">
                     ↑ Import Excel
