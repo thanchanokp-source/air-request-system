@@ -42,7 +42,7 @@ export function ClaimSplitTable({ item, highlightDept, showCrNo = false }: { ite
       <table className="text-xs w-full">
         <thead className="bg-gray-50">
           <tr>
-            {["CLAIM DEPT", "% CLAIM", "AIR COST (THB)", "REASON", ...(showCrNo ? ["CR NO"] : []), "STATUS"].map(h => (
+            {["CLAIM DEPT", "% CLAIM", "AIR COST (THB)", "DELAY CODE / DETAIL", ...(showCrNo ? ["CR NO"] : []), "STATUS"].map(h => (
               <th key={h} className="px-3 py-1.5 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -56,7 +56,10 @@ export function ClaimSplitTable({ item, highlightDept, showCrNo = false }: { ite
                 <td className="px-3 py-1.5 font-medium">{s.dept}</td>
                 <td className="px-3 py-1.5">{s.pct}%</td>
                 <td className="px-3 py-1.5 font-semibold text-green-700">{fmt(splitAirCost(item, s))}</td>
-                <td className="px-3 py-1.5 text-gray-500">{s.reason || "-"}</td>
+                <td className="px-3 py-1.5 text-gray-500">
+                  {s.reason ? <span className="font-medium text-gray-700">{s.reason}</span> : "-"}
+                  {(s as any).reasonDetail && <span className="block text-[10px] text-gray-400">{(s as any).reasonDetail}</span>}
+                </td>
                 {showCrNo && <td className="px-3 py-1.5 font-medium text-blue-700">{s.crNo || "-"}</td>}
                 <td className="px-3 py-1.5">{st ? <span className={`px-2 py-0.5 rounded-full ${st.cls}`}>{st.text}</span> : "-"}</td>
               </tr>

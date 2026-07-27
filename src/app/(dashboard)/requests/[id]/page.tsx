@@ -457,7 +457,7 @@ export default function RequestDetailPage() {
   const [logSelected, setLogSelected] = useState<Set<string>>(new Set())
   const [batchInvoice, setBatchInvoice] = useState("")
   const [batchBookingDate, setBatchBookingDate] = useState("")
-  const [soClaimDepts, setSoClaimDepts] = useState<Record<string, {dept: string, pct: number, reason?: string}[]>>({})
+  const [soClaimDepts, setSoClaimDepts] = useState<Record<string, {dept: string, pct: number, reason?: string, reasonDetail?: string}[]>>({})
   const [soDvmAssigned, setSoDvmAssigned] = useState<Record<string, string>>({})
   const [dvmUsers, setDvmUsers] = useState<Record<string, any[]>>({})
   const [soClaimSelected, setSoClaimSelected] = useState<Set<string>>(new Set())
@@ -473,7 +473,11 @@ export default function RequestDetailPage() {
   const [vpScmSearching, setVpScmSearching] = useState(false)
   const [vpScmOpen, setVpScmOpen] = useState(false)
   const [scmSelectedIds, setScmSelectedIds] = useState<Set<string>>(new Set())
-  const [scmRows, setScmRows] = useState<{dept: string, pct: string, reason: string}[]>([{dept:"", pct:"", reason:""}])
+  const [scmRows, setScmRows] = useState<{dept: string, pct: string, reason: string, reasonDetail?: string}[]>([{dept:"", pct:"", reason:"", reasonDetail:""}])
+  // SCM delay-code master (dropdown source): code + its detail definitions.
+  const [delayCodes, setDelayCodes] = useState<{ code: string; definitions: string[] }[]>([])
+  useEffect(() => { fetch("/api/master/delay-code").then(r => r.json()).then(d => setDelayCodes(Array.isArray(d) ? d : [])).catch(() => {}) }, [])
+  const defsForCode = (code: string) => delayCodes.find(c => c.code === code)?.definitions || []
   const [scmSoInput, setScmSoInput] = useState("")
   const [scmForwarding, setScmForwarding] = useState(false)
   const [importErrors, setImportErrors] = useState<{so: string, issues: string[]}[]>([])
@@ -3232,7 +3236,8 @@ export default function RequestDetailPage() {
                                   ${deptTotal === 100 ? "bg-green-100 text-green-800 border border-green-300" : "bg-amber-100 text-amber-800 border border-amber-300"}`}>
                                   <span className="flex-1">
                                     <span className="font-semibold">{CLAIM_DEPT_LABEL[d.dept] || d.dept} {d.pct}%</span>
-                                    {d.reason && <span className="block text-[9px] opacity-70 mt-0.5">{d.reason}</span>}
+                                    {d.reason && <span className="block text-[9px] opacity-80 mt-0.5 font-medium">{d.reason}</span>}
+                                    {d.reasonDetail && <span className="block text-[9px] opacity-60">{d.reasonDetail}</span>}
                                   </span>
                                   <button type="button" onClick={() => setSoClaimDepts(p => {
                                     const n = {...p}; n[item.id] = (n[item.id] || []).filter((x: any) => x.dept !== d.dept)
@@ -6458,7 +6463,7 @@ export default function RequestDetailPage() {
               <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Quick Assign</p>
-                  <button type="button" onClick={() => { setScmRows([{dept:"", pct:"", reason:""}]); setScmSelectedIds(new Set()) }}
+                  <button type="button" onClick={() => { setScmRows([{dept:"", pct:"", reason:"", reasonDetail:""}]); setScmSelectedIds(new Set()) }}
                     className="text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                     Clear
@@ -6484,10 +6489,19 @@ export default function RequestDetailPage() {
                           onChange={e => setScmRows(p => p.map((r, i) => i === idx ? {...r, pct: e.target.value} : r))}
                           className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs w-14 text-center focus:ring-1 focus:ring-blue-400 focus:outline-none" />
                       </div>
-                      <input type="text" placeholder="Reason (required)..." value={row.reason}
+                      {/* Delay CODE (dropdown from master) */}
+                      <select value={row.reason}
                         onChange={e => setScmRows(p => p.map((r, i) => i === idx ? {...r, reason: e.target.value} : r))}
-                        className={`rounded-lg px-2 py-1.5 text-xs w-44 focus:ring-1 focus:outline-none border
-                          ${row.dept && !row.reason.trim() ? "border-red-400 bg-red-50 focus:ring-red-400" : "border-gray-300 focus:ring-blue-400"}`} />
+                        className={`rounded-lg px-2 py-1.5 text-xs w-40 focus:ring-1 focus:outline-none border
+                          ${row.dept && !row.reason.trim() ? "border-red-400 bg-red-50 focus:ring-red-400" : "border-gray-300 focus:ring-blue-400"}`}>
+                        <option value="">-- DELAY CODE --</option>
+                        {delayCodes.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                      </select>
+                      {/* Detail (pick a definition of the chosen code, or type your own) */}
+                      <input type="text" list={`scm-def-${idx}`} placeholder="Detail..." value={row.reasonDetail || ""}
+                        onChange={e => setScmRows(p => p.map((r, i) => i === idx ? {...r, reasonDetail: e.target.value} : r))}
+                        className="rounded-lg px-2 py-1.5 text-xs w-52 border border-gray-300 focus:ring-1 focus:ring-blue-400 focus:outline-none" />
+                      <datalist id={`scm-def-${idx}`}>{defsForCode(row.reason).map((d, i) => <option key={i} value={d} />)}</datalist>
                       {scmRows.length > 1 && (
                         <button type="button" onClick={() => setScmRows(p => p.filter((_, i) => i !== idx))}
                           className="text-gray-300 hover:text-red-500 text-sm leading-none">✕</button>
@@ -6497,7 +6511,7 @@ export default function RequestDetailPage() {
                   {/* + Add row button */}
                   {scmRows.length < 3 && (
                     <button type="button"
-                      onClick={() => setScmRows(p => [...p, {dept:"", pct:"", reason:""}])}
+                      onClick={() => setScmRows(p => [...p, {dept:"", pct:"", reason:"", reasonDetail:""}])}
                       className="text-xs text-blue-500 hover:text-blue-700 font-medium flex items-center gap-1 pl-5">
                       + Add dept
                     </button>
@@ -6590,12 +6604,12 @@ export default function RequestDetailPage() {
                       <button type="button" disabled={!canStamp}
                         title={total !== 100 ? "% total must equal 100" : missingReason ? "Please enter Reason for every dept" : scmSelectedIds.size === 0 ? "Select SO first" : ""}
                         onClick={() => {
-                          const deptsToApply = filled.map(r => ({ dept: r.dept, pct: Number(r.pct), reason: r.reason.trim() }))
-                          const combinedReason = filled.map(r => r.reason.trim()).filter(Boolean).join("; ")
+                          const deptsToApply = filled.map(r => ({ dept: r.dept, pct: Number(r.pct), reason: r.reason.trim(), reasonDetail: (r.reasonDetail || "").trim() }))
+                          const combinedReason = filled.map(r => [r.reason.trim(), (r.reasonDetail || "").trim()].filter(Boolean).join(" — ")).filter(Boolean).join("; ")
                           setSoClaimDepts(p => { const n = {...p}; scmSelectedIds.forEach(sid => { n[sid] = deptsToApply }); return n })
                           if (combinedReason) setSoClaimComments(p => { const n = {...p}; scmSelectedIds.forEach(sid => { n[sid] = combinedReason }); return n })
                           setScmSelectedIds(new Set())
-                          setScmRows([{dept:"", pct:"", reason:""}])
+                          setScmRows([{dept:"", pct:"", reason:"", reasonDetail:""}])
                         }}
                         className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
                         Stamp{scmSelectedIds.size > 0 ? ` (${scmSelectedIds.size})` : ""}
