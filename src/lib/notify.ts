@@ -1560,7 +1560,7 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
   }
   const docs = await (prisma.airRequest as any).findMany({
     where: { status: { in: ACTIVE_STATUSES } },
-    include: { approvalLogs: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: { approvalLogs: { orderBy: { createdAt: "desc" }, take: 1 }, items: true, claimForwards: true },
   })
   if (!docs.length) return { docs: 0, emailsSent: 0 }
   const now = Date.now()
@@ -1575,6 +1575,37 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
     if (assignedEmail) {
       // Merch / VP SCM stages → only the specific person picked on this document.
       recips = [assignedEmail]
+    } else if (["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_CLAIM_GW"].includes(doc.status)) {
+      // Claim stages → remind ONLY the claim depts that are ACTUALLY on this document (a
+      // COMMERCIAL-only doc must not ping Procurement/NYK). COMMERCIAL = the merch person picked;
+      // other depts by their entry/VP roles; plus Logistics (parallel) until Save & Send.
+      const NO_APPROVAL = ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+      const doneSt = ["DEPT_APPROVED", "COMPLETED", "REJECTED"]
+      const pendingDepts = new Set<string>()
+      for (const it of (doc.items || [])) for (const s of getSplits(it)) if (s.dept && !doneSt.includes(String(s.status || "")) && !NO_APPROVAL.includes(s.dept)) pendingDepts.add(s.dept)
+      const set = new Set<string>()
+      const addE = (e: any) => { if (e) set.add(String(e).toLowerCase()) }
+      // A forwarded approver (per dept) is the current holder for their SOs.
+      for (const f of (doc.claimForwards || [])) if (pendingDepts.has(f.dept) && f.nextEmail && (!Array.isArray(f.itemIds) || f.itemIds.length)) addE(f.nextEmail)
+      const roleSet = new Set<string>()
+      for (const d of pendingDepts) {
+        if (d === "COMMERCIAL") { addE(doc.assignedVpMer || doc.assignedDvmMer); continue }
+        for (const r of [...claimEntryRoles(d), ...claimVpRoles(d)]) roleSet.add(r)
+      }
+      if (roleSet.size) {
+        const us = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: { in: [...roleSet] } }, { roles: { hasSome: [...roleSet] } }] }, select: { email: true, bu: true, role: true, roles: true } })
+        for (const u of us) {
+          const held = [u.role, ...(u.roles || [])]
+          const isNyk = held.some((r: string) => r && r.startsWith("SCM_NYK")) // NYK is cross-BU (bu often NYG)
+          if (isNyk || !u.bu || u.bu === "ALL" || u.bu === docBu) addE(u.email)
+        }
+      }
+      if (!doc.logisticsSent) {
+        const lgRoles = docBu === "GW" ? ["LOGISTICS_GW"] : docBu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS"]
+        const lgUs = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: { in: lgRoles } }, { roles: { hasSome: lgRoles } }] }, select: { email: true, bu: true } })
+        for (const u of lgUs) { if (docBu === "TRM" || !u.bu || u.bu === "ALL" || u.bu === docBu) addE(u.email) }
+      }
+      recips = [...set]
     } else {
       // Role-based stages (or no assignee set) → all active holders of the role, scoped by BU.
       const rolesToNotify: string[] | undefined = STATUS_ROLES[doc.status]
