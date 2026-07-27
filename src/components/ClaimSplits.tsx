@@ -16,17 +16,29 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
 }
 
 // Compact inline badges — one chip per claim split (dept + %).
-export function ClaimSplitBadges({ item }: { item: any }) {
+// showReason: also surface the SCM delay code + detail per split (so approvers see it).
+export function ClaimSplitBadges({ item, showReason = false }: { item: any; showReason?: boolean }) {
   const splits = getSplits(item)
   if (splits.length === 0) return <span className="text-gray-300">—</span>
   return (
     <div className="flex flex-wrap gap-1">
-      {splits.map((s: ClaimSplit, i: number) => (
-        <span key={i} className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full whitespace-nowrap">
-          <span className="font-medium">{s.dept}</span>
-          <span className="text-gray-400">{s.pct}%</span>
-        </span>
-      ))}
+      {splits.map((s: ClaimSplit, i: number) => {
+        const detail = (s as any).reasonDetail as string | undefined
+        return (
+          <span key={i} className="inline-flex flex-col gap-0.5 text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-lg">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+              <span className="font-medium">{s.dept}</span>
+              <span className="text-gray-400">{s.pct}%</span>
+            </span>
+            {showReason && s.reason && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 max-w-[16rem]">
+                <span className="font-semibold whitespace-nowrap">{s.reason}</span>
+                {detail && <span className="text-amber-700 truncate" title={detail}>· {detail}</span>}
+              </span>
+            )}
+          </span>
+        )
+      })}
     </div>
   )
 }

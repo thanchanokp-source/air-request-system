@@ -405,7 +405,7 @@ export default function ApprovalsPage() {
                         {isClaimRole && <td className="px-3 py-1.5 font-bold text-red-700 whitespace-nowrap">{fmtNum(myClaimForItem(item))} THB</td>}
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.factory}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.country}</td>
-                        <td className="px-3 py-1.5"><ClaimSplitBadges item={item} /></td>
+                        <td className="px-3 py-1.5"><ClaimSplitBadges item={item} showReason /></td>
                         {hasNyk && <td className="px-3 py-1.5 whitespace-nowrap font-medium text-indigo-700">{req.crNo || "-"}</td>}
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.invoiceNo || "-"}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.hawbNo || "-"}</td>
