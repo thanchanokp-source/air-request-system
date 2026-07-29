@@ -192,8 +192,10 @@ export const authOptions: NextAuthOptions = {
         // Normal email/password login
         if (!credentials?.email || !credentials?.password) return null
         if (!credentials.email.toLowerCase().endsWith("@nanyangtextile.com")) return null
+        // Emails are stored lowercase — normalize the typed input so an uppercase domain/name
+        // (e.g. "jariya.t@NANYANGTEXTILE.com") still matches instead of silently failing login.
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email: credentials.email.trim().toLowerCase() }
         })
         if (!user || !user.isActive) return null
         if (!user.password) return null
