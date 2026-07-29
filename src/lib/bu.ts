@@ -55,6 +55,11 @@ export function viewableBus(user: any): { bus: Bu[]; canAll: boolean } {
   const set = new Set<Bu>()
   let hasBoth = false
   for (const r of roles) {
+    // "LOGISTICS" (bare, no _EA/_TRM/_GW suffix) is a SHARED role name distinguished ONLY by
+    // User.bu: NYG (Aoyjai) vs EA (Quynh). There is no LOGISTICS_EA role, so here user.bu IS
+    // authoritative (the Approvals flow already scopes EA LG by user.bu). Without this, roleBu
+    // maps every bare LOGISTICS user to NYG and an EA logistics user wrongly sees NYG.
+    if (r === "LOGISTICS") { set.add(bu === "EA" ? "EA" : bu === "TRM" ? "TRM" : "NYG"); continue }
     const b = roleBu(r)
     if (b === "BOTH") hasBoth = true
     else if (b) set.add(b)
