@@ -1881,7 +1881,9 @@ async function notifyLgFilesToClaimersImpl(requestId: string) {
 // where LG can enter data but still have SO with NO Actual Air Freight (not filled yet).
 // Emails the BU's LG role-holders a table with one-click Open-Document links.
 export async function notifyLgPendingReminder(): Promise<{ sent: number; docs: number }> {
-  const NYG_ST = ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"]
+  // PENDING_SCM excluded — LG only acts AFTER VP SCM approves (doc → PENDING_PRESIDENT), so don't
+  // remind LG while the doc is still at the SCM stage. Mirrors the Approvals-queue visibility rule.
+  const NYG_ST = ["PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"]
   const GW_ST = ["PENDING_CLAIM_GW", "PENDING_LOGISTICS_GW", "PENDING_PRESIDENT_GW"]
   const docs: any[] = await prisma.airRequest.findMany({
     where: { status: { in: [...NYG_ST, ...GW_ST] } },

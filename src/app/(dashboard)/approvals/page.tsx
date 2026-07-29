@@ -116,12 +116,14 @@ export default function ApprovalsPage() {
     // President (NYG) — FINAL approver (items at PRESIDENT_PENDING). Match via held roles
     // so one person who is President of BOTH BUs sees NYG docs here.
     if (myRoles.includes("PRESIDENT") && r.status === "PENDING_PRESIDENT") return items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
-    // LG (NYG) runs in parallel with Claim — show until LG has pressed "Save & Send"
-    // (logisticsSent). After that LG's work is done → drop it from the queue.
+    // LG (NYG) starts AFTER VP SCM approves (doc leaves PENDING_SCM → PENDING_PRESIDENT), then
+    // runs in parallel with Claim — show until LG has pressed "Save & Send" (logisticsSent).
+    // NOTE: PENDING_SCM is intentionally EXCLUDED — LG must not see/book a doc still at the SCM
+    // stage; it only appears once SCM + VP SCM are both done.
     // Logistics is BU-scoped: NYG LG sees NYG docs, EA LG (quynh) sees EA docs. (GW uses LOGISTICS_GW.)
-    if (myRoles.includes("LOGISTICS") && r.bu !== "GW" && requestInBu(r, userBu || "NYG") && !r.logisticsSent && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
-    // TRM logistics — same NYG-style parallel/logistics stages, scoped to TRM docs (Urairat).
-    if (myRoles.includes("LOGISTICS_TRM") && r.bu === "TRM" && !r.logisticsSent && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
+    if (myRoles.includes("LOGISTICS") && r.bu !== "GW" && requestInBu(r, userBu || "NYG") && !r.logisticsSent && ["PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
+    // TRM logistics — same NYG-style parallel/logistics stages (post-VP-SCM), scoped to TRM docs (Urairat).
+    if (myRoles.includes("LOGISTICS_TRM") && r.bu === "TRM" && !r.logisticsSent && ["PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }
