@@ -3115,7 +3115,8 @@ export default function RequestDetailPage() {
                 <input type="file" accept=".xlsx,.xls" className="hidden" onChange={async e => {
                   const file = e.target.files?.[0]; if (!file) return
                   const buf = await file.arrayBuffer()
-                  const wb2 = XLSX.read(buf, { type: "buffer" })
+                  // type:"array" + Uint8Array — "buffer" needs a Node Buffer (absent in browser).
+                  const wb2 = XLSX.read(new Uint8Array(buf), { type: "array" })
                   const ws2 = wb2.Sheets[wb2.SheetNames[0]]
                   const rows2 = XLSX.utils.sheet_to_json(ws2, { defval: "" }) as any[]
                   const newDepts: Record<string, {dept: string, pct: number}[]> = {}
@@ -6260,22 +6261,40 @@ export default function RequestDetailPage() {
                     ↑ Import Excel
                     <input type="file" accept=".xlsx,.xls" className="hidden" onChange={async e => {
                       const file = e.target.files?.[0]; if (!file) return
-                      const buf = await file.arrayBuffer()
-                      const wb2 = XLSX.read(buf, { type: "buffer" })
-                      const ws2 = wb2.Sheets[wb2.SheetNames[0]]
-                      const rows2 = XLSX.utils.sheet_to_json(ws2, { defval: "" }) as any[]
+                      // Browser File API → ArrayBuffer. Must use type:"array" with a Uint8Array —
+                      // type:"buffer" needs a Node Buffer (absent in the browser) and SheetJS
+                      // then fails SILENTLY inside this async handler (looks like "import did nothing").
+                      let rows2: any[]
+                      try {
+                        const buf = await file.arrayBuffer()
+                        const wb2 = XLSX.read(new Uint8Array(buf), { type: "array" })
+                        const ws2 = wb2.Sheets[wb2.SheetNames[0]]
+                        rows2 = XLSX.utils.sheet_to_json(ws2, { defval: "" }) as any[]
+                      } catch (err: any) {
+                        setImportErrors([{ so: "—", issues: [`อ่านไฟล์ไม่สำเร็จ: ${err?.message || err}. กรุณาใช้ไฟล์ที่กด Export (SCM) มา กรอกข้อมูล แล้วบันทึกเป็น .xlsx`] }])
+                        e.target.value = ""; return
+                      }
                       const labelToCode = Object.fromEntries(Object.entries(CLAIM_DEPT_LABEL).map(([k, v]) => [v, k]))
                       // SO match is leading-zero tolerant (Excel drops a leading 0: 01262592 → 1262592).
                       const soK = (x: any) => String(x ?? "").replace(/\D/g, "").replace(/^0+/, "")
                       const newDepts: Record<string, {dept: string, pct: number, reason: string}[]> = {}
                       const newComments: Record<string, string> = {}
                       const errorList: {so: string, issues: string[]}[] = []
+                      // One file row = one item. Track already-matched items so that when several items
+                      // share the SAME SO+SUB (different STYLE), each file row maps to a DISTINCT item
+                      // (prefer the STYLE match) instead of everyone hitting the first → 24/25 assigned.
+                      const usedIds = new Set<string>()
                       rows2.forEach((row: any) => {
                         const so = String(row["SO"] || "").trim()
                         const sub = String(row["SUB"] || "").trim()
+                        const style = String(row["STYLE"] || "").trim()
                         if (!so) return
                         const soLabel = sub ? `${so}/${sub}` : so
-                        const found = pendingScmItems.find((i: any) => soK(i.so) === soK(so) && (i.sub || "") === sub)
+                        const soSubMatch = (i: any) => soK(i.so) === soK(so) && (i.sub || "") === sub
+                        const found = pendingScmItems.find((i: any) => soSubMatch(i) && !usedIds.has(i.id) && (!style || (i.style || "") === style))
+                          || pendingScmItems.find((i: any) => soSubMatch(i) && !usedIds.has(i.id))
+                          || pendingScmItems.find((i: any) => soSubMatch(i))
+                        if (found) usedIds.add((found as any).id)
                         const issues: string[] = []
                         if (!found) { issues.push("This SO was not found in the list"); errorList.push({ so: soLabel, issues }); return }
                         const slots = [1,2,3].map(n => ({
