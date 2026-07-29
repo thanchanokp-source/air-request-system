@@ -115,7 +115,7 @@ function LoginForm() {
             <div className="chip on"><i /><span>NYG</span></div>
             <div className="chip on"><i /><span>GW</span></div>
             <div className="chip on"><i /><span>TRM</span></div>
-            <div className="chip soon"><span>EA</span><em>soon</em></div>
+            <div className="chip on"><i /><span>EA</span></div>
           </div>
         </div>
 
