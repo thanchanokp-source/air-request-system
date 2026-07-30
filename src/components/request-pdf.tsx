@@ -7,6 +7,14 @@ Font.register({ family: "Sarabun", src: "/fonts/Sarabun-Regular.ttf" })
 Font.register({ family: "SarabunB", src: "/fonts/Sarabun-Bold.ttf" })
 Font.registerHyphenationCallback((word: string) => [word]) // avoid breaking Thai words
 
+// HAWB#/INVOICE are long unbroken digit strings. With the "never split a word" hyphenation
+// callback above, react-pdf can't break them inside a narrow fixed-width column, so they OVERFLOW
+// and overlap the next column. Insert a zero-width space (U+200B, an explicit line-break
+// opportunity honoured independently of hyphenation) every 4 chars → the number wraps to multiple
+// lines within its own column instead of bleeding out.
+const ZWSP = String.fromCharCode(0x200B)
+const softWrap = (v: any) => { const s = String(v ?? "").trim(); return s ? s.replace(/(.{4})/g, "$1" + ZWSP) : "-" }
+
 // Company letterhead — edit here if the legal entity / address changes.
 const COMPANY = {
   name: "Nan Yang Garment Co., Ltd.",
@@ -314,8 +322,8 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           <Text style={[s.td, { width: C.style }]}>{item.style || "-"}</Text>
           <Text style={[s.td, { width: C.sub }]}>{item.sub || "-"}</Text>
           <Text style={[s.tdL, { flex: 1 }]}>{item.description || "-"}</Text>
-          <Text style={[s.td, { width: C.hawb }]}>{item.hawbNo || "-"}</Text>
-          <Text style={[s.td, { width: C.inv }]}>{item.invoiceNo || "-"}</Text>
+          <Text style={[s.td, { width: C.hawb }]}>{softWrap(item.hawbNo)}</Text>
+          <Text style={[s.td, { width: C.inv }]}>{softWrap(item.invoiceNo)}</Text>
           <Text style={[s.td, { width: C.qty }]}>{fmtNum(item.qtyRequestAir)}</Text>
           <Text style={[s.td, { width: C.gross }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
           <Text style={[s.tdR, { width: C.est }]}>{fmtNum(est)}</Text>
@@ -415,7 +423,7 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
   // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
   // wrap, so a too-narrow column overflows and overlaps its neighbour. Fixed cols sum ≈ 482
   // → REASON (flex) gets the rest.
-  const C = { no: 14, so: 42, style: 52, sub: 20, desc: 24, fac: 38, ctry: 44, hawb: 36, inv: 40, qty: 26, gross: 30, est: 36, act: 36, claim: 44 }
+  const C = { no: 14, so: 42, style: 52, sub: 20, desc: 24, fac: 38, ctry: 44, hawb: 42, inv: 46, qty: 26, gross: 30, est: 36, act: 36, claim: 44 }
   return (
     <Document title={`${req.documentNo || "Combined"}`}>
       <Page size="A4" style={s.pageFlow} wrap>
@@ -495,8 +503,8 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
               <Text style={[s.td, { width: C.fac }]}>{item.factory || "-"}</Text>
               <Text style={[s.td, { width: C.ctry }]}>{item.country || "-"}</Text>
               <Text style={[s.tdL, { flex: 1 }]}>{reasonOf(item)}</Text>
-              <Text style={[s.td, { width: C.hawb }]}>{item.hawbNo || "-"}</Text>
-              <Text style={[s.td, { width: C.inv }]}>{item.invoiceNo || "-"}</Text>
+              <Text style={[s.td, { width: C.hawb }]}>{softWrap(item.hawbNo)}</Text>
+              <Text style={[s.td, { width: C.inv }]}>{softWrap(item.invoiceNo)}</Text>
               <Text style={[s.td, { width: C.qty }]}>{fmtNum(item.qtyRequestAir)}</Text>
               <Text style={[s.td, { width: C.gross }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
               <Text style={[s.tdR, { width: C.est }]}>{fmtNum(Number(item.airFreight) || 0)}</Text>
