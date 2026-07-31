@@ -411,7 +411,9 @@ export function finalizeGwCr(splits: ClaimSplit[], depts: string[], crNo: string
 // the SO reaches Accounting only when the claim is fully approved AND Logistics
 // has entered data (actualAirFreight). `lgDone` = actualAirFreight != null.
 // While either side is incomplete the SO stays PRES_PASSED (the parallel stage).
-export function deriveGwItemStatus(splits: ClaimSplit[], lgDone: boolean = true): string {
+// skipPresident: "NYK Direct" imports skip the GW President step — a fully-approved claim
+// goes STRAIGHT to Accounting (ACCOUNTING_PENDING) instead of PRESIDENT_PENDING.
+export function deriveGwItemStatus(splits: ClaimSplit[], lgDone: boolean = true, skipPresident: boolean = false): string {
   if (splits.length === 0) return "PRES_PASSED"
   // GW + SUPPLIER claims need NO approval — treat them as already approved so they
   // never block the doc (it flows straight to Accounting via the President step).
@@ -423,7 +425,9 @@ export function deriveGwItemStatus(splits: ClaimSplit[], lgDone: boolean = true)
   if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_DEPT_ACCEPTED || s === GW_NYK_APPROVER_PASSED)) return "PRES_PASSED"
   // claim fully approved + Logistics data filled → President's FINAL approval
   // (President moved to the end); President then sends it to Accounting.
-  return lgDone ? "PRESIDENT_PENDING" : "PRES_PASSED"
+  // NYK Direct docs skip President → go straight to Accounting.
+  if (lgDone) return skipPresident ? "ACCOUNTING_PENDING" : "PRESIDENT_PENDING"
+  return "PRES_PASSED"
 }
 
 // ── NYG claim flow (per split: DVM → VP, per department) ───────────
