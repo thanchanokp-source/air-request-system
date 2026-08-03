@@ -298,7 +298,10 @@ export default function ApprovalsPage() {
   const invoices = [...new Set(allRows.map(r => r.invoiceNo).filter(Boolean))].sort()
   const hawbs = [...new Set(allRows.map(r => r.hawbNo).filter(Boolean))].sort()
 
-  const stageOptions = [...new Set(myRequests.map(r => docStageLabel(r)))].sort()
+  // Stage options scoped to the CURRENT BU tab (don't show GW-only stages while viewing NYG, etc.)
+  const stageOptions = [...new Set(myRequests
+    .filter(r => !showBuToggle || buApprovalView === "ALL" || requestInBu(r, buApprovalView))
+    .map(r => docStageLabel(r)))].sort()
   const filtered = allRows.filter(row => {
     const r = row.request
     return (!stageF.length || stageF.includes(docStageLabel(r))) &&

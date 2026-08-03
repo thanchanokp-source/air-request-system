@@ -33,7 +33,7 @@ export function MultiSelect({ label, options, value, onChange }: Props) {
         <span className="text-gray-400 text-[10px] ml-1 shrink-0">▼</span>
       </button>
       {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 w-full min-w-[200px] bg-white border border-gray-200 rounded-xl shadow-lg">
+        <div className="absolute z-50 top-full left-0 mt-1 w-max min-w-full max-w-[340px] bg-white border border-gray-200 rounded-xl shadow-lg">
           <div className="p-2 border-b border-gray-100">
             <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} autoFocus
               className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
@@ -51,7 +51,7 @@ export function MultiSelect({ label, options, value, onChange }: Props) {
               <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
                 <input type="checkbox" checked={value.includes(opt)} onChange={() => toggle(opt)}
                   className="w-3.5 h-3.5 rounded border-gray-300" />
-                <span className="text-sm text-gray-700">{opt}</span>
+                <span className="text-sm text-gray-700 whitespace-nowrap">{opt}</span>
               </label>
             ))}
           </div>
