@@ -72,11 +72,14 @@ model MasterDelayCode {
 // is the same regardless of brand. Est. Air Freight = grossWeight × rate.
 model MasterFreightRate {
   id        String   @id @default(cuid())
-  country   String   @unique
+  country   String
+  bu        String   @default("ALL")   // "ALL" = shared across BUs (default); a BU-specific row overrides
+  currency  String   @default("THB")   // rate currency — EA quotes freight in USD
   ratePerKg Float    @default(0)
   isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
 
+  @@unique([country, bu])
   @@index([country])
 }
 
@@ -127,6 +130,7 @@ model AirRequest {
   lgForwardName    String?
   lgForwardBy      String?   // who forwarded (name)
   lgForwardToken   String?   // magic-link so the subordinate can open & continue without a full account
+  vndRate          Float?    // EA only: VND-per-THB snapshot at creation → lets amounts display in VND (toggle) without changing later when the FX rate is edited
   createdBy        User                @relation(fields: [createdById], references: [id])
   items            AirRequestItem[]
   approvalLogs     ApprovalLog[]

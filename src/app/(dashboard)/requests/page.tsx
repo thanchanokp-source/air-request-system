@@ -129,6 +129,7 @@ export default function RequestsPage() {
   const [invoiceF, setInvoiceF] = useState<string[]>([])
   const [hawbF, setHawbF] = useState<string[]>([])
   const [stageF, setStageF] = useState<string[]>([])
+  const [curr, setCurr] = useState<"THB" | "VND">("THB") // EA: view amounts in THB or VND (toggle)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set())
@@ -172,6 +173,14 @@ export default function RequestsPage() {
   const allRows = buRequests.flatMap(r =>
     (r.items || []).map((item: any) => ({ ...item, request: r }))
   )
+
+  // EA amounts are stored in THB; when the VND toggle is on, convert for DISPLAY via the doc's
+  // snapshot factor (req.vndRate = VND per THB). Returns a formatted "<n> <unit>" string.
+  const eaVnd = activeBu === "EA" && curr === "VND"
+  const money = (thb: number, req?: any) => {
+    const r = req?.vndRate || 0
+    return eaVnd && r > 0 ? `${fmtNum((thb || 0) * r)} VND` : `${fmtNum(thb || 0)} THB`
+  }
 
   // ── Stage helpers — shared by the Pending-by-Stage tiles AND the Stage filter. President
   // moved to the END (final approver, after Logistics ∥ Claim). ──
@@ -295,10 +304,11 @@ export default function RequestsPage() {
     if (res.ok) setRequests(prev => prev.filter(r => r.id !== reqId))
   }
 
+  const curUnit = eaVnd ? "VND" : "THB"
   const SO_COLS = [
     ["SO",""],["BU",""],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
-    ["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],
+    [`EST. AIR FREIGHT (${curUnit})`,"min-w-[120px]"],[`ACTUAL AIR FREIGHT (${curUnit})`,"min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],
     ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"]
   ] as [string,string][]
@@ -352,6 +362,15 @@ export default function RequestsPage() {
             <span className={`px-2 py-0.5 rounded text-xs font-bold ${activeBu === "GW" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
               {activeBu}
             </span>
+          )}
+          {/* EA only: view amounts in THB or VND */}
+          {activeBu === "EA" && (
+            <div className="flex rounded-lg border border-indigo-200 overflow-hidden text-xs font-semibold">
+              {(["THB", "VND"] as const).map(c => (
+                <button key={c} onClick={() => setCurr(c)}
+                  className={`px-3 py-1.5 transition-colors ${curr === c ? "bg-indigo-600 text-white" : "bg-white text-indigo-500 hover:bg-indigo-50"}`}>{c}</button>
+              ))}
+            </div>
           )}
         </div>
         {/* Actions grouped on the right (New Request next to Import History) */}
@@ -510,8 +529,8 @@ export default function RequestsPage() {
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
                   <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
                 )}
-                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ml-auto">EST {fmtNum(dg.estTotal)} THB</span>
-                <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {fmtNum(dg.actTotal)} THB</span>
+                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ml-auto">EST {money(dg.estTotal, dg.request)}</span>
+                <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {money(dg.actTotal, dg.request)}</span>
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{dg.styles.length} style(s) · {dg.total} transactions</span>
                 {(() => {
                   // Collapse multiple attachment chips → first file + "+N" so the row stays on ONE line.
@@ -577,8 +596,8 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2">{row.qtyOriginalShipment}</td>
                                     <td className="px-3 py-2 font-semibold">{row.qtyRequestAir}</td>
                                     <td className="px-3 py-2 text-blue-700">{fmtNum(row.grossWeight, 2)}</td>
-                                    <td className="px-3 py-2 text-blue-700">{fmtNum(row.airFreight)}</td>
-                                    <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(row.actualAirFreight)}</td>
+                                    <td className="px-3 py-2 text-blue-700">{fmtNum(eaVnd && row.request.vndRate ? (row.airFreight || 0) * row.request.vndRate : row.airFreight)}</td>
+                                    <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(eaVnd && row.request.vndRate ? (row.actualAirFreight || 0) * row.request.vndRate : row.actualAirFreight)}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.factory}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.country}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">

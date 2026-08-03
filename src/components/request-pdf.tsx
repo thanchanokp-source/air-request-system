@@ -419,6 +419,11 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
   const claimByDept: Record<string, number> = {}
   for (const [d, v] of Object.entries(claimByDeptRaw)) claimByDept[d] = Math.round(v)
   const claimDeptRows = Object.entries(claimByDept)
+  // EA prints amounts in VND (converted from the stored THB via the doc's snapshot factor).
+  const isEaVnd = (req as any)?.bu === "EA" && Number((req as any)?.vndRate) > 0
+  const vr = Number((req as any)?.vndRate) || 1
+  const cvt = (n: any) => isEaVnd ? (Number(n) || 0) * vr : (Number(n) || 0)
+  const CUR = isEaVnd ? "VND" : "THB"
   // Portrait A4 (usable ~551pt). REASON takes the remaining width (flex) and wraps.
   // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
   // wrap, so a too-narrow column overflows and overlaps its neighbour. Fixed cols sum ≈ 482
@@ -507,8 +512,8 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
               <Text style={[s.td, { width: C.inv }]}>{softWrap(item.invoiceNo)}</Text>
               <Text style={[s.td, { width: C.qty }]}>{fmtNum(item.qtyRequestAir)}</Text>
               <Text style={[s.td, { width: C.gross }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
-              <Text style={[s.tdR, { width: C.est }]}>{fmtNum(Number(item.airFreight) || 0)}</Text>
-              <Text style={[s.tdR, { width: C.act }]}>{item.actualAirFreight != null ? fmtNum(item.actualAirFreight) : "-"}</Text>
+              <Text style={[s.tdR, { width: C.est }]}>{fmtNum(cvt(item.airFreight))}</Text>
+              <Text style={[s.tdR, { width: C.act }]}>{item.actualAirFreight != null ? fmtNum(cvt(item.actualAirFreight)) : "-"}</Text>
               <Text style={[s.tdL, { width: C.claim, borderRightWidth: 0 }]}>{claimOf(item)}</Text>
             </View>
           ))}
@@ -516,8 +521,8 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
             <Text style={[s.tdR, { flex: 1, fontFamily: "SarabunB" }]}>TOTAL</Text>
             <Text style={[s.td, { width: C.qty, fontFamily: "SarabunB" }]}>{fmtNum(totQty)}</Text>
             <Text style={[s.td, { width: C.gross, fontFamily: "SarabunB" }]}>{fmtNum(totGross, 2)}</Text>
-            <Text style={[s.tdR, { width: C.est, fontFamily: "SarabunB" }]}>{fmtNum(totEst)}</Text>
-            <Text style={[s.tdR, { width: C.act, fontFamily: "SarabunB", color: "#1E3A8A" }]}>{anyActual ? fmtNum(totActual) : "-"}</Text>
+            <Text style={[s.tdR, { width: C.est, fontFamily: "SarabunB" }]}>{fmtNum(cvt(totEst))}</Text>
+            <Text style={[s.tdR, { width: C.act, fontFamily: "SarabunB", color: "#1E3A8A" }]}>{anyActual ? fmtNum(cvt(totActual)) : "-"}</Text>
             <Text style={[s.td, { width: C.claim, borderRightWidth: 0 }]}> </Text>
           </View>
         </View>
@@ -531,7 +536,7 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
           <View style={s.totalBox}>
             <View style={s.totalBoxRowLast}>
               <Text style={s.totalBoxK}>TOTAL</Text>
-              <Text style={s.totalBoxV}>{fmtNum(grand)} <Text style={{ fontSize: 8, color: "#111" }}>THB</Text></Text>
+              <Text style={s.totalBoxV}>{fmtNum(cvt(grand))} <Text style={{ fontSize: 8, color: "#111" }}>{CUR}</Text></Text>
             </View>
           </View>
         </View>
@@ -541,12 +546,12 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
           <View style={{ marginTop: 8, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 3, borderStyle: "solid", maxWidth: 260 }} wrap={false}>
             <View style={{ flexDirection: "row", backgroundColor: "#1e3a8a", paddingVertical: 3, paddingHorizontal: 8 }}>
               <Text style={{ color: "#fff", fontSize: 8, flex: 1 }}>CLAIM BY DEPARTMENT</Text>
-              <Text style={{ color: "#fff", fontSize: 8, textAlign: "right", width: 90 }}>CLAIM (THB)</Text>
+              <Text style={{ color: "#fff", fontSize: 8, textAlign: "right", width: 90 }}>CLAIM ({CUR})</Text>
             </View>
             {claimDeptRows.map(([d, amt], i) => (
               <View key={d} style={{ flexDirection: "row", paddingVertical: 2.5, paddingHorizontal: 8, borderTopWidth: i === 0 ? 0 : 0.5, borderTopColor: "#e2e8f0", borderStyle: "solid" }}>
                 <Text style={{ fontSize: 8, flex: 1 }}>{deptLabel(d)}</Text>
-                <Text style={{ fontSize: 8, textAlign: "right", width: 90 }}>{fmtNum(amt)}</Text>
+                <Text style={{ fontSize: 8, textAlign: "right", width: 90 }}>{fmtNum(cvt(amt))}</Text>
               </View>
             ))}
           </View>
