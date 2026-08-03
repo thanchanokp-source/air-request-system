@@ -47,9 +47,25 @@ export default function ApprovalsPage() {
     return s
   }
 
+  const [approverDir, setApproverDir] = useState<any[]>([]) // role→people, for the admin person-search
   useEffect(() => {
     fetch("/api/requests?mine=true").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
+    fetch("/api/users/claim-directory").then(r => r.json()).then(d => setApproverDir(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
+  // Roles that are the CURRENT approver(s) at a doc's stage (for the person-search to match
+  // role-based approvers — LG/SCM/President — not just the per-doc assigned people).
+  const stageRolesOf = (s: string): string[] => {
+    if (["PENDING_DVM_MER", "PENDING_DVM_MER_EA", "PENDING_DVM_MER_TRM"].includes(s)) return ["DVM_MER", "DVM_MER_EA", "DVM_MER_TRM"]
+    if (["PENDING_VP_MER", "PENDING_VP_MER_EA", "PENDING_VP_MER_TRM"].includes(s)) return ["VP_MER", "VP_MER_EA", "VP_MER_TRM"]
+    if (["PENDING_VP_MER_GW", "PENDING_DPM_GW"].includes(s)) return ["VP_MER_GW", "DPM_GW"]
+    if (s === "PENDING_GM_GW") return ["GM_GW"]
+    if (s === "PENDING_SCM") return ["SCM_USER", "VP_SCM"]
+    if (s === "PENDING_VP_SCM") return ["VP_SCM"]
+    if (["PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(s)) return ["LOGISTICS", "DVM_MER", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "SCM_NYK_APPROVER", "SCM_NYG"]
+    if (s === "PENDING_CLAIM_GW") return ["LOGISTICS_GW", "SCM_NYK_APPROVER", "SCM_NYG", "CLAIM_GW"]
+    if (["PENDING_PRESIDENT", "PENDING_PRESIDENT_GW"].includes(s)) return ["PRESIDENT", "PRESIDENT_GW", "LOGISTICS", "LOGISTICS_GW"]
+    return []
+  }
 
   // Derive claim dept from role
   const claimDept = role.startsWith("DVM_") ? role.replace("DVM_", "")
@@ -321,10 +337,22 @@ export default function ApprovalsPage() {
   const pq = personQ.trim().toLowerCase()
   const personMatch = (r: any) => {
     if (!pq) return true
+    // 1) People explicitly on the doc (creator / assigned approver / forward recipient).
     const fields = [r.createdBy?.email, r.createdBy?.name, r.assignedDvmMer, r.assignedVpMer, r.assignedVpScm,
       (r as any).assignedScmNykEvp, (r as any).assignedScmNykCr, (r as any).lgForwardEmail, (r as any).lgForwardName,
       ...((r.claimForwards || []) as any[]).flatMap(f => [f.nextEmail, f.nextName])]
-    return fields.some(x => String(x || "").toLowerCase().includes(pq))
+    if (fields.some(x => String(x || "").toLowerCase().includes(pq))) return true
+    // 2) Role-based CURRENT approvers (LG/SCM/President/claim depts) — resolve from the directory
+    // by the doc's current-stage roles + BU, so searching an LG/approver name finds their docs.
+    const roles = stageRolesOf(r.status)
+    if (!roles.length) return false
+    const docBu = r.bu || "NYG"
+    return approverDir.some((u: any) => {
+      const held = [u.role, ...(Array.isArray(u.roles) ? u.roles : [])]
+      if (!held.some((x: string) => roles.includes(x))) return false
+      if (u.bu && u.bu !== "ALL" && u.bu !== docBu) return false // LG/merch are BU-scoped
+      return String(u.name || "").toLowerCase().includes(pq) || String(u.email || "").toLowerCase().includes(pq)
+    })
   }
   const docGroups = myRequests
     .filter(r => filtered.some(f => f.request.id === r.id))
