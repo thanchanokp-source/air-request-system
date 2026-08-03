@@ -296,7 +296,7 @@ export default function RequestsPage() {
   }
 
   const SO_COLS = [
-    ["SO",""],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
+    ["SO",""],["BU",""],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
     ["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],
@@ -555,6 +555,7 @@ export default function RequestsPage() {
                                   <Fragment key={row.id}>
                                   <tr className={`hover:bg-blue-50/30 ${row.itemStatus === "REJECTED" ? "opacity-50" : ""}`}>
                                     <td className="px-3 py-2 font-medium whitespace-nowrap">{row.so}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-600">{row.request.bu || row.request.buName || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.customerPO || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
