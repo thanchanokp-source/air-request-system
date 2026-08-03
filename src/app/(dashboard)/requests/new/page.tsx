@@ -19,6 +19,9 @@ export default function NewRequestPage() {
   const isTRM = userBu === "TRM"
 
   const [file, setFile] = useState<File | null>(null)
+  // GW MER attaches supporting files at upload (they pick the claim dept here, so proof docs
+  // travel with the request from the start). GW only.
+  const [attachFiles, setAttachFiles] = useState<File[]>([])
   const [preview, setPreview] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -132,6 +135,14 @@ export default function NewRequestPage() {
       const attachForm = new FormData()
       attachForm.append("file", file)
       await fetch(`/api/requests/${data.id}/attachments`, { method: "POST", body: attachForm })
+    }
+    // GW: upload the MER's supporting attachments too (they chose the claim here).
+    if (data.id && isGW && attachFiles.length) {
+      for (const f of attachFiles) {
+        const form = new FormData()
+        form.append("file", f); form.append("category", "MER_GW")
+        await fetch(`/api/requests/${data.id}/attachments`, { method: "POST", body: form }).catch(() => {})
+      }
     }
     setLoading(false)
     if (data.id) {
@@ -272,6 +283,27 @@ export default function NewRequestPage() {
             onChange={handleFileChange}
             className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
           />
+          {/* GW only: attach supporting documents (MER picks the claim here, so proof travels along). */}
+          {isGW && (
+            <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+              <p className="text-xs font-semibold text-gray-500">📎 แนบเอกสารประกอบ (GW — หลายไฟล์ได้)</p>
+              <label className="inline-flex items-center gap-2 border border-emerald-300 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-100 cursor-pointer">
+                + เพิ่มไฟล์แนบ
+                <input type="file" multiple className="hidden"
+                  onChange={e => { const fs = Array.from(e.target.files || []); if (fs.length) setAttachFiles(p => [...p, ...fs]); e.target.value = "" }} />
+              </label>
+              {attachFiles.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {attachFiles.map((f, i) => (
+                    <span key={i} className="inline-flex items-center gap-2 text-xs bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full">
+                      {f.name}
+                      <button type="button" onClick={() => setAttachFiles(p => p.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500 leading-none">✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Master Description reference — DESCRIPTION in the Excel must match one of these */}
