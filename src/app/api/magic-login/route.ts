@@ -29,17 +29,19 @@ export async function GET(req: NextRequest) {
   const byClaimNext  = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg ? null : await (prisma.airRequest as any).findFirst({ where: { claimNextToken: token } })
   // Per-department forward token (ClaimForward)
   const byClaimFwd   = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext ? null : await (prisma as any).claimForward.findFirst({ where: { token } })
+  // Logistics handoff token (a senior LG forwarded data-entry to a subordinate)
+  const byLgFwd      = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext || byClaimFwd ? null : await (prisma.airRequest as any).findFirst({ where: { lgForwardToken: token } })
   // Passwordless account login link (User.loginToken)
-  const byLoginToken = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext || byClaimFwd ? null : await (prisma.user as any).findFirst({ where: { loginToken: token } })
+  const byLoginToken = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext || byClaimFwd || byLgFwd ? null : await (prisma.user as any).findFirst({ where: { loginToken: token } })
 
-  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byGm ? "gm" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimGw ? "claimGw" : byClaimSup ? "claimSupplier" : byScmNykAppr ? "scmNykApprover" : byScmNykEvp ? "scmNykEvp" : byScmNyk ? "scmNyk" : byScmNyg ? "scmNyg" : byClaimNext ? "claimNext" : byClaimFwd ? "claimForward" : "none")
+  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byGm ? "gm" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimGw ? "claimGw" : byClaimSup ? "claimSupplier" : byScmNykAppr ? "scmNykApprover" : byScmNykEvp ? "scmNykEvp" : byScmNyk ? "scmNyk" : byScmNyg ? "scmNyg" : byClaimNext ? "claimNext" : byClaimFwd ? "claimForward" : byLgFwd ? "lgForward" : "none")
 
-  if (!byVpMer && !byGm && !byPresident && !byScm && !byVpScm && !byLogistics && !byAccounting && !byClaimGw && !byClaimSup && !byScmNykAppr && !byScmNykEvp && !byScmNyk && !byScmNyg && !byClaimNext && !byClaimFwd && !byLoginToken) {
+  if (!byVpMer && !byGm && !byPresident && !byScm && !byVpScm && !byLogistics && !byAccounting && !byClaimGw && !byClaimSup && !byScmNykAppr && !byScmNykEvp && !byScmNyk && !byScmNyg && !byClaimNext && !byClaimFwd && !byLgFwd && !byLoginToken) {
     console.log("[magic-login] token not found")
     return NextResponse.redirect(new URL("/login?error=invalid-token", req.url))
   }
 
-  const finalRedirect = byLoginToken ? (redirectTo || "/dashboard") : byClaimNext || byClaimFwd ? (byClaimFwd ? `/requests/${byClaimFwd.requestId}` : redirectTo) : "/approvals"
+  const finalRedirect = byLoginToken ? (redirectTo || "/dashboard") : byLgFwd ? `/requests/${byLgFwd.id}` : byClaimNext || byClaimFwd ? (byClaimFwd ? `/requests/${byClaimFwd.requestId}` : redirectTo) : "/approvals"
 
   // Hand off to client-side page which calls signIn() via NextAuth
   const magicAuthUrl = new URL("/magic-auth", req.url)

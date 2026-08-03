@@ -89,6 +89,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // "NYK Direct" GW imports skip the President step — a fully-approved claim jumps straight to
   // Accounting. Passed into deriveGwItemStatus at every GW-claim completion site below.
   const skipPres = !!(request as any).nykDirect
+  // A subordinate this doc was forwarded to (LG handoff) may do the SAME Logistics data-entry
+  // as an LG actor, but only for THIS doc (matched by email → request.lgForwardEmail).
+  const isFwdTarget = !!(request as any).lgForwardEmail && String((session.user as any).email || "").toLowerCase() === String((request as any).lgForwardEmail).toLowerCase()
 
   // Capture the approver's signature snapshot for any APPROVE-type action (not
   // data entry, and not Logistics — Logistics is not a signatory). Centralised so
@@ -281,7 +284,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // LG saves logistics data as draft at PENDING_SCM (parallel with SCM — no status change).
   // TRM logistics (Urairat = LOGISTICS_TRM in roles[]) uses the SAME NYG-style flow → accept it too,
   // but only for non-GW docs so her GW logistics still routes to the LOGISTICS_GW branch below.
-  if (action === "save_logistics_draft" && (userRole === "LOGISTICS" || (heldRoles.includes("LOGISTICS_TRM") && request.bu !== "GW"))) {
+  if (action === "save_logistics_draft" && (userRole === "LOGISTICS" || (heldRoles.includes("LOGISTICS_TRM") && request.bu !== "GW") || (isFwdTarget && request.bu !== "GW"))) {
     if (itemActuals && typeof itemActuals === "object") {
       for (const [iid, val] of Object.entries(itemActuals)) {
         const num = parseFloat(String(val))
@@ -346,7 +349,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW LG "Save Draft" — save the same LG data (Actual / INV / HAWB / Ship Date / QTY by SO)
   // WITHOUT changing status or running the NYG-specific advancement. GW uses its own item
   // statuses, so it must not go through the LOGISTICS (NYG) draft handler above.
-  if (action === "save_logistics_draft" && userRole === "LOGISTICS_GW") {
+  if (action === "save_logistics_draft" && (userRole === "LOGISTICS_GW" || (isFwdTarget && request.bu === "GW"))) {
     if (itemActuals && typeof itemActuals === "object") {
       for (const [iid, val] of Object.entries(itemActuals)) {
         const num = parseFloat(String(val))
@@ -968,7 +971,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW LOGISTICS (parallel with Claim): enter invoice/HAWB/actual per SO. Saving
   // data does NOT advance the SO — it only completes the Logistics side; the SO
   // reaches Accounting when Claim is also fully approved.
-  if (action === "approve" && userRole === "LOGISTICS_GW") {
+  if (action === "approve" && (userRole === "LOGISTICS_GW" || (isFwdTarget && request.bu === "GW"))) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!["PENDING_CLAIM_GW", "PENDING_LOGISTICS_GW", "PENDING_PRESIDENT_GW"].includes(request.status)) {
       return NextResponse.json({ error: "Request is not at the Logistics stage" }, { status: 400 })

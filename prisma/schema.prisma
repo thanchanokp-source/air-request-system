@@ -123,6 +123,10 @@ model AirRequest {
   pendingRate      Boolean             @default(false)  // held: Country rate missing, not yet sent to first approver
   pendingWeight    Boolean             @default(false)  // held: a DESCRIPTION has no WT Charge in Master, not yet sent
   nykDirect        Boolean             @default(false)  // GW "NYK Direct" import: skips all approvers → lands at SCM NYK claim; after NYK done → Accounting (skip President)
+  lgForwardEmail   String?   // LG handoff: a senior LG forwarded this doc's data-entry to a subordinate
+  lgForwardName    String?
+  lgForwardBy      String?   // who forwarded (name)
+  lgForwardToken   String?   // magic-link so the subordinate can open & continue without a full account
   createdBy        User                @relation(fields: [createdById], references: [id])
   items            AirRequestItem[]
   approvalLogs     ApprovalLog[]

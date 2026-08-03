@@ -113,6 +113,15 @@ export const authOptions: NextAuthOptions = {
             if (logUser) return { id: logUser.id, email: logUser.email, name: logUser.name, role: logRole, bu: isGW ? "GW" : (logUser.bu || "NYG"), claimDepartment: null, priority: null }
             return null
           }
+          // Logistics handoff token: a senior LG forwarded data-entry to a subordinate. Log them
+          // in scoped to THIS doc — role LOGISTICS_SUB has no queue access; the request page grants
+          // LG data-entry only because request.lgForwardEmail === their email (isForwardTarget).
+          const lgFwdReq = await (prisma.airRequest as any).findFirst({ where: { lgForwardToken: token } })
+          if (lgFwdReq) {
+            const email = String(lgFwdReq.lgForwardEmail || "").toLowerCase()
+            const u = email ? await (prisma.user as any).findUnique({ where: { email } }) : null
+            return { id: u?.id || `lg_fwd_${token.slice(0, 8)}`, email, name: lgFwdReq.lgForwardName || u?.name || email, role: "LOGISTICS_SUB", bu: lgFwdReq.bu || "NYG", claimDepartment: null, priority: null }
+          }
           // GW claim per-dept tokens. CLAIM_GW is split GW vs SUPPLIER by a
           // separate token so each logs in scoped to its own claimDepartment.
           for (const [field, gwRole, scopeDept] of [["claimGwToken", "CLAIM_GW", "GW"], ["claimSupplierToken", "CLAIM_GW", "SUPPLIER"], ["scmNykApproverToken", "SCM_NYK_APPROVER", null], ["scmNykEvpToken", "SCM_NYK_EVP", null], ["scmNykToken", "SCM_NYK", null], ["scmNygToken", "SCM_NYG", null]] as const) {

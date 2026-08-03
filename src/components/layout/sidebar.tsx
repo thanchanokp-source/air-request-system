@@ -11,8 +11,8 @@ const nav = [
   { href: "/files", label: "ALL FILES" },
   { href: "/requests/nyk-import", label: "NYK IMPORT (GW)", roles: ["ADMIN", "SCM_NYK_APPROVER", "SCM_NYK", "SCM_NYK_EVP"] },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
-  { href: "/master/port", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "MER_USER", "MER_GW"], masterEdit: true },
-  { href: "/master/description", label: "MASTER DESCRIPTION", roles: ["ADMIN", "LOGISTICS", "MER_USER"], masterEdit: true },
+  { href: "/master/port", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "MER_USER", "MER_GW"], masterEdit: true },
+  { href: "/master/description", label: "MASTER DESCRIPTION", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "MER_USER"], masterEdit: true },
   { href: "/master/delay-code", label: "MASTER DELAY CODE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "SCM_USER"], masterEdit: true },
   { href: "/settings", label: "SETTINGS", adminOnly: true }
 ]

@@ -249,6 +249,7 @@ export default function UsersPage() {
   const [showConfigured, setShowConfigured] = useState(false) // Setup Guide: collapse the long "Configured Master Users" list
   const [buFilter, setBuFilter] = useState<"NYG"|"GW"|"EA"|"TRM"|"">("")
   const [roleFilter, setRoleFilter] = useState("")
+  const [userQ, setUserQ] = useState("")
   const [peopleQ, setPeopleQ] = useState("")
   const [peopleResults, setPeopleResults] = useState<any[]>([])
   const [peopleLoading, setPeopleLoading] = useState(false)
@@ -404,9 +405,11 @@ export default function UsersPage() {
     const BU_SCOPED = new Set(["LOGISTICS", "CLAIM_PRODUCTION", "VP_PRODUCTION"])
     return heldRolesOf(u).some(r => !BU_SCOPED.has(r) && set.has(r))
   }
+  const q = userQ.trim().toLowerCase()
   const filtered = users.filter(u =>
     (!roleFilter || heldRolesOf(u).includes(roleFilter)) &&
-    (!buFilter || inBuTab(u, buFilter))
+    (!buFilter || inBuTab(u, buFilter)) &&
+    (!q || String(u.name || "").toLowerCase().includes(q) || String(u.email || "").toLowerCase().includes(q))
   )
 
   // Sync orderedIds when filter changes — default sort by approval flow then priority
@@ -937,6 +940,11 @@ export default function UsersPage() {
               {ALL_ROLES.map(r => <option key={r} value={r}>{ROLE_LABEL[r] || r}</option>)}
             </select>
             {roleFilter && <button onClick={() => setRoleFilter("")} className="text-xs text-gray-400 hover:text-gray-600">✕ Role</button>}
+            <div className="relative">
+              <input value={userQ} onChange={e => setUserQ(e.target.value)} placeholder="🔍 ค้นหาชื่อ / อีเมล"
+                className="border border-gray-300 rounded-lg pl-3 pr-7 py-1.5 text-xs w-56" />
+              {userQ && <button onClick={() => setUserQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">✕</button>}
+            </div>
             {buFilter && <span className={`px-2 py-0.5 rounded text-xs font-semibold ${buFilter === "GW" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>{buFilter}</span>}
           </div>
           {loading ? <div className="py-10 text-center text-gray-400 text-sm">Loading...</div> : (

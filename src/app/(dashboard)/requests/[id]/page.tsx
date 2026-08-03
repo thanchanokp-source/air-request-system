@@ -484,6 +484,12 @@ export default function RequestDetailPage() {
   const [soInvMap, setSoInvMap] = useState<Record<string, string>>({})
   const [hawbGroups, setHawbGroups] = useState<{ id: string; hawbNo: string; bookingDate: string; totalCost: string; invNos: string[] }[]>([])
   const [lgDraftSaving, setLgDraftSaving] = useState(false)
+  // LG handoff (Forward) — pass this doc's data-entry to a subordinate.
+  const [lgFwdOpen, setLgFwdOpen] = useState(false)
+  const [lgFwdTargets, setLgFwdTargets] = useState<{ id: string; name: string; email: string }[]>([])
+  const [lgFwdTo, setLgFwdTo] = useState("")
+  const [lgFwdNote, setLgFwdNote] = useState("")
+  const [lgFwdBusy, setLgFwdBusy] = useState(false)
   const [lgSelectedSoIds, setLgSelectedSoIds] = useState<Set<string>>(new Set())
   const [lgBulkInv, setLgBulkInv] = useState("")
   const [lgQuickInv, setLgQuickInv] = useState("")
@@ -717,6 +723,7 @@ export default function RequestDetailPage() {
   const myClaimDept: string | null = (session?.user as any)?.claimDepartment || null
   const myPriority: number | null = (session?.user as any)?.priority ?? null
   const myUserId: string = (session?.user as any)?.id || ""
+  const userEmail = String((session?.user as any)?.email || "").toLowerCase()
   const isGWRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
   const isGWRequest = req?.bu === "GW"
   // Procurement's special "approve-self or forward-to-boss" flow belonged to the
@@ -1080,11 +1087,14 @@ export default function RequestDetailPage() {
   const isPresidentRole = myAllRoles.includes("PRESIDENT") && req?.status === "PENDING_PRESIDENT" && (req?.items || []).some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
   // Logistics actor: TRM docs → LOGISTICS_TRM (Urairat), all other non-GW → the shared LOGISTICS.
   // Uses myAllRoles so a multi-role holder (Urairat = LOGISTICS_GW + LOGISTICS_TRM) is recognised.
-  const isLgActor = req?.bu === "TRM" ? myAllRoles.includes("LOGISTICS_TRM") : myAllRoles.includes("LOGISTICS")
+  // A subordinate this doc was forwarded to (LG handoff) can do the SAME data-entry as an LG
+  // actor, but only for THIS doc (their role LOGISTICS_SUB grants no queue access anywhere else).
+  const isForwardTarget = !!req?.lgForwardEmail && userEmail === String(req.lgForwardEmail).toLowerCase()
+  const isLgActor = (req?.bu === "TRM" ? myAllRoles.includes("LOGISTICS_TRM") : myAllRoles.includes("LOGISTICS")) || (isForwardTarget && !isGWRequest)
   const isLogisticsRole = isLgActor && presPassedItems.length > 0 && !isGWRequest
   const isLgParallelAtScm = isLgActor && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(req?.status) && !isGWRequest
   // GW Logistics uses the same Air Waybill Entry UI (at its own PENDING_LOGISTICS_GW stage).
-  const isLgGwEntry = role === "LOGISTICS_GW" && (req?.status === "PENDING_CLAIM_GW" || req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && isGWRequest
+  const isLgGwEntry = (role === "LOGISTICS_GW" || (isForwardTarget && isGWRequest)) && (req?.status === "PENDING_CLAIM_GW" || req?.status === "PENDING_LOGISTICS_GW" || req?.status === "PENDING_PRESIDENT_GW") && isGWRequest
   const showAwbEntry = isLgParallelAtScm || isLgGwEntry
   const allLgItems = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && (isLgGwEntry ? i.itemStatus === "PRES_PASSED" : true))
   const uniqueInvNos = [...new Set(Object.values(soInvMap).filter(Boolean))]
@@ -1194,6 +1204,44 @@ export default function RequestDetailPage() {
       return
     }
     router.push("/approvals")
+  }
+  const openLgForward = async () => {
+    setLgFwdOpen(true)
+    if (lgFwdTargets.length === 0) {
+      const r = await fetch("/api/users/lg-forward-targets").then(r => r.json()).catch(() => [])
+      setLgFwdTargets(Array.isArray(r) ? r : [])
+    }
+  }
+  // Save whatever's filled so far as a draft, then hand the doc off to the chosen subordinate.
+  const forwardLg = async () => {
+    const target = lgFwdTargets.find(t => t.email === lgFwdTo)
+    if (!target) { alert("เลือกผู้รับก่อน"); return }
+    setLgFwdBusy(true)
+    // 1. Save current partial data as a draft (never sends/advances).
+    const itemLogisticsData: Record<string, { invoiceNo: string; hawbNo: string; bookingDate: string }> = {}
+    const itemActualsData: Record<string, string> = {}
+    Object.entries(soInvMap).forEach(([itemId, invNo]) => { itemLogisticsData[itemId] = { invoiceNo: invNo || "", hawbNo: "", bookingDate: "" } })
+    hawbGroups.forEach(group => {
+      const { items, avgPerUnit } = getHawbCalc(group)
+      items.forEach((item: any) => {
+        itemLogisticsData[item.id] = { invoiceNo: soInvMap[item.id] || "", hawbNo: group.hawbNo || "", bookingDate: group.bookingDate }
+        const ov = soActualOverride[item.id]
+        itemActualsData[item.id] = ov !== undefined && ov !== "" ? String(parseFloat(ov) || 0) : String(Math.round(liveQty(item) * avgPerUnit * 100) / 100)
+      })
+    })
+    await fetch(`/api/requests/${id}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "save_logistics_draft", itemLogistics: itemLogisticsData, itemActuals: itemActualsData, itemShipData: Object.fromEntries(Object.entries(soShipData).map(([iid, v]) => [iid, { qtyRequestAir: v.qty, planShipmentDate: v.date }])), lgComplete: false }),
+    }).catch(() => {})
+    // 2. Record the forward + email the subordinate a magic-link.
+    const res = await fetch(`/api/requests/${id}/lg-forward`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ toEmail: target.email, toName: target.name, note: lgFwdNote.trim() || undefined }),
+    })
+    setLgFwdBusy(false)
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Forward failed"); return }
+    alert(`ส่งต่อให้ ${target.name} แล้ว (บันทึกข้อมูลที่กรอกไว้ + ส่งอีเมลแจ้ง)`)
+    setLgFwdOpen(false); router.push("/approvals")
   }
   const uploadLgFile = async (file: File, category: string) => {
     setLgDraftSaving(true)
@@ -5709,6 +5757,11 @@ export default function RequestDetailPage() {
                 className="bg-white border border-gray-300 text-gray-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
                 {lgDraftSaving ? "..." : "Save Draft"}
               </button>
+              <button type="button" onClick={openLgForward} disabled={lgDraftSaving}
+                title="บันทึกที่กรอกไว้ แล้วส่งต่อให้ลูกน้องกรอกต่อ"
+                className="bg-white border border-blue-300 text-blue-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50">
+                ↪ Forward
+              </button>
               <button type="button" onClick={() => saveLgHawb(false)} disabled={lgDraftSaving || hawbGroups.length === 0 || !lgShipDatesOk}
                 title={!lgComplete ? "Incomplete data (calculated SOs must be in a HAWB + have a HAWB No.)" : !lgShipDatesOk ? `Ship Date required for calculated SOs: ${missingShipDateSos.join(", ")}` : lgFileCount === 0 ? "At least 1 file must be attached" : ""}
                 className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50">
@@ -5716,6 +5769,38 @@ export default function RequestDetailPage() {
               </button>
             </div>
           </div>
+
+          {/* LG Forward modal — save partial + hand off to a subordinate */}
+          {lgFwdOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setLgFwdOpen(false)}>
+              <div className="bg-white rounded-xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
+                <div>
+                  <h3 className="font-semibold text-gray-800">↪ Forward ให้ลูกน้องกรอกต่อ</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">ข้อมูลที่กรอกไว้จะถูกบันทึก แล้วส่งอีเมลลิงก์ให้ผู้รับเข้ามาทำต่อ</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">ผู้รับ (LG)</label>
+                  <select value={lgFwdTo} onChange={e => setLgFwdTo(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1">
+                    <option value="">-- เลือกผู้รับ --</option>
+                    {lgFwdTargets.map(t => <option key={t.id} value={t.email}>{t.name} ({t.email})</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500">โน้ต (ไม่บังคับ)</label>
+                  <textarea value={lgFwdNote} onChange={e => setLgFwdNote(e.target.value)} rows={2}
+                    placeholder="เช่น กรอก HAWB ที่เหลือให้ด้วยนะ" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1" />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setLgFwdOpen(false)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">ยกเลิก</button>
+                  <button onClick={forwardLg} disabled={lgFwdBusy || !lgFwdTo}
+                    className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">
+                    {lgFwdBusy ? "กำลังส่ง..." : "บันทึก & ส่งต่อ"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* STEP 1 — Ship Date & QTY Air: Logistics fills what Merchandise left blank FIRST,
               before generating Actual / INV (Actual & Est. Air Freight are derived from QTY). */}
