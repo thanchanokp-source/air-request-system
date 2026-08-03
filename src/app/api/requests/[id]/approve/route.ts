@@ -1208,7 +1208,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // SCM NYK (User) enters the CR NO (one per document). Each NYK split becomes
   // DEPT_APPROVED only when the APPROVER + EVP have both approved that SO too.
   if (action === "finalize_cr_gw" && userRole === "SCM_NYK") {
-    const isGW = request.bu === "GW"
+    // NYK Direct imports ride the GW claim machinery regardless of the doc's tagged BU.
+    const isGW = request.bu === "GW" || !!(request as any).nykDirect
     const expectedStatus = isGW ? "PENDING_CLAIM_GW" : "PENDING_CLAIM"
     if (request.status !== expectedStatus) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
     const nykDept = isGW ? "SCM NYK" : "NYK"

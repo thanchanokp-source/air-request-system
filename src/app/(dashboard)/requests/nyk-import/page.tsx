@@ -21,6 +21,7 @@ export default function NykImportPage() {
   const allowed = role === "ADMIN" || roles.some(r => NYK_ROLES.includes(r))
 
   const [rows, setRows] = useState<any[]>([])
+  const [bu, setBu] = useState("GW")
   const [fileName, setFileName] = useState("")
   const [attachments, setAttachments] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
@@ -63,7 +64,7 @@ export default function NykImportPage() {
     try {
       const res = await fetch("/api/requests/nyk-direct", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: rows }),
+        body: JSON.stringify({ items: rows, bu }),
       })
       if (!res.ok) { const e = await res.json().catch(() => ({})); setError(e.error || "Create failed"); setBusy(false); return }
       const { id } = await res.json()
@@ -81,13 +82,25 @@ export default function NykImportPage() {
   return (
     <div className="space-y-5 max-w-5xl">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">NYK DIRECT IMPORT <span className="text-sm font-medium text-orange-600 align-middle">GW</span></h1>
+        <h1 className="text-2xl font-bold text-gray-900">NYK DIRECT IMPORT <span className="text-sm font-medium text-orange-600 align-middle">ALL BU</span></h1>
         <p className="text-xs text-gray-400 mt-0.5">นำเข้าไฟล์ที่มีข้อมูลครบ (INV / HAWB / Total HAWB / NYK 100%) → ข้ามทุกขั้น ส่งตรงให้ SCM NYK อนุมัติ · actual คำนวณจาก Total HAWB ให้อัตโนมัติ</p>
+      </div>
+
+      {/* BU selector — NYK is shared, so the import works for any BU (doc is tagged with it). */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3">
+        <span className="text-xs font-semibold text-gray-500">BU</span>
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-semibold">
+          {["NYG", "GW", "EA", "TRM"].map(b => (
+            <button key={b} type="button" onClick={() => setBu(b)}
+              className={`px-4 py-1.5 transition-colors ${bu === b ? "bg-orange-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>{b}</button>
+          ))}
+        </div>
+        <span className="text-xs text-gray-400">เอกสารจะถูก tag เป็น BU นี้ · ส่งไปที่ SCM NYK ชุดเดียวกันทุก BU</span>
       </div>
 
       {/* Step 1 — data file */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
-        <p className="text-xs font-semibold text-gray-500">① ไฟล์ข้อมูล (Excel — เทมเพลต GW)</p>
+        <p className="text-xs font-semibold text-gray-500">① ไฟล์ข้อมูล (Excel)</p>
         <label className="inline-flex items-center gap-2 border border-blue-300 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 cursor-pointer">
           ⬆ เลือกไฟล์
           <input type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = "" }} />

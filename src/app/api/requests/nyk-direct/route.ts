@@ -44,6 +44,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const items: any[] = Array.isArray(body.items) ? body.items : []
   if (items.length === 0) return NextResponse.json({ error: "No rows found in the file" }, { status: 400 })
+  // NYK is a SHARED claim across BUs → this import works for any BU. The document is TAGGED with
+  // the chosen BU (for reporting/filtering) but always rides the GW-style NYK claim machinery
+  // (nykDirect forces the GW claim flow in the approve route + detail page, so the same SCM NYK
+  // 3-role can approve it regardless of BU).
+  const bu = ["NYG", "GW", "EA", "TRM"].includes(String(body.bu)) ? String(body.bu) : "GW"
 
   // Total HAWB# is entered ONCE per HAWB group (on one row); spread it across the group's SOs
   // proportional to QTY Air — same formula the Logistics HAWB flow uses:
@@ -67,7 +72,7 @@ export async function POST(req: NextRequest) {
   }
 
   const first = items[0]
-  const documentNo = await generateDocumentNo("GW")
+  const documentNo = await generateDocumentNo(bu)
   const userId = (session.user as any).id
 
   const itemData = items.map((it: any) => {
@@ -105,8 +110,8 @@ export async function POST(req: NextRequest) {
     data: {
       documentNo,
       brandName: String(col(first, "Brand name") || col(first, "BRAND") || ""),
-      buName: String(col(first, "BU") || "GW"),
-      bu: "GW",
+      buName: String(col(first, "BU") || bu),
+      bu,
       status: "PENDING_CLAIM_GW",
       nykDirect: true,
       logisticsSent: true, // LG data (INV/HAWB/actual) is supplied by the import

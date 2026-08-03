@@ -725,7 +725,10 @@ export default function RequestDetailPage() {
   const myUserId: string = (session?.user as any)?.id || ""
   const userEmail = String((session?.user as any)?.email || "").toLowerCase()
   const isGWRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
-  const isGWRequest = req?.bu === "GW"
+  // NYK Direct imports (any BU) ride the GW claim machinery → the SCM NYK claim/CR UI must render
+  // for them regardless of the doc's tagged BU. They only ever sit at the NYK claim stage, so the
+  // other GW-gated screens (MER/DPM/GM/President) never trigger for them.
+  const isGWRequest = req?.bu === "GW" || !!req?.nykDirect
   // Procurement's special "approve-self or forward-to-boss" flow belonged to the
   // manual-forward model. NYG now uses the priority model → Procurement approves like
   // any other dept (VP_PROCUREMENT is the next priority group), so disable it.
