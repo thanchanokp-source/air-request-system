@@ -68,7 +68,14 @@ function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string):
     // Cross-BU holders (SCM / VP SCM / President carry bu="ALL") match any document's BU.
     (!bu || u.bu === bu || u.bu === "ALL") &&
     (roles.includes(u.role) || (Array.isArray(u.roles) && u.roles.some((r: string) => roles.includes(r)))))
-  cands.sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
+  // Prefer a BU-EXACT holder over a bu="ALL" fallback (e.g. NYG's own LG over an admin who holds
+  // LOGISTICS across all BUs), THEN by priority. Without this, a bu="ALL" person with priority 1
+  // (e.g. a claim approver who's also LG) wrongly shows as the Logistics person for every BU.
+  cands.sort((a: any, b: any) => {
+    const aX = bu && a.bu === bu ? 0 : 1, bX = bu && b.bu === bu ? 0 : 1
+    if (aX !== bX) return aX - bX
+    return (a.priority ?? 99) - (b.priority ?? 99)
+  })
   return cands[0] ? nameOf(cands[0].email) || nameOf(cands[0].name) : ""
 }
 
