@@ -30,33 +30,32 @@ const SoBadge = ({ s, docStatus }: { s: string; docStatus: string }) => {
   return <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${cls}`}>{lbl}</span>
 }
 
-const getSoCurrentStep = (docStatus: string, itemStatus: string): string => {
-  if (itemStatus === "REJECTED") return "Rejected"
-  if (itemStatus === "COMPLETED") return "Completed"
+// Current SO status, labelled by POSITION (PENDING_MER → … → COMPLETED). The LG ∥ Claim phase is
+// combined: an SO whose Actual air freight is NOT entered yet shows "PENDING_LG_BOOKING/CLAIM"
+// (LG still has to book/enter). Once the Actual is filled but the claim isn't fully approved, it
+// drops to "PENDING_CLAIM" (LG done — only claim left). Needs the row for actualAirFreight.
+const getSoCurrentStep = (row: any): string => {
+  const itemStatus = row?.itemStatus, docStatus = row?.request?.status || ""
+  if (itemStatus === "REJECTED") return "REJECTED"
+  if (itemStatus === "COMPLETED" || itemStatus === "ACCOUNTING_PENDING") return "COMPLETED"
+  if (itemStatus === "PRESIDENT_PENDING") return "PENDING_PRESIDENT" // claim + LG done → final
+  const airEntered = row?.actualAirFreight != null
+  // LG ∥ Claim parallel phase.
+  const claimPhase = ["VP_PASSED", "PRES_PASSED", "LOG_PASSED"].includes(itemStatus)
+    || ["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_CLAIM_GW"].includes(docStatus)
+  if (claimPhase) return airEntered ? "PENDING_CLAIM" : "PENDING_LG_BOOKING/CLAIM"
+  // Claim already approved for this SO → only Logistics booking may remain, else waiting President.
+  if (itemStatus === "CLAIM_PASSED") return airEntered ? "PENDING_PRESIDENT" : "PENDING_LG_BOOKING/CLAIM"
+  if (itemStatus === "PASSED") return "PENDING_VP_SCM"
+  if (itemStatus === "VP_MER_PASSED") return "PENDING_SCM"
+  if (itemStatus === "SCM_GW_PENDING") return "PENDING_SCM"
   if (itemStatus === "PENDING") {
-    if (docStatus === "PENDING_PRESIDENT" || docStatus === "PENDING_PRESIDENT_GW") return "President"
-    if (docStatus === "PENDING_SCM") return "SCM"
-    if (docStatus === "PENDING_VP_SCM") return "VP SCM"
-    if (docStatus === "PENDING_CLAIM") return "Claim"
-    if (docStatus === "PENDING_LOGISTICS") return "Logistics"
-    if (docStatus === "PENDING_VP_MER_GW") return "DPM GW"
-    if (docStatus === "PENDING_GM_GW") return "GM GW"
-    if (docStatus === "PENDING_DVM_MER") return "DVM Merchandise"
-    return "VP Merchandise"
+    if (docStatus === "PENDING_PRESIDENT" || docStatus === "PENDING_PRESIDENT_GW") return "PENDING_PRESIDENT"
+    if (docStatus === "PENDING_SCM") return "PENDING_SCM"
+    if (docStatus === "PENDING_VP_SCM") return "PENDING_VP_SCM"
+    if (["PENDING_VP_MER", "PENDING_VP_MER_EA", "PENDING_VP_MER_TRM", "PENDING_VP_MER_GW", "PENDING_DPM_GW", "PENDING_GM_GW"].includes(docStatus)) return "PENDING_VP_MER"
+    return "PENDING_MER" // DVM/ADVM merch (first approver)
   }
-  if (itemStatus === "VP_MER_PASSED") return "President"
-  if (itemStatus === "PASSED") return "VP SCM"
-  if (itemStatus === "VP_PASSED") return "Claim"
-  if (itemStatus === "PRES_PASSED") {
-    if (docStatus === "PENDING_CLAIM_GW") return "LG ∥ Claim" // GW parallel stage
-    if (docStatus === "PENDING_LOGISTICS_GW") return "Logistics"
-    return "SCM" // NYG: President reset → SCM re-assigns claim
-  }
-  if (itemStatus === "LOG_PASSED") return "Claim"
-  if (itemStatus === "CLAIM_PASSED") return "Claim"
-  if (itemStatus === "PRESIDENT_PENDING") return "President" // claim + LG done → final President approval
-  if (itemStatus === "SCM_GW_PENDING") return "SCM (GW)"
-  if (itemStatus === "ACCOUNTING_PENDING") return "Accounting"
   return "-"
 }
 
@@ -77,25 +76,19 @@ const AggBadge = ({ rows }: { rows: any[] }) => {
 }
 
 const STEP_COLORS: Record<string, string> = {
-  "DPM GW": "bg-yellow-100 text-yellow-700",
-  "GM GW": "bg-orange-100 text-orange-700",
-  "VP Merchandise": "bg-yellow-100 text-yellow-700",
-  "DVM Merchandise": "bg-yellow-100 text-yellow-700",
-  "SCM": "bg-orange-100 text-orange-700",
-  "VP SCM": "bg-amber-100 text-amber-700",
-  "President": "bg-purple-100 text-purple-700",
-  "Logistics": "bg-blue-100 text-blue-700",
-  "LG ∥ Claim": "bg-indigo-100 text-indigo-700",
-  "Claim": "bg-indigo-100 text-indigo-700",
-  "VP Claim": "bg-violet-100 text-violet-700",
-  "SCM (GW)": "bg-orange-100 text-orange-700",
-  "Accounting": "bg-teal-100 text-teal-700",
-  "Completed": "bg-green-100 text-green-700",
-  "Rejected": "bg-red-100 text-red-700",
+  "PENDING_MER": "bg-yellow-100 text-yellow-700",
+  "PENDING_VP_MER": "bg-amber-100 text-amber-700",
+  "PENDING_SCM": "bg-orange-100 text-orange-700",
+  "PENDING_VP_SCM": "bg-orange-100 text-orange-800",
+  "PENDING_LG_BOOKING/CLAIM": "bg-blue-100 text-blue-700",
+  "PENDING_CLAIM": "bg-indigo-100 text-indigo-700",
+  "PENDING_PRESIDENT": "bg-purple-100 text-purple-700",
+  "COMPLETED": "bg-green-100 text-green-700",
+  "REJECTED": "bg-red-100 text-red-700",
 }
 
-const CurrentStepBadge = ({ docStatus, itemStatus }: { docStatus: string; itemStatus: string }) => {
-  const step = getSoCurrentStep(docStatus, itemStatus)
+const CurrentStepBadge = ({ row }: { row: any }) => {
+  const step = getSoCurrentStep(row)
   const cls = STEP_COLORS[step] || "bg-gray-100 text-gray-500"
   return <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${cls}`}>{step}</span>
 }
@@ -613,7 +606,7 @@ export default function RequestsPage() {
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.invoiceNo || "-"}</td>
                                     <td className="px-3 py-2"><SoBadge s={row.itemStatus} docStatus={row.request.status} /></td>
-                                    <td className="px-3 py-2"><CurrentStepBadge docStatus={row.request.status} itemStatus={row.itemStatus} /></td>
+                                    <td className="px-3 py-2"><CurrentStepBadge row={row} /></td>
                                   </tr>
                                   <tr className="bg-gray-50/40">
                                     <td colSpan={20} className="px-6 py-1.5">
