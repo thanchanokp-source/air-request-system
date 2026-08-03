@@ -128,6 +128,7 @@ export default function RequestsPage() {
   const [claimF, setClaimF] = useState<string[]>([])
   const [invoiceF, setInvoiceF] = useState<string[]>([])
   const [hawbF, setHawbF] = useState<string[]>([])
+  const [stageF, setStageF] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set())
@@ -172,9 +173,62 @@ export default function RequestsPage() {
     (r.items || []).map((item: any) => ({ ...item, request: r }))
   )
 
+  // ── Stage helpers — shared by the Pending-by-Stage tiles AND the Stage filter. President
+  // moved to the END (final approver, after Logistics ∥ Claim). ──
+  const POSITIONS = activeBu === "GW" ? [
+    { key: "PENDING_VP_MER_GW", label: "DPM" },
+    { key: "PENDING_GM_GW", label: "GM" },
+    { key: "PENDING_LOGISTICS_GW", label: "LOGISTICS" },
+    { key: "PENDING_CLAIM_GW", label: "CLAIM" },
+    { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
+  ] : [
+    { key: "PENDING_DVM_MER", label: "DVM Merchandise" },
+    { key: "PENDING_VP_MER", label: "VP Merchandise" },
+    { key: "PENDING_SCM", label: "SCM" },
+    { key: "PENDING_VP_SCM", label: "VP SCM" },
+    { key: "PENDING_LOGISTICS", label: "LOGISTICS" },
+    { key: "PENDING_CLAIM", label: "CLAIM" },
+    { key: "PENDING_PRESIDENT", label: "PRESIDENT" },
+  ]
+  const KEY_LABEL: Record<string, string> = Object.fromEntries(POSITIONS.map(p => [p.key, p.label]))
+  const ITEM_TO_STEP: Record<string, string> = activeBu === "GW" ? {
+    PRES_PASSED: "PENDING_LOGISTICS_GW", LOG_PASSED: "PENDING_CLAIM_GW",
+    SCM_GW_PENDING: "PENDING_SCM_GW", PRESIDENT_PENDING: "PENDING_PRESIDENT_GW",
+  } : {
+    DVM_MER_PASSED: "PENDING_VP_MER", VP_MER_PASSED: "PENDING_SCM", PASSED: "PENDING_VP_SCM",
+    VP_PASSED: "PENDING_LOGISTICS", PRES_PASSED: "PENDING_LOGISTICS", LOG_PASSED: "PENDING_CLAIM",
+    PRESIDENT_PENDING: "PENDING_PRESIDENT", CLAIM_PASSED: "PENDING_CLAIM",
+  }
+  // The stage key(s) an SO row currently sits at (GW's parallel PRES_PASSED can be BOTH LG + Claim).
+  const rowStageKeys = (row: any): string[] => {
+    const st = row.itemStatus
+    if (st === "REJECTED" || st === "COMPLETED" || st === "ACCOUNTING_PENDING") return []
+    if (activeBu === "GW" && st === "PRES_PASSED" && row.request.status === "PENDING_CLAIM_GW") {
+      const keys: string[] = []
+      if (row.actualAirFreight == null) keys.push("PENDING_LOGISTICS_GW")
+      if (getSplits(row).some((s: any) => s.status !== "DEPT_APPROVED" && s.status !== "REJECTED")) keys.push("PENDING_CLAIM_GW")
+      return keys
+    }
+    if (st === "PENDING") {
+      const s = row.request.status
+      const key = activeBu === "GW" ? s
+        : s === "PENDING_DVM_MER_EA" || s === "PENDING_DVM_MER_TRM" ? "PENDING_DVM_MER"
+        : s === "PENDING_VP_MER_EA" || s === "PENDING_VP_MER_TRM" ? "PENDING_VP_MER"
+        : s
+      return [key]
+    }
+    const k = ITEM_TO_STEP[st]
+    return k ? [k] : []
+  }
+  // Which claim department(s) an SO is still waiting on — for the "Claim: <dept>" sub-filter.
+  const rowClaimDepts = (row: any): string[] => {
+    const depts = getSplits(row).map((s: any) => s.dept).filter(Boolean)
+    return depts.length ? depts : (row.claimDepartment ? [row.claimDepartment] : [])
+  }
+
   const applyFilters = (rows: any[], opts: {
     brand?: string[], style?: string[], so?: string[], cp?: string[],
-    port?: string[], country?: string[], claim?: string[], invoice?: string[], hawb?: string[]
+    port?: string[], country?: string[], claim?: string[], invoice?: string[], hawb?: string[], stage?: string[]
   }) => rows.filter(row => {
     const r = row.request
     const statusMatch = !statusFilter.length || statusFilter.some(s =>
@@ -182,7 +236,15 @@ export default function RequestsPage() {
       (s === "REJECTED" && row.itemStatus === "REJECTED") ||
       (s === "PENDING" && row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED")
     )
-    return statusMatch &&
+    const stageMatch = !opts.stage?.length || (() => {
+      const keys = rowStageKeys(row)
+      if (keys.some(k => opts.stage!.includes(KEY_LABEL[k]))) return true
+      // Claim sub-filter: "Claim: <dept>" matches a claim-stage SO waiting on that dept.
+      if (keys.includes("PENDING_CLAIM") || keys.includes("PENDING_CLAIM_GW"))
+        return rowClaimDepts(row).some(d => opts.stage!.includes(`Claim: ${d}`))
+      return false
+    })()
+    return statusMatch && stageMatch &&
       (!opts.brand?.length || opts.brand.includes(r.brandName)) &&
       (!opts.style?.length || opts.style.includes(row.style)) &&
       (!opts.so?.length || opts.so.includes(row.so)) &&
@@ -205,7 +267,10 @@ export default function RequestsPage() {
   const invoices = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF }).map(r => r.invoiceNo))
   const hawbs    = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.hawbNo))
 
-  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF })
+  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF, stage: stageF })
+  // Stage filter options: the pipeline stages + a "Claim: <dept>" sub-option per claim department.
+  const claimDeptOpts = activeBu === "GW" ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
+  const stageOptions = [...POSITIONS.map(p => p.label), ...claimDeptOpts.map(d => `Claim: ${d}`)]
 
   const docGroups = buRequests.map(req => {
     const reqRows = filtered.filter(row => row.request.id === req.id)
@@ -239,23 +304,6 @@ export default function RequestsPage() {
   ] as [string,string][]
 
   const [claimExpanded, setClaimExpanded] = useState(false)
-
-  // President moved to the END (final approver, after Logistics ∥ Claim).
-  const POSITIONS = activeBu === "GW" ? [
-    { key: "PENDING_VP_MER_GW", label: "DPM" },
-    { key: "PENDING_GM_GW", label: "GM" },
-    { key: "PENDING_LOGISTICS_GW", label: "LOGISTICS" },
-    { key: "PENDING_CLAIM_GW", label: "CLAIM" },
-    { key: "PENDING_PRESIDENT_GW", label: "PRESIDENT" },
-  ] : [
-    { key: "PENDING_DVM_MER", label: "DVM Merchandise" },
-    { key: "PENDING_VP_MER", label: "VP Merchandise" },
-    { key: "PENDING_SCM", label: "SCM" },
-    { key: "PENDING_VP_SCM", label: "VP SCM" },
-    { key: "PENDING_LOGISTICS", label: "LOGISTICS" },
-    { key: "PENDING_CLAIM", label: "CLAIM" },
-    { key: "PENDING_PRESIDENT", label: "PRESIDENT" },
-  ]
 
   // CLAIM box breakdown = who each pending SO is still waiting on.
   const claimByDept: Record<string, number> = {}
@@ -412,14 +460,15 @@ export default function RequestsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {!!(statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length) && (
-            <button onClick={() => { setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]) }}
+          {!!(stageF.length || statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length) && (
+            <button onClick={() => { setStageF([]); setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]) }}
               className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
               Clear All
             </button>
           )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-1.5">
+          <MultiSelect label="All Stage" options={stageOptions} value={stageF} onChange={setStageF} />
           <MultiSelect label="All Status" options={["COMPLETED","PENDING","REJECTED"]} value={statusFilter} onChange={setStatusFilter} />
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
