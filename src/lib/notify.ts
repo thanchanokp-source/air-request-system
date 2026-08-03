@@ -319,6 +319,13 @@ export async function sendPasswordSetupEmail(email: string, name: string, token:
   await sendMail(email, "[Air Request] Set Your Password to Get Started", html)
 }
 
+// SCM NYK claims only after Logistics has entered INV + Actual air for every NYK SO — the claim
+// amount = Actual × %, so NYK can't act before those numbers exist. Alert is held until then.
+function nykLgReady(req: any): boolean {
+  const nyk = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && getSplits(i).some((s: any) => s.dept === "SCM NYK" || s.dept === "NYK"))
+  return nyk.length > 0 && nyk.every((i: any) => i.invoiceNo && i.actualAirFreight != null)
+}
+
 // Map the claim splits present on a doc → recipient groups. Only SCM NYK / SCM NYG
 // get alerted — GW + SUPPLIER claims are auto-approved (no approval, no email).
 function gwClaimGroups(depts: Set<string>, req: any): { role: string; label: string; claimDept?: string; token?: string }[] {
@@ -375,6 +382,8 @@ async function notifyGwClaimNykImpl(requestId: string): Promise<number> {
     const depts = new Set<string>()
     for (const it of req.items) getSplits(it).forEach((s: any) => depts.add(s.dept))
     if (!depts.has("SCM NYK") && !depts.has("NYK")) return 0
+    // Only once Logistics has filled INV + Actual air for the NYK SOs.
+    if (!nykLgReady(req)) return 0
     const users = await (prisma.user as any).findMany({
       where: { isActive: true, OR: [{ role: "SCM_NYK_APPROVER" }, { roles: { has: "SCM_NYK_APPROVER" } }] },
       select: { email: true },
@@ -762,6 +771,9 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
         const magicLink = g.token ? `${APP_URL}/api/magic-login?token=${g.token}&redirect=/approvals` : undefined
         const html = buildHtml(req, newStatus, link, undefined, undefined, magicLink)
         if (g.role === "SCM_NYK_APPROVER") {
+          // HOLD the SCM NYK alert until Logistics has entered INV + Actual air. If not ready yet,
+          // skip — LG's "Save & Send" will trigger notifyGwClaimNyk once the numbers are in.
+          if (!nykLgReady(req)) continue
           // 2 approvers (by brand) → send EACH their OWN link (?as=email) so clicking
           // logs in as THEM (not the first user). Show brand(s).
           const subj = `[Claim – SCM NYK] Pending Approval — Brand: ${nykBrandLabel(req)} — ${req.documentNo}`

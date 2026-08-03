@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
-import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi, notifyRecall } from "@/lib/notify"
+import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi, notifyRecall, notifyGwClaimNyk } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 import { recomputeRequestFreight } from "@/lib/freight"
@@ -342,6 +342,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // Mark LG as sent (chip turns green only now) + email the claimers the files + signed PDF.
       await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
       await notifyLgFilesToClaimers(id).catch(() => {})
+      await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
     }
     return NextResponse.json(await getUpdated())
   }
@@ -1028,6 +1029,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (body.lgComplete) {
       await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
       await notifyLgFilesToClaimers(id).catch(() => {})
+      await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
     }
     return NextResponse.json(await getUpdated())
   }
@@ -1086,6 +1088,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     // LG confirmed/sent → chip turns green + gate President on this (not on draft).
     await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
+    await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
     const newStatus = await recalcDocStatus(id)
     if (newStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
