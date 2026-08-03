@@ -30,7 +30,21 @@ export default function ApprovalsPage() {
   const [claimF, setClaimF] = useState<string[]>([])
   const [invoiceF, setInvoiceF] = useState<string[]>([])
   const [hawbF, setHawbF] = useState<string[]>([])
+  const [stageF, setStageF] = useState<string[]>([])
   const [buApprovalView, setBuApprovalView] = useState<string>("ALL")
+  // Doc-level stage label (for the Stage filter). SCM + VP SCM share PENDING_SCM; LG ∥ Claim shared.
+  const docStageLabel = (r: any): string => {
+    const s = r.status
+    if (["PENDING_DVM_MER", "PENDING_DVM_MER_EA", "PENDING_DVM_MER_TRM", "PENDING_MER", "PENDING_MER_GW"].includes(s)) return "PENDING_MER"
+    if (["PENDING_VP_MER", "PENDING_VP_MER_EA", "PENDING_VP_MER_TRM", "PENDING_VP_MER_GW", "PENDING_DPM_GW"].includes(s)) return "PENDING_VP_MER"
+    if (s === "PENDING_GM_GW") return "PENDING_GM_GW"
+    if (s === "PENDING_SCM") return "PENDING_SCM/VP_SCM"
+    if (s === "PENDING_VP_SCM") return "PENDING_VP_SCM"
+    if (["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_CLAIM_GW", "PENDING_LOGISTICS", "PENDING_LOGISTICS_GW"].includes(s)) return "PENDING_LG_BOOKING/CLAIM"
+    if (["PENDING_PRESIDENT", "PENDING_PRESIDENT_GW"].includes(s)) return "PENDING_PRESIDENT"
+    if (s === "PENDING_ACCOUNTING") return "PENDING_ACCOUNTING"
+    return s
+  }
 
   useEffect(() => {
     fetch("/api/requests?mine=true").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
@@ -283,9 +297,11 @@ export default function ApprovalsPage() {
   const invoices = [...new Set(allRows.map(r => r.invoiceNo).filter(Boolean))].sort()
   const hawbs = [...new Set(allRows.map(r => r.hawbNo).filter(Boolean))].sort()
 
+  const stageOptions = [...new Set(myRequests.map(r => docStageLabel(r)))].sort()
   const filtered = allRows.filter(row => {
     const r = row.request
-    return (!brandF.length || brandF.includes(r.brandName)) &&
+    return (!stageF.length || stageF.includes(docStageLabel(r))) &&
+      (!brandF.length || brandF.includes(r.brandName)) &&
       (!styleF.length || styleF.includes(row.style)) &&
       (!soF.length || soF.includes(row.so)) &&
       (!cpF.length || cpF.includes(row.customerPO)) &&
@@ -331,14 +347,15 @@ export default function ApprovalsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {(brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length) && (
-            <button onClick={() => { setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]) }}
+          {(stageF.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length) && (
+            <button onClick={() => { setStageF([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]) }}
               className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
               Clear All
             </button>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-1.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-10 gap-1.5">
+          <MultiSelect label="All Stage" options={stageOptions} value={stageF} onChange={setStageF} />
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF} />
