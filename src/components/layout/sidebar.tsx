@@ -8,7 +8,7 @@ const nav = [
   { href: "/dashboard", label: "DASHBOARD" },
   { href: "/requests", label: "AIR REQUESTS" },
   { href: "/approvals", label: "APPROVALS" },
-  { href: "/files", label: "ALL FILES" },
+  { href: "/files", label: "REPORT" },
   { href: "/requests/nyk-import", label: "NYK IMPORT", roles: ["ADMIN", "SCM_NYK_APPROVER", "SCM_NYK", "SCM_NYK_EVP"] },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
   { href: "/master/port", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "MER_USER", "MER_GW"], masterEdit: true },
