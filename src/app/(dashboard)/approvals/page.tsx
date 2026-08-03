@@ -195,9 +195,14 @@ export default function ApprovalsPage() {
   }
 
   // Show a doc only if this person can ACT on it — their primary stage matches, they own a
-  // claim SO via any held role, or they're the current forward recipient. (Approvals is the
-  // personal action queue — even admin-like viewers see only their own here.)
-  const myRequests = requests.filter(r => matchesPrimary(r) || heldClaimItems(r).length > 0 || claimNextItems(r).length > 0)
+  // claim SO via any held role, or they're the current forward recipient.
+  // EXCEPTION: ADMIN sees EVERY in-flight document (oversight) — Approvals doubles as an
+  // all-docs monitor for admin, not just their personal action queue.
+  const isAdminViewer = role === "ADMIN"
+  const TERMINAL_ST = ["COMPLETED", "REJECTED", "DRAFT"]
+  const myRequests = isAdminViewer
+    ? requests.filter(r => !TERMINAL_ST.includes(r.status) && (r.items || []).some((i: any) => i.itemStatus !== "REJECTED"))
+    : requests.filter(r => matchesPrimary(r) || heldClaimItems(r).length > 0 || claimNextItems(r).length > 0)
 
   // Show only items relevant to this role
   const primaryItems = (r: any) => {
@@ -241,6 +246,8 @@ export default function ApprovalsPage() {
   // Union of primary-role items + claim SO owned via any held role (multi-role).
   const isProdClaimer = myRoles.includes("CLAIM_PRODUCTION") || myRoles.includes("VP_PRODUCTION")
   const getRelevantItems = (r: any) => {
+    // Admin monitor: show every non-rejected SO of the doc (not scoped to a role's stage).
+    if (isAdminViewer) return (r.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
     const prim = primaryItems(r)
     const seen = new Set(prim.map((i: any) => i.id))
     const extra = [...heldClaimItems(r), ...claimNextItems(r)].filter((i: any) => {
@@ -306,7 +313,7 @@ export default function ApprovalsPage() {
         <div className="flex items-center gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">APPROVALS</h1>
-            <p className="text-xs text-gray-400 mt-0.5">{docGroups.length} document(s) pending your action</p>
+            <p className="text-xs text-gray-400 mt-0.5">{docGroups.length} document(s) {isAdminViewer ? "in progress (admin view — all pending docs)" : "pending your action"}</p>
           </div>
           {showBuToggle && (
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold self-start">
