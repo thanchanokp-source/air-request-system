@@ -436,6 +436,12 @@ export default function RequestsPage() {
               if (key === "PENDING_CLAIM_GW") return getSplits(r).some((s: any) => s.status !== "DEPT_APPROVED" && s.status !== "REJECTED")
               return false
             }
+            // NYG/EA/TRM: LG runs PARALLEL with Claim. An SO in the claim/president window whose LG
+            // isn't sent yet is still "waiting on Logistics" (the chain shows it) → count it under
+            // LOGISTICS too, in ADDITION to its claim stage (same rule as the LG queue visibility).
+            if (activeBu !== "GW" && key === "PENDING_LOGISTICS") {
+              return !r.request.logisticsSent && ["PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.request.status)
+            }
             let step: string | undefined
             if (st === "PENDING") {
               // A PENDING item's stage IS the document's current status. Map EA merch
