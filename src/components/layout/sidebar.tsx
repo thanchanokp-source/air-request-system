@@ -10,6 +10,7 @@ const nav = [
   { href: "/approvals", label: "APPROVALS" },
   { href: "/files", label: "REPORT" },
   { href: "/requests/nyk-import", label: "NYK IMPORT", roles: ["ADMIN", "SCM_NYK_APPROVER", "SCM_NYK", "SCM_NYK_EVP"] },
+  { href: "/logistics", label: "LG BOOKING", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM"] },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
   { href: "/master/port", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "MER_USER", "MER_GW"], masterEdit: true },
   { href: "/master/description", label: "MASTER DESCRIPTION", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "MER_USER"], masterEdit: true },

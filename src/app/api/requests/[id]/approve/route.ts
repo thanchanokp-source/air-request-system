@@ -284,7 +284,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // LG saves logistics data as draft at PENDING_SCM (parallel with SCM — no status change).
   // TRM logistics (Urairat = LOGISTICS_TRM in roles[]) uses the SAME NYG-style flow → accept it too,
   // but only for non-GW docs so her GW logistics still routes to the LOGISTICS_GW branch below.
-  if (action === "save_logistics_draft" && (userRole === "LOGISTICS" || (heldRoles.includes("LOGISTICS_TRM") && request.bu !== "GW") || (isFwdTarget && request.bu !== "GW"))) {
+  if (action === "save_logistics_draft" && (userRole === "LOGISTICS" || (heldRoles.includes("LOGISTICS_TRM") && request.bu !== "GW") || (isFwdTarget && request.bu !== "GW") || (userRole === "ADMIN" && request.bu !== "GW"))) {
     if (itemActuals && typeof itemActuals === "object") {
       for (const [iid, val] of Object.entries(itemActuals)) {
         const num = parseFloat(String(val))
@@ -350,7 +350,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW LG "Save Draft" — save the same LG data (Actual / INV / HAWB / Ship Date / QTY by SO)
   // WITHOUT changing status or running the NYG-specific advancement. GW uses its own item
   // statuses, so it must not go through the LOGISTICS (NYG) draft handler above.
-  if (action === "save_logistics_draft" && (userRole === "LOGISTICS_GW" || (isFwdTarget && request.bu === "GW"))) {
+  if (action === "save_logistics_draft" && (userRole === "LOGISTICS_GW" || (isFwdTarget && request.bu === "GW") || (userRole === "ADMIN" && request.bu === "GW"))) {
     if (itemActuals && typeof itemActuals === "object") {
       for (const [iid, val] of Object.entries(itemActuals)) {
         const num = parseFloat(String(val))
@@ -1272,7 +1272,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Case 6: Logistics rejects an SO that was wrongly included (not air / not in projection) →
   // bounce it back to the stage BEFORE the claim split (NYG: SCM re-assigns; GW: MER re-selects
   // the claim dept), and FYI everyone who already approved the document.
-  if (action === "lg_reject_so" && ["LOGISTICS", "LOGISTICS_GW"].includes(userRole)) {
+  if (action === "lg_reject_so" && (["LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "ADMIN"].includes(userRole) || heldRoles.some(r => ["LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM"].includes(r)))) {
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     if (!comment) return NextResponse.json({ error: "Please provide a reason before rejecting the SO" }, { status: 400 })
     const item = request.items.find((i: any) => i.id === itemId)
