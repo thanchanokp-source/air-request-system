@@ -31,6 +31,7 @@ export default function ApprovalsPage() {
   const [invoiceF, setInvoiceF] = useState<string[]>([])
   const [hawbF, setHawbF] = useState<string[]>([])
   const [stageF, setStageF] = useState<string[]>([])
+  const [personQ, setPersonQ] = useState("")
   const [buApprovalView, setBuApprovalView] = useState<string>("ALL")
   // Doc-level stage label (for the Stage filter). SCM + VP SCM share PENDING_SCM; LG ∥ Claim shared.
   const docStageLabel = (r: any): string => {
@@ -312,10 +313,21 @@ export default function ApprovalsPage() {
       (!hawbF.length || hawbF.includes(row.hawbNo))
   })
 
+  // Admin person-search: find every in-flight doc that a given person is on / assigned to (creator,
+  // any picked approver, or a claim-forward recipient). The doc's status badge shows WHAT is pending.
+  const pq = personQ.trim().toLowerCase()
+  const personMatch = (r: any) => {
+    if (!pq) return true
+    const fields = [r.createdBy?.email, r.createdBy?.name, r.assignedDvmMer, r.assignedVpMer, r.assignedVpScm,
+      (r as any).assignedScmNykEvp, (r as any).assignedScmNykCr, (r as any).lgForwardEmail, (r as any).lgForwardName,
+      ...((r.claimForwards || []) as any[]).flatMap(f => [f.nextEmail, f.nextName])]
+    return fields.some(x => String(x || "").toLowerCase().includes(pq))
+  }
   const docGroups = myRequests
     .filter(r => filtered.some(f => f.request.id === r.id))
     // Cross-BU person can filter the queue by BU via the toggle (ALL = both).
     .filter(r => !showBuToggle || buApprovalView === "ALL" || requestInBu(r, buApprovalView))
+    .filter(personMatch)
 
   const isClaimRole = role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG"
   const myDepts = isClaimRole ? gwDeptsForRole(role, userClaimDept) : []
@@ -343,6 +355,19 @@ export default function ApprovalsPage() {
           )}
         </div>
       </div>
+
+      {/* Admin-only: find every pending doc that a given person is on (assigned/creator/forward). */}
+      {isAdminViewer && (
+        <div className="bg-white rounded-xl border border-gray-200 p-3 flex items-center gap-3 flex-wrap">
+          <span className="text-xs font-semibold text-gray-500">🔎 ค้นหาว่าเอกสารค้างที่ใคร</span>
+          <div className="relative flex-1 min-w-[240px] max-w-md">
+            <input value={personQ} onChange={e => setPersonQ(e.target.value)} placeholder="พิมพ์ชื่อ / อีเมลของผู้อนุมัติ…"
+              className="w-full border border-gray-300 rounded-lg pl-3 pr-8 py-1.5 text-sm" />
+            {personQ && <button onClick={() => setPersonQ("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">✕</button>}
+          </div>
+          {pq && <span className="text-xs text-gray-500">พบ <b className="text-indigo-600">{docGroups.length}</b> เอกสาร (ดู STATUS ว่าค้างขั้นไหน · กด Open เข้าไปจัดการ)</span>}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">

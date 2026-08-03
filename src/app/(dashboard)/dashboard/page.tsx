@@ -567,6 +567,36 @@ function SectionRow({ label }: { label:string }) {
   )
 }
 
+// Per-SO status by position (same scheme as AIR REQUESTS). LG ∥ Claim phase: no Actual air yet →
+// PENDING_LG_BOOKING/CLAIM; Actual entered but claim not done → PENDING_CLAIM.
+const STATUS_CLS: Record<string, string> = {
+  "PENDING_MER": "bg-yellow-100 text-yellow-700", "PENDING_VP_MER": "bg-amber-100 text-amber-700",
+  "PENDING_SCM": "bg-orange-100 text-orange-700", "PENDING_VP_SCM": "bg-orange-100 text-orange-800",
+  "PENDING_LG_BOOKING/CLAIM": "bg-blue-100 text-blue-700", "PENDING_CLAIM": "bg-indigo-100 text-indigo-700",
+  "PENDING_PRESIDENT": "bg-purple-100 text-purple-700", "COMPLETED": "bg-green-100 text-green-700",
+  "REJECTED": "bg-red-100 text-red-700",
+}
+const soStage = (row: any): string => {
+  const st = row?.itemStatus, ds = row?.request?.status || ""
+  if (st === "REJECTED") return "REJECTED"
+  if (st === "COMPLETED" || st === "ACCOUNTING_PENDING") return "COMPLETED"
+  if (st === "PRESIDENT_PENDING") return "PENDING_PRESIDENT"
+  const air = row?.actualAirFreight != null
+  if (["VP_PASSED", "PRES_PASSED", "LOG_PASSED"].includes(st) || ["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_CLAIM_GW"].includes(ds))
+    return air ? "PENDING_CLAIM" : "PENDING_LG_BOOKING/CLAIM"
+  if (st === "CLAIM_PASSED") return air ? "PENDING_PRESIDENT" : "PENDING_LG_BOOKING/CLAIM"
+  if (st === "PASSED") return "PENDING_VP_SCM"
+  if (st === "VP_MER_PASSED" || st === "SCM_GW_PENDING") return "PENDING_SCM"
+  if (st === "PENDING") {
+    if (ds === "PENDING_PRESIDENT" || ds === "PENDING_PRESIDENT_GW") return "PENDING_PRESIDENT"
+    if (ds === "PENDING_SCM") return "PENDING_SCM"
+    if (ds === "PENDING_VP_SCM") return "PENDING_VP_SCM"
+    if (["PENDING_VP_MER", "PENDING_VP_MER_EA", "PENDING_VP_MER_TRM", "PENDING_VP_MER_GW", "PENDING_DPM_GW", "PENDING_GM_GW"].includes(ds)) return "PENDING_VP_MER"
+    return "PENDING_MER"
+  }
+  return "-"
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const { data: session } = useSession()
@@ -985,12 +1015,12 @@ export default function DashboardPage() {
         <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
-              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
+              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
                 <th key={h} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && <tr><td colSpan={23} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+              {loading && <tr><td colSpan={24} className="text-center py-10 text-gray-400">Loading...</td></tr>}
               {!loading && filtered.map((row,i)=>{
                 const ar = row.qtyOriginalShipment>0 ? row.qtyRequestAir/row.qtyOriginalShipment*100 : 0
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
@@ -1004,6 +1034,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.customerPO || "-"}</td>
                     <td className="px-3 py-1.5">{soBrand(row)}</td>
                     <td className="px-3 py-1.5">{row.request.buName}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const s=soStage(row);return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${STATUS_CLS[s]||"bg-gray-100 text-gray-500"}`}>{s}</span>})()}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
                     <td className="px-3 py-1.5">{row.qtyOriginalShipment}</td>
@@ -1028,7 +1059,7 @@ export default function DashboardPage() {
                   </tr>
                 )
               })}
-              {!loading&&filtered.length===0&&<tr><td colSpan={23} className="text-center py-10 text-gray-400">No data</td></tr>}
+              {!loading&&filtered.length===0&&<tr><td colSpan={24} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
           </table>
         </div>
