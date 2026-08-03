@@ -38,7 +38,8 @@ export default function LgBookingPage() {
     return s
   }, [isAdmin, roles, userBu])
 
-  // SOs still waiting on LG = itemStatus PRES_PASSED on a document not yet sent onward.
+  // SOs still waiting on LG (document not yet sent onward). LG runs in PARALLEL with claim, so the
+  // bookable item statuses are LOG_PASSED / CLAIM_PASSED / PRES_PASSED for NYG-style BUs; GW = PRES_PASSED.
   const rows = useMemo(() => {
     const out: any[] = []
     for (const r of requests) {
@@ -46,8 +47,9 @@ export default function LgBookingPage() {
       if (r.logisticsSent) continue
       const bu = r.bu || "NYG"
       if (!lgBus.has(bu)) continue
+      const bookable = bu === "GW" ? ["PRES_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"]
       for (const it of (r.items || [])) {
-        if (it.itemStatus !== "PRES_PASSED") continue
+        if (!bookable.includes(it.itemStatus)) continue
         out.push({ ...it, request: r, brand: it.brand || r.brandName || "(no brand)" })
       }
     }

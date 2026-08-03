@@ -26,7 +26,11 @@ export async function POST(req: NextRequest) {
   const ids: string[] = []
   for (const x of itemInput) { if (x?.id) { ids.push(String(x.id)); if (x.invoiceNo) invById[String(x.id)] = String(x.invoiceNo) } }
 
-  const items = await prisma.airRequestItem.findMany({ where: { id: { in: ids }, itemStatus: "PRES_PASSED" } })
+  // LG books in PARALLEL with claim, so accept every bookable status (LOG_PASSED / CLAIM_PASSED for
+  // NYG-style BUs, PRES_PASSED for GW). Booking only writes actual/hawb/inv — it never changes status.
+  const items = await prisma.airRequestItem.findMany({
+    where: { id: { in: ids }, itemStatus: { in: ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"] } },
+  })
   if (items.length === 0) return NextResponse.json({ error: "Selected SO not found (or already booked)" }, { status: 400 })
 
   const totalQty = items.reduce((s, i) => s + (i.qtyActualShip ?? i.qtyRequestAir), 0)

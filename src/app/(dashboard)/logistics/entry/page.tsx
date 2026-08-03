@@ -43,15 +43,19 @@ export default function LgEntryPage() {
     load()
   }, [load])
 
-  // Selected SOs (still PRES_PASSED), each carrying its parent document.
+  // LG works in PARALLEL with claim → bookable statuses differ by BU.
+  const bookableOf = (bu: string) => bu === "GW" ? ["PRES_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"]
+
+  // Selected SOs (still bookable by LG), each carrying its parent document.
   const myItems = useMemo(() => {
     const idset = new Set(entryIds)
     const out: any[] = []
     for (const r of requests) {
       if (r.logisticsSent) continue
+      const bookable = bookableOf(r.bu || "NYG")
       for (const it of (r.items || [])) {
         if (!idset.has(it.id)) continue
-        if (it.itemStatus !== "PRES_PASSED") continue
+        if (!bookable.includes(it.itemStatus)) continue
         out.push({ ...it, request: r, brand: it.brand || r.brandName || "(no brand)" })
       }
     }
@@ -151,11 +155,12 @@ export default function LgEntryPage() {
     setBusy(null)
   }
 
-  // Documents represented — with send-onward eligibility (all their PRES_PASSED SOs booked).
+  // Documents represented — with send-onward eligibility (all their bookable SOs now booked).
   const involvedDocs = useMemo(() => {
     const ids = new Set(myItems.map(i => i.request.id))
     return requests.filter(r => ids.has(r.id)).map(r => {
-      const pres = (r.items || []).filter((i: any) => i.itemStatus === "PRES_PASSED")
+      const bookable = bookableOf(r.bu || "NYG")
+      const pres = (r.items || []).filter((i: any) => bookable.includes(i.itemStatus))
       const unbooked = pres.filter((i: any) => !i.hawbNo)
       return { req: r, eligible: pres.length > 0 && unbooked.length === 0, remaining: unbooked.length }
     })
