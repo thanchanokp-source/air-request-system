@@ -24,6 +24,8 @@ export default function LgBookingPage() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [openBrands, setOpenBrands] = useState<Set<string>>(new Set())
+  const toggleBrand = (b: string) => setOpenBrands(p => { const n = new Set(p); n.has(b) ? n.delete(b) : n.add(b); return n })
 
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => { setRequests(Array.isArray(d) ? d : []); setLoading(false) })
@@ -96,65 +98,72 @@ export default function LgBookingPage() {
 
       {brands.map(({ brand, docs, count, ids }) => {
         const allOn = ids.every(id => selected.has(id))
+        const open = openBrands.has(brand)
         return (
-          <div key={brand} className="space-y-2">
-            <div className="flex items-center gap-2 pt-1">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox" checked={allOn} onChange={() => toggleMany(ids, !allOn)} className="rounded" />
+          <div key={brand} className="rounded-xl border-2 border-black overflow-hidden bg-white">
+            {/* Brand dropdown header */}
+            <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b-2 border-black">
+              <input type="checkbox" checked={allOn} onChange={() => toggleMany(ids, !allOn)} onClick={e => e.stopPropagation()} className="rounded" />
+              <button onClick={() => toggleBrand(brand)} className="flex items-center gap-2 flex-1 text-left">
+                <span className="text-gray-500 text-xs w-3">{open ? "▾" : "▸"}</span>
                 <span className="text-sm font-bold text-gray-800">🏷 {brand}</span>
-              </label>
-              <span className="text-xs text-gray-400">{count} SO · {docs.length} เอกสาร</span>
-              <div className="flex-1 border-t border-gray-200" />
+                <span className="text-xs text-gray-400">{count} SO · {docs.length} เอกสาร</span>
+              </button>
             </div>
-            {docs.map(({ request: req, items }) => {
-              const est = items.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
-              const act = items.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
-              const docIds = items.map((i: any) => i.id)
-              const docAllOn = docIds.every((id: string) => selected.has(id))
-              return (
-                <div key={req.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="px-4 py-3 bg-gray-50 border-b flex flex-wrap items-center gap-2">
-                    <input type="checkbox" checked={docAllOn} onChange={() => toggleMany(docIds, !docAllOn)} className="rounded" />
-                    <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm">{req.documentNo}</Link>
-                    <span className="text-xs text-gray-500">{req.bu}</span>
-                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">EST {fmtNum(est)} THB</span>
-                    <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">ACT {fmtNum(act)} THB</span>
-                    <span className="text-xs text-gray-400">{items.length} SO</span>
-                    <Link href={`/requests/${req.id}`} className="ml-auto text-xs text-gray-500 hover:text-blue-600 underline">เปิดเอกสาร →</Link>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs whitespace-nowrap">
-                      <thead className="bg-gray-50 border-b"><tr>
-                        <th className="px-3 py-2 w-8"></th>
-                        {["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","PLAN DATE","QTY AIR","GROSS (KG)","EST. AIR FREIGHT (THB)","ACTUAL (THB)","FACTORY","COUNTRY","INV NO","HAWB#"].map(h =>
-                          <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium">{h}</th>)}
-                      </tr></thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {items.map((it: any) => (
-                          <tr key={it.id} className={selected.has(it.id) ? "bg-blue-50" : "hover:bg-blue-50/30"}>
-                            <td className="px-3 py-1.5"><input type="checkbox" checked={selected.has(it.id)} onChange={() => toggle(it.id)} className="rounded" /></td>
-                            <td className="px-3 py-1.5 font-medium">{it.so}</td>
-                            <td className="px-3 py-1.5">{it.style}</td>
-                            <td className="px-3 py-1.5">{it.sub || "-"}</td>
-                            <td className="px-3 py-1.5">{it.customerPO || "-"}</td>
-                            <td className="px-3 py-1.5">{it.description || "-"}</td>
-                            <td className="px-3 py-1.5">{fmtDate(it.planShipmentDate)}</td>
-                            <td className="px-3 py-1.5 text-right font-semibold">{it.qtyRequestAir}</td>
-                            <td className="px-3 py-1.5 text-right text-blue-700">{fmtNum(it.grossWeight, 2)}</td>
-                            <td className="px-3 py-1.5 text-right text-blue-700">{fmtNum(it.airFreight)}</td>
-                            <td className="px-3 py-1.5 text-right font-semibold text-green-700">{it.actualAirFreight != null ? fmtNum(it.actualAirFreight) : "-"}</td>
-                            <td className="px-3 py-1.5">{it.factory || "-"}</td>
-                            <td className="px-3 py-1.5">{it.country || "-"}</td>
-                            <td className="px-3 py-1.5">{it.invoiceNo || "-"}</td>
-                            <td className="px-3 py-1.5">{it.hawbNo || "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )
-            })}
+
+            {open && (
+              <div className="p-3 space-y-2">
+                {docs.map(({ request: req, items }) => {
+                  const est = items.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
+                  const act = items.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
+                  const docIds = items.map((i: any) => i.id)
+                  const docAllOn = docIds.every((id: string) => selected.has(id))
+                  return (
+                    <div key={req.id} className="bg-white rounded-xl border border-black overflow-hidden">
+                      <div className="px-4 py-3 bg-gray-50 border-b border-black flex flex-wrap items-center gap-2">
+                        <input type="checkbox" checked={docAllOn} onChange={() => toggleMany(docIds, !docAllOn)} className="rounded" />
+                        <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm">{req.documentNo}</Link>
+                        <span className="text-xs text-gray-500">{req.bu}</span>
+                        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">EST {fmtNum(est)} THB</span>
+                        <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">ACT {fmtNum(act)} THB</span>
+                        <span className="text-xs text-gray-400">{items.length} SO</span>
+                        <Link href={`/requests/${req.id}`} className="ml-auto text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">Open →</Link>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs whitespace-nowrap">
+                          <thead className="bg-gray-50 border-b"><tr>
+                            <th className="px-3 py-2 w-8"></th>
+                            {["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","PLAN DATE","QTY AIR","GROSS (KG)","EST. AIR FREIGHT (THB)","ACTUAL (THB)","FACTORY","COUNTRY","INV NO","HAWB#"].map(h =>
+                              <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium">{h}</th>)}
+                          </tr></thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {items.map((it: any) => (
+                              <tr key={it.id} className={selected.has(it.id) ? "bg-blue-50" : "hover:bg-blue-50/30"}>
+                                <td className="px-3 py-1.5"><input type="checkbox" checked={selected.has(it.id)} onChange={() => toggle(it.id)} className="rounded" /></td>
+                                <td className="px-3 py-1.5 font-medium">{it.so}</td>
+                                <td className="px-3 py-1.5">{it.style}</td>
+                                <td className="px-3 py-1.5">{it.sub || "-"}</td>
+                                <td className="px-3 py-1.5">{it.customerPO || "-"}</td>
+                                <td className="px-3 py-1.5">{it.description || "-"}</td>
+                                <td className="px-3 py-1.5">{fmtDate(it.planShipmentDate)}</td>
+                                <td className="px-3 py-1.5 text-right font-semibold">{it.qtyRequestAir}</td>
+                                <td className="px-3 py-1.5 text-right text-blue-700">{fmtNum(it.grossWeight, 2)}</td>
+                                <td className="px-3 py-1.5 text-right text-blue-700">{fmtNum(it.airFreight)}</td>
+                                <td className="px-3 py-1.5 text-right font-semibold text-green-700">{it.actualAirFreight != null ? fmtNum(it.actualAirFreight) : "-"}</td>
+                                <td className="px-3 py-1.5">{it.factory || "-"}</td>
+                                <td className="px-3 py-1.5">{it.country || "-"}</td>
+                                <td className="px-3 py-1.5">{it.invoiceNo || "-"}</td>
+                                <td className="px-3 py-1.5">{it.hawbNo || "-"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )
       })}
