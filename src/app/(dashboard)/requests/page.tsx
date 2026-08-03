@@ -220,7 +220,13 @@ export default function RequestsPage() {
       return [key]
     }
     const k = ITEM_TO_STEP[st]
-    return k ? [k] : []
+    const keys = k ? [k] : []
+    // NYG/EA/TRM: LG runs PARALLEL with Claim — a claim-phase SO whose LG isn't sent yet is ALSO at
+    // Logistics (same rule as the LOGISTICS tile), so the Stage filter matches the tile count.
+    if (activeBu !== "GW" && !row.request.logisticsSent
+      && ["PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(row.request.status)
+      && !keys.includes("PENDING_LOGISTICS")) keys.push("PENDING_LOGISTICS")
+    return keys
   }
   // Which claim department(s) an SO is still waiting on — for the "Claim: <dept>" sub-filter.
   const rowClaimDepts = (row: any): string[] => {
