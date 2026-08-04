@@ -169,7 +169,8 @@ export default function ApprovalsPage() {
     // lock the whole doc to the first approver — show while ANY SO still awaits an approver.
     if (myRoles.includes("SCM_NYK_APPROVER")) {
       const myDepts = gwDeptsForRole("SCM_NYK_APPROVER", userClaimDept)
-      if (items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts))) return true
+      // SCM NYK sees the doc ONLY after LG has entered its data (INV + Actual air) on the NYK SO.
+      if (items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts) && i.invoiceNo && i.actualAirFreight != null)) return true
     }
     // CR user: once they've entered the CR NO for the doc, their job is done → drop it.
     if (myRoles.includes("SCM_NYK") && !r.crNo) {
@@ -256,7 +257,7 @@ export default function ApprovalsPage() {
     if (myRoles.includes("LOGISTICS_GW") && r.bu === "GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
     if (myRoles.includes("SCM_NYK_APPROVER")) {
       const myDepts = gwDeptsForRole("SCM_NYK_APPROVER", userClaimDept)
-      return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts))
+      return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts) && i.invoiceNo && i.actualAirFreight != null)
     }
     const gwClaimRoleP = myRoles.find((rr: string) => ["CLAIM_GW", "SCM_NYK", "SCM_NYK_EVP", "SCM_NYG"].includes(rr))
     if (gwClaimRoleP) {
