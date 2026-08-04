@@ -419,11 +419,9 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
   const claimByDept: Record<string, number> = {}
   for (const [d, v] of Object.entries(claimByDeptRaw)) claimByDept[d] = Math.round(v)
   const claimDeptRows = Object.entries(claimByDept)
-  // EA prints amounts in VND (converted from the stored THB via the doc's snapshot factor).
-  const isEaVnd = (req as any)?.bu === "EA" && Number((req as any)?.vndRate) > 0
-  const vr = Number((req as any)?.vndRate) || 1
-  const cvt = (n: any) => isEaVnd ? (Number(n) || 0) * vr : (Number(n) || 0)
-  const CUR = isEaVnd ? "VND" : "THB"
+  // EA amounts are stored in USD (est = gross × USD rate); every other BU is in THB. No conversion.
+  const cvt = (n: any) => Number(n) || 0
+  const CUR = (req as any)?.bu === "EA" ? "USD" : "THB"
   // Portrait A4 (usable ~551pt). REASON takes the remaining width (flex) and wraps.
   // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
   // wrap, so a too-narrow column overflows and overlaps its neighbour. Fixed cols sum ≈ 482

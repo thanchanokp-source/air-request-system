@@ -122,7 +122,6 @@ export default function RequestsPage() {
   const [invoiceF, setInvoiceF] = useState<string[]>([])
   const [hawbF, setHawbF] = useState<string[]>([])
   const [stageF, setStageF] = useState<string[]>([])
-  const [curr, setCurr] = useState<"THB" | "VND">("THB") // EA: view amounts in THB or VND (toggle)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set())
@@ -167,13 +166,9 @@ export default function RequestsPage() {
     (r.items || []).map((item: any) => ({ ...item, request: r }))
   )
 
-  // EA amounts are stored in THB; when the VND toggle is on, convert for DISPLAY via the doc's
-  // snapshot factor (req.vndRate = VND per THB). Returns a formatted "<n> <unit>" string.
-  const eaVnd = activeBu === "EA" && curr === "VND"
-  const money = (thb: number, req?: any) => {
-    const r = req?.vndRate || 0
-    return eaVnd && r > 0 ? `${fmtNum((thb || 0) * r)} VND` : `${fmtNum(thb || 0)} THB`
-  }
+  // EA amounts are stored in USD (est = gross × USD rate); every other BU in THB. Just label the unit.
+  const isEaBu = activeBu === "EA"
+  const money = (v: number, _req?: any) => `${fmtNum(v || 0)} ${isEaBu ? "USD" : "THB"}`
 
   // ── Stage helpers — shared by the Pending-by-Stage tiles AND the Stage filter. President
   // moved to the END (final approver, after Logistics ∥ Claim). ──
@@ -303,7 +298,7 @@ export default function RequestsPage() {
     if (res.ok) setRequests(prev => prev.filter(r => r.id !== reqId))
   }
 
-  const curUnit = eaVnd ? "VND" : "THB"
+  const curUnit = isEaBu ? "USD" : "THB"
   const SO_COLS = [
     ["SO",""],["BU",""],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
@@ -361,15 +356,6 @@ export default function RequestsPage() {
             <span className={`px-2 py-0.5 rounded text-xs font-bold ${activeBu === "GW" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
               {activeBu}
             </span>
-          )}
-          {/* EA only: view amounts in THB or VND */}
-          {activeBu === "EA" && (
-            <div className="flex rounded-lg border border-indigo-200 overflow-hidden text-xs font-semibold">
-              {(["THB", "VND"] as const).map(c => (
-                <button key={c} onClick={() => setCurr(c)}
-                  className={`px-3 py-1.5 transition-colors ${curr === c ? "bg-indigo-600 text-white" : "bg-white text-indigo-500 hover:bg-indigo-50"}`}>{c}</button>
-              ))}
-            </div>
           )}
         </div>
         {/* Actions grouped on the right (New Request next to Import History) */}
@@ -601,8 +587,8 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2">{row.qtyOriginalShipment}</td>
                                     <td className="px-3 py-2 font-semibold">{row.qtyRequestAir}</td>
                                     <td className="px-3 py-2 text-blue-700">{fmtNum(row.grossWeight, 2)}</td>
-                                    <td className="px-3 py-2 text-blue-700">{fmtNum(eaVnd && row.request.vndRate ? (row.airFreight || 0) * row.request.vndRate : row.airFreight)}</td>
-                                    <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(eaVnd && row.request.vndRate ? (row.actualAirFreight || 0) * row.request.vndRate : row.actualAirFreight)}</td>
+                                    <td className="px-3 py-2 text-blue-700">{fmtNum(row.airFreight)}</td>
+                                    <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(row.actualAirFreight)}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.factory}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.country}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">

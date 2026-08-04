@@ -32,21 +32,22 @@ export async function releaseHeldDocs() {
   if (!held.length) return
 
   const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
-  const rates: Record<string, number> = {}
-  for (const r of rateList) rates[rateKey(r.country)] = r.ratePerKg
+  const rates: Record<string, number> = {}, ratesUsd: Record<string, number> = {}
+  for (const r of rateList) { rates[rateKey(r.country)] = r.ratePerKg; ratesUsd[rateKey(r.country)] = r.rateUsd || 0 }
   const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
   const wts: Record<string, number> = {}
   for (const d of descList) wts[descKey(d.name)] = d.weightPerUnit || 0
 
   for (const doc of held) {
     const items = doc.items as any[]
-    const rateOk = items.filter(i => i.country).every(i => (rates[rateKey(i.country)] || 0) > 0)
+    const dr = doc.bu === "EA" ? ratesUsd : rates   // EA prices freight in USD
+    const rateOk = items.filter(i => i.country).every(i => (dr[rateKey(i.country)] || 0) > 0)
     const wtOk = items.filter(i => i.description).every(i => (wts[descKey(i.description)] || 0) > 0)
     // Recompute Gross + Est. for every item now that data may have been added.
     // Gross uses QTY ORIGINAL Shipment (not QTY Air) — see recomputeRequestFreight note.
     for (const it of items) {
       const wt = wts[descKey(it.description)] || 0
-      const rate = rates[rateKey(it.country)] || 0
+      const rate = dr[rateKey(it.country)] || 0
       const gross = (it.qtyOriginalShipment || 0) * wt
       await prisma.airRequestItem.update({
         where: { id: it.id },
@@ -68,15 +69,17 @@ export const releasePendingRateDocs = releaseHeldDocs
 export async function recomputeRequestFreight(requestId: string): Promise<void> {
   const items = await (prisma.airRequestItem as any).findMany({ where: { requestId } })
   if (!items.length) return
+  const req = await (prisma.airRequest as any).findUnique({ where: { id: requestId }, select: { bu: true } })
   const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
-  const rates: Record<string, number> = {}
-  for (const r of rateList) rates[rateKey(r.country)] = r.ratePerKg
+  const rates: Record<string, number> = {}, ratesUsd: Record<string, number> = {}
+  for (const r of rateList) { rates[rateKey(r.country)] = r.ratePerKg; ratesUsd[rateKey(r.country)] = r.rateUsd || 0 }
+  const dr = req?.bu === "EA" ? ratesUsd : rates   // EA prices freight in USD
   const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
   const wts: Record<string, number> = {}
   for (const d of descList) wts[descKey(d.name)] = d.weightPerUnit || 0
   for (const it of items) {
     const wt = wts[descKey(it.description)] || 0
-    const rate = rates[rateKey(it.country)] || 0
+    const rate = dr[rateKey(it.country)] || 0
     const gross = (it.qtyOriginalShipment || 0) * wt
     await prisma.airRequestItem.update({
       where: { id: it.id },

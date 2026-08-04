@@ -6,7 +6,6 @@ import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange } from "@/lib/notify"
 import { sendMail } from "@/lib/email"
 import { canonCountry } from "@/lib/freight"
-import { getFx } from "@/lib/fx"
 import { attachGarmentPo } from "@/lib/bom"
 import { normalizeSo } from "@/lib/so"
 import { forceImportReason } from "@/lib/claim"
@@ -148,17 +147,17 @@ export async function POST(req: NextRequest) {
       .filter((x: any) => x.country)
       .map((x: any) => [rateKey(x.country), x])).values()] as { country: string }[]
 
-    // BU-aware rates: a row matching this doc's BU overrides the shared "ALL" row. EA rows are
-    // quoted in USD/kg → converted to THB via the FX rate (freight is stored in THB for every BU).
+    // BU-aware rates: a row matching this doc's BU overrides the shared "ALL" row. EA prices freight
+    // in USD (rateUsd) → EA est is in USD; every other BU uses the THB rate (ratePerKg).
     const docBuForRate = isGW ? "GW" : isEA ? "EA" : isTRM ? "TRM" : "NYG"
-    const fx = await getFx()
     const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true }, orderBy: { updatedAt: "asc" } })
     const allRates: Record<string, number> = {}, buRates: Record<string, number> = {}
     for (const r of rateList) {
-      const rateThb = r.currency === "USD" ? r.ratePerKg * (fx.thbPerUsd || 0) : r.ratePerKg
+      const val = isEA ? (r.rateUsd || 0) : (r.ratePerKg || 0)
       const key = rateKey(r.country)
-      if (r.bu === "ALL") allRates[key] = rateThb
-      else if (r.bu === docBuForRate) buRates[key] = rateThb
+      if (val <= 0) continue
+      if (r.bu === "ALL") allRates[key] = val
+      else if (r.bu === docBuForRate) buRates[key] = val
     }
     const freightRates: Record<string, number> = { ...allRates, ...buRates } // BU-specific wins over shared
 
@@ -239,9 +238,6 @@ export async function POST(req: NextRequest) {
         // description has a WT Charge (so Gross/Est. Air Freight can be computed).
         pendingRate: !isHistorical && missingRates.length > 0,
         pendingWeight: !isHistorical && missingDescriptions.length > 0,
-        // EA displays amounts in VND (toggle) — snapshot the VND-per-THB factor at creation so a
-        // completed doc's VND never shifts when the FX rate is later edited.
-        ...(isEA && fx.vndPerThb > 0 ? { vndRate: fx.vndPerThb } : {}),
         vpMerToken: crypto.randomUUID(),
         ...(isGW ? {
           gmToken: crypto.randomUUID(),

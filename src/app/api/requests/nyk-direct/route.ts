@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange } from "@/lib/notify"
 import { normalizeSo } from "@/lib/so"
-import { getFx } from "@/lib/fx"
 import crypto from "crypto"
 
 // "NYK Direct" GW import. Special GW flow that SKIPS every approver (MER/DPM/GM/President/LG) and
@@ -75,7 +74,6 @@ export async function POST(req: NextRequest) {
   const first = items[0]
   const documentNo = await generateDocumentNo(bu)
   const userId = (session.user as any).id
-  const fx = bu === "EA" ? await getFx() : null   // EA → snapshot VND display factor
 
   const itemData = items.map((it: any) => {
     const qty = Number(numOf(col(it, "QTY Request ship Air (pcs)") ?? col(it, "QTY AIR")))
@@ -118,7 +116,6 @@ export async function POST(req: NextRequest) {
       nykDirect: true,
       logisticsSent: true, // LG data (INV/HAWB/actual) is supplied by the import
       createdById: userId,
-      ...(fx && fx.vndPerThb > 0 ? { vndRate: fx.vndPerThb } : {}),
       scmNykApproverToken: crypto.randomUUID(),
       scmNykToken: crypto.randomUUID(),
       scmNykEvpToken: crypto.randomUUID(),
