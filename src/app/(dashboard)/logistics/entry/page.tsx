@@ -39,6 +39,7 @@ export default function LgEntryPage() {
   const [fwEmail, setFwEmail] = useState("")
   const [fwName, setFwName] = useState("")
   const [fwNote, setFwNote] = useState("")
+  const [fwTargets, setFwTargets] = useState<any[]>([])
 
   const load = useCallback(async () => {
     const d = await fetch("/api/requests").then(r => r.json())
@@ -49,6 +50,8 @@ export default function LgEntryPage() {
   useEffect(() => {
     try { setEntryIds(JSON.parse(sessionStorage.getItem("lg_entry_ids") || "[]")) } catch { setEntryIds([]) }
     load()
+    // LG-capable people from master (for the Forward picker).
+    fetch("/api/users/lg-forward-targets").then(r => r.json()).then(d => setFwTargets(Array.isArray(d) ? d : [])).catch(() => {})
   }, [load])
 
   const bookableOf = (bu: string) => bu === "GW" ? ["PRES_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"]
@@ -352,8 +355,13 @@ export default function LgEntryPage() {
             <div className="bg-slate-800 text-white px-5 py-3 font-semibold text-sm">Forward ให้ผู้ใต้บังคับบัญชา</div>
             <div className="p-5 space-y-3">
               <p className="text-xs text-gray-500">ส่งต่อ {[...new Set(myItems.map(i => i.request.documentNo))].length} เอกสารให้กรอกต่อ (ส่งลิงก์เข้าอีเมล)</p>
-              <input value={fwEmail} onChange={e => setFwEmail(e.target.value)} placeholder="อีเมล @nanyangtextile.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-              <input value={fwName} onChange={e => setFwName(e.target.value)} placeholder="ชื่อผู้รับ (ไม่บังคับ)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              <label className="block text-xs font-medium text-gray-600">เลือกผู้รับ (คน LG จาก master)</label>
+              <select value={fwEmail} onChange={e => { const u = fwTargets.find(t => t.email === e.target.value); setFwEmail(e.target.value); setFwName(u?.name || "") }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
+                <option value="">— เลือกผู้รับ —</option>
+                {fwTargets.map(t => <option key={t.email} value={t.email}>{t.name || t.email} ({t.email})</option>)}
+              </select>
+              {fwTargets.length === 0 && <p className="text-[11px] text-amber-600">ไม่พบรายชื่อ LG ใน master</p>}
               <textarea value={fwNote} onChange={e => setFwNote(e.target.value)} rows={2} placeholder="หมายเหตุ (ไม่บังคับ)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
               <div className="flex gap-2">
                 <button onClick={() => setFwOpen(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">ยกเลิก</button>
