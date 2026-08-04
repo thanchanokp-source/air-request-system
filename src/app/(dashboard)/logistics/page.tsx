@@ -100,27 +100,27 @@ export default function LgBookingPage() {
         const allOn = ids.every(id => selected.has(id))
         const open = openBrands.has(brand)
         return (
-          <div key={brand} className="rounded-xl border-2 border-black overflow-hidden bg-white">
+          <div key={brand} className="rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow transition-shadow overflow-hidden">
             {/* Brand dropdown header */}
-            <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b-2 border-black">
-              <input type="checkbox" checked={allOn} onChange={() => toggleMany(ids, !allOn)} onClick={e => e.stopPropagation()} className="rounded" />
-              <button onClick={() => toggleBrand(brand)} className="flex items-center gap-2 flex-1 text-left">
-                <span className="text-gray-500 text-xs w-3">{open ? "▾" : "▸"}</span>
-                <span className="text-sm font-bold text-gray-800">🏷 {brand}</span>
-                <span className="text-xs text-gray-400">{count} SO · {docs.length} เอกสาร</span>
+            <div className={`flex items-center gap-2.5 px-4 py-3.5 ${open ? "border-b border-gray-100 bg-gray-50/60" : "bg-white"}`}>
+              <input type="checkbox" checked={allOn} onChange={() => toggleMany(ids, !allOn)} onClick={e => e.stopPropagation()} className="rounded border-gray-300 text-blue-600" />
+              <button onClick={() => toggleBrand(brand)} className="flex items-center gap-2.5 flex-1 text-left group">
+                <span className={`text-gray-400 text-[10px] w-3 transition-transform ${open ? "rotate-90" : ""}`}>▸</span>
+                <span className="text-[15px] font-semibold text-gray-700 group-hover:text-gray-900 tracking-tight">{brand}</span>
+                <span className="text-xs text-gray-400 font-normal">{count} SO · {docs.length} เอกสาร</span>
               </button>
             </div>
 
             {open && (
-              <div className="p-3 space-y-2">
+              <div className="p-3 space-y-2.5 bg-gray-50/40">
                 {docs.map(({ request: req, items }) => {
                   const est = items.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
                   const act = items.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
                   const docIds = items.map((i: any) => i.id)
                   const docAllOn = docIds.every((id: string) => selected.has(id))
                   return (
-                    <div key={req.id} className="bg-white rounded-xl border border-black overflow-hidden">
-                      <div className="px-4 py-3 bg-gray-50 border-b border-black flex flex-wrap items-center gap-2">
+                    <div key={req.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      <div className="px-4 py-3 bg-gray-50/70 border-b border-gray-100 flex flex-wrap items-center gap-2">
                         <input type="checkbox" checked={docAllOn} onChange={() => toggleMany(docIds, !docAllOn)} className="rounded" />
                         <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm">{req.documentNo}</Link>
                         <span className="text-xs text-gray-500">{req.bu}</span>
