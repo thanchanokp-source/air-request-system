@@ -126,6 +126,7 @@ export default function LgEntryPage() {
     const allCalc = items.every(it => { const inv = soInvMap[it.id]; return !!inv && hawbGroups.some(g => g.hawbNo && g.invNos.includes(inv)) })
     if (!allCalc) return false
     if (!items.every(hasShipDate)) return false
+    if (!items.every(it => liveQty(it) > 0)) return false // QTY Air must be filled
     const groups = hawbGroups.filter(g => g.invNos.some(inv => items.some(it => soInvMap[it.id] === inv)))
     if (groups.some(g => !g.bookingDate)) return false
     // Attachments are OPTIONAL — a document does not need its own file to be sent.
@@ -166,8 +167,11 @@ export default function LgEntryPage() {
   const saveDraft = async () => { setSaving(true); await persist(new Set()); await load(); setSaving(false); alert("บันทึกร่างแล้ว (ยังไม่ส่ง)") }
 
   const send = async () => {
+    // Every selected SO must have Plan Ship Date + QTY Air filled before Send.
+    const missingDetail = allLgItems.filter(it => !hasShipDate(it) || !(liveQty(it) > 0))
+    if (missingDetail.length) { alert(`กรอกรายละเอียดให้ครบก่อนส่ง — SO ที่ยังขาด Plan Ship Date / QTY Air:\n${[...new Set(missingDetail.map(i => i.so))].join(", ")}`); return }
     const ready = involvedReqIds.filter(docComplete)
-    if (ready.length === 0) { alert("ยังไม่มีเอกสารพร้อมส่ง — SO ที่คำนวณต้องอยู่ใน HAWB (มี HAWB No), มี Ship Date และ Booking Date ครบ"); return }
+    if (ready.length === 0) { alert("ยังไม่มีเอกสารพร้อมส่ง — SO ที่เลือกต้องอยู่ใน HAWB (มี HAWB No) และมี Booking Date ครบ"); return }
     if (!confirm(`ส่งต่อ ${ready.length} เอกสารที่พร้อม? (ที่เหลือบันทึกเป็นร่าง)`)) return
     setSaving(true); await persist(new Set(ready)); await load(); setSaving(false)
     alert(`ส่งต่อแล้ว ${ready.length} เอกสาร`)
@@ -369,7 +373,7 @@ export default function LgEntryPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50"><tr>
-                  <th className="px-2 py-1 text-left">DOC</th><th className="px-2 py-1 text-left">SO</th><th className="px-2 py-1 text-left">STYLE</th>
+                  <th className="px-2 py-1 text-left">DOC</th><th className="px-2 py-1 text-left">SO</th><th className="px-2 py-1 text-left">SUB</th><th className="px-2 py-1 text-left">STYLE</th><th className="px-2 py-1 text-left">BRAND</th>
                   <th className="px-2 py-1 text-right">QTY Air</th><th className="px-2 py-1 text-left">Plan Ship Date</th>
                 </tr></thead>
                 <tbody>
@@ -379,7 +383,9 @@ export default function LgEntryPage() {
                       <tr key={it.id} className={`border-t border-gray-100 ${missingQty ? "bg-red-50" : ""}`}>
                         <td className="px-2 py-1"><Link href={`/requests/${it.request.id}`} className="text-blue-600 hover:underline">{it.request.documentNo}</Link></td>
                         <td className="px-2 py-1 font-medium">{it.so}</td>
+                        <td className="px-2 py-1 text-gray-500">{it.sub || "-"}</td>
                         <td className="px-2 py-1 text-gray-500">{it.style}</td>
+                        <td className="px-2 py-1 text-gray-500">{it.brand || it.request.brandName || "-"}</td>
                         <td className="px-2 py-1">
                           <input type="number" min="0" className="w-24 border border-gray-300 rounded px-2 py-1 text-right"
                             value={soShipData[it.id]?.qty ?? (it.qtyRequestAir || "")}
