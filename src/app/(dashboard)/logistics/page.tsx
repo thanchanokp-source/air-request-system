@@ -107,7 +107,7 @@ export default function LgBookingPage() {
               <button onClick={() => toggleBrand(brand)} className="flex items-center gap-2.5 flex-1 text-left group">
                 <span className={`text-gray-400 text-[10px] w-3 transition-transform ${open ? "rotate-90" : ""}`}>▸</span>
                 <span className="text-[15px] font-semibold text-gray-700 group-hover:text-gray-900 tracking-tight">{brand}</span>
-                <span className="text-xs text-gray-400 font-normal">{count} transaction · {docs.length} เอกสาร</span>
+                <span className="text-xs text-gray-400 font-normal">{count} transaction · {docs.length} Document</span>
               </button>
             </div>
 
