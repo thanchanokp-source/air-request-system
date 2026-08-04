@@ -177,11 +177,30 @@ export default function LgEntryPage() {
   // with LG's INV NO. / HAWB# / EXPENSE/HAWB (LG-specific header) prefilled — LG fills HAWB + Expense
   // then imports back.
   const exportXlsx = async () => {
-    const XLSX = await import("xlsx")
+    const ExcelJS = (await import("exceljs")).default
     const fmtD = (v: any) => { if (!v) return ""; const d = new Date(v); if (isNaN(d.getTime())) return ""; return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}` }
     const DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
-    const headers = ["No_Document", "CR NO", "Brand name", "BU", "STYLE", "SO", "SUB", "CUSTOMER PO", "DESCRIPTION", "WEIGHT(KG)", "Original Shipment Date", "Plan Shipment Date", "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "Reason delay", "Factory", "Country", "Port", "INV NO.", "HAWB#", "EXPENSE/HAWB", "CLAIM DEPT 1", "%CLAIM1", "ACTUAL AIRFREIGHT1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "ACTUAL AIRFREIGHT2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "ACTUAL AIRFREIGHT3", "REASON 3"]
-    const rows = allLgItems.map((item: any) => {
+    // Port + CR NO removed. Header colours by role part: MER = blue, LG = orange, Claim/SCM = green.
+    const headers = ["No_Document", "Brand name", "BU", "STYLE", "SO", "SUB", "CUSTOMER PO", "DESCRIPTION", "WEIGHT(KG)", "Original Shipment Date", "Plan Shipment Date", "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "Reason delay", "Factory", "Country", "INV NO.", "HAWB#", "EXPENSE/HAWB", "CLAIM DEPT 1", "%CLAIM1", "ACTUAL AIRFREIGHT1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "ACTUAL AIRFREIGHT2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "ACTUAL AIRFREIGHT3", "REASON 3"]
+    const widths = [16, 16, 6, 14, 12, 8, 14, 24, 10, 20, 20, 20, 20, 16, 14, 12, 16, 16, 18, 14, 8, 16, 16, 14, 8, 16, 16, 14, 8, 16, 16]
+    const MER_C = "FFDDEBF7", LG_C = "FFFCE4D6", CLAIM_C = "FFE2EFDA" // blue / orange / green
+    const colorOf = (i: number) => (i >= 16 && i <= 18) ? LG_C : (i >= 19 ? CLAIM_C : MER_C)
+
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet("LG")
+    const hr = ws.addRow(headers)
+    hr.height = 30
+    headers.forEach((_, i) => {
+      const c = hr.getCell(i + 1)
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colorOf(i) } }
+      c.font = { bold: true, size: 10 }
+      c.alignment = { vertical: "middle", horizontal: "center", wrapText: true }
+      c.border = { top: { style: "thin", color: { argb: "FFBFBFBF" } }, bottom: { style: "thin", color: { argb: "FFBFBFBF" } }, left: { style: "thin", color: { argb: "FFBFBFBF" } }, right: { style: "thin", color: { argb: "FFBFBFBF" } } }
+    })
+    widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
+    ws.views = [{ state: "frozen", ySplit: 1 }]
+
+    allLgItems.forEach((item: any) => {
       const invNo = soInvMap[item.id] || ""
       const hawbGrp = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
       const hawbNo = hawbGrp?.hawbNo || ""
@@ -189,22 +208,23 @@ export default function LgEntryPage() {
       const d: any[] = Array.isArray(item.claimDepts) && item.claimDepts.length > 0 ? item.claimDepts : []
       const deptAmt = (pct: any) => (af > 0 && pct) ? Math.round(af * (Number(pct) / 100) * 100) / 100 : ""
       const isGW = (item.request.bu === "GW")
-      return [
-        item.request.documentNo, (item.request as any).crNo || "", item.request.brandName || "", isGW ? "GW" : (item.request.bu || "NYG"),
+      ws.addRow([
+        item.request.documentNo, item.request.brandName || "", isGW ? "GW" : (item.request.bu || "NYG"),
         item.style || "", item.so || "", item.sub || "", item.customerPO || "", item.description || "", item.grossWeight ?? "",
         fmtD(item.originalShipmentDate), fmtD(item.planShipmentDate), item.qtyOriginalShipment ?? item.qtyRequestAir ?? "", item.qtyRequestAir ?? "",
-        item.reasonDelay || "", item.factory || "", item.country || "", item.port || "",
+        item.reasonDelay || "", item.factory || "", item.country || "",
         invNo, hawbNo, hawbGrp?.totalCost || "",
         d[0]?.dept ? (DEPT_LABEL[d[0].dept] || d[0].dept) : "", d[0]?.pct ?? "", deptAmt(d[0]?.pct), d[0]?.reason || "",
         d[1]?.dept ? (DEPT_LABEL[d[1].dept] || d[1].dept) : "", d[1]?.pct ?? "", deptAmt(d[1]?.pct), d[1]?.reason || "",
         d[2]?.dept ? (DEPT_LABEL[d[2].dept] || d[2].dept) : "", d[2]?.pct ?? "", deptAmt(d[2]?.pct), d[2]?.reason || "",
-      ]
+      ])
     })
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-    ws["!cols"] = [16, 14, 16, 6, 14, 12, 8, 14, 24, 10, 20, 20, 22, 22, 16, 14, 12, 12, 16, 16, 20, 14, 8, 18, 16, 14, 8, 18, 16, 14, 8, 18, 16].map(w => ({ wch: w }))
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "LG")
-    XLSX.writeFile(wb, `LG_Booking_${allLgItems.length}tx.xlsx`)
+
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a"); a.href = url; a.download = `LG_Booking_${allLgItems.length}tx.xlsx`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
   // Import back: read SO/SUB → INV NO., and HAWB# + EXPENSE/HAWB → rebuild the HAWB groups.
