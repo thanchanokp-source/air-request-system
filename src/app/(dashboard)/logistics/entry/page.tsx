@@ -128,7 +128,7 @@ export default function LgEntryPage() {
     if (!items.every(hasShipDate)) return false
     const groups = hawbGroups.filter(g => g.invNos.some(inv => items.some(it => soInvMap[it.id] === inv)))
     if (groups.some(g => !g.bookingDate)) return false
-    if (lgFileCount(docMap[reqId]) === 0) return false
+    // Attachments are OPTIONAL — a document does not need its own file to be sent.
     return true
   }
 
@@ -351,9 +351,14 @@ export default function LgEntryPage() {
                             onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], qty: e.target.value } }))} />
                         </td>
                         <td className="px-2 py-1">
-                          <input type="date" className="border border-gray-300 rounded px-2 py-1"
-                            value={soShipData[it.id]?.date ?? toDateInput(it.planShipmentDate)}
-                            onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], date: e.target.value } }))} />
+                          {(() => {
+                            const dv = soShipData[it.id]?.date ?? toDateInput(it.planShipmentDate)
+                            return (
+                              <input type="date" className={`border rounded px-2 py-1 ${dv ? "border-gray-300" : "border-red-400 bg-red-50"}`}
+                                value={dv}
+                                onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], date: e.target.value } }))} />
+                            )
+                          })()}
                         </td>
                       </tr>
                     )
@@ -363,15 +368,14 @@ export default function LgEntryPage() {
             </div>
           </div>
 
-          {/* ② Attach files — one attach, applied to every selected document */}
+          {/* ② Attach files — one attach, applied to every selected document (OPTIONAL) */}
           {(() => {
-            const allHaveFile = involvedReqIds.every(id => lgFileCount(docMap[id]) > 0)
-            const missing = involvedReqIds.filter(id => lgFileCount(docMap[id]) === 0).length
+            const totalFiles = involvedReqIds.reduce((s, id) => s + lgFileCount(docMap[id]), 0)
             return (
               <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(แนบครั้งเดียว ใช้กับทุกเอกสารที่เลือก · ต้องมี ≥1)</span></p>
-                  {allHaveFile ? <span className="text-[11px] text-green-600">✓ แนบครบทุกเอกสาร</span> : <span className="text-[11px] text-red-500">* ยังขาด {missing} เอกสาร</span>}
+                  <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(ไม่บังคับ · แนบครั้งเดียว ใช้กับทุกเอกสารที่เลือก)</span></p>
+                  {totalFiles > 0 && <span className="text-[11px] text-green-600">✓ {totalFiles} file(s)</span>}
                   <div className="ml-auto flex items-center gap-1.5">
                     {["INV", "AWB", "EXPENSE", "COMBINE"].map(cat => (
                       <label key={cat} className="text-[11px] px-2.5 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer">
