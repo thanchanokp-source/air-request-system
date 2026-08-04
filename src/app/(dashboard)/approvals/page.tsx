@@ -147,14 +147,10 @@ export default function ApprovalsPage() {
     // President (NYG) — FINAL approver (items at PRESIDENT_PENDING). Match via held roles
     // so one person who is President of BOTH BUs sees NYG docs here.
     if (myRoles.includes("PRESIDENT") && r.status === "PENDING_PRESIDENT") return items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
-    // LG (NYG) starts AFTER VP SCM approves (doc leaves PENDING_SCM → PENDING_PRESIDENT), then
-    // runs in parallel with Claim — show until LG has pressed "Save & Send" (logisticsSent).
-    // NOTE: PENDING_SCM is intentionally EXCLUDED — LG must not see/book a doc still at the SCM
-    // stage; it only appears once SCM + VP SCM are both done.
-    // Logistics is BU-scoped: NYG LG sees NYG docs, EA LG (quynh) sees EA docs. (GW uses LOGISTICS_GW.)
-    if (myRoles.includes("LOGISTICS") && r.bu !== "GW" && requestInBu(r, userBu || "NYG") && !r.logisticsSent && ["PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
-    // TRM logistics — same NYG-style parallel/logistics stages (post-VP-SCM), scoped to TRM docs (Urairat).
-    if (myRoles.includes("LOGISTICS_TRM") && r.bu === "TRM" && !r.logisticsSent && ["PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(r.status)) return true
+    // LG booking work is NO LONGER shown in APPROVALS — it lives on the dedicated LG BOOKING page
+    // (/logistics, grouped by brand). A Logistics person still sees APPROVALS only when they are an
+    // actual approver via some OTHER role (handled by the other branches here). Admin is separate
+    // (isAdminViewer above shows every in-flight doc). NYG/EA/TRM LG booking branches intentionally removed.
     if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
       return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
     }
@@ -166,11 +162,7 @@ export default function ApprovalsPage() {
     // President (GW) is now the FINAL approver — items sit at PRESIDENT_PENDING
     // (claim + logistics already complete) awaiting the whole-doc approval.
     if (myRoles.includes("PRESIDENT_GW") && r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW") return items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
-    // Logistics ∥ Claim run in parallel after President → doc sits at PENDING_CLAIM_GW while LG
-    // enters HAWB data. Show until LG has pressed "Save & Send" (logisticsSent) — NOT until actuals
-    // are entered, otherwise a "Save Draft" (which fills actuals) would drop the doc from the queue
-    // before LG has actually submitted. Mirrors the NYG LG rule above.
-    if (myRoles.includes("LOGISTICS_GW") && (r.status === "PENDING_CLAIM_GW" || r.status === "PENDING_LOGISTICS_GW" || r.status === "PENDING_PRESIDENT_GW") && r.bu === "GW" && !r.logisticsSent && items.some((i: any) => i.itemStatus === "PRES_PASSED")) return true
+    // GW LG booking also moved to the LG BOOKING page — removed from APPROVALS (see NYG note above).
     // SCM NYK 3-role claim works in BOTH BU (dept "SCM NYK" in GW, "NYK" in NYG).
     // TWO approvers split work BY BRAND — both see the doc; each approves their own
     // brand's SO. An SO drops (for everyone) once ANY approver approves it. So we do NOT
