@@ -60,6 +60,15 @@ export default function MasterRatePage() {
     await fetch("/api/master/port", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...newData, ratePerKg: Number(newData.ratePerKg) }) })
     setSaving(false); setAdding(false); setNewData({ country: "", ratePerKg: "", bu: "ALL", currency: "THB" }); load()
   }
+  // Inline per-row USD entry: typing a USD rate + Enter/blur stores the row as a USD rate (auto → THB/VND).
+  const saveUsd = async (p: any, raw: string) => {
+    const val = String(raw).trim()
+    const cur = p.currency === "USD" ? String(p.ratePerKg) : ""
+    if (val === cur || val === "") return
+    const n = Number(val); if (isNaN(n)) return
+    await fetch(`/api/master/port/${p.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ country: p.country, bu: p.bu || "ALL", ratePerKg: n, currency: "USD" }) })
+    load()
+  }
 
   // Import from the Rate-Country Excel (columns: CUSTOMER/BRAND · COUNTRY · RATE AIR FREIGHT).
   const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -176,12 +185,12 @@ export default function MasterRatePage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {["COUNTRY","BU","RATE/KG","= THB","≈ VND",...(canEdit ? ["ACTIONS"] : [])].map(h =>
+              {["COUNTRY","BU","RATE/KG","USD/KG","= THB","≈ VND",...(canEdit ? ["ACTIONS"] : [])].map(h =>
                 <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {loading && <tr><td colSpan={canEdit ? 6 : 5} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+            {loading && <tr><td colSpan={canEdit ? 7 : 6} className="text-center py-10 text-gray-400">Loading...</td></tr>}
             {!loading && filtered.map(p => (
               <tr key={p.id} className="hover:bg-gray-50">
                 {canEdit && editId === p.id ? (
@@ -192,7 +201,7 @@ export default function MasterRatePage() {
                       <input type="number" step="0.0001" value={editData.ratePerKg} onChange={e => setEditData(d => ({...d,ratePerKg:e.target.value}))} className="border rounded px-2 py-1 text-sm w-24" />
                       <select value={editData.currency} onChange={e => setEditData(d => ({...d,currency:e.target.value}))} className="border rounded px-1 py-1 text-xs"><option value="THB">THB</option><option value="USD">USD</option></select>
                     </td>
-                    <td className="px-4 py-2 text-gray-400" colSpan={2}>—</td>
+                    <td className="px-4 py-2 text-gray-400" colSpan={3}>—</td>
                     <td className="px-4 py-2 flex gap-2">
                       <button onClick={saveEdit} disabled={saving} className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 disabled:opacity-50">{saving ? "..." : "SAVE"}</button>
                       <button onClick={() => setEditId(null)} className="text-xs bg-gray-200 text-gray-600 px-3 py-1 rounded hover:bg-gray-300">CANCEL</button>
@@ -203,6 +212,14 @@ export default function MasterRatePage() {
                     <td className="px-4 py-3 font-medium text-gray-900">{p.country}</td>
                     <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.bu === "ALL" ? "bg-gray-100 text-gray-500" : "bg-blue-100 text-blue-700"}`}>{p.bu || "ALL"}</span></td>
                     <td className="px-4 py-3 font-semibold text-gray-700">{(p.ratePerKg || 0).toLocaleString()} <span className="text-xs text-gray-400">{p.currency || "THB"}</span></td>
+                    <td className="px-4 py-3">
+                      {canEdit ? (
+                        <input type="number" step="0.0001" defaultValue={p.currency === "USD" ? p.ratePerKg : ""} placeholder="USD"
+                          onKeyDown={e => { if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur() }}
+                          onBlur={e => saveUsd(p, e.currentTarget.value)}
+                          className="border border-gray-300 rounded px-2 py-1 text-sm w-24 focus:ring-1 focus:ring-indigo-400 focus:outline-none" />
+                      ) : (p.currency === "USD" ? (p.ratePerKg || 0).toLocaleString() : "—")}
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{p.currency === "USD" ? asThb(p).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{vndPerThb > 0 ? (asThb(p) * vndPerThb).toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}</td>
                     {canEdit && (
@@ -216,7 +233,7 @@ export default function MasterRatePage() {
               </tr>
             ))}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={canEdit ? 6 : 5} className="text-center py-10 text-gray-400">{rates.length ? "No match" : (canEdit ? "No rates — Import Excel or click + ADD" : "No rates yet")}</td></tr>
+              <tr><td colSpan={canEdit ? 7 : 6} className="text-center py-10 text-gray-400">{rates.length ? "No match" : (canEdit ? "No rates — Import Excel or click + ADD" : "No rates yet")}</td></tr>
             )}
           </tbody>
         </table>
