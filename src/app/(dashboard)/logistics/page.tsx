@@ -127,7 +127,6 @@ export default function LgBookingPage() {
                         <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">EST {fmtNum(est)} THB</span>
                         <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">ACT {fmtNum(act)} THB</span>
                         <span className="text-xs text-gray-400">{items.length} transaction</span>
-                        <Link href={`/requests/${req.id}`} className="ml-auto text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">Open →</Link>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs whitespace-nowrap">
