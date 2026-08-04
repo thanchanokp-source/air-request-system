@@ -35,7 +35,7 @@ export default function LgEntryPage() {
 
   // Forward
   const [fwOpen, setFwOpen] = useState(false)
-  const [fwTo, setFwTo] = useState("")
+  const [fwList, setFwList] = useState<string[]>([""]) // multiple recipients (add more)
   const [fwNote, setFwNote] = useState("")
   const [fwTargets, setFwTargets] = useState<any[]>([])
 
@@ -265,13 +265,18 @@ export default function LgEntryPage() {
     alert(`Import: อัปเดต INV ${Object.keys(updates).length} SO · HAWB ${Object.keys(hawbMap).length} กลุ่ม`)
   }
 
-  const deleteAtt = async (attId: string) => {
-    if (!confirm("ลบไฟล์นี้?")) return
+  // The same file is attached to every selected document, so a "file" here is a GROUP of attachment
+  // ids (one per doc). Deleting removes them all at once.
+  const deleteAtt = async (attIds: string[]) => {
+    if (!confirm(`ลบไฟล์นี้? (จาก ${attIds.length} เอกสาร)`)) return
     setSaving(true)
-    const res = await fetch(`/api/attachments/${attId}`, { method: "DELETE" })
-    if (res.ok) await load()
-    else alert((await res.json().catch(() => ({})))?.error || "ลบไม่สำเร็จ (ลบได้เฉพาะไฟล์ที่ตัวเองอัปโหลด)")
-    setSaving(false)
+    let err = ""
+    for (const id of attIds) {
+      const res = await fetch(`/api/attachments/${id}`, { method: "DELETE" })
+      if (!res.ok) err = (await res.json().catch(() => ({})))?.error || "ลบไม่สำเร็จ (ลบได้เฉพาะไฟล์ที่ตัวเองอัปโหลด)"
+    }
+    if (err) alert(err)
+    await load(); setSaving(false)
   }
 
   // One attach action → attaches the file to EVERY selected document (so each doc satisfies the
@@ -285,21 +290,36 @@ export default function LgEntryPage() {
     await load(); setSaving(false)
   }
 
+  // BUs a Logistics person covers (from their roles + bu) — used to route each doc to the right recipient.
+  const coveredBus = (u: any) => {
+    const rs = [u?.role, ...(u?.roles || [])]
+    const s = new Set<string>()
+    if (rs.includes("LOGISTICS") || rs.includes("LOGISTICS_SUB")) s.add(u?.bu === "EA" ? "EA" : "NYG")
+    if (rs.includes("LOGISTICS_GW")) s.add("GW")
+    if (rs.includes("LOGISTICS_TRM")) s.add("TRM")
+    if (s.size === 0 && u?.bu) s.add(u.bu)
+    return s
+  }
+
   const forward = async () => {
-    const t = fwTargets.find(x => x.email === fwTo)
-    if (!t) { alert("เลือกผู้รับก่อน"); return }
+    const emails = [...new Set(fwList.filter(Boolean))]
+    if (emails.length === 0) { alert("เลือกผู้รับก่อน"); return }
     setSaving(true)
     await persist(new Set()) // save partial first
     let ok = 0
+    // Route each document to a selected recipient who covers that document's BU (fallback: first).
     for (const reqId of involvedReqIds) {
+      const bu = docMap[reqId]?.bu || "NYG"
+      const email = emails.find(e => { const u = fwTargets.find(t => t.email === e); return u && coveredBus(u).has(bu) }) || emails[0]
+      const u = fwTargets.find(t => t.email === email)
       const res = await fetch(`/api/requests/${reqId}/lg-forward`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toEmail: t.email, toName: t.name, note: fwNote.trim() || undefined }),
+        body: JSON.stringify({ toEmail: email, toName: u?.name || email, note: fwNote.trim() || undefined }),
       })
       if (res.ok) ok++
     }
-    setSaving(false); setFwOpen(false); setFwTo(""); setFwNote("")
-    alert(`ส่งต่อให้ ${t.name} แล้ว ${ok}/${involvedReqIds.length} เอกสาร`)
+    setSaving(false); setFwOpen(false); setFwList([""]); setFwNote("")
+    alert(`ส่งต่อแล้ว ${ok}/${involvedReqIds.length} เอกสาร (ให้ ${emails.length} คน)`)
   }
 
   if (!allowed) return <div className="text-center py-20 text-gray-400">เฉพาะ Logistics / Admin เท่านั้น</div>
@@ -385,12 +405,20 @@ export default function LgEntryPage() {
 
           {/* ② Attach files — one attach, applied to every selected document (OPTIONAL) */}
           {(() => {
-            const totalFiles = involvedReqIds.reduce((s, id) => s + lgFileCount(docMap[id]), 0)
+            // One file may sit on several documents (attached to all selected) — group by name+category
+            // so it shows ONCE, and delete removes every copy.
+            const groups: Record<string, { rep: any; ids: string[] }> = {}
+            involvedReqIds.forEach(id => (docMap[id]?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).forEach((a: any) => {
+              const k = `${a.category}|${a.fileName}`
+              if (!groups[k]) groups[k] = { rep: a, ids: [] }
+              groups[k].ids.push(a.id)
+            }))
+            const fileGroups = Object.values(groups)
             return (
               <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(ไม่บังคับ · แนบครั้งเดียว ใช้กับทุกเอกสารที่เลือก)</span></p>
-                  {totalFiles > 0 && <span className="text-[11px] text-green-600">✓ {totalFiles} file(s)</span>}
+                  {fileGroups.length > 0 && <span className="text-[11px] text-green-600">✓ {fileGroups.length} file(s)</span>}
                   <div className="ml-auto flex items-center gap-1.5">
                     {["INV", "AWB", "EXPENSE", "COMBINE"].map(cat => (
                       <label key={cat} className="text-[11px] px-2.5 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer">
@@ -402,12 +430,12 @@ export default function LgEntryPage() {
                 </div>
                 {/* Files already on the selected documents */}
                 <div className="flex flex-wrap gap-2">
-                  {involvedReqIds.flatMap(id => (docMap[id]?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).map((a: any) => (
-                    <span key={a.id} className="inline-flex items-center gap-1.5 text-[10px] bg-blue-50 border border-blue-100 rounded px-2 py-0.5">
-                      <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">📎 {a.category} · {a.fileName}</a>
-                      <button onClick={() => deleteAtt(a.id)} title="ลบไฟล์ (เผื่ออัปผิด)" className="text-gray-400 hover:text-red-500 font-bold leading-none">✕</button>
+                  {fileGroups.map(g => (
+                    <span key={`${g.rep.category}|${g.rep.fileName}`} className="inline-flex items-center gap-1.5 text-[10px] bg-blue-50 border border-blue-100 rounded px-2 py-0.5">
+                      <a href={`/api/attachments/${g.rep.id}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">📎 {g.rep.category} · {g.rep.fileName}</a>
+                      <button onClick={() => deleteAtt(g.ids)} title="ลบไฟล์ (เผื่ออัปผิด)" className="text-gray-400 hover:text-red-500 font-bold leading-none">✕</button>
                     </span>
-                  )))}
+                  ))}
                 </div>
               </div>
             )
@@ -618,17 +646,37 @@ export default function LgEntryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setFwOpen(false)}>
           <div className="bg-white rounded-xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div><h3 className="font-semibold text-gray-800">↪ Forward ให้ผู้ใต้บังคับบัญชา</h3>
-              <p className="text-xs text-gray-400 mt-0.5">บันทึกข้อมูลที่กรอกไว้ แล้วส่งลิงก์ {involvedReqIds.length} เอกสารเข้าอีเมล</p></div>
-            <div><label className="text-xs font-medium text-gray-500">ผู้รับ (LG จาก master)</label>
-              <select value={fwTo} onChange={e => setFwTo(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1">
-                <option value="">-- เลือกผู้รับ --</option>
-                {fwTargets.map(t => <option key={t.id} value={t.email}>{t.name} ({t.email})</option>)}
-              </select></div>
+              <p className="text-xs text-gray-400 mt-0.5">บันทึกข้อมูลที่กรอกไว้ แล้วส่งลิงก์ {involvedReqIds.length} เอกสารเข้าอีเมล · เอกสารแต่ละ BU ส่งให้ผู้รับที่ครอบ BU นั้น</p></div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-gray-500">ผู้รับ (LG จาก master — จัดกลุ่มตาม BU)</label>
+              {(() => {
+                const docBus = [...new Set(involvedReqIds.map(id => docMap[id]?.bu || "NYG"))]
+                const order = ["NYG", "EA", "TRM", "GW"].filter(b => docBus.includes(b))
+                const groups = order.map(bu => ({ bu, users: fwTargets.filter(t => coveredBus(t).has(bu)) }))
+                const other = fwTargets.filter(t => ![...coveredBus(t)].some(b => docBus.includes(b)))
+                return fwList.map((email, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <select value={email} onChange={e => setFwList(p => p.map((x, idx) => idx === i ? e.target.value : x))}
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                      <option value="">-- เลือกผู้รับ --</option>
+                      {groups.map(g => (
+                        <optgroup key={g.bu} label={`LG (${g.bu})`}>
+                          {g.users.map(u => <option key={u.email} value={u.email}>{u.name} ({u.email})</option>)}
+                        </optgroup>
+                      ))}
+                      {other.length > 0 && <optgroup label="อื่นๆ">{other.map(u => <option key={u.email} value={u.email}>{u.name} ({u.email})</option>)}</optgroup>}
+                    </select>
+                    {fwList.length > 1 && <button onClick={() => setFwList(p => p.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600 px-1">✕</button>}
+                  </div>
+                ))
+              })()}
+              <button onClick={() => setFwList(p => [...p, ""])} className="text-xs text-blue-600 hover:underline font-medium">＋ เพิ่มผู้รับ</button>
+            </div>
             <div><label className="text-xs font-medium text-gray-500">โน้ต (ไม่บังคับ)</label>
               <textarea value={fwNote} onChange={e => setFwNote(e.target.value)} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1" /></div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setFwOpen(false)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">ยกเลิก</button>
-              <button onClick={forward} disabled={saving || !fwTo} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">บันทึก & ส่งต่อ</button>
+              <button onClick={forward} disabled={saving || !fwList.some(Boolean)} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">บันทึก & ส่งต่อ</button>
             </div>
           </div>
         </div>

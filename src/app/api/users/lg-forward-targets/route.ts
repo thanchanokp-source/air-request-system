@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest) {
   const roles = ["LOGISTICS_SUB", "LOGISTICS", "LOGISTICS_TRM", "LOGISTICS_GW"]
   const users = await (prisma.user as any).findMany({
     where: { isActive: true, OR: [{ role: { in: roles } }, { roles: { hasSome: roles } }] },
-    select: { id: true, name: true, email: true, role: true },
+    select: { id: true, name: true, email: true, role: true, roles: true, bu: true },
     orderBy: [{ name: "asc" }],
   })
   return NextResponse.json(users.filter((u: any) => u.id !== meId))
