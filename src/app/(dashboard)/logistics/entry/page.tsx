@@ -699,10 +699,7 @@ export default function LgEntryPage() {
                   </div>
                 ))
               })()}
-              <div className="flex items-center gap-4">
-                <button onClick={() => setFwList(p => [...p, { email: "", manual: false }])} className="text-xs text-blue-600 hover:underline font-medium">＋ Add recipient</button>
-                <button onClick={() => setFwList(p => [...p, { email: "", manual: true }])} className="text-xs text-blue-600 hover:underline font-medium">＋ Add more (type email)</button>
-              </div>
+              <button onClick={() => setFwList(p => [...p, { email: "", manual: true }])} className="text-xs text-blue-600 hover:underline font-medium">＋ Add more (type email)</button>
             </div>
             <div><label className="text-xs font-medium text-gray-500">Note (optional)</label>
               <textarea value={fwNote} onChange={e => setFwNote(e.target.value)} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1" /></div>
