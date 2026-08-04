@@ -3,12 +3,14 @@ import { useEffect, useMemo, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 
-// LG BOOKING — combined entry for the SOs ticked on the landing page (may span several documents).
-// Flow: (1) enter Invoice per SO, (2) group SOs into a HAWB with one Total Air → ACTUAL is generated
-// per transaction, one HAWB can span documents. QTY Air / Plan Ship Date are editable (default = the
-// value MER entered). Buttons: Forward (hand off to a subordinate), Save Draft, Send (advance).
-const fmt0 = (n: any) => n != null ? Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "-"
+// LG BOOKING — combined Air Waybill Entry for the SOs ticked on the landing page (may span several
+// documents). Same UI as the per-document page (Ship Date & QTY → Attach → INV grouping → HAWB with
+// Total Cost → generated Actual), only here one HAWB can pull INVs across documents. On save the data
+// is fanned out per document (save_logistics_draft / approve for GW), so each doc advances on its own.
+const num = (n: any, d = 0) => n != null ? Number(n).toLocaleString("en-US", { maximumFractionDigits: d }) : "—"
 const toDateInput = (v: any) => { if (!v) return ""; const d = new Date(v); return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10) }
+
+type HawbGroup = { id: string; hawbNo: string; bookingDate: string; totalCost: string; invNos: string[] }
 
 export default function LgEntryPage() {
   const { data: session } = useSession()
@@ -19,25 +21,23 @@ export default function LgEntryPage() {
   const [entryIds, setEntryIds] = useState<string[]>([])
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  // Per-SO inputs
-  const [rowInv, setRowInv] = useState<Record<string, string>>({})
-  const [rowQty, setRowQty] = useState<Record<string, string>>({})
-  const [rowDate, setRowDate] = useState<Record<string, string>>({})
-  const [checked, setChecked] = useState<Set<string>>(new Set())
+  // Entry state (keyed by itemId → cross-document safe)
+  const [soInvMap, setSoInvMap] = useState<Record<string, string>>({})
+  const [soShipData, setSoShipData] = useState<Record<string, { qty?: string; date?: string }>>({})
+  const [soActualOverride, setSoActualOverride] = useState<Record<string, string>>({})
+  const [hawbGroups, setHawbGroups] = useState<HawbGroup[]>([])
+  const [lgQuickInv, setLgQuickInv] = useState("")
+  const [lgQuickSo, setLgQuickSo] = useState("")
+  const [lgSelectedSoIds, setLgSelectedSoIds] = useState<Set<string>>(new Set())
+  const [lgRejectId, setLgRejectId] = useState<string | null>(null)
+  const [lgRejectReason, setLgRejectReason] = useState("")
+  const [prefilled, setPrefilled] = useState(false)
 
-  // Bulk-action inputs
-  const [invBulk, setInvBulk] = useState("")
-  const [hawbInput, setHawbInput] = useState("")
-  const [totalInput, setTotalInput] = useState("")
-
-  // Send-back + forward modals
-  const [sbItem, setSbItem] = useState<any>(null)
-  const [sbReason, setSbReason] = useState("")
+  // Forward
   const [fwOpen, setFwOpen] = useState(false)
-  const [fwEmail, setFwEmail] = useState("")
-  const [fwName, setFwName] = useState("")
+  const [fwTo, setFwTo] = useState("")
   const [fwNote, setFwNote] = useState("")
   const [fwTargets, setFwTargets] = useState<any[]>([])
 
@@ -50,14 +50,13 @@ export default function LgEntryPage() {
   useEffect(() => {
     try { setEntryIds(JSON.parse(sessionStorage.getItem("lg_entry_ids") || "[]")) } catch { setEntryIds([]) }
     load()
-    // LG-capable people from master (for the Forward picker).
     fetch("/api/users/lg-forward-targets").then(r => r.json()).then(d => setFwTargets(Array.isArray(d) ? d : [])).catch(() => {})
   }, [load])
 
   const bookableOf = (bu: string) => bu === "GW" ? ["PRES_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"]
 
-  // Selected SOs (still bookable), each carrying its parent document.
-  const myItems = useMemo(() => {
+  // Selected bookable SOs, each carrying its parent document.
+  const allLgItems = useMemo(() => {
     const idset = new Set(entryIds)
     const out: any[] = []
     for (const r of requests) {
@@ -72,319 +71,469 @@ export default function LgEntryPage() {
     return out
   }, [requests, entryIds])
 
-  // Prefill inputs from DB once (INV / QTY / Ship Date default to what MER entered).
+  const docMap = useMemo(() => { const m: Record<string, any> = {}; for (const it of allLgItems) m[it.request.id] = it.request; return m }, [allLgItems])
+  const involvedReqIds = useMemo(() => [...new Set(allLgItems.map(i => i.request.id))], [allLgItems])
+
+  // Prefill from DB once (INV per SO + reconstruct HAWB groups from saved hawbNo).
   useEffect(() => {
-    const inv: Record<string, string> = {}, qty: Record<string, string> = {}, date: Record<string, string> = {}
-    for (const it of myItems) {
+    if (prefilled || allLgItems.length === 0) return
+    const inv: Record<string, string> = {}
+    const hawbRestore: Record<string, { hawbNo: string; invNos: Set<string>; total: number; bookingDate: string }> = {}
+    for (const it of allLgItems) {
       if (it.invoiceNo) inv[it.id] = it.invoiceNo
-      qty[it.id] = String(it.qtyActualShip ?? it.qtyRequestAir ?? "")
-      date[it.id] = toDateInput(it.planShipmentDate)
-    }
-    setRowInv(p => ({ ...inv, ...p })); setRowQty(p => ({ ...qty, ...p })); setRowDate(p => ({ ...date, ...p }))
-  }, [myItems.length])
-
-  // Group by brand.
-  const brands = useMemo(() => {
-    const g: Record<string, any[]> = {}
-    for (const it of myItems) (g[it.brand] ||= []).push(it)
-    return Object.entries(g).sort((a, b) => a[0].localeCompare(b[0]))
-  }, [myItems])
-
-  const toggle = (id: string) => setChecked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
-  const unbookedItems = myItems.filter(i => !i.hawbNo)
-
-  // Persist QTY / Ship Date edits + INV (draft) for the given items, grouped per document.
-  const saveDraftFor = async (items: any[]) => {
-    const byDoc: Record<string, any[]> = {}
-    for (const it of items) (byDoc[it.request.id] ||= []).push(it)
-    for (const [reqId, docItems] of Object.entries(byDoc)) {
-      const itemLogistics: Record<string, any> = {}
-      const itemShipData: Record<string, any> = {}
-      for (const it of docItems) {
-        if (!it.hawbNo && rowInv[it.id]?.trim()) itemLogistics[it.id] = { invoiceNo: rowInv[it.id].trim() }
-        const q = rowQty[it.id], d = rowDate[it.id]
-        const origQ = String(it.qtyActualShip ?? it.qtyRequestAir ?? ""), origD = toDateInput(it.planShipmentDate)
-        const sd: any = {}
-        if (q != null && q !== "" && q !== origQ) sd.qtyRequestAir = q
-        if (d && d !== origD) sd.planShipmentDate = d
-        if (Object.keys(sd).length) itemShipData[it.id] = sd
+      if (it.hawbNo && it.invoiceNo) {
+        if (!hawbRestore[it.hawbNo]) hawbRestore[it.hawbNo] = { hawbNo: it.hawbNo, invNos: new Set(), total: 0, bookingDate: "" }
+        hawbRestore[it.hawbNo].invNos.add(it.invoiceNo)
+        hawbRestore[it.hawbNo].total += it.actualAirFreight || 0
+        if (it.bookingDate && !hawbRestore[it.hawbNo].bookingDate) hawbRestore[it.hawbNo].bookingDate = toDateInput(it.bookingDate)
       }
-      if (!Object.keys(itemLogistics).length && !Object.keys(itemShipData).length) continue
+    }
+    setSoInvMap(inv)
+    setHawbGroups(Object.values(hawbRestore).map(h => ({ id: Math.random().toString(36).slice(2), hawbNo: h.hawbNo, bookingDate: h.bookingDate, totalCost: String(Math.round(h.total)), invNos: [...h.invNos] })))
+    setPrefilled(true)
+  }, [allLgItems, prefilled])
+
+  const liveQty = (item: any): number => {
+    const typed = soShipData[item.id]?.qty
+    if (typed != null && String(typed).trim() !== "") { const n = Number(String(typed).replace(/,/g, "")); if (!isNaN(n)) return n }
+    return Number(item.qtyRequestAir) || 0
+  }
+  const getHawbCalc = (group: { totalCost: string; invNos: string[] }) => {
+    const items = allLgItems.filter((i: any) => group.invNos.includes(soInvMap[i.id]))
+    const totalQty = items.reduce((s: number, i: any) => s + liveQty(i), 0)
+    const hasOverride = items.some((i: any) => soActualOverride[i.id] !== undefined && soActualOverride[i.id] !== "")
+    const overrideTotal = hasOverride ? items.reduce((s: number, i: any) => s + (parseFloat(soActualOverride[i.id]) || 0), 0) : null
+    const totalCost = overrideTotal !== null ? overrideTotal : (parseFloat(group.totalCost) || 0)
+    const avgPerUnit = totalQty > 0 ? totalCost / totalQty : 0
+    return { items, totalQty, totalCost, avgPerUnit, hasOverride, overrideTotal }
+  }
+
+  const uniqueInvNos = [...new Set(Object.values(soInvMap).filter(Boolean))]
+  const assignedHawbInvNos = new Set(hawbGroups.flatMap(g => g.invNos))
+  const addHawbGroup = () => setHawbGroups(p => [...p, { id: Math.random().toString(36).slice(2), hawbNo: "", bookingDate: "", totalCost: "", invNos: [] }])
+  const removeHawbGroup = (gid: string) => setHawbGroups(p => p.filter(g => g.id !== gid))
+  const updateHawb = (gid: string, data: Partial<HawbGroup>) => setHawbGroups(p => p.map(g => g.id === gid ? { ...g, ...data } : g))
+  const toggleInvInHawb = (gid: string, invNo: string) => setHawbGroups(p => p.map(g => g.id !== gid ? g : { ...g, invNos: g.invNos.includes(invNo) ? g.invNos.filter(n => n !== invNo) : [...g.invNos, invNo] }))
+
+  const isCalcItem = (it: any) => { const inv = soInvMap[it.id]; return !!inv && hawbGroups.some(g => g.invNos.includes(inv)) }
+  const hasShipDate = (it: any) => !!(soShipData[it.id]?.date && String(soShipData[it.id]?.date).trim()) || !!it.planShipmentDate
+  const LG_FILE_CATS = ["INV", "AWB", "EXPENSE", "COMBINE"]
+  const lgFileCount = (r: any) => (r?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).length
+
+  // Per-document readiness to advance (Send): all its bookable SOs are calculated in a HAWB w/ No,
+  // have a ship date, booking dates filled, and ≥1 file attached.
+  const docComplete = (reqId: string) => {
+    const items = allLgItems.filter(i => i.request.id === reqId)
+    if (items.length === 0) return false
+    const allCalc = items.every(it => { const inv = soInvMap[it.id]; return !!inv && hawbGroups.some(g => g.hawbNo && g.invNos.includes(inv)) })
+    if (!allCalc) return false
+    if (!items.every(hasShipDate)) return false
+    const groups = hawbGroups.filter(g => g.invNos.some(inv => items.some(it => soInvMap[it.id] === inv)))
+    if (groups.some(g => !g.bookingDate)) return false
+    if (lgFileCount(docMap[reqId]) === 0) return false
+    return true
+  }
+
+  const buildPayload = () => {
+    const itemLog: Record<string, any> = {}, itemAct: Record<string, string> = {}
+    Object.entries(soInvMap).forEach(([id, inv]) => { itemLog[id] = { invoiceNo: inv || "", hawbNo: "", bookingDate: "" } })
+    hawbGroups.forEach(group => {
+      const { items, avgPerUnit } = getHawbCalc(group)
+      items.forEach((it: any) => {
+        itemLog[it.id] = { invoiceNo: soInvMap[it.id] || "", hawbNo: group.hawbNo || "", bookingDate: group.bookingDate }
+        const ov = soActualOverride[it.id]
+        itemAct[it.id] = ov !== undefined && ov !== "" ? String(parseFloat(ov) || 0) : String(Math.round(liveQty(it) * avgPerUnit * 100) / 100)
+      })
+    })
+    const itemShip = Object.fromEntries(Object.entries(soShipData).map(([id, v]) => [id, { qtyRequestAir: v.qty, planShipmentDate: v.date }]))
+    return { itemLog, itemAct, itemShip }
+  }
+
+  // Fan out the save per document. completeSet = docs to advance (lgComplete); others just draft.
+  const persist = async (completeSet: Set<string>) => {
+    const { itemLog, itemAct, itemShip } = buildPayload()
+    for (const reqId of involvedReqIds) {
+      const docItemIds = allLgItems.filter(i => i.request.id === reqId).map(i => i.id)
+      const pick = (obj: any) => Object.fromEntries(Object.entries(obj).filter(([id]) => docItemIds.includes(id)))
+      const complete = completeSet.has(reqId)
+      const isGw = (docMap[reqId]?.bu || "NYG") === "GW"
+      const action = complete && isGw ? "approve" : "save_logistics_draft"
       await fetch(`/api/requests/${reqId}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save_logistics_draft", itemLogistics, itemShipData }),
+        body: JSON.stringify({ action, itemLogistics: pick(itemLog), itemActuals: pick(itemAct), itemShipData: pick(itemShip), lgComplete: complete }),
       })
     }
   }
 
-  const applyInvToChecked = () => {
-    if (!invBulk.trim() || checked.size === 0) { alert("กรอก INV และเลือก SO ก่อน"); return }
-    setRowInv(p => { const n = { ...p }; checked.forEach(id => n[id] = invBulk.trim()); return n })
-    setInvBulk("")
-  }
-
-  // Create a cross-document HAWB for the checked SOs → generates ACTUAL per transaction.
-  const createHawb = async () => {
-    const sel = unbookedItems.filter(i => checked.has(i.id))
-    if (sel.length === 0) { alert("เลือก SO ที่จะรวมเป็น HAWB ก่อน"); return }
-    if (!hawbInput.trim()) { alert("กรอก HAWB No"); return }
-    const total = parseFloat(totalInput) || 0
-    if (total <= 0) { alert("กรอก Total Air (THB)"); return }
-    const missingInv = sel.filter(i => !rowInv[i.id]?.trim())
-    if (missingInv.length) { alert(`กรอก Invoice ให้ครบก่อน (ขาด ${missingInv.length} SO)`); return }
-    setBusy("hawb")
-    // 1) persist any QTY/date edits first so ACTUAL divides by the correct qty.
-    await saveDraftFor(sel)
-    // 2) create the cross-doc HAWB (server computes actual = total × qty ÷ Σqty).
-    const res = await fetch("/api/logistics/hawb", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hawbNo: hawbInput.trim(), totalCharge: total, items: sel.map(i => ({ id: i.id, invoiceNo: rowInv[i.id]?.trim() })) }),
-    })
-    if (res.ok) { setHawbInput(""); setTotalInput(""); setChecked(new Set()); await load() }
-    else alert((await res.json().catch(() => ({})))?.error || "สร้าง HAWB ไม่สำเร็จ")
-    setBusy(null)
-  }
-
-  const deleteHawb = async (hNo: string) => {
-    if (!confirm(`ลบ HAWB ${hNo} และล้างค่า actual ของ SO ที่เกี่ยวข้อง?`)) return
-    setBusy(hNo)
-    const res = await fetch("/api/logistics/hawb", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hawbNo: hNo }) })
-    if (res.ok) await load(); else alert("ลบไม่สำเร็จ")
-    setBusy(null)
-  }
-
-  const saveDraft = async () => {
-    setBusy("draft"); await saveDraftFor(myItems); await load(); setBusy(null); alert("บันทึกร่างแล้ว")
-  }
-
-  const sendBack = async () => {
-    if (!sbItem || !sbReason.trim()) return
-    setBusy(sbItem.id)
-    const res = await fetch(`/api/requests/${sbItem.request.id}/approve`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "lg_reject_so", itemId: sbItem.id, comment: sbReason.trim() }),
-    })
-    if (res.ok) { setSbItem(null); setSbReason(""); await load() } else alert("Send back ไม่สำเร็จ")
-    setBusy(null)
-  }
-
-  // Documents represented — eligibility to send onward (all their bookable SOs now booked).
-  const involvedDocs = useMemo(() => {
-    const ids = new Set(myItems.map(i => i.request.id))
-    return requests.filter(r => ids.has(r.id)).map(r => {
-      const bookable = bookableOf(r.bu || "NYG")
-      const pres = (r.items || []).filter((i: any) => bookable.includes(i.itemStatus))
-      const unbooked = pres.filter((i: any) => !i.hawbNo)
-      return { req: r, eligible: pres.length > 0 && unbooked.length === 0, remaining: unbooked.length }
-    })
-  }, [requests, myItems])
+  const saveDraft = async () => { setSaving(true); await persist(new Set()); await load(); setSaving(false); alert("บันทึกร่างแล้ว (ยังไม่ส่ง)") }
 
   const send = async () => {
-    const eligible = involvedDocs.filter(d => d.eligible && d.req.bu !== "GW")
-    const gwEligible = involvedDocs.filter(d => d.eligible && d.req.bu === "GW")
-    if (eligible.length === 0 && gwEligible.length === 0) { alert("ยังไม่มีเอกสารที่ book ครบ (book ทุก SO ก่อนส่ง)"); return }
-    if (!confirm(`ส่งต่อ ${eligible.length} เอกสารที่ book ครบแล้ว?${gwEligible.length ? ` (GW ${gwEligible.length} เอกสาร ให้ส่งที่หน้าเอกสาร)` : ""}`)) return
-    setBusy("send")
-    await saveDraftFor(myItems)
-    for (const d of eligible) {
-      await fetch(`/api/requests/${d.req.id}/approve`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "save_logistics_draft", lgComplete: true }),
-      })
-    }
-    await load(); setBusy(null)
-    alert(`ส่งต่อแล้ว ${eligible.length} เอกสาร${gwEligible.length ? ` · GW ${gwEligible.length} เอกสารกรุณาส่งที่หน้าเอกสาร` : ""}`)
+    const ready = involvedReqIds.filter(docComplete)
+    if (ready.length === 0) { alert("ยังไม่มีเอกสารพร้อมส่ง — SO ที่คำนวณต้องอยู่ใน HAWB (มี HAWB No), มี Ship Date, Booking Date และแนบไฟล์ ≥1"); return }
+    if (!confirm(`ส่งต่อ ${ready.length} เอกสารที่พร้อม? (ที่เหลือบันทึกเป็นร่าง)`)) return
+    setSaving(true); await persist(new Set(ready)); await load(); setSaving(false)
+    alert(`ส่งต่อแล้ว ${ready.length} เอกสาร`)
+  }
+
+  const uploadLgFile = async (file: File, category: string, reqId: string) => {
+    setSaving(true)
+    const form = new FormData(); form.append("file", file); form.append("category", category)
+    const res = await fetch(`/api/requests/${reqId}/attachments`, { method: "POST", body: form })
+    if (res.ok) await load(); else alert("อัปโหลดไฟล์ไม่สำเร็จ")
+    setSaving(false)
+  }
+
+  const lgRejectSo = async (itemId: string, reqId: string) => {
+    setSaving(true)
+    const res = await fetch(`/api/requests/${reqId}/approve`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "lg_reject_so", itemId, comment: lgRejectReason.trim() }),
+    })
+    if (res.ok) { setLgRejectId(null); setLgRejectReason(""); await load() } else alert("Send back ไม่สำเร็จ")
+    setSaving(false)
   }
 
   const forward = async () => {
-    if (!fwEmail.trim().endsWith("@nanyangtextile.com")) { alert("กรอกอีเมล @nanyangtextile.com"); return }
-    setBusy("fw")
-    const ids = [...new Set(myItems.map(i => i.request.id))]
+    const t = fwTargets.find(x => x.email === fwTo)
+    if (!t) { alert("เลือกผู้รับก่อน"); return }
+    setSaving(true)
+    await persist(new Set()) // save partial first
     let ok = 0
-    for (const reqId of ids) {
+    for (const reqId of involvedReqIds) {
       const res = await fetch(`/api/requests/${reqId}/lg-forward`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toEmail: fwEmail.trim(), toName: fwName.trim() || fwEmail.trim(), note: fwNote.trim() }),
+        body: JSON.stringify({ toEmail: t.email, toName: t.name, note: fwNote.trim() || undefined }),
       })
       if (res.ok) ok++
     }
-    setBusy(null); setFwOpen(false); setFwEmail(""); setFwName(""); setFwNote("")
-    alert(`ส่งต่อให้ ${fwName || fwEmail} แล้ว ${ok}/${ids.length} เอกสาร`)
+    setSaving(false); setFwOpen(false); setFwTo(""); setFwNote("")
+    alert(`ส่งต่อให้ ${t.name} แล้ว ${ok}/${involvedReqIds.length} เอกสาร`)
   }
 
   if (!allowed) return <div className="text-center py-20 text-gray-400">เฉพาะ Logistics / Admin เท่านั้น</div>
 
-  const hasUnbooked = myItems.some((i: any) => !i.hawbNo)
-
   return (
-    <div className="space-y-5 pb-24">
+    <div className="space-y-4 pb-24">
+      {saving && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-3">
+            <svg className="animate-spin h-9 w-9 text-orange-500" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+            <p className="text-orange-700 font-semibold">Saving...</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <Link href="/logistics" className="text-sm text-blue-600 hover:underline">← LG BOOKING</Link>
-        <h1 className="text-xl font-bold text-gray-900">กรอก HAWB ({myItems.length} transaction)</h1>
+        <h1 className="text-xl font-bold text-gray-900">Air Waybill Entry ({allLgItems.length} transaction)</h1>
       </div>
 
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
-      {!loading && myItems.length === 0 && (
-        <div className="text-center py-20 text-gray-400">ไม่มี SO ที่เลือก — กลับไป <Link href="/logistics" className="text-blue-600 underline">LG BOOKING</Link> เพื่อเลือกใหม่</div>
+      {!loading && allLgItems.length === 0 && (
+        <div className="text-center py-20 text-gray-400">ไม่มี SO ที่เลือก — กลับไป <Link href="/logistics" className="text-blue-600 underline">LG BOOKING</Link></div>
       )}
 
-      {/* Step actions */}
-      {hasUnbooked && (
-        <div className="grid md:grid-cols-2 gap-3">
-          {/* 1. Invoice */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2 shadow-sm">
-            <p className="text-sm font-semibold text-gray-700"><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs mr-1.5">1</span> Invoice</p>
-            <p className="text-xs text-gray-400">ติ๊กเลือก SO ในตาราง แล้วกรอก INV → กด "ใส่ INV ให้ที่เลือก" (หรือพิมพ์ในช่อง INV ของแต่ละแถวก็ได้)</p>
-            <div className="flex items-center gap-2">
-              <input value={invBulk} onChange={e => setInvBulk(e.target.value)} placeholder="INV No."
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-              <button onClick={applyInvToChecked} className="text-xs bg-blue-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-blue-700 whitespace-nowrap">ใส่ INV ให้ที่เลือก ({checked.size})</button>
+      {allLgItems.length > 0 && (
+        <div className="space-y-4 border border-orange-200 rounded-xl bg-orange-50/30 p-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <p className="text-sm font-semibold text-orange-800">Logistics — Air Waybill Entry</p>
+              <p className="text-xs text-orange-500 mt-0.5">① กรอก QTY/Ship Date → ② แนบไฟล์ → ③ ใส่ INV → ④ จัด HAWB (Total Cost → generate Actual)</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => setFwOpen(true)} disabled={saving} className="bg-white border border-blue-300 text-blue-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50">↪ Forward</button>
+              <button onClick={saveDraft} disabled={saving} className="bg-white border border-gray-300 text-gray-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">Save Draft</button>
+              <button onClick={send} disabled={saving} className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50">Send →</button>
             </div>
           </div>
-          {/* 2. HAWB */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2 shadow-sm">
-            <p className="text-sm font-semibold text-gray-700"><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-xs mr-1.5">2</span> HAWB → generate Actual</p>
-            <p className="text-xs text-gray-400">เลือก SO ที่มี INV แล้ว กรอก HAWB No + Total Air → ระบบหาร actual ให้ตาม qty (HAWB เดียวข้ามเอกสารได้)</p>
-            <div className="flex items-center gap-2">
-              <input value={hawbInput} onChange={e => setHawbInput(e.target.value)} placeholder="HAWB No."
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-              <input type="number" value={totalInput} onChange={e => setTotalInput(e.target.value)} placeholder="Total Air (THB)"
-                className="w-36 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-              <button onClick={createHawb} disabled={busy === "hawb"} className="text-xs bg-slate-800 text-white px-3 py-2 rounded-lg font-medium hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap">{busy === "hawb" ? "..." : `สร้าง HAWB (${checked.size})`}</button>
+
+          {/* ① Ship Date & QTY Air */}
+          <div className="bg-white rounded-xl border border-orange-300 p-3 space-y-2">
+            <p className="text-xs font-semibold text-orange-800">① Ship Date &amp; QTY Air <span className="font-normal text-gray-500">(default = ค่าที่ MER กรอก · แก้ได้ · red = ยังไม่มี QTY)</span></p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50"><tr>
+                  <th className="px-2 py-1 text-left">DOC</th><th className="px-2 py-1 text-left">SO</th><th className="px-2 py-1 text-left">STYLE</th>
+                  <th className="px-2 py-1 text-right">QTY Air</th><th className="px-2 py-1 text-left">Plan Ship Date</th><th className="px-2 py-1 text-center">Send back</th>
+                </tr></thead>
+                <tbody>
+                  {allLgItems.map((it: any) => {
+                    const missingQty = !(liveQty(it) > 0)
+                    return (
+                      <tr key={it.id} className={`border-t border-gray-100 ${missingQty ? "bg-red-50" : ""}`}>
+                        <td className="px-2 py-1"><Link href={`/requests/${it.request.id}`} className="text-blue-600 hover:underline">{it.request.documentNo}</Link></td>
+                        <td className="px-2 py-1 font-medium">{it.so}</td>
+                        <td className="px-2 py-1 text-gray-500">{it.style}</td>
+                        <td className="px-2 py-1">
+                          <input type="number" min="0" className="w-24 border border-gray-300 rounded px-2 py-1 text-right"
+                            value={soShipData[it.id]?.qty ?? (it.qtyRequestAir || "")}
+                            onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], qty: e.target.value } }))} />
+                        </td>
+                        <td className="px-2 py-1">
+                          <input type="date" className="border border-gray-300 rounded px-2 py-1"
+                            value={soShipData[it.id]?.date ?? toDateInput(it.planShipmentDate)}
+                            onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], date: e.target.value } }))} />
+                        </td>
+                        <td className="px-2 py-1 text-center">
+                          {lgRejectId === it.id ? (
+                            <div className="flex items-center gap-1">
+                              <input autoFocus placeholder="เหตุผล" value={lgRejectReason} onChange={e => setLgRejectReason(e.target.value)} className="w-48 border border-red-300 rounded px-2 py-1" />
+                              <button onClick={() => lgRejectSo(it.id, it.request.id)} disabled={!lgRejectReason.trim()} className="px-2 py-1 bg-red-600 text-white rounded disabled:opacity-50">OK</button>
+                              <button onClick={() => { setLgRejectId(null); setLgRejectReason("") }} className="px-2 py-1 bg-gray-100 text-gray-600 rounded">✕</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setLgRejectId(it.id); setLgRejectReason("") }} className="px-2 py-0.5 text-red-600 border border-red-200 rounded hover:bg-red-50">✕ Send back</button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Table grouped by brand */}
-      {brands.map(([brand, items]) => (
-        <div key={brand} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-4 py-3 bg-gray-50/70 border-b flex items-center gap-2">
-            {items.some((i: any) => !i.hawbNo) && (() => {
-              const bIds = items.filter((i: any) => !i.hawbNo).map((i: any) => i.id)
-              const allOn = bIds.every((id: string) => checked.has(id))
-              return <input type="checkbox" checked={allOn} onChange={() => setChecked(p => { const n = new Set(p); bIds.forEach((id: string) => allOn ? n.delete(id) : n.add(id)); return n })} className="rounded" />
-            })()}
-            <span className="text-sm font-semibold text-gray-700">{brand}</span>
-            <span className="text-xs text-gray-400">{items.length} transaction</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs whitespace-nowrap">
-              <thead className="bg-gray-50 border-b"><tr>
-                <th className="px-2 py-2 w-8"></th>
-                {["DOC NO","SO","STYLE","SUB","QTY AIR *","PLAN DATE *","INV NO","HAWB#","ACTUAL (คำนวณ)",""].map(h =>
-                  <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium">{h}</th>)}
-              </tr></thead>
-              <tbody className="divide-y divide-gray-100">
-                {items.map((it: any) => {
-                  const booked = !!it.hawbNo
-                  return (
-                    <tr key={it.id} className={booked ? "bg-green-50/50" : checked.has(it.id) ? "bg-blue-50" : "hover:bg-blue-50/30"}>
-                      <td className="px-2 py-2">{!booked && <input type="checkbox" checked={checked.has(it.id)} onChange={() => toggle(it.id)} className="rounded" />}</td>
-                      <td className="px-3 py-2"><Link href={`/requests/${it.request.id}`} className="text-blue-600 hover:underline font-medium">{it.request.documentNo}</Link> <span className="text-gray-400">{it.request.bu}</span></td>
-                      <td className="px-3 py-2 font-medium">{it.so}</td>
-                      <td className="px-3 py-2">{it.style}</td>
-                      <td className="px-3 py-2">{it.sub || "-"}</td>
-                      {/* Editable QTY Air (default = MER) */}
-                      <td className="px-3 py-2">
-                        <input type="number" value={rowQty[it.id] ?? ""} onChange={e => setRowQty(p => ({ ...p, [it.id]: e.target.value }))}
-                          className="w-20 border border-gray-300 rounded px-2 py-1 text-xs bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 text-right" />
-                      </td>
-                      {/* Editable Plan Ship Date (default = MER) */}
-                      <td className="px-3 py-2">
-                        <input type="date" value={rowDate[it.id] ?? ""} onChange={e => setRowDate(p => ({ ...p, [it.id]: e.target.value }))}
-                          className="border border-gray-300 rounded px-2 py-1 text-xs bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                      </td>
-                      {booked ? (
-                        <>
-                          <td className="px-3 py-2"><span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">{it.invoiceNo || "-"}</span></td>
-                          <td className="px-3 py-2"><span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">{it.hawbNo}</span></td>
-                          <td className="px-3 py-2 text-right font-semibold text-green-700">{fmt0(it.actualAirFreight)}</td>
-                          <td className="px-3 py-2"><button disabled={busy === it.hawbNo} onClick={() => deleteHawb(it.hawbNo)} className="text-[11px] text-red-500 hover:text-red-700 underline">ลบ HAWB</button></td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="px-3 py-2">
-                            <input value={rowInv[it.id] || ""} onChange={e => setRowInv(p => ({ ...p, [it.id]: e.target.value }))} placeholder="INV"
-                              className="w-28 border border-gray-300 rounded px-2 py-1 text-xs bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                          </td>
-                          <td className="px-3 py-2 text-gray-300">—</td>
-                          <td className="px-3 py-2 text-right text-gray-300">-</td>
-                          <td className="px-3 py-2"><button onClick={() => { setSbItem(it); setSbReason("") }} className="text-[11px] text-red-500 hover:text-red-700 underline">↩ Send Back</button></td>
-                        </>
-                      )}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
-
-      {myItems.length > 0 && <p className="text-[11px] text-gray-400">* QTY Air / Plan Date แก้ไขได้ — ถ้าไม่แก้ ระบบยึดค่าที่ MER กรอกมา</p>}
-
-      {/* Send status per document */}
-      {involvedDocs.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-1.5 shadow-sm">
-          <p className="text-sm font-semibold text-gray-700">สถานะการ book ต่อเอกสาร</p>
-          {involvedDocs.map(({ req, eligible, remaining }) => (
-            <div key={req.id} className="flex items-center gap-3 text-xs border-b last:border-0 py-1.5">
-              <Link href={`/requests/${req.id}`} className="text-blue-600 hover:underline font-medium">{req.documentNo}</Link>
-              <span className="text-gray-400">{req.bu}</span>
-              {remaining > 0 ? <span className="text-amber-600">เหลือ {remaining} SO ยังไม่ book</span> : <span className="text-green-600 font-medium">✓ book ครบแล้ว</span>}
-              {req.bu === "GW" && eligible && <Link href={`/requests/${req.id}`} className="ml-auto text-slate-600 underline">ส่งที่หน้าเอกสาร (GW) →</Link>}
+          {/* ② Attach files — per document */}
+          <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
+            <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(ต่อเอกสาร · ต้องมี ≥1 ไฟล์ก่อน Send)</span></p>
+            <div className="space-y-2">
+              {involvedReqIds.map(reqId => {
+                const r = docMap[reqId]
+                const cnt = lgFileCount(r)
+                return (
+                  <div key={reqId} className="flex items-center gap-3 flex-wrap border border-gray-100 rounded-lg px-3 py-2">
+                    <Link href={`/requests/${reqId}`} className="text-xs font-medium text-blue-600 hover:underline">{r?.documentNo}</Link>
+                    {cnt > 0 ? <span className="text-[11px] text-green-600">✓ {cnt} file(s)</span> : <span className="text-[11px] text-red-500">* need ≥1</span>}
+                    <div className="ml-auto flex items-center gap-1.5">
+                      {["INV", "AWB", "EXPENSE", "COMBINE"].map(cat => (
+                        <label key={cat} className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer">
+                          +{cat}
+                          <input type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadLgFile(f, cat, reqId) }} />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
 
-      {/* Sticky action bar: Forward / Save Draft / Send */}
-      {myItems.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 lg:left-60 bg-white border-t shadow-lg px-6 py-3 flex items-center gap-3 z-40">
-          <button onClick={() => setFwOpen(true)} className="text-sm border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50">↪ Forward</button>
-          <button onClick={saveDraft} disabled={busy === "draft"} className="text-sm border border-blue-300 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 disabled:opacity-50">{busy === "draft" ? "..." : "💾 Save Draft"}</button>
-          <button onClick={send} disabled={busy === "send"} className="ml-auto bg-green-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50">{busy === "send" ? "..." : "Send →"}</button>
+          {/* ③ INV assignment */}
+          <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
+            <div className="bg-orange-50/80 border-b border-orange-200 px-4 py-3 space-y-3">
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-orange-700 mb-1">③ INV NO.</label>
+                  <input id="lg-quick-inv" value={lgQuickInv} placeholder="Type INV..." onChange={e => setLgQuickInv(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && lgQuickInv.trim()) {
+                        e.preventDefault()
+                        if (lgSelectedSoIds.size > 0) { setSoInvMap(p => { const n = { ...p }; lgSelectedSoIds.forEach(id => { n[id] = lgQuickInv.trim() }); return n }); setLgSelectedSoIds(new Set()); setLgQuickInv("") }
+                        else { const el = document.getElementById("lg-quick-so") as HTMLInputElement | null; el?.focus() }
+                      }
+                    }}
+                    className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm w-40 focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+                </div>
+                {lgQuickInv.trim() && (
+                  <div className="relative">
+                    <label className="block text-xs font-semibold text-orange-700 mb-1">SO No. <span className="font-normal text-orange-400">(type+Enter or click a row)</span></label>
+                    <input id="lg-quick-so" value={lgQuickSo} placeholder="Search SO..." autoComplete="off" onChange={e => setLgQuickSo(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key !== "Enter") return; e.preventDefault()
+                        const q = lgQuickSo.trim(); if (!q) return
+                        const rows = allLgItems.filter((i: any) => i.so === q)
+                        if (rows.length) { setSoInvMap(p => { const n = { ...p }; rows.forEach((r: any) => { n[r.id] = lgQuickInv.trim() }); return n }); setLgQuickSo("") }
+                      }}
+                      className="border border-orange-300 rounded-lg px-3 py-1.5 text-sm w-48 focus:ring-2 focus:ring-orange-400 focus:outline-none" />
+                    {lgQuickSo.trim() && (
+                      <div className="absolute top-full mt-1 left-0 bg-white border border-orange-200 rounded-xl shadow-lg z-20 min-w-64 max-h-48 overflow-y-auto">
+                        {(() => {
+                          const sos = [...new Set(allLgItems.filter((i: any) => String(i.so).includes(lgQuickSo.trim())).map((i: any) => i.so))]
+                          if (sos.length === 0) return <p className="text-xs text-gray-400 px-3 py-2">SO not found</p>
+                          return sos.map((so: any) => {
+                            const rows = allLgItems.filter((i: any) => i.so === so)
+                            const allAssigned = rows.every((r: any) => soInvMap[r.id] === lgQuickInv.trim())
+                            return (
+                              <button key={so} onClick={() => { setSoInvMap(p => { const n = { ...p }; rows.forEach((r: any) => { if (allAssigned) delete n[r.id]; else n[r.id] = lgQuickInv.trim() }); return n }); setLgQuickSo("") }}
+                                className={`flex items-center justify-between w-full text-left px-3 py-2 text-xs hover:bg-orange-50 border-b border-orange-50 last:border-0 ${allAssigned ? "bg-orange-50" : ""}`}>
+                                <span><span className="font-semibold">{so}</span><span className="text-gray-400 ml-2">{rows[0]?.style}</span><span className="text-orange-400 ml-2">· {rows.length} row{rows.length > 1 ? "s" : ""}</span></span>
+                                {allAssigned && <span className="text-orange-600 font-bold">✓</span>}
+                              </button>
+                            )
+                          })
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {lgQuickInv.trim() && <button onClick={() => { setLgQuickInv(""); setLgQuickSo("") }} className="text-xs text-gray-400 hover:text-red-500 pb-1.5">✕ Clear</button>}
+              </div>
+              {lgQuickInv.trim() && (() => {
+                const assigned = allLgItems.filter((i: any) => soInvMap[i.id] === lgQuickInv.trim())
+                return assigned.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-xs text-orange-600 font-medium">{lgQuickInv}:</span>
+                    {assigned.map((i: any) => (
+                      <span key={i.id} className="inline-flex items-center gap-1 text-xs bg-orange-600 text-white px-2.5 py-0.5 rounded-full">{i.so}
+                        <button onClick={() => setSoInvMap(p => { const n = { ...p }; delete n[i.id]; return n })} className="hover:opacity-70 leading-none">×</button>
+                      </span>
+                    ))}
+                  </div>
+                ) : <p className="text-xs text-orange-400">Click a row or type an SO to add it to {lgQuickInv}</p>
+              })()}
+            </div>
+
+            <div className="overflow-auto max-h-[55vh]">
+              <table className="w-full text-xs whitespace-nowrap">
+                <thead><tr>
+                  <th className="px-3 py-2 sticky top-0 z-10 bg-orange-50 border-b border-orange-100">
+                    <input type="checkbox" checked={allLgItems.length > 0 && allLgItems.every((i: any) => lgSelectedSoIds.has(i.id) || !!soInvMap[i.id])}
+                      onChange={e => {
+                        if (lgQuickInv.trim()) { const v = lgQuickInv.trim(); setSoInvMap(p => { const n = { ...p }; if (e.target.checked) allLgItems.forEach((i: any) => { n[i.id] = v }); else allLgItems.forEach((i: any) => { if (n[i.id] === v) delete n[i.id] }); return n }) }
+                        else setLgSelectedSoIds(e.target.checked ? new Set(allLgItems.map((i: any) => i.id)) : new Set())
+                      }} className="accent-orange-500" />
+                  </th>
+                  {["DOC","SO No.","Sub","Style","Customer PO","Description","QTY Air","Weight (KG)","Est. Freight","Country","Factory","INV NO.","Actual Freight"].map(h =>
+                    <th key={h} className="px-3 py-2 text-left text-orange-700 font-medium sticky top-0 bg-orange-50 border-b border-orange-100">{h}</th>)}
+                </tr></thead>
+                <tbody className="divide-y divide-orange-50">
+                  {allLgItems.map((item: any, idx: number) => {
+                    const invNo = soInvMap[item.id] || ""
+                    const hl = lgQuickInv.trim() && invNo === lgQuickInv.trim()
+                    const group = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
+                    const actual = group ? (() => { const { avgPerUnit } = getHawbCalc(group); return parseFloat(group.totalCost) > 0 || group.invNos.length ? liveQty(item) * avgPerUnit : null })() : null
+                    return (
+                      <tr key={item.id} onClick={() => { if (!lgQuickInv.trim()) return; setSoInvMap(p => p[item.id] === lgQuickInv.trim() ? (() => { const n = { ...p }; delete n[item.id]; return n })() : ({ ...p, [item.id]: lgQuickInv.trim() })) }}
+                        className={`${hl ? "bg-orange-100" : "hover:bg-orange-50/40"} ${lgQuickInv.trim() ? "cursor-pointer" : ""}`}>
+                        <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                          <input type="checkbox" checked={lgSelectedSoIds.has(item.id) || !!invNo}
+                            onChange={e => { if (lgQuickInv.trim()) { setSoInvMap(p => { const n = { ...p }; if (e.target.checked) n[item.id] = lgQuickInv.trim(); else delete n[item.id]; return n }) } else setLgSelectedSoIds(p => { const n = new Set(p); e.target.checked ? n.add(item.id) : n.delete(item.id); return n }) }}
+                            className="accent-orange-500" />
+                        </td>
+                        <td className="px-3 py-2"><Link href={`/requests/${item.request.id}`} className="text-blue-600 hover:underline">{item.request.documentNo}</Link></td>
+                        <td className="px-3 py-2 font-semibold text-orange-900">{item.so}</td>
+                        <td className="px-3 py-2 text-gray-500">{item.sub || "—"}</td>
+                        <td className="px-3 py-2 text-gray-600">{item.style}</td>
+                        <td className="px-3 py-2 text-gray-500">{item.customerPO || "—"}</td>
+                        <td className="px-3 py-2 text-gray-500 max-w-48 truncate">{item.description || "—"}</td>
+                        <td className="px-3 py-2 font-semibold">{liveQty(item)}</td>
+                        <td className="px-3 py-2 text-blue-700">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "—"}</td>
+                        <td className="px-3 py-2 text-blue-700">{num(item.airFreight)}</td>
+                        <td className="px-3 py-2 text-gray-500">{item.country || "—"}</td>
+                        <td className="px-3 py-2 text-gray-500">{item.factory || "—"}</td>
+                        <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center gap-1">
+                            <input id={`lg-inv-${item.id}`} value={invNo} placeholder="INV-0000"
+                              onChange={e => setSoInvMap(p => ({ ...p, [item.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key !== "Enter") return; e.preventDefault(); const nx = allLgItems[idx + 1]; if (nx) { const el = document.getElementById(`lg-inv-${nx.id}`) as HTMLInputElement | null; el?.focus(); el?.select() } }}
+                              className={`border rounded-lg px-2.5 py-1 text-xs w-32 focus:ring-1 focus:ring-orange-400 focus:outline-none ${invNo ? "border-orange-400 bg-orange-50 font-medium" : "border-orange-200"}`} />
+                            {invNo && <button onClick={() => setSoInvMap(p => { const n = { ...p }; delete n[item.id]; return n })} className="text-gray-300 hover:text-red-400 text-sm leading-none">×</button>}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">{actual != null ? <span className="font-semibold text-green-700">{actual.toLocaleString("en-US", { maximumFractionDigits: 2 })}</span> : <span className="text-gray-300">—</span>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ④ HAWB */}
+          {uniqueInvNos.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-orange-800 uppercase tracking-wide">④ Air Waybill (HAWB)</p>
+                {hawbGroups.length === 0 && <span className="text-xs text-orange-400">กด "+ Add HAWB" แล้วติ๊กเลือก INV</span>}
+              </div>
+              {hawbGroups.map((group, gi) => {
+                const { items, totalQty, avgPerUnit, totalCost, hasOverride } = getHawbCalc(group)
+                const hasCost = totalCost > 0
+                return (
+                  <div key={group.id} className="bg-white rounded-xl border border-orange-200 overflow-hidden shadow-sm">
+                    <div className="bg-orange-50 border-b border-orange-200 px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-xs font-bold text-orange-800 shrink-0">HAWB #{gi + 1}</span>
+                        <div className="flex items-center gap-1.5"><label className="text-xs text-gray-500">HAWB No.</label>
+                          <input value={group.hawbNo} placeholder="123-12345678" onChange={e => updateHawb(group.id, { hawbNo: e.target.value })} className="border border-orange-300 rounded-lg px-2.5 py-1 text-xs w-36 focus:ring-1 focus:ring-orange-400 focus:outline-none" /></div>
+                        <div className="flex items-center gap-1.5"><label className="text-xs text-gray-500">Booking Date <span className="text-red-500">*</span></label>
+                          <input type="date" value={group.bookingDate} onChange={e => updateHawb(group.id, { bookingDate: e.target.value })} className={`border rounded-lg px-2.5 py-1 text-xs focus:outline-none ${group.bookingDate ? "border-orange-300" : "border-red-300 bg-red-50"}`} /></div>
+                        <div className="flex items-center gap-1.5"><label className="text-xs text-gray-500">Total Cost (THB)</label>
+                          <input type="number" value={group.totalCost} placeholder="0" min="0" onChange={e => updateHawb(group.id, { totalCost: e.target.value })} className="border border-orange-300 rounded-lg px-2.5 py-1 text-xs w-32 focus:ring-1 focus:ring-orange-400 focus:outline-none" /></div>
+                        {items.length > 0 && hasCost && <span className="text-xs text-orange-600 font-medium">{totalQty.toLocaleString()} pcs · avg {avgPerUnit.toFixed(4)} THB/pc</span>}
+                        <button onClick={() => removeHawbGroup(group.id)} className="ml-auto text-xs text-red-400 hover:text-red-600 font-medium">Delete</button>
+                      </div>
+                    </div>
+                    <div className="p-4 space-y-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-2">Select INV in this HAWB</label>
+                        <div className="space-y-1.5">
+                          {uniqueInvNos.map(invNo => {
+                            const isSel = group.invNos.includes(invNo)
+                            const isTaken = !isSel && assignedHawbInvNos.has(invNo)
+                            const soCount = allLgItems.filter((i: any) => soInvMap[i.id] === invNo).length
+                            const qty = allLgItems.filter((i: any) => soInvMap[i.id] === invNo).reduce((s: number, i: any) => s + liveQty(i), 0)
+                            return (
+                              <label key={invNo} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${isSel ? "bg-orange-50 border-orange-300" : isTaken ? "opacity-50 cursor-not-allowed border-gray-200 bg-gray-50" : "border-gray-200 hover:bg-orange-50/50 hover:border-orange-200 cursor-pointer"}`}>
+                                <input type="checkbox" checked={isSel} disabled={isTaken} onChange={() => toggleInvInHawb(group.id, invNo)} className="accent-orange-500 w-4 h-4" />
+                                <span className="flex-1 flex items-center gap-3"><span className={`text-sm font-semibold ${isSel ? "text-orange-900" : "text-gray-700"}`}>{invNo}</span><span className="text-xs text-gray-400">{soCount} SO · {qty.toLocaleString()} pcs</span>{isTaken && <span className="text-xs text-gray-400 italic">Already in another HAWB</span>}</span>
+                                {isSel && <span className="text-xs font-medium text-orange-600">✓</span>}
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      {items.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          {hasCost && !hasOverride && <p className="text-xs text-orange-700 mb-2">Avg/unit = {totalCost.toLocaleString()} ÷ {totalQty} = <strong>THB {avgPerUnit.toFixed(4)}</strong></p>}
+                          <table className="w-full text-xs border border-orange-100 whitespace-nowrap">
+                            <thead className="bg-orange-100/60"><tr>{["DOC","SO No.","INV NO.","Style","QTY Air","Actual Freight (THB)"].map(h => <th key={h} className="px-3 py-1.5 text-left text-orange-700 font-medium">{h}</th>)}</tr></thead>
+                            <tbody className="divide-y divide-orange-50">
+                              {items.map((item: any) => {
+                                const calcVal = hasCost && !hasOverride ? liveQty(item) * avgPerUnit : null
+                                const disp = soActualOverride[item.id] !== undefined ? soActualOverride[item.id] : (calcVal !== null ? calcVal.toFixed(2) : "")
+                                return (
+                                  <tr key={item.id} className="bg-white/80">
+                                    <td className="px-3 py-1.5 text-blue-600">{item.request.documentNo}</td>
+                                    <td className="px-3 py-1.5 font-medium">{item.so}</td>
+                                    <td className="px-3 py-1.5 text-gray-500">{soInvMap[item.id] || "—"}</td>
+                                    <td className="px-3 py-1.5 text-gray-500">{item.style}</td>
+                                    <td className="px-3 py-1.5">{liveQty(item)}</td>
+                                    <td className="px-3 py-1.5"><input type="number" value={disp} placeholder="0.00" min="0" step="0.01" onChange={e => setSoActualOverride(p => ({ ...p, [item.id]: e.target.value }))} className={`w-32 border rounded-lg px-2 py-0.5 text-xs focus:outline-none font-semibold ${soActualOverride[item.id] !== undefined ? "border-blue-300 bg-blue-50 text-blue-800" : "border-orange-200 text-orange-800"}`} /></td>
+                                  </tr>
+                                )
+                              })}
+                              <tr className="bg-orange-50 font-semibold text-orange-900"><td colSpan={4} className="px-3 py-1.5 text-right text-orange-600">Total</td><td className="px-3 py-1.5">{totalQty}</td><td className="px-3 py-1.5">{totalCost > 0 ? totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</td></tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : <p className="text-xs text-center text-gray-400 py-2">ติ๊กเลือก INV ด้านบนเพื่อคำนวณ Freight</p>}
+                    </div>
+                  </div>
+                )
+              })}
+              <button onClick={addHawbGroup} className="w-full border-2 border-dashed border-orange-300 rounded-xl py-2.5 text-sm text-orange-600 hover:bg-orange-50 hover:border-orange-400 font-medium">+ Add Air Waybill (HAWB)</button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Forward modal */}
       {fwOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="bg-slate-800 text-white px-5 py-3 font-semibold text-sm">Forward ให้ผู้ใต้บังคับบัญชา</div>
-            <div className="p-5 space-y-3">
-              <p className="text-xs text-gray-500">ส่งต่อ {[...new Set(myItems.map(i => i.request.documentNo))].length} เอกสารให้กรอกต่อ (ส่งลิงก์เข้าอีเมล)</p>
-              <label className="block text-xs font-medium text-gray-600">เลือกผู้รับ (คน LG จาก master)</label>
-              <select value={fwEmail} onChange={e => { const u = fwTargets.find(t => t.email === e.target.value); setFwEmail(e.target.value); setFwName(u?.name || "") }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
-                <option value="">— เลือกผู้รับ —</option>
-                {fwTargets.map(t => <option key={t.email} value={t.email}>{t.name || t.email} ({t.email})</option>)}
-              </select>
-              {fwTargets.length === 0 && <p className="text-[11px] text-amber-600">ไม่พบรายชื่อ LG ใน master</p>}
-              <textarea value={fwNote} onChange={e => setFwNote(e.target.value)} rows={2} placeholder="หมายเหตุ (ไม่บังคับ)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
-              <div className="flex gap-2">
-                <button onClick={() => setFwOpen(false)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">ยกเลิก</button>
-                <button onClick={forward} disabled={busy === "fw"} className="flex-1 bg-slate-800 text-white py-2 rounded-lg text-sm font-medium hover:bg-slate-700 disabled:opacity-50">{busy === "fw" ? "..." : "Forward"}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Send back modal */}
-      {sbItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="bg-red-600 text-white px-5 py-3 font-semibold text-sm">Send back SO {sbItem.so}</div>
-            <div className="p-5 space-y-3">
-              <p className="text-xs text-gray-500">{sbItem.request.documentNo} · SO {sbItem.so} — ส่งกลับก่อน claim (แจ้ง MER/SCM)</p>
-              <textarea value={sbReason} onChange={e => setSbReason(e.target.value)} rows={3} placeholder="เหตุผล (เช่น ไม่ได้ air จริง / 0 claim)"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
-              <div className="flex gap-2">
-                <button onClick={() => setSbItem(null)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">ยกเลิก</button>
-                <button onClick={sendBack} disabled={!sbReason.trim() || busy === sbItem.id} className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">{busy === sbItem.id ? "..." : "Send back"}</button>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setFwOpen(false)}>
+          <div className="bg-white rounded-xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div><h3 className="font-semibold text-gray-800">↪ Forward ให้ผู้ใต้บังคับบัญชา</h3>
+              <p className="text-xs text-gray-400 mt-0.5">บันทึกข้อมูลที่กรอกไว้ แล้วส่งลิงก์ {involvedReqIds.length} เอกสารเข้าอีเมล</p></div>
+            <div><label className="text-xs font-medium text-gray-500">ผู้รับ (LG จาก master)</label>
+              <select value={fwTo} onChange={e => setFwTo(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1">
+                <option value="">-- เลือกผู้รับ --</option>
+                {fwTargets.map(t => <option key={t.id} value={t.email}>{t.name} ({t.email})</option>)}
+              </select></div>
+            <div><label className="text-xs font-medium text-gray-500">โน้ต (ไม่บังคับ)</label>
+              <textarea value={fwNote} onChange={e => setFwNote(e.target.value)} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1" /></div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setFwOpen(false)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">ยกเลิก</button>
+              <button onClick={forward} disabled={saving || !fwTo} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">บันทึก & ส่งต่อ</button>
             </div>
           </div>
         </div>
