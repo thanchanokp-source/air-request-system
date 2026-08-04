@@ -420,28 +420,43 @@ export default function LgEntryPage() {
               groups[k].ids.push(a.id)
             }))
             const fileGroups = Object.values(groups)
+            const byCat = (cat: string) => fileGroups.filter(g => g.rep.category === cat)
+            const chip = (g: any) => (
+              <span key={`${g.rep.category}|${g.rep.fileName}`} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 max-w-full">
+                <a href={`/api/attachments/${g.rep.id}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline truncate">📎 {g.rep.fileName}</a>
+                <button onClick={() => deleteAtt(g.ids)} title="ลบไฟล์" className="text-gray-400 hover:text-red-500 font-bold leading-none shrink-0">✕</button>
+              </span>
+            )
+            const slots = [{ key: "INV", label: "INV" }, { key: "AWB", label: "AWB" }, { key: "EXPENSE", label: "Expense" }]
             return (
               <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(ไม่บังคับ · แนบครั้งเดียว ใช้กับทุกเอกสารที่เลือก)</span></p>
-                  {fileGroups.length > 0 && <span className="text-[11px] text-green-600">✓ {fileGroups.length} file(s)</span>}
-                  <div className="ml-auto flex items-center gap-1.5">
-                    {["INV", "AWB", "EXPENSE", "COMBINE"].map(cat => (
-                      <label key={cat} className="text-[11px] px-2.5 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer">
-                        +{cat}
-                        <input type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadLgFileAll(f, cat) }} />
-                      </label>
-                    ))}
-                  </div>
+                <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(ไม่บังคับ · แนบครั้งเดียว ใช้กับทุกเอกสารที่เลือก)</span>{fileGroups.length > 0 && <span className="ml-1 text-green-600">✓ {fileGroups.length} file(s)</span>}</p>
+                {/* Per-category slots */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {slots.map(s => {
+                    const files = byCat(s.key)
+                    return (
+                      <div key={s.key} className={`rounded-lg border p-2 space-y-1.5 ${files.length ? "border-green-300 bg-green-50/40" : "border-gray-200 bg-gray-50"}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-gray-700">{s.label} {files.length > 0 && <span className="text-green-600">✓{files.length}</span>}</p>
+                          <label className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer whitespace-nowrap shrink-0">＋ Attach
+                            <input type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadLgFileAll(f, s.key) }} />
+                          </label>
+                        </div>
+                        <div className="flex flex-wrap gap-1">{files.length ? files.map(chip) : <span className="text-[10px] text-gray-400">— ไม่มีไฟล์ —</span>}</div>
+                      </div>
+                    )
+                  })}
                 </div>
-                {/* Files already on the selected documents */}
-                <div className="flex flex-wrap gap-2">
-                  {fileGroups.map(g => (
-                    <span key={`${g.rep.category}|${g.rep.fileName}`} className="inline-flex items-center gap-1.5 text-[10px] bg-blue-50 border border-blue-100 rounded px-2 py-0.5">
-                      <a href={`/api/attachments/${g.rep.id}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">📎 {g.rep.category} · {g.rep.fileName}</a>
-                      <button onClick={() => deleteAtt(g.ids)} title="ลบไฟล์ (เผื่ออัปผิด)" className="text-gray-400 hover:text-red-500 font-bold leading-none">✕</button>
-                    </span>
-                  ))}
+                {/* Combine — multiple files */}
+                <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/40 p-2 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-blue-800">Combine File <span className="font-normal text-gray-500">(หลายไฟล์ได้)</span> {byCat("COMBINE").length > 0 && <span className="text-green-600">✓{byCat("COMBINE").length}</span>}</p>
+                    <label className="text-[10px] px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-100 cursor-pointer whitespace-nowrap shrink-0">＋ Add files
+                      <input type="file" multiple className="hidden" onChange={async e => { const fs = Array.from(e.target.files || []); e.target.value = ""; for (const f of fs) await uploadLgFileAll(f, "COMBINE") }} />
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-1">{byCat("COMBINE").length ? byCat("COMBINE").map(chip) : <span className="text-[10px] text-gray-400">— ไม่มีไฟล์ —</span>}</div>
                 </div>
               </div>
             )
