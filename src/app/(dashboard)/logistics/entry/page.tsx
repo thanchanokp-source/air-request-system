@@ -181,10 +181,10 @@ export default function LgEntryPage() {
     const fmtD = (v: any) => { if (!v) return ""; const d = new Date(v); if (isNaN(d.getTime())) return ""; return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}` }
     const DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
     // Port + CR NO removed. Header colours by role part: MER = blue, LG = orange, Claim/SCM = green.
-    const headers = ["No_Document", "Brand name", "BU", "STYLE", "SO", "SUB", "CUSTOMER PO", "DESCRIPTION", "WEIGHT(KG)", "Original Shipment Date", "Plan Shipment Date", "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "Reason delay", "Factory", "Country", "INV NO.", "HAWB#", "EXPENSE/HAWB", "CLAIM DEPT 1", "%CLAIM1", "ACTUAL AIRFREIGHT1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "ACTUAL AIRFREIGHT2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "ACTUAL AIRFREIGHT3", "REASON 3"]
-    const widths = [16, 16, 6, 14, 12, 8, 14, 24, 10, 20, 20, 20, 20, 16, 14, 12, 16, 16, 18, 14, 8, 16, 16, 14, 8, 16, 16, 14, 8, 16, 16]
-    const MER_C = "FFDDEBF7", LG_C = "FFFCE4D6", CLAIM_C = "FFE2EFDA" // blue / orange / green
-    const colorOf = (i: number) => (i >= 16 && i <= 18) ? LG_C : (i >= 19 ? CLAIM_C : MER_C)
+    const headers = ["No_Document", "Brand name", "BU", "STYLE", "SO", "SUB", "CUSTOMER PO", "DESCRIPTION", "WEIGHT(KG)", "Original Shipment Date", "Plan Shipment Date", "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "Factory", "Country", "INV NO.", "HAWB#", "EXPENSE/HAWB", "CLAIM DEPT 1", "%CLAIM1", "ACTUAL AIRFREIGHT1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "ACTUAL AIRFREIGHT2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "ACTUAL AIRFREIGHT3", "REASON 3"]
+    const widths = [16, 16, 6, 14, 12, 8, 14, 24, 10, 20, 20, 20, 20, 14, 12, 16, 16, 18, 14, 8, 16, 16, 14, 8, 16, 16, 14, 8, 16, 16]
+    const MER_C = "FFDDEBF7", LG_C = "FFFCE4D6", CLAIM_C = "FFE2EFDA" // blue / orange / green (LG = INV/HAWB#/EXPENSE cols 15-17)
+    const colorOf = (i: number) => (i >= 15 && i <= 17) ? LG_C : (i >= 18 ? CLAIM_C : MER_C)
 
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet("LG")
@@ -212,7 +212,7 @@ export default function LgEntryPage() {
         item.request.documentNo, item.request.brandName || "", isGW ? "GW" : (item.request.bu || "NYG"),
         item.style || "", item.so || "", item.sub || "", item.customerPO || "", item.description || "", item.grossWeight ?? "",
         fmtD(item.originalShipmentDate), fmtD(item.planShipmentDate), item.qtyOriginalShipment ?? item.qtyRequestAir ?? "", item.qtyRequestAir ?? "",
-        item.reasonDelay || "", item.factory || "", item.country || "",
+        item.factory || "", item.country || "",
         invNo, hawbNo, hawbGrp?.totalCost || "",
         d[0]?.dept ? (DEPT_LABEL[d[0].dept] || d[0].dept) : "", d[0]?.pct ?? "", deptAmt(d[0]?.pct), d[0]?.reason || "",
         d[1]?.dept ? (DEPT_LABEL[d[1].dept] || d[1].dept) : "", d[1]?.pct ?? "", deptAmt(d[1]?.pct), d[1]?.reason || "",
