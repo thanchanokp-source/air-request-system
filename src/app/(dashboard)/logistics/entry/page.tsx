@@ -656,25 +656,25 @@ export default function LgEntryPage() {
             <div className="space-y-2">
               <label className="text-xs font-medium text-gray-500">ผู้รับ (LG จาก master — จัดกลุ่มตาม BU)</label>
               {(() => {
+                // Only LG people who cover a BU in the selected documents are suggested; anyone else
+                // (e.g. LG of another BU) can be typed in by hand.
                 const docBus = [...new Set(involvedReqIds.map(id => docMap[id]?.bu || "NYG"))]
-                const order = ["NYG", "EA", "TRM", "GW"].filter(b => docBus.includes(b))
-                const groups = order.map(bu => ({ bu, users: fwTargets.filter(t => coveredBus(t).has(bu)) }))
-                const other = fwTargets.filter(t => ![...coveredBus(t)].some(b => docBus.includes(b)))
-                return fwList.map((email, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <select value={email} onChange={e => setFwList(p => p.map((x, idx) => idx === i ? e.target.value : x))}
-                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                      <option value="">-- เลือกผู้รับ --</option>
-                      {groups.map(g => (
-                        <optgroup key={g.bu} label={`LG (${g.bu})`}>
-                          {g.users.map(u => <option key={u.email} value={u.email}>{u.name} ({u.email})</option>)}
-                        </optgroup>
-                      ))}
-                      {other.length > 0 && <optgroup label="อื่นๆ">{other.map(u => <option key={u.email} value={u.email}>{u.name} ({u.email})</option>)}</optgroup>}
-                    </select>
-                    {fwList.length > 1 && <button onClick={() => setFwList(p => p.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600 px-1">✕</button>}
-                  </div>
-                ))
+                const relevant = fwTargets.filter(t => [...coveredBus(t)].some(b => docBus.includes(b)))
+                return (
+                  <>
+                    {fwList.map((email, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input list="lg-fw-targets" value={email} onChange={e => setFwList(p => p.map((x, idx) => idx === i ? e.target.value : x))}
+                          placeholder="เลือกจากลิสต์ หรือพิมพ์อีเมล @nanyangtextile.com"
+                          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                        {fwList.length > 1 && <button onClick={() => setFwList(p => p.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600 px-1">✕</button>}
+                      </div>
+                    ))}
+                    <datalist id="lg-fw-targets">
+                      {relevant.map(u => <option key={u.email} value={u.email}>{u.name} — LG {[...coveredBus(u)].filter(b => docBus.includes(b)).join("/")}</option>)}
+                    </datalist>
+                  </>
+                )
               })()}
               <button onClick={() => setFwList(p => [...p, ""])} className="text-xs text-blue-600 hover:underline font-medium">＋ เพิ่มผู้รับ</button>
             </div>
