@@ -35,7 +35,8 @@ export default function LgEntryPage() {
 
   // Forward
   const [fwOpen, setFwOpen] = useState(false)
-  const [fwList, setFwList] = useState<string[]>([""]) // multiple recipients (add more)
+  // Recipients: pick from a BU-grouped dropdown, or add a manual-typed row.
+  const [fwList, setFwList] = useState<{ email: string; manual: boolean }[]>([{ email: "", manual: false }])
   const [fwNote, setFwNote] = useState("")
   const [fwTargets, setFwTargets] = useState<any[]>([])
 
@@ -306,7 +307,7 @@ export default function LgEntryPage() {
   }
 
   const forward = async () => {
-    const emails = [...new Set(fwList.filter(Boolean))]
+    const emails = [...new Set(fwList.map(x => x.email.trim()).filter(Boolean))]
     if (emails.length === 0) { alert("Select a recipient first"); return }
     setSaving(true)
     await persist(new Set()) // save partial first
@@ -322,7 +323,7 @@ export default function LgEntryPage() {
       })
       if (res.ok) ok++
     }
-    setSaving(false); setFwOpen(false); setFwList([""]); setFwNote("")
+    setSaving(false); setFwOpen(false); setFwList([{ email: "", manual: false }]); setFwNote("")
     alert(`Forwarded ${ok}/${involvedReqIds.length} document(s) (to ${emails.length} recipient(s))`)
   }
 
@@ -672,33 +673,42 @@ export default function LgEntryPage() {
             <div className="space-y-2">
               <label className="text-xs font-medium text-gray-500">Recipient (LG from master — grouped by BU)</label>
               {(() => {
-                // Only LG people who cover a BU in the selected documents are suggested; anyone else
-                // (e.g. LG of another BU) can be typed in by hand.
                 const docBus = [...new Set(involvedReqIds.map(id => docMap[id]?.bu || "NYG"))]
-                const relevant = fwTargets.filter(t => [...coveredBus(t)].some(b => docBus.includes(b)))
-                return (
-                  <>
-                    {fwList.map((email, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <input list="lg-fw-targets" value={email} onChange={e => setFwList(p => p.map((x, idx) => idx === i ? e.target.value : x))}
-                          placeholder="Select from list or type an @nanyangtextile.com email"
-                          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-                        {fwList.length > 1 && <button onClick={() => setFwList(p => p.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600 px-1">✕</button>}
-                      </div>
-                    ))}
-                    <datalist id="lg-fw-targets">
-                      {relevant.map(u => <option key={u.email} value={u.email}>{u.name} — LG {[...coveredBus(u)].filter(b => docBus.includes(b)).join("/")}</option>)}
-                    </datalist>
-                  </>
-                )
+                const order = ["NYG", "EA", "TRM", "GW"].filter(b => docBus.includes(b))
+                const groups = order.map(bu => ({ bu, users: fwTargets.filter(t => coveredBus(t).has(bu)) }))
+                const setAt = (i: number, v: string) => setFwList(p => p.map((x, idx) => idx === i ? { ...x, email: v } : x))
+                const removeAt = (i: number) => setFwList(p => p.filter((_, idx) => idx !== i))
+                return fwList.map((row, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    {row.manual ? (
+                      <input type="text" autoComplete="off" value={row.email} onChange={e => setAt(i, e.target.value)}
+                        placeholder="Type an @nanyangtextile.com email"
+                        className="flex-1 border border-blue-300 rounded-lg px-3 py-2 text-sm" />
+                    ) : (
+                      <select value={row.email} onChange={e => setAt(i, e.target.value)}
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">-- Select recipient --</option>
+                        {groups.map(g => (
+                          <optgroup key={g.bu} label={`LG (${g.bu})`}>
+                            {g.users.map(u => <option key={u.email} value={u.email}>{u.name} ({u.email})</option>)}
+                          </optgroup>
+                        ))}
+                      </select>
+                    )}
+                    {fwList.length > 1 && <button onClick={() => removeAt(i)} className="text-red-400 hover:text-red-600 px-1">✕</button>}
+                  </div>
+                ))
               })()}
-              <button onClick={() => setFwList(p => [...p, ""])} className="text-xs text-blue-600 hover:underline font-medium">＋ Add recipient</button>
+              <div className="flex items-center gap-4">
+                <button onClick={() => setFwList(p => [...p, { email: "", manual: false }])} className="text-xs text-blue-600 hover:underline font-medium">＋ Add recipient</button>
+                <button onClick={() => setFwList(p => [...p, { email: "", manual: true }])} className="text-xs text-blue-600 hover:underline font-medium">＋ Add more (type email)</button>
+              </div>
             </div>
             <div><label className="text-xs font-medium text-gray-500">Note (optional)</label>
               <textarea value={fwNote} onChange={e => setFwNote(e.target.value)} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1" /></div>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setFwOpen(false)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
-              <button onClick={forward} disabled={saving || !fwList.some(Boolean)} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">Save & Forward</button>
+              <button onClick={forward} disabled={saving || !fwList.some(x => x.email.trim())} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">Save & Forward</button>
             </div>
           </div>
         </div>
