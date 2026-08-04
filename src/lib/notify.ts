@@ -1618,6 +1618,28 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
         for (const u of lgUs) { if (docBu === "TRM" || !u.bu || u.bu === "ALL" || u.bu === docBu) addE(u.email) }
       }
       recips = [...set]
+    } else if (doc.status === "PENDING_SCM") {
+      // PENDING_SCM spans TWO sub-stages: SCM assigns claim (items PENDING) then VP SCM approves
+      // (items PASSED). Remind SCM only while it still has SOs to assign; once everything is assigned,
+      // remind VP SCM instead — otherwise SCM keeps getting alerts for work they've already finished
+      // (and their Approvals queue is empty).
+      const its = doc.items || []
+      const needAssign = its.some((i: any) => i.itemStatus === "PENDING")
+      const needVp = its.some((i: any) => i.itemStatus === "PASSED")
+      const set2 = new Set<string>()
+      const addE2 = (e: any) => { if (e) set2.add(String(e).toLowerCase()) }
+      if (needAssign) {
+        const us = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "SCM_USER" }, { roles: { has: "SCM_USER" } }] }, select: { email: true, bu: true } })
+        for (const u of us) if (!u.bu || u.bu === "ALL" || u.bu === docBu) addE2(u.email)
+      }
+      if (needVp) {
+        if (doc.assignedVpScm) addE2(doc.assignedVpScm)
+        else {
+          const vps = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "VP_SCM" }, { roles: { has: "VP_SCM" } }] }, select: { email: true, bu: true } })
+          for (const u of vps) if (!u.bu || u.bu === "ALL" || u.bu === docBu) addE2(u.email)
+        }
+      }
+      recips = [...set2]
     } else {
       // Role-based stages (or no assignee set) → all active holders of the role, scoped by BU.
       const rolesToNotify: string[] | undefined = STATUS_ROLES[doc.status]
