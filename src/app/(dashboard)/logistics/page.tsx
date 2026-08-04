@@ -107,7 +107,7 @@ export default function LgBookingPage() {
               <button onClick={() => toggleBrand(brand)} className="flex items-center gap-2.5 flex-1 text-left group">
                 <span className={`text-gray-400 text-[10px] w-3 transition-transform ${open ? "rotate-90" : ""}`}>▸</span>
                 <span className="text-[15px] font-semibold text-gray-700 group-hover:text-gray-900 tracking-tight">{brand}</span>
-                <span className="text-xs text-gray-400 font-normal">{count} SO · {docs.length} เอกสาร</span>
+                <span className="text-xs text-gray-400 font-normal">{count} transaction · {docs.length} เอกสาร</span>
               </button>
             </div>
 
@@ -126,7 +126,7 @@ export default function LgBookingPage() {
                         <span className="text-xs text-gray-500">{req.bu}</span>
                         <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">EST {fmtNum(est)} THB</span>
                         <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">ACT {fmtNum(act)} THB</span>
-                        <span className="text-xs text-gray-400">{items.length} SO</span>
+                        <span className="text-xs text-gray-400">{items.length} transaction</span>
                         <Link href={`/requests/${req.id}`} className="ml-auto text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium">Open →</Link>
                       </div>
                       <div className="overflow-x-auto">
@@ -171,10 +171,10 @@ export default function LgBookingPage() {
       {/* Sticky action bar */}
       {selected.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 lg:left-60 bg-white border-t shadow-lg px-6 py-3 flex items-center gap-3 z-40">
-          <span className="text-sm font-medium text-gray-700">เลือกแล้ว {selected.size} SO</span>
+          <span className="text-sm font-medium text-gray-700">เลือกแล้ว {selected.size} transaction</span>
           <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-red-600 underline">ล้าง</button>
           <button onClick={openSelected} className="ml-auto bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
-            เปิดทำงาน {selected.size} SO →
+            เปิดทำงาน {selected.size} transaction →
           </button>
         </div>
       )}

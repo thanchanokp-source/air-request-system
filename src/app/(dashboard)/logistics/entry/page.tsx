@@ -172,7 +172,7 @@ export default function LgEntryPage() {
     <div className="space-y-5 pb-24">
       <div className="flex items-center gap-3">
         <Link href="/logistics" className="text-sm text-blue-600 hover:underline">← LG BOOKING</Link>
-        <h1 className="text-xl font-bold text-gray-900">กรอก HAWB ({myItems.length} SO)</h1>
+        <h1 className="text-xl font-bold text-gray-900">กรอก HAWB ({myItems.length} transaction)</h1>
       </div>
 
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
@@ -184,7 +184,7 @@ export default function LgEntryPage() {
         <div key={brand} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="px-4 py-3 bg-gray-50 border-b flex items-center gap-2">
             <span className="text-sm font-bold text-gray-800">🏷 {brand}</span>
-            <span className="text-xs text-gray-400">{items.length} SO</span>
+            <span className="text-xs text-gray-400">{items.length} transaction</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs whitespace-nowrap">
