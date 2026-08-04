@@ -19,14 +19,16 @@ const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US"
 // Shared NYG-style flat SO table for the "by SO" approver screens (claim / GW). One row per SO
 // with a checkbox on rows the viewer may act on, plus a STATUS badge. Selection + batch actions
 // stay in each screen's existing header/footer bar — this only renders the grid.
-function SoApprovalTable({ items, selected, onToggle, canApprove, statusOf, showActual = true }: {
+function SoApprovalTable({ items, selected, onToggle, canApprove, statusOf, showActual = true, cur = "THB" }: {
   items: any[]
   selected: Set<string>
   onToggle: (id: string, checked: boolean) => void
   canApprove: (item: any) => boolean
   statusOf: (item: any) => { t: string; c: string }
   showActual?: boolean
+  cur?: string
 }) {
+  const CUR = cur
   const RIGHT = new Set(["QTY AIR", "GROSS (KG)", "EST. (THB)", "ACTUAL (THB)"])
   const cols: { h: string; get: (it: any) => any }[] = [
     { h: "SO", get: it => it.so },
@@ -47,7 +49,7 @@ function SoApprovalTable({ items, selected, onToggle, canApprove, statusOf, show
           <tr>
             <th className="px-2 py-2 w-8 sticky left-0 top-0 bg-gray-50 z-30"></th>
             {cols.map(c => (
-              <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h}</th>
+              <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h.replace("THB", CUR)}</th>
             ))}
             <th className="px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 text-left z-20">STATUS</th>
           </tr>
@@ -93,6 +95,7 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
   const a = bu === "GW"
     ? { border: "border-emerald-200", btn: "bg-emerald-600 hover:bg-emerald-700", badge: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-500", strong: "text-emerald-700" }
     : { border: "border-blue-200", btn: "bg-blue-600 hover:bg-blue-700", badge: "bg-blue-100 text-blue-700", bar: "bg-blue-500", strong: "text-blue-700" }
+  const CUR = req?.bu === "EA" ? "USD" : "THB"
   const items: any[] = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
   const totalEst = items.reduce((s, i) => s + (Number(i.airFreight) || 0), 0)
   const totalAct = items.reduce((s, i) => s + (Number(i.actualAirFreight) || 0), 0)
@@ -127,8 +130,8 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
 
       {/* Headline figures — ACTUAL is the number the President is here to sign off. */}
       <div className="grid grid-cols-2 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/60">
-        <Stat label="Est. Air Freight" value={totalEst} sub="THB" />
-        <Stat label="Actual Air Freight" value={totalAct} sub="THB" big />
+        <Stat label="Est. Air Freight" value={totalEst} sub={CUR} />
+        <Stat label="Actual Air Freight" value={totalAct} sub={CUR} big />
       </div>
 
       {/* Who claims how much */}
@@ -143,7 +146,7 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
                   <div className="flex items-center justify-between text-sm mb-1">
                     <span className="font-medium text-gray-700">{d.dept}</span>
                     <span className="tabular-nums text-gray-800">
-                      <span className="font-semibold">{fmtNum(d.amt)}</span> <span className="text-gray-400 text-xs">THB</span>
+                      <span className="font-semibold">{fmtNum(d.amt)}</span> <span className="text-gray-400 text-xs">{CUR}</span>
                       <span className="text-gray-400 text-xs ml-2">{Math.round(share)}%</span>
                     </span>
                   </div>
@@ -163,7 +166,7 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
           <thead className="bg-gray-50">
             <tr>
               {["STYLE", "SO", "QTY AIR", "EST. (THB)", "ACTUAL (THB)", "CLAIM"].map(h =>
-                <th key={h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${["QTY AIR", "EST. (THB)", "ACTUAL (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
+                <th key={h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${["QTY AIR", "EST. (THB)", "ACTUAL (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h.replace("THB", CUR)}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -994,21 +997,22 @@ export default function RequestDetailPage() {
   const claimSelIds = [...dvmSelected].filter((idv: string) => gwFwdItems.some((i: any) => i.id === idv))
   const claimActIds: string[] = claimSelIds.length ? claimSelIds : gwFwdItems.map((i: any) => i.id)
   const exportClaimExcel = () => {
+    const CUR = req?.bu === "EA" ? "USD" : "THB"
     const rows = gwFwdItemsSorted.map((it: any, i: number) => {
       const r = claimRow(it)
       return {
         "No.": i + 1, "SO": it.so, "STYLE": it.style, "CUSTOMER PO": it.customerPO || "",
         "QTY AIR": it.qtyRequestAir ?? "", "GROSS (KG)": it.grossWeight ?? "",
         "HAWB#": it.hawbNo || "", "INVOICE NO": it.invoiceNo || "",
-        "EST. FREIGHT (THB)": it.airFreight ?? "", "ACTUAL (THB)": r.actual,
-        "CLAIM %": r.pct, "MY EST (THB)": r.myEst, "MY CLAIM (THB)": r.amt,
+        [`EST. FREIGHT (${CUR})`]: it.airFreight ?? "", [`ACTUAL (${CUR})`]: r.actual,
+        "CLAIM %": r.pct, [`MY EST (${CUR})`]: r.myEst, [`MY CLAIM (${CUR})`]: r.amt,
         "PLAN DATE": fmtDate(it.planShipmentDate),
         "FACTORY": it.factory || "", "COUNTRY": it.country || "",
       }
     })
     rows.push({ "No.": "", "SO": "TOTAL", "STYLE": "", "CUSTOMER PO": "", "QTY AIR": claimTotals.qty,
-      "GROSS (KG)": "", "HAWB#": "", "INVOICE NO": "", "EST. FREIGHT (THB)": claimTotals.est,
-      "ACTUAL (THB)": claimTotals.actual, "CLAIM %": "", "MY EST (THB)": claimTotals.myEst, "MY CLAIM (THB)": claimTotals.amt,
+      "GROSS (KG)": "", "HAWB#": "", "INVOICE NO": "", [`EST. FREIGHT (${CUR})`]: claimTotals.est,
+      [`ACTUAL (${CUR})`]: claimTotals.actual, "CLAIM %": "", [`MY EST (${CUR})`]: claimTotals.myEst, [`MY CLAIM (${CUR})`]: claimTotals.amt,
       "PLAN DATE": "", "FACTORY": "", "COUNTRY": "" } as any)
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
@@ -1932,6 +1936,8 @@ export default function RequestDetailPage() {
 
   if (loading) return <div className="text-center py-20 text-gray-400">Loading...</div>
   if (!req) return <div className="text-center py-20 text-gray-400">Not found</div>
+  // Currency label for money amounts: EA documents are stored/shown in USD, all others in THB.
+  const CUR = req?.bu === "EA" ? "USD" : "THB"
 
   const activeItems = req.items?.filter((i: any) => i.itemStatus !== "REJECTED") || []
   const pendingScmItems = req?.status === "PENDING_SCM" ? activeItems.filter((i: any) => i.itemStatus === "PENDING") : activeItems
@@ -2091,14 +2097,14 @@ export default function RequestDetailPage() {
             <div className="flex flex-wrap gap-5">
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">Est. Air Freight</p>
-                <p className="text-sm font-bold text-blue-700">{fmtThb(estTotal)} <span className="text-xs font-normal text-gray-400">THB</span></p>
+                <p className="text-sm font-bold text-blue-700">{fmtThb(estTotal)} <span className="text-xs font-normal text-gray-400">{CUR}</span></p>
               </div>
               {hasActual && (
                 <>
                   <div className="w-px h-8 bg-gray-100 self-center" />
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase tracking-wider">Actual Air Freight</p>
-                    <p className="text-sm font-bold text-green-700">{fmtThb(actTotal)} <span className="text-xs font-normal text-gray-400">THB</span></p>
+                    <p className="text-sm font-bold text-green-700">{fmtThb(actTotal)} <span className="text-xs font-normal text-gray-400">{CUR}</span></p>
                   </div>
                 </>
               )}
@@ -2267,7 +2273,7 @@ export default function RequestDetailPage() {
               <table className="w-full text-xs whitespace-nowrap">
                 <thead className="bg-gray-50 border-b border-gray-200"><tr>
                   {["", "STYLE", "BRAND", "SUB", "SO", "CUSTOMER PO", "DESCRIPTION", "PLAN DATE", "QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)", "FACTORY", "COUNTRY", "STATUS", "ACTION"].map((h, i) =>
-                    <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
+                    <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h.replace("THB", CUR)}</th>)}
                 </tr></thead>
                 <tbody className="divide-y divide-gray-100">
                   {styleGroups.flatMap(g => {
@@ -2360,10 +2366,10 @@ export default function RequestDetailPage() {
                     <div className="hidden sm:flex items-center gap-3 text-xs">
                       <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
                       <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} THB</span></span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} {CUR}</span></span>
                       {(g as any).totalActual > 0 && <>
                         <span className="text-gray-300">|</span>
-                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} THB</span></span>
+                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} {CUR}</span></span>
                       </>}
                     </div>
                   </div>
@@ -2429,7 +2435,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","BRAND","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","ACTUAL AIR FREIGHT (THB)","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","BRAND","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. AIR FREIGHT (${CUR})`,`ACTUAL AIR FREIGHT (${CUR})`,"FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -2522,7 +2528,7 @@ export default function RequestDetailPage() {
               <table className="w-full text-xs whitespace-nowrap">
                 <thead className="bg-gray-50 border-b border-gray-200"><tr>
                   {["", "STYLE", "BRAND", "SO", "CUSTOMER PO", "DESCRIPTION", "PLAN DATE", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)", "CLAIM DEPT", "DELAY CODE", "DETAIL", "FACTORY", "COUNTRY", "STATUS", "ACTION"].map((h, i) =>
-                    <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
+                    <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h.replace("THB", CUR)}</th>)}
                 </tr></thead>
                 <tbody className="divide-y divide-gray-100">
                   {styleGroups.flatMap(g => {
@@ -2620,10 +2626,10 @@ export default function RequestDetailPage() {
                     <div className="hidden sm:flex items-center gap-3 text-xs">
                       <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
                       <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} THB</span></span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} {CUR}</span></span>
                       {(g as any).totalActual > 0 && <>
                         <span className="text-gray-300">|</span>
-                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} THB</span></span>
+                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} {CUR}</span></span>
                       </>}
                     </div>
                   </div>
@@ -2669,7 +2675,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50"><tr>
-                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY CODE","DETAIL","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
+                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY CODE","DETAIL","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-gray-50">
@@ -2741,10 +2747,10 @@ export default function RequestDetailPage() {
                     <div className="hidden sm:flex items-center gap-3 text-xs">
                       <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
                       <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} THB</span></span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} {CUR}</span></span>
                       {(g as any).totalActual > 0 && <>
                         <span className="text-gray-300">|</span>
-                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} THB</span></span>
+                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} {CUR}</span></span>
                       </>}
                     </div>
                   </div>
@@ -2794,7 +2800,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50"><tr>
-                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY CODE","DETAIL","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)"].map(h =>
+                        {["SO","ORIG. DATE","PLAN DATE","CLAIM DEPT","DELAY CODE","DETAIL","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-gray-50">
@@ -2923,7 +2929,7 @@ export default function RequestDetailPage() {
               <table className="w-full text-xs whitespace-nowrap">
                 <thead className="bg-gray-50 border-b border-gray-200"><tr>
                   {["", "STYLE", "BRAND", "SUB", "SO", "CUSTOMER PO", "DESCRIPTION", "PLAN DATE", "QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)", "FACTORY", "COUNTRY", "STATUS", "ACTION"].map((h, i) =>
-                    <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
+                    <th key={i} className={`px-3 py-2 font-medium text-gray-500 ${["QTY ORIG", "QTY AIR", "GROSS (KG)", "EST. FREIGHT (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h.replace("THB", CUR)}</th>)}
                 </tr></thead>
                 <tbody className="divide-y divide-gray-100">
                   {styleGroups.flatMap(g => {
@@ -3010,7 +3016,7 @@ export default function RequestDetailPage() {
                     <div className="hidden sm:flex items-center gap-3 text-xs">
                       <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
                       <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} THB</span></span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} {CUR}</span></span>
                     </div>
                   </div>
                   <span className="text-xs text-gray-400 shrink-0">{g.items.length} SO(s)</span>
@@ -3055,7 +3061,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. AIR FREIGHT (THB)","CLAIM DEPT","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. AIR FREIGHT (${CUR})`,"CLAIM DEPT","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -3270,7 +3276,7 @@ export default function RequestDetailPage() {
                 <table className="w-full text-xs whitespace-nowrap">
                   <thead className="bg-blue-50/60 border-b border-blue-100">
                     <tr>
-                      {["SO","SUB","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","FACTORY","COUNTRY","CLAIM DEPT","SCM DELAY REASON"].map(h =>
+                      {["SO","SUB","STYLE","DESCRIPTION","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,"FACTORY","COUNTRY","CLAIM DEPT","SCM DELAY REASON"].map(h =>
                         <th key={h} className="px-3 py-2 text-left text-blue-700 font-medium">{h}</th>)}
                     </tr>
                   </thead>
@@ -3438,7 +3444,7 @@ export default function RequestDetailPage() {
             <div className="border border-gray-200 rounded-lg overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 border-b">
-                  <tr>{["SO","STYLE","QTY AIR","QTY ACTUAL","EST. (THB)","ACTUAL (THB)","INVOICE NO","HAWB #","BOOKING DATE"].map(h =>
+                  <tr>{["SO","STYLE","QTY AIR","QTY ACTUAL",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB #","BOOKING DATE"].map(h =>
                     <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                   </tr>
                 </thead>
@@ -3522,7 +3528,7 @@ export default function RequestDetailPage() {
               <div className="border border-gray-100 rounded-xl overflow-x-auto">
                 <table className="w-full text-xs whitespace-nowrap">
                   <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>{["SO","STYLE","DESCRIPTION","PLAN DATE","QTY ORIG","QTY AIR","GROSS WT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","FACTORY","COUNTRY"].map(h =>
+                    <tr>{["SO","STYLE","DESCRIPTION","PLAN DATE","QTY ORIG","QTY AIR","GROSS WT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","FACTORY","COUNTRY"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-400 font-medium">{h}</th>)}
                     </tr>
                   </thead>
@@ -3833,7 +3839,7 @@ export default function RequestDetailPage() {
             )}
 
             {claimTableView && (
-              <SoApprovalTable items={nextItems} selected={nextSelected}
+              <SoApprovalTable items={nextItems} selected={nextSelected} cur={req?.bu === "EA" ? "USD" : "THB"}
                 onToggle={(id, checked) => setNextSelected(prev => { const s = new Set(prev); checked ? s.add(id) : s.delete(id); return s })}
                 canApprove={(i: any) => i.itemStatus === "LOG_PASSED"}
                 statusOf={(i: any) => i.itemStatus === "CLAIM_PASSED" ? { t: "Approved ✓", c: "bg-green-100 text-green-700" } : i.itemStatus === "LOG_PASSED" ? { t: "Your turn", c: "bg-yellow-100 text-yellow-700" } : { t: "Pending", c: "bg-gray-100 text-gray-500" }} />
@@ -3882,7 +3888,7 @@ export default function RequestDetailPage() {
                     <div className="border-t border-gray-100 overflow-x-auto">
                       <table className="text-xs w-full">
                         <thead className="bg-gray-50">
-                          <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","CLAIM DEPT","FACTORY","COUNTRY"].map(h =>
+                          <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","CLAIM DEPT","FACTORY","COUNTRY"].map(h =>
                             <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                           </tr>
                         </thead>
@@ -4117,12 +4123,12 @@ export default function RequestDetailPage() {
               </p>
             </div>
             <div className="px-4 py-2.5">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Estimate Air Freight (THB)</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Estimate Air Freight ({CUR})</p>
               <p className="text-lg font-bold text-gray-700 tabular-nums">{claimTotals.myEst.toLocaleString()}</p>
               <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.est.toLocaleString()}</p>
             </div>
             <div className="px-4 py-2.5">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Actual Air Freight (THB)</p>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Actual Air Freight ({CUR})</p>
               <p className="text-lg font-bold text-blue-700 tabular-nums">{claimTotals.amt.toLocaleString()}</p>
               <p className="text-[10px] text-gray-400 tabular-nums">of {claimTotals.actual.toLocaleString()}</p>
             </div>
@@ -4170,7 +4176,7 @@ export default function RequestDetailPage() {
                   <tr>
                     <th className="px-2 py-2 w-8 sticky left-0 top-0 bg-gray-50 z-30"></th>
                     {cols.map(c => (
-                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h}</th>
+                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h.replace("THB", CUR)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -4235,7 +4241,7 @@ export default function RequestDetailPage() {
                       <div className="overflow-x-auto">
                         <table className="text-xs w-full">
                           <thead className="bg-gray-50">
-                            <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
+                            <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                               <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                             </tr>
                           </thead>
@@ -4706,7 +4712,7 @@ export default function RequestDetailPage() {
                   <tr>
                     <th className="px-2 py-2 w-8 sticky left-0 top-0 bg-gray-50 z-30"></th>
                     {cols.map(c => (
-                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h}</th>
+                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h.replace("THB", CUR)}</th>
                     ))}
                     <th className="px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 text-left z-20">STATUS</th>
                   </tr>
@@ -4920,7 +4926,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -5068,7 +5074,7 @@ export default function RequestDetailPage() {
                   <tr>
                     <th className="px-2 py-2 w-8 sticky left-0 top-0 bg-gray-50 z-30"></th>
                     {cols.map(c => (
-                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h}</th>
+                      <th key={c.h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 ${RIGHT.has(c.h) ? "text-right" : "text-left"} ${c.h === "SO" ? "left-8 z-30" : "z-20"}`}>{c.h.replace("THB", CUR)}</th>
                     ))}
                     <th className="px-3 py-2 font-medium text-gray-500 whitespace-nowrap sticky top-0 bg-gray-50 text-left z-20">STATUS</th>
                   </tr>
@@ -5233,7 +5239,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. FREIGHT (THB)","ACTUAL (THB)","INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -5366,6 +5372,7 @@ export default function RequestDetailPage() {
           )}
           {claimTableView && (
             <SoApprovalTable items={(req.items||[]).filter((i:any) => ["LOG_PASSED","COMPLETED","REJECTED"].includes(i.itemStatus))}
+              cur={req?.bu === "EA" ? "USD" : "THB"}
               selected={claimGwSelected}
               onToggle={(id, checked) => setClaimGwSelected(prev => { const n = new Set(prev); checked ? n.add(id) : n.delete(id); return n })}
               canApprove={(i: any) => i.itemStatus === "LOG_PASSED"}
@@ -5436,7 +5443,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)","EST. (THB)","ACTUAL (THB)","INVOICE NO","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -6062,7 +6069,7 @@ export default function RequestDetailPage() {
                         }}
                         className="accent-orange-500" />
                     </th>
-                    {["SO No.","Sub","Style","Customer PO","Description","QTY Orig","QTY Air","Weight (KG)","Est. Freight (THB)","Country","Factory","INV NO.","Actual Freight (THB)"].map(h =>
+                    {["SO No.","Sub","Style","Customer PO","Description","QTY Orig","QTY Air","Weight (KG)",`Est. Freight (${CUR})`,"Country","Factory","INV NO.",`Actual Freight (${CUR})`].map(h =>
                       <th key={h} className={`px-3 py-2 text-left text-orange-700 font-medium sticky top-0 bg-orange-50 border-b border-orange-100 ${h === "SO No." ? "left-10 z-20" : "z-10"}`}>{h}</th>)}
                   </tr>
                 </thead>
@@ -6187,14 +6194,14 @@ export default function RequestDetailPage() {
                             className={`border rounded-lg px-2.5 py-1 text-xs focus:ring-1 focus:ring-orange-400 focus:outline-none ${group.bookingDate ? "border-orange-300" : "border-red-300 bg-red-50"}`} />
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <label className="text-xs text-gray-500 shrink-0">Total Cost (THB)</label>
+                          <label className="text-xs text-gray-500 shrink-0">Total Cost ({CUR})</label>
                           <input type="number" value={group.totalCost} placeholder="0" min="0"
                             onChange={e => updateHawb(group.id, { totalCost: e.target.value })}
                             className="border border-orange-300 rounded-lg px-2.5 py-1 text-xs w-32 focus:ring-1 focus:ring-orange-400 focus:outline-none" />
                         </div>
                         {items.length > 0 && hasCost && (
                           <span className="text-xs text-orange-600 font-medium">
-                            {totalQty.toLocaleString()} pcs · avg {avgPerUnit.toFixed(4)} THB/pc
+                            {totalQty.toLocaleString()} pcs · avg {avgPerUnit.toFixed(4)} {CUR}/pc
                           </span>
                         )}
                         <button type="button" onClick={() => removeHawbGroup(group.id)}
@@ -6238,12 +6245,12 @@ export default function RequestDetailPage() {
                         <div>
                           {hasCost && !hasOverride && (
                             <p className="text-xs text-orange-700 mb-2">
-                              Avg/unit = {totalCost.toLocaleString()} ÷ {totalQty} pcs = <strong>THB {avgPerUnit.toFixed(4)}</strong>
+                              Avg/unit = {totalCost.toLocaleString()} ÷ {totalQty} pcs = <strong>{CUR} {avgPerUnit.toFixed(4)}</strong>
                             </p>
                           )}
                           {hasOverride && (
                             <p className="text-xs text-blue-700 mb-2">
-                              Per-item Actual Freight entry mode · total = <strong>THB {totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}</strong>
+                              Per-item Actual Freight entry mode · total = <strong>{CUR} {totalCost.toLocaleString("en-US", { maximumFractionDigits: 2 })}</strong>
                               <button type="button" onClick={() => {
                                 const cleared: Record<string, string> = { ...soActualOverride }
                                 items.forEach((i: any) => { delete cleared[i.id] })
@@ -6255,7 +6262,7 @@ export default function RequestDetailPage() {
                             <table className="w-full text-xs rounded-lg overflow-hidden border border-orange-100 whitespace-nowrap">
                               <thead className="bg-orange-100/60">
                                 <tr>
-                                  {["SO No.","INV NO.","Style","QTY Air","Actual Freight (THB)"].map(h =>
+                                  {["SO No.","INV NO.","Style","QTY Air",`Actual Freight (${CUR})`].map(h =>
                                     <th key={h} className="px-3 py-1.5 text-left text-orange-700 font-medium">{h}</th>)}
                                 </tr>
                               </thead>
@@ -6865,7 +6872,7 @@ export default function RequestDetailPage() {
                 <div className="border border-gray-200 rounded-lg overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-gray-50 border-b">
-                      <tr>{["SO","STYLE","QTY AIR","QTY ACTUAL","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
+                      <tr>{["SO","STYLE","QTY AIR","QTY ACTUAL",`ACTUAL (${CUR})`,"INVOICE NO","BOOKING DATE"].map(h =>
                         <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                       </tr>
                     </thead>
@@ -6938,7 +6945,7 @@ export default function RequestDetailPage() {
           <div className="border border-gray-200 rounded-lg overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 border-b">
-                <tr>{["SO","STYLE","QTY AIR","QTY ACTUAL","ACTUAL (THB)","INVOICE NO","BOOKING DATE"].map(h =>
+                <tr>{["SO","STYLE","QTY AIR","QTY ACTUAL",`ACTUAL (${CUR})`,"INVOICE NO","BOOKING DATE"].map(h =>
                   <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                 </tr>
               </thead>
@@ -6969,7 +6976,7 @@ export default function RequestDetailPage() {
           <div className="overflow-x-auto">
             <table className="text-xs w-full">
               <thead className="bg-gray-50 border-b">
-                <tr>{([["STYLE","min-w-[110px]"],["SO","min-w-[90px]"],["CUSTOMER PO","min-w-[110px]"],["DESCRIPTION","min-w-[160px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],["QTY ORIG","min-w-[75px]"],["QTY AIR","min-w-[70px]"],["GROSS WEIGHT (KG)","min-w-[110px]"],["EST. AIR FREIGHT (THB)","min-w-[120px]"],["ACTUAL AIR FREIGHT (THB)","min-w-[130px]"],["CLAIM DEPT","min-w-[110px]"],["FACTORY","min-w-[70px]"],["COUNTRY","min-w-[110px]"],["STATUS","min-w-[110px]"]] as [string,string][]).map(([h,w]) =>
+                <tr>{([["STYLE","min-w-[110px]"],["SO","min-w-[90px]"],["CUSTOMER PO","min-w-[110px]"],["DESCRIPTION","min-w-[160px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],["QTY ORIG","min-w-[75px]"],["QTY AIR","min-w-[70px]"],["GROSS WEIGHT (KG)","min-w-[110px]"],[`EST. AIR FREIGHT (${CUR})`,"min-w-[120px]"],[`ACTUAL AIR FREIGHT (${CUR})`,"min-w-[130px]"],["CLAIM DEPT","min-w-[110px]"],["FACTORY","min-w-[70px]"],["COUNTRY","min-w-[110px]"],["STATUS","min-w-[110px]"]] as [string,string][]).map(([h,w]) =>
                   <th key={h} className={`px-2 py-2 text-left text-gray-600 whitespace-nowrap ${w}`}>{h}</th>)}
                 </tr>
               </thead>
