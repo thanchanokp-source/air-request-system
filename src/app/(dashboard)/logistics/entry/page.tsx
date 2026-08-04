@@ -164,17 +164,17 @@ export default function LgEntryPage() {
     }
   }
 
-  const saveDraft = async () => { setSaving(true); await persist(new Set()); await load(); setSaving(false); alert("บันทึกร่างแล้ว (ยังไม่ส่ง)") }
+  const saveDraft = async () => { setSaving(true); await persist(new Set()); await load(); setSaving(false); alert("Draft saved (not sent yet)") }
 
   const send = async () => {
     // Every selected SO must have Plan Ship Date + QTY Air filled before Send.
     const missingDetail = allLgItems.filter(it => !hasShipDate(it) || !(liveQty(it) > 0))
-    if (missingDetail.length) { alert(`กรอกรายละเอียดให้ครบก่อนส่ง — SO ที่ยังขาด Plan Ship Date / QTY Air:\n${[...new Set(missingDetail.map(i => i.so))].join(", ")}`); return }
+    if (missingDetail.length) { alert(`Please complete all details before sending — SOs still missing Plan Ship Date / QTY Air:\n${[...new Set(missingDetail.map(i => i.so))].join(", ")}`); return }
     const ready = involvedReqIds.filter(docComplete)
-    if (ready.length === 0) { alert("ยังไม่มีเอกสารพร้อมส่ง — SO ที่เลือกต้องอยู่ใน HAWB (มี HAWB No) และมี Booking Date ครบ"); return }
-    if (!confirm(`ส่งต่อ ${ready.length} เอกสารที่พร้อม? (ที่เหลือบันทึกเป็นร่าง)`)) return
+    if (ready.length === 0) { alert("No documents are ready to send — selected SOs must be in a HAWB (with HAWB No) and have all Booking Dates filled"); return }
+    if (!confirm(`Forward ${ready.length} ready document(s)? (the rest will be saved as draft)`)) return
     setSaving(true); await persist(new Set(ready)); await load(); setSaving(false)
-    alert(`ส่งต่อแล้ว ${ready.length} เอกสาร`)
+    alert(`Forwarded ${ready.length} document(s)`)
   }
 
   // Export the SELECTED transactions (cross-document) as the MER-format sheet + SCM claim columns,
@@ -189,7 +189,7 @@ export default function LgEntryPage() {
     // its claim block has no per-dept ACTUAL AIRFREIGHTn. Pick the header set by the selection's BU.
     const isGwExport = allLgItems.length > 0 && allLgItems.every((i: any) => i.request.bu === "GW")
     const mixed = allLgItems.some((i: any) => i.request.bu === "GW") && allLgItems.some((i: any) => i.request.bu !== "GW")
-    if (mixed && !confirm("เลือกปน GW กับ BU อื่น — จะ export ด้วยหัวแบบ NYG (EXPENSE/HAWB). ดำเนินการต่อ?")) return
+    if (mixed && !confirm("Selection mixes GW with another BU — will export with the NYG header (EXPENSE/HAWB). Continue?")) return
     const base = ["No_Document", "Brand name", "BU", "STYLE", "SO", "SUB", "CUSTOMER PO", "DESCRIPTION", "WEIGHT(KG)", "Original Shipment Date", "Plan Shipment Date", "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "Factory", "Country"]
     const baseW = [16, 16, 6, 14, 12, 8, 14, 24, 10, 20, 20, 20, 20, 14, 12]
     const headers = isGwExport
@@ -266,18 +266,18 @@ export default function LgEntryPage() {
     })
     if (Object.keys(updates).length > 0) setSoInvMap(p => ({ ...p, ...updates }))
     if (Object.keys(hawbMap).length > 0) setHawbGroups(Object.values(hawbMap).map(h => ({ id: Math.random().toString(36).slice(2), hawbNo: h.hawbNo, bookingDate: "", totalCost: h.totalCost, invNos: [...h.invNos] })))
-    alert(`Import: อัปเดต INV ${Object.keys(updates).length} SO · HAWB ${Object.keys(hawbMap).length} กลุ่ม`)
+    alert(`Import: updated INV for ${Object.keys(updates).length} SO · ${Object.keys(hawbMap).length} HAWB group(s)`)
   }
 
   // The same file is attached to every selected document, so a "file" here is a GROUP of attachment
   // ids (one per doc). Deleting removes them all at once.
   const deleteAtt = async (attIds: string[]) => {
-    if (!confirm(`ลบไฟล์นี้? (จาก ${attIds.length} เอกสาร)`)) return
+    if (!confirm(`Delete this file? (from ${attIds.length} document(s))`)) return
     setSaving(true)
     let err = ""
     for (const id of attIds) {
       const res = await fetch(`/api/attachments/${id}`, { method: "DELETE" })
-      if (!res.ok) err = (await res.json().catch(() => ({})))?.error || "ลบไม่สำเร็จ (ลบได้เฉพาะไฟล์ที่ตัวเองอัปโหลด)"
+      if (!res.ok) err = (await res.json().catch(() => ({})))?.error || "Delete failed (you can only delete files you uploaded yourself)"
     }
     if (err) alert(err)
     await load(); setSaving(false)
@@ -307,7 +307,7 @@ export default function LgEntryPage() {
 
   const forward = async () => {
     const emails = [...new Set(fwList.filter(Boolean))]
-    if (emails.length === 0) { alert("เลือกผู้รับก่อน"); return }
+    if (emails.length === 0) { alert("Select a recipient first"); return }
     setSaving(true)
     await persist(new Set()) // save partial first
     let ok = 0
@@ -323,10 +323,10 @@ export default function LgEntryPage() {
       if (res.ok) ok++
     }
     setSaving(false); setFwOpen(false); setFwList([""]); setFwNote("")
-    alert(`ส่งต่อแล้ว ${ok}/${involvedReqIds.length} เอกสาร (ให้ ${emails.length} คน)`)
+    alert(`Forwarded ${ok}/${involvedReqIds.length} document(s) (to ${emails.length} recipient(s))`)
   }
 
-  if (!allowed) return <div className="text-center py-20 text-gray-400">เฉพาะ Logistics / Admin เท่านั้น</div>
+  if (!allowed) return <div className="text-center py-20 text-gray-400">Logistics / Admin only</div>
 
   return (
     <div className="space-y-4 pb-24">
@@ -346,7 +346,7 @@ export default function LgEntryPage() {
 
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
       {!loading && allLgItems.length === 0 && (
-        <div className="text-center py-20 text-gray-400">ไม่มี SO ที่เลือก — กลับไป <Link href="/logistics" className="text-blue-600 underline">LG BOOKING</Link></div>
+        <div className="text-center py-20 text-gray-400">No SO selected — go back to <Link href="/logistics" className="text-blue-600 underline">LG BOOKING</Link></div>
       )}
 
       {allLgItems.length > 0 && (
@@ -354,7 +354,7 @@ export default function LgEntryPage() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <p className="text-sm font-semibold text-orange-800">Logistics — Air Waybill Entry</p>
-              <p className="text-xs text-orange-500 mt-0.5">① กรอก QTY/Ship Date → ② แนบไฟล์ → ③ ใส่ INV → ④ จัด HAWB (Total Cost → generate Actual)</p>
+              <p className="text-xs text-orange-500 mt-0.5">① Enter QTY/Ship Date → ② Attach files → ③ Enter INV → ④ Organize HAWB (Total Cost → generate Actual)</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button onClick={exportXlsx} disabled={saving} className="bg-white border border-orange-300 text-orange-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-50 disabled:opacity-50">⬇ Export</button>
@@ -369,7 +369,7 @@ export default function LgEntryPage() {
 
           {/* ① Ship Date & QTY Air */}
           <div className="bg-white rounded-xl border border-orange-300 p-3 space-y-2">
-            <p className="text-xs font-semibold text-orange-800">① Ship Date &amp; QTY Air <span className="font-normal text-gray-500">(default = ค่าที่ MER กรอก · แก้ได้ · red = ยังไม่มี QTY)</span></p>
+            <p className="text-xs font-semibold text-orange-800">① Ship Date &amp; QTY Air <span className="font-normal text-gray-500">(default = value entered by MER · editable · red = no QTY yet)</span></p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50"><tr>
@@ -424,13 +424,13 @@ export default function LgEntryPage() {
             const chip = (g: any) => (
               <span key={`${g.rep.category}|${g.rep.fileName}`} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 max-w-full">
                 <a href={`/api/attachments/${g.rep.id}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline truncate">📎 {g.rep.fileName}</a>
-                <button onClick={() => deleteAtt(g.ids)} title="ลบไฟล์" className="text-gray-400 hover:text-red-500 font-bold leading-none shrink-0">✕</button>
+                <button onClick={() => deleteAtt(g.ids)} title="Delete file" className="text-gray-400 hover:text-red-500 font-bold leading-none shrink-0">✕</button>
               </span>
             )
             const slots = [{ key: "INV", label: "INV" }, { key: "AWB", label: "AWB" }, { key: "EXPENSE", label: "Expense" }]
             return (
               <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
-                <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(ไม่บังคับ · แนบครั้งเดียว ใช้กับทุกเอกสารที่เลือก)</span>{fileGroups.length > 0 && <span className="ml-1 text-green-600">✓ {fileGroups.length} file(s)</span>}</p>
+                <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(optional · attach once, applies to all selected documents)</span>{fileGroups.length > 0 && <span className="ml-1 text-green-600">✓ {fileGroups.length} file(s)</span>}</p>
                 {/* Per-category slots */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {slots.map(s => {
@@ -443,7 +443,7 @@ export default function LgEntryPage() {
                             <input type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadLgFileAll(f, s.key) }} />
                           </label>
                         </div>
-                        <div className="flex flex-wrap gap-1">{files.length ? files.map(chip) : <span className="text-[10px] text-gray-400">— ไม่มีไฟล์ —</span>}</div>
+                        <div className="flex flex-wrap gap-1">{files.length ? files.map(chip) : <span className="text-[10px] text-gray-400">— no files —</span>}</div>
                       </div>
                     )
                   })}
@@ -451,12 +451,12 @@ export default function LgEntryPage() {
                 {/* Combine — multiple files */}
                 <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/40 p-2 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-blue-800">Combine File <span className="font-normal text-gray-500">(หลายไฟล์ได้)</span> {byCat("COMBINE").length > 0 && <span className="text-green-600">✓{byCat("COMBINE").length}</span>}</p>
+                    <p className="text-xs font-medium text-blue-800">Combine File <span className="font-normal text-gray-500">(multiple files allowed)</span> {byCat("COMBINE").length > 0 && <span className="text-green-600">✓{byCat("COMBINE").length}</span>}</p>
                     <label className="text-[10px] px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-100 cursor-pointer whitespace-nowrap shrink-0">＋ Add files
                       <input type="file" multiple className="hidden" onChange={async e => { const fs = Array.from(e.target.files || []); e.target.value = ""; for (const f of fs) await uploadLgFileAll(f, "COMBINE") }} />
                     </label>
                   </div>
-                  <div className="flex flex-wrap gap-1">{byCat("COMBINE").length ? byCat("COMBINE").map(chip) : <span className="text-[10px] text-gray-400">— ไม่มีไฟล์ —</span>}</div>
+                  <div className="flex flex-wrap gap-1">{byCat("COMBINE").length ? byCat("COMBINE").map(chip) : <span className="text-[10px] text-gray-400">— no files —</span>}</div>
                 </div>
               </div>
             )
@@ -588,7 +588,7 @@ export default function LgEntryPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold text-orange-800 uppercase tracking-wide">④ Air Waybill (HAWB)</p>
-                {hawbGroups.length === 0 && <span className="text-xs text-orange-400">กด "+ Add HAWB" แล้วติ๊กเลือก INV</span>}
+                {hawbGroups.length === 0 && <span className="text-xs text-orange-400">Click "+ Add HAWB" then tick to select INV</span>}
               </div>
               {hawbGroups.map((group, gi) => {
                 const { items, totalQty, avgPerUnit, totalCost, hasOverride } = getHawbCalc(group)
@@ -651,7 +651,7 @@ export default function LgEntryPage() {
                             </tbody>
                           </table>
                         </div>
-                      ) : <p className="text-xs text-center text-gray-400 py-2">ติ๊กเลือก INV ด้านบนเพื่อคำนวณ Freight</p>}
+                      ) : <p className="text-xs text-center text-gray-400 py-2">Tick INV above to calculate Freight</p>}
                     </div>
                   </div>
                 )
@@ -666,10 +666,10 @@ export default function LgEntryPage() {
       {fwOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setFwOpen(false)}>
           <div className="bg-white rounded-xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
-            <div><h3 className="font-semibold text-gray-800">↪ Forward ให้ผู้ใต้บังคับบัญชา</h3>
-              <p className="text-xs text-gray-400 mt-0.5">บันทึกข้อมูลที่กรอกไว้ แล้วส่งลิงก์ {involvedReqIds.length} เอกสารเข้าอีเมล · เอกสารแต่ละ BU ส่งให้ผู้รับที่ครอบ BU นั้น</p></div>
+            <div><h3 className="font-semibold text-gray-800">↪ Forward to a subordinate</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Save the entered data, then email the link for {involvedReqIds.length} document(s) · each BU's document goes to the recipient covering that BU</p></div>
             <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-500">ผู้รับ (LG จาก master — จัดกลุ่มตาม BU)</label>
+              <label className="text-xs font-medium text-gray-500">Recipient (LG from master — grouped by BU)</label>
               {(() => {
                 // Only LG people who cover a BU in the selected documents are suggested; anyone else
                 // (e.g. LG of another BU) can be typed in by hand.
@@ -680,7 +680,7 @@ export default function LgEntryPage() {
                     {fwList.map((email, i) => (
                       <div key={i} className="flex items-center gap-2">
                         <input list="lg-fw-targets" value={email} onChange={e => setFwList(p => p.map((x, idx) => idx === i ? e.target.value : x))}
-                          placeholder="เลือกจากลิสต์ หรือพิมพ์อีเมล @nanyangtextile.com"
+                          placeholder="Select from list or type an @nanyangtextile.com email"
                           className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                         {fwList.length > 1 && <button onClick={() => setFwList(p => p.filter((_, idx) => idx !== i))} className="text-red-400 hover:text-red-600 px-1">✕</button>}
                       </div>
@@ -691,13 +691,13 @@ export default function LgEntryPage() {
                   </>
                 )
               })()}
-              <button onClick={() => setFwList(p => [...p, ""])} className="text-xs text-blue-600 hover:underline font-medium">＋ เพิ่มผู้รับ</button>
+              <button onClick={() => setFwList(p => [...p, ""])} className="text-xs text-blue-600 hover:underline font-medium">＋ Add recipient</button>
             </div>
-            <div><label className="text-xs font-medium text-gray-500">โน้ต (ไม่บังคับ)</label>
+            <div><label className="text-xs font-medium text-gray-500">Note (optional)</label>
               <textarea value={fwNote} onChange={e => setFwNote(e.target.value)} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1" /></div>
             <div className="flex gap-2 justify-end">
-              <button onClick={() => setFwOpen(false)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">ยกเลิก</button>
-              <button onClick={forward} disabled={saving || !fwList.some(Boolean)} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">บันทึก & ส่งต่อ</button>
+              <button onClick={() => setFwOpen(false)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+              <button onClick={forward} disabled={saving || !fwList.some(Boolean)} className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40">Save & Forward</button>
             </div>
           </div>
         </div>

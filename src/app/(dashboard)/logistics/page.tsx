@@ -32,7 +32,7 @@ export default function LgBookingPage() {
 
   const openNoAir = (req: any, docIds: string[]) => {
     const ids = docIds.filter(id => selected.has(id))
-    if (ids.length === 0) { alert("ติ๊กเลือก SO ที่ไม่ได้ air ในเอกสารนี้ก่อน"); return }
+    if (ids.length === 0) { alert("Tick the SOs with no air in this document first"); return }
     setNoAirReason("No air"); setNoAir({ reqId: req.id, docNo: req.documentNo, ids })
   }
   const doNoAir = async () => {
@@ -103,20 +103,20 @@ export default function LgBookingPage() {
     router.push("/logistics/entry")
   }
 
-  if (!allowed) return <div className="text-center py-20 text-gray-400">เฉพาะ Logistics / Admin เท่านั้น</div>
+  if (!allowed) return <div className="text-center py-20 text-gray-400">Logistics / Admin only</div>
 
   return (
     <div className="space-y-4 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">LG BOOKING</h1>
-        <p className="text-xs text-gray-400 mt-0.5">เลือก SO ที่จะ book (ข้ามเอกสารในแต่ละ brand ได้) แล้วกด "เปิดทำงาน" → กรอก HAWB เดียวครอบ SO ที่เลือก</p>
+        <p className="text-xs text-gray-400 mt-0.5">Select SOs to book (can span documents within a brand), then click "Open" → enter one HAWB across the selected SOs</p>
       </div>
 
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหา brand / SO / เลขเอกสาร…"
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Search brand / SO / document no…"
         className="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
 
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
-      {!loading && brands.length === 0 && <div className="text-center py-20 text-gray-400">ไม่มี SO ที่รอ LG</div>}
+      {!loading && brands.length === 0 && <div className="text-center py-20 text-gray-400">No SOs waiting on LG</div>}
 
       {brands.map(({ brand, docs, count, ids }) => {
         const allOn = ids.every(id => selected.has(id))
@@ -184,7 +184,7 @@ export default function LgBookingPage() {
                       <div className="px-4 py-2 border-t border-gray-100 flex justify-end">
                         <button onClick={() => openNoAir(req, docIds)}
                           className="text-xs text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 font-medium">
-                          ✕ No air — ส่งกลับ SO ที่เลือก
+                          ✕ No air — send back selected SOs
                         </button>
                       </div>
                     </div>
@@ -199,10 +199,10 @@ export default function LgBookingPage() {
       {/* Sticky action bar */}
       {selected.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 lg:left-60 bg-white border-t shadow-lg px-6 py-3 flex items-center gap-3 z-40">
-          <span className="text-sm font-medium text-gray-700">เลือกแล้ว {selected.size} transaction</span>
-          <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-red-600 underline">ล้าง</button>
+          <span className="text-sm font-medium text-gray-700">Selected {selected.size} transaction(s)</span>
+          <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:text-red-600 underline">Clear</button>
           <button onClick={openSelected} className="ml-auto bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
-            เปิดทำงาน {selected.size} transaction →
+            Open {selected.size} transaction(s) →
           </button>
         </div>
       )}
@@ -211,14 +211,14 @@ export default function LgBookingPage() {
       {noAir && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="bg-red-600 text-white px-5 py-3 font-semibold text-sm">No air — ส่งกลับ {noAir.ids.length} SO</div>
+            <div className="bg-red-600 text-white px-5 py-3 font-semibold text-sm">No air — send back {noAir.ids.length} SO(s)</div>
             <div className="p-5 space-y-3">
-              <p className="text-xs text-gray-500">{noAir.docNo} · {noAir.ids.length} SO ที่เลือก — ยืนยันว่าไม่ได้ air จริง? ระบบจะส่งกลับก่อน claim (แจ้ง MER/SCM)</p>
-              <textarea value={noAirReason} onChange={e => setNoAirReason(e.target.value)} rows={3} placeholder="เหตุผล (เช่น No air / ไม่ได้ ship air)"
+              <p className="text-xs text-gray-500">{noAir.docNo} · {noAir.ids.length} selected SO(s) — confirm these had no air? They will be sent back before claim (notifies MER/SCM)</p>
+              <textarea value={noAirReason} onChange={e => setNoAirReason(e.target.value)} rows={3} placeholder="Reason (e.g. No air / not shipped by air)"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
               <div className="flex gap-2">
-                <button onClick={() => setNoAir(null)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">ยกเลิก</button>
-                <button onClick={doNoAir} disabled={!noAirReason.trim() || sending} className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">{sending ? "..." : "ยืนยัน No air"}</button>
+                <button onClick={() => setNoAir(null)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
+                <button onClick={doNoAir} disabled={!noAirReason.trim() || sending} className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">{sending ? "..." : "Confirm No air"}</button>
               </div>
             </div>
           </div>
