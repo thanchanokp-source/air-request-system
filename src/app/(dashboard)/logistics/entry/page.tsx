@@ -369,7 +369,7 @@ export default function LgEntryPage() {
 
           {/* ① Ship Date & QTY Air */}
           <div className="bg-white rounded-xl border border-orange-300 p-3 space-y-2">
-            <p className="text-xs font-semibold text-orange-800">① Ship Date &amp; QTY Air <span className="font-normal text-gray-500">(default = value entered by MER · editable · red = no QTY yet)</span></p>
+            <p className="text-base font-bold text-orange-800">① ACTUAL SHIP &amp; QTY <span className="text-xs font-normal text-gray-500">(default = value entered by MER · editable · red = no QTY yet)</span></p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50"><tr>
@@ -465,9 +465,10 @@ export default function LgEntryPage() {
           {/* ③ INV assignment */}
           <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
             <div className="bg-orange-50/80 border-b border-orange-200 px-4 py-3 space-y-3">
+              <p className="text-base font-bold text-orange-800">③ INVOICE &amp; ACTUAL AIRFREIGHT</p>
               <div className="flex flex-wrap items-end gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-orange-700 mb-1">③ INV NO.</label>
+                  <label className="block text-xs font-semibold text-orange-700 mb-1">INV NO.</label>
                   <input id="lg-quick-inv" value={lgQuickInv} placeholder="Type INV..." onChange={e => setLgQuickInv(e.target.value)}
                     onKeyDown={e => {
                       if (e.key === "Enter" && lgQuickInv.trim()) {
