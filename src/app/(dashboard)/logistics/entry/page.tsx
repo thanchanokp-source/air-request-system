@@ -173,6 +173,15 @@ export default function LgEntryPage() {
     alert(`ส่งต่อแล้ว ${ready.length} เอกสาร`)
   }
 
+  const deleteAtt = async (attId: string) => {
+    if (!confirm("ลบไฟล์นี้?")) return
+    setSaving(true)
+    const res = await fetch(`/api/attachments/${attId}`, { method: "DELETE" })
+    if (res.ok) await load()
+    else alert((await res.json().catch(() => ({})))?.error || "ลบไม่สำเร็จ (ลบได้เฉพาะไฟล์ที่ตัวเองอัปโหลด)")
+    setSaving(false)
+  }
+
   // One attach action → attaches the file to EVERY selected document (so each doc satisfies the
   // "≥1 file before Send" rule without LG having to upload document by document).
   const uploadLgFileAll = async (file: File, category: string) => {
@@ -294,7 +303,10 @@ export default function LgEntryPage() {
                 {/* Files already on the selected documents */}
                 <div className="flex flex-wrap gap-2">
                   {involvedReqIds.flatMap(id => (docMap[id]?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).map((a: any) => (
-                    <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline bg-blue-50 border border-blue-100 rounded px-2 py-0.5">📎 {a.category} · {a.fileName}</a>
+                    <span key={a.id} className="inline-flex items-center gap-1.5 text-[10px] bg-blue-50 border border-blue-100 rounded px-2 py-0.5">
+                      <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">📎 {a.category} · {a.fileName}</a>
+                      <button onClick={() => deleteAtt(a.id)} title="ลบไฟล์ (เผื่ออัปผิด)" className="text-gray-400 hover:text-red-500 font-bold leading-none">✕</button>
+                    </span>
                   )))}
                 </div>
               </div>
