@@ -98,9 +98,9 @@ const AngledTick = ({ x, y, payload }: any) => {
   )
 }
 
-function CostBar({ data, height=200, onBarClick, drillLabel, onBack }: {
+function CostBar({ data, height=200, onBarClick, drillLabel, onBack, cur="THB" }: {
   data:{name:string;est:number;actual:number}[]; height?:number
-  onBarClick?:(n:string)=>void; drillLabel?:string; onBack?:()=>void
+  onBarClick?:(n:string)=>void; drillLabel?:string; onBack?:()=>void; cur?:string
 }) {
   const renderEstLabel = (props:any) => {
     const {x,y,width,value} = props
@@ -138,19 +138,19 @@ function CostBar({ data, height=200, onBarClick, drillLabel, onBack }: {
             <XAxis dataKey="name" tick={<AngledTick/>} interval={0} height={56}/>
             <YAxis tick={{fontSize:10}} tickFormatter={fmtK} width={48}/>
             <Tooltip formatter={(v:any,n:any)=>[fmtNum(v),n]}/>
-            <Bar dataKey="est" name="Est. (THB)" fill="#c05050" radius={[2,2,0,0]}
+            <Bar dataKey="est" name={`Est. (${cur})`} fill="#c05050" radius={[2,2,0,0]}
               cursor={onBarClick?"pointer":undefined} onClick={(d:any)=>onBarClick?.(d.name)}>
               <LabelList content={renderEstLabel}/>
             </Bar>
-            <Bar dataKey="actual" name="Actual (THB)" fill="#f5c0c0" radius={[2,2,0,0]}
+            <Bar dataKey="actual" name={`Actual (${cur})`} fill="#f5c0c0" radius={[2,2,0,0]}
               cursor={onBarClick?"pointer":undefined} onClick={(d:any)=>onBarClick?.(d.name)}>
               <LabelList content={renderActualLabel}/>
             </Bar>
           </BarChart>
         </ResponsiveContainer>
         <div className="flex items-center justify-center gap-4 pt-1 pb-0.5">
-          <div className="flex items-center gap-1"><span className="inline-block w-3 h-2.5 rounded-sm" style={{background:"#c05050"}}/><span className="text-xs text-gray-600">Est. (THB)</span></div>
-          <div className="flex items-center gap-1"><span className="inline-block w-3 h-2.5 rounded-sm" style={{background:"#f5c0c0"}}/><span className="text-xs text-gray-600">Actual (THB)</span></div>
+          <div className="flex items-center gap-1"><span className="inline-block w-3 h-2.5 rounded-sm" style={{background:"#c05050"}}/><span className="text-xs text-gray-600">Est. ({cur})</span></div>
+          <div className="flex items-center gap-1"><span className="inline-block w-3 h-2.5 rounded-sm" style={{background:"#f5c0c0"}}/><span className="text-xs text-gray-600">Actual ({cur})</span></div>
         </div>
       </>}
     </div>
@@ -298,7 +298,7 @@ const gradRange = (n: number, dark: string, light: string) => {
   })
 }
 
-function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
+function ReasonPanel({ rows, height=200, cur="THB" }: { rows:any[]; height?:number; cur?:string }) {
   const [mode, setMode] = useState<'count'|'cost'|'qty'>('count')
   const [drillDept, setDrillDept] = useState<string|null>(null)   // cost/qty: which claim dept is drilled into
   // Actual Cost / Actual QTY: top level = by claim department; click a bar → its reasons.
@@ -414,7 +414,7 @@ function ReasonPanel({ rows, height=200 }: { rows:any[]; height?:number }) {
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
                     <XAxis type="number" tick={{fontSize:12}} tickFormatter={mode==='cost'?fmtK:undefined} allowDecimals={false}/>
                     <YAxis type="category" dataKey="name" tick={{fontSize:10}} width={132} interval={0}/>
-                    <Tooltip formatter={(v:any)=>mode==='cost'?[fmtNum(v)+' THB','Actual Cost']:[fmtNum(v)+' pcs','QTY Air']}/>
+                    <Tooltip formatter={(v:any)=>mode==='cost'?[fmtNum(v)+' '+cur,'Actual Cost']:[fmtNum(v)+' pcs','QTY Air']}/>
                     <Bar dataKey={mode==='cost'?'cost':'qty'} radius={[0,3,3,0]}
                       cursor={drillDept?undefined:'pointer'} onClick={(d:any)=>{ if(!drillDept && d?.name) setDrillDept(d.name) }}>
                       {chartData.map((d:any,i:number)=><Cell key={i} fill={drillDept?deptColor(drillDept):deptColor(d.name)}/>)}
@@ -499,7 +499,7 @@ function Paged({ data, size=5, fromEnd=false, children }: { data:any[]; size?:nu
   )
 }
 
-function LogisticsCostBar({ rows }: { rows:any[] }) {
+function LogisticsCostBar({ rows, cur="THB" }: { rows:any[]; cur?:string }) {
   const data = useMemo(()=>{
     const m:Record<string,{cost:number;qty:number;soCount:number}>={}
     rows.forEach(r=>{
@@ -529,8 +529,8 @@ function LogisticsCostBar({ rows }: { rows:any[] }) {
               <tr className="border-b border-gray-200">
                 <th className="text-left py-1.5 px-2 text-gray-500 font-semibold text-[11px] w-1/2 bg-white">BRAND</th>
                 <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">QTY</th>
-                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">TOTAL (THB)</th>
-                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">COST/PCS (THB)</th>
+                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">TOTAL ({cur})</th>
+                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">COST/PCS ({cur})</th>
               </tr>
             </thead>
             <tbody>
@@ -609,6 +609,8 @@ export default function DashboardPage() {
   ], [viewBus, canAll])
 
   const [activeBu, setActiveBu] = useState<string>("ALL")
+  // EA amounts are stored in USD; every other BU is THB. Label-only — numbers are unchanged.
+  const CUR = activeBu === "EA" ? "USD" : "THB"
   // Session loads after first render — default the active BU to the viewer's first allowed
   // BU (or "All BU" for admins) once we know who they are.
   const buInit = useRef(false)
@@ -811,8 +813,8 @@ export default function DashboardPage() {
         "QTY ORIG":       row.qtyOriginalShipment,
         "QTY AIR":        row.qtyRequestAir,
         "AIR RATE%":      Number(ar.toFixed(1)),
-        "EST. (THB)":     row.airFreight ?? 0,
-        "ACTUAL (THB)":   row.actualAirFreight ?? 0,
+        [`EST. (${CUR})`]:     row.airFreight ?? 0,
+        [`ACTUAL (${CUR})`]:   row.actualAirFreight ?? 0,
         "INV NO":         row.invoiceNo ?? "",
         "HAWB NO":        row.hawbNo ?? "",
         "VAR%":           vp != null ? Number(vp.toFixed(1)) : "",
@@ -852,8 +854,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {([
           ["QTY SHIP AIR","pcs",fmtNum(totalQAir),"text-orange-700","bg-orange-50 border-orange-200","Requested air"],
-          ["EST. AIRFREIGHT","THB",fmtK(totalEst),"text-sky-700","bg-sky-50 border-sky-200",`${fmtNum(totalEst)} THB`],
-          ["ACTUAL AIRFREIGHT","THB",fmtK(totalAct),"text-teal-700","bg-teal-50 border-teal-200",`${fmtNum(totalAct)} THB`],
+          ["EST. AIRFREIGHT",CUR,fmtK(totalEst),"text-sky-700","bg-sky-50 border-sky-200",`${fmtNum(totalEst)} ${CUR}`],
+          ["ACTUAL AIRFREIGHT",CUR,fmtK(totalAct),"text-teal-700","bg-teal-50 border-teal-200",`${fmtNum(totalAct)} ${CUR}`],
           ["ACTUAL vs EST","%",varPct!=null?(varPct>0?"↑":"↓")+Math.abs(varPct).toFixed(1)+"%":"N/A",varPct!=null&&varPct>0?"text-red-600":varPct!=null&&varPct<0?"text-green-600":"text-gray-400","bg-orange-50 border-orange-200",varPct!=null?`Variance ${fmtPct(varPct)}`:"Actual N/A"],
         ] as [string,string,any,string,string,string][]).map(([label,unit,value,tc,bg,sub])=>(
           <div key={label} className={`${bg} border rounded-xl p-4`}>
@@ -869,7 +871,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
           <div className="flex items-baseline justify-between flex-wrap gap-1">
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.15em]">Claim by department</p>
-            <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtK(claimAmtTotal)} · Est {fmtK(claimEstTotal)} THB</p>
+            <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtK(claimAmtTotal)} · Est {fmtK(claimEstTotal)} {CUR}</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             {(()=>{ const barMax = Math.max(...claimByDept.map(d=>d.amt||d.est), 1); return claimByDept.map(d=>{
@@ -885,7 +887,7 @@ export default function DashboardPage() {
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:c}}/>
                     <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide truncate">{d.dept}</span>
                   </div>
-                  <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums">{fmtK(d.amt)}<span className="text-[11px] font-medium text-gray-300 ml-1">THB</span></p>
+                  <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums">{fmtK(d.amt)}<span className="text-[11px] font-medium text-gray-300 ml-1">{CUR}</span></p>
                   <div className="mt-3 h-1 rounded-full bg-gray-100 overflow-hidden">
                     <div className="h-full rounded-full" style={{width:`${Math.max(2,Math.min(100,barPct))}%`, background:c}}/>
                   </div>
@@ -942,13 +944,13 @@ export default function DashboardPage() {
 
       {/* ── Delay Reason Overview (below filters) ───────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <ReasonPanel rows={filtered} height={180}/>
-        <LogisticsCostBar rows={filtered}/>
+        <ReasonPanel rows={filtered} height={180} cur={CUR}/>
+        <LogisticsCostBar rows={filtered} cur={CUR}/>
       </div>
 
       {/* ── Column Headers ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>EST vs ACTUAL AIR FREIGHT (THB)</div>
+        <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>EST vs ACTUAL AIR FREIGHT ({CUR})</div>
         <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>QTY SHIP AIR (pcs)</div>
         <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>AVG DELAY DAYS (Plan − Original)</div>
       </div>
@@ -956,7 +958,7 @@ export default function DashboardPage() {
       {/* ── Row 1: By Ship Month ─────────────────────────────────────────── */}
       <SectionRow label="By Ship Month"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <Paged data={monthlyCost} fromEnd>{(s)=><CostBar data={s} height={H}/>}</Paged>
+        <Paged data={monthlyCost} fromEnd>{(s)=><CostBar data={s} height={H} cur={CUR}/>}</Paged>
         <Paged data={monthlyQty} fromEnd>{(s)=><QtyBar data={s} height={H}/>}</Paged>
         <Paged data={monthlyDelay} fromEnd>{(s)=><DelayBar data={s} rows={filtered} groupFn={moKey} height={H}/>}</Paged>
       </div>
@@ -964,7 +966,7 @@ export default function DashboardPage() {
       {/* ── Row 2: By Brand ─────────────────────────────────────────────── */}
       <SectionRow label="By Brand"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <Paged data={brandCost}>{(s)=><CostBar data={s} height={H}/>}</Paged>
+        <Paged data={brandCost}>{(s)=><CostBar data={s} height={H} cur={CUR}/>}</Paged>
         <Paged data={brandQty}>{(s)=><QtyBar data={s} height={H}/>}</Paged>
         <Paged data={brandDelay}>{(s)=><DelayBar data={s} rows={filtered} groupFn={(r:any)=>brandKey(r)} height={H}/>}</Paged>
       </div>
@@ -972,7 +974,7 @@ export default function DashboardPage() {
       {/* ── Row 3: By Country ────────────────────────────────────────────── */}
       <SectionRow label="By Country"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <Paged data={countryCost}>{(s)=><CostBar data={s} height={H}/>}</Paged>
+        <Paged data={countryCost}>{(s)=><CostBar data={s} height={H} cur={CUR}/>}</Paged>
         <Paged data={countryQty}>{(s)=><QtyBar data={s} height={H}/>}</Paged>
         <Paged data={countryDelay}>{(s)=><DelayBar data={s} rows={filtered.filter(cRows)} groupFn={cKey} height={H}/>}</Paged>
       </div>
@@ -980,7 +982,7 @@ export default function DashboardPage() {
       {/* ── Row 4: By BU ────────────────────────────────────────────────── */}
       <SectionRow label="By BU"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <CostBar  data={buCost}  height={H}/>
+        <CostBar  data={buCost}  height={H} cur={CUR}/>
         <QtyBar   data={buQty}   height={H}/>
         <DelayBar data={buDelay} rows={filtered} groupFn={(r:any)=>r.request?.buName||"N/A"} height={H}/>
       </div>
@@ -988,7 +990,7 @@ export default function DashboardPage() {
       {/* ── Row 5: By Claim Dept ─────────────────────────────────────────── */}
       <SectionRow label="By Claim Dept"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <CostBar  data={deptCost}  height={H}/>
+        <CostBar  data={deptCost}  height={H} cur={CUR}/>
         <QtyBar   data={deptQty}   height={H}/>
         <DelayBar data={deptDelay} rows={filtered} groupFn={(r:any)=>r.claimDepartment||"Unassigned"} height={H}/>
       </div>
@@ -1015,7 +1017,7 @@ export default function DashboardPage() {
         <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
-              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%","EST. (THB)","ACTUAL (THB)","INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
+              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
                 <th key={h} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
               </tr>
             </thead>
