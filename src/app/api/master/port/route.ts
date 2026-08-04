@@ -4,7 +4,6 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { releasePendingRateDocs } from "@/lib/freight"
 import { canEditMaster } from "@/lib/master-access"
-import { getFx } from "@/lib/fx"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -39,19 +38,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, saved, total: body.rows.length })
   }
 
-  // Single rate. bu="ALL" = shared (default); a BU-specific row (e.g. EA) overrides. EA quotes in USD.
-  const { country, ratePerKg } = body
+  // Single rate. Two separate rates per country row: ratePerKg (THB, for NYG/GW/TRM) + rateUsd (USD, EA).
+  const { country } = body
   const bu = String(body.bu || "ALL").trim() || "ALL"
-  const currency = String(body.currency || "THB").trim().toUpperCase() === "USD" ? "USD" : "THB"
   if (!country) return NextResponse.json({ error: "Missing country" }, { status: 400 })
   try {
-    const rate = Number(ratePerKg) || 0
+    const rateThb = Number(body.ratePerKg) || 0
+    const rateUsd = Number(body.rateUsd) || 0
     const item = await (prisma as any).masterFreightRate.upsert({
       where: { country_bu: { country: String(country).trim(), bu } },
-      update: { ratePerKg: rate, currency },
-      create: { country: String(country).trim(), bu, currency, ratePerKg: rate },
+      update: { ratePerKg: rateThb, rateUsd },
+      create: { country: String(country).trim(), bu, currency: "THB", ratePerKg: rateThb, rateUsd },
     })
-    const recalculated = rate > 0 ? await recalcOpenItems(item.country, rate, bu, currency) : 0
+    const recalculated = await recalcOpenItems(item.country, rateThb, rateUsd, bu)
     await releasePendingRateDocs()
     return NextResponse.json({ ...item, recalculated })
   } catch (e: any) {
@@ -59,25 +58,26 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Recompute Est. Air Freight (grossWeight × rate, in THB) for open items matching this COUNTRY.
-// A USD rate (EA) is converted to THB via the FX rate. A bu-specific rate only recalcs that BU's
-// docs; a shared "ALL" rate recalcs docs of any BU that has NO BU-specific override.
-async function recalcOpenItems(country: string, rate: number, bu: string, currency: string): Promise<number> {
-  const fx = currency === "USD" ? await getFx() : null
-  const rateThb = currency === "USD" ? rate * (fx?.thbPerUsd || 0) : rate
-  if (rateThb <= 0) return 0
+// Recompute Est. Air Freight (grossWeight × rate) for open items of this COUNTRY. EA items use the USD
+// rate (est stored in USD); every other BU uses the THB rate (est in THB). A bu-specific rate only
+// recalcs that BU's docs; a shared "ALL" rate recalcs docs of any BU (that has no BU-specific override).
+async function recalcOpenItems(country: string, rateThb: number, rateUsd: number, bu: string): Promise<number> {
   const affected = await (prisma.airRequestItem as any).findMany({
     where: {
       country: { equals: country, mode: "insensitive" },
       request: { status: { notIn: ["COMPLETED", "REJECTED"] }, ...(bu !== "ALL" ? { bu } : {}) },
     },
-    select: { id: true, grossWeight: true },
+    select: { id: true, grossWeight: true, request: { select: { bu: true } } },
   })
+  let n = 0
   for (const it of affected) {
+    const r = it.request?.bu === "EA" ? rateUsd : rateThb
+    if (r <= 0) continue
     await prisma.airRequestItem.update({
       where: { id: it.id },
-      data: { airFreight: (it.grossWeight || 0) * rateThb, marketRatePerKg: rateThb },
+      data: { airFreight: (it.grossWeight || 0) * r, marketRatePerKg: r },
     })
+    n++
   }
-  return affected.length
+  return n
 }

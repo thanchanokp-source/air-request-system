@@ -74,8 +74,9 @@ model MasterFreightRate {
   id        String   @id @default(cuid())
   country   String
   bu        String   @default("ALL")   // "ALL" = shared across BUs (default); a BU-specific row overrides
-  currency  String   @default("THB")   // rate currency — EA quotes freight in USD
-  ratePerKg Float    @default(0)
+  currency  String   @default("THB")   // legacy — kept for back-compat; rates now use ratePerKg (THB) + rateUsd (USD)
+  ratePerKg Float    @default(0)        // THB per kg (NYG / GW / TRM)
+  rateUsd   Float    @default(0)        // USD per kg (EA) — separate field so a country can hold both
   isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
 
