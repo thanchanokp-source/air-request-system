@@ -173,6 +173,63 @@ export default function LgEntryPage() {
     alert(`ส่งต่อแล้ว ${ready.length} เอกสาร`)
   }
 
+  // Export the SELECTED transactions (cross-document) as the MER-format sheet + SCM claim columns,
+  // with LG's INV NO. / HAWB# / EXPENSE/HAWB (LG-specific header) prefilled — LG fills HAWB + Expense
+  // then imports back.
+  const exportXlsx = async () => {
+    const XLSX = await import("xlsx")
+    const fmtD = (v: any) => { if (!v) return ""; const d = new Date(v); if (isNaN(d.getTime())) return ""; return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}` }
+    const DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
+    const headers = ["No_Document", "CR NO", "Brand name", "BU", "STYLE", "SO", "SUB", "CUSTOMER PO", "DESCRIPTION", "WEIGHT(KG)", "Original Shipment Date", "Plan Shipment Date", "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "Reason delay", "Factory", "Country", "Port", "INV NO.", "HAWB#", "EXPENSE/HAWB", "CLAIM DEPT 1", "%CLAIM1", "ACTUAL AIRFREIGHT1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "ACTUAL AIRFREIGHT2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "ACTUAL AIRFREIGHT3", "REASON 3"]
+    const rows = allLgItems.map((item: any) => {
+      const invNo = soInvMap[item.id] || ""
+      const hawbGrp = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
+      const hawbNo = hawbGrp?.hawbNo || ""
+      const af = hawbGrp && parseFloat(hawbGrp.totalCost) > 0 ? Math.round(liveQty(item) * getHawbCalc(hawbGrp).avgPerUnit * 100) / 100 : (typeof item.actualAirFreight === "number" ? item.actualAirFreight : 0)
+      const d: any[] = Array.isArray(item.claimDepts) && item.claimDepts.length > 0 ? item.claimDepts : []
+      const deptAmt = (pct: any) => (af > 0 && pct) ? Math.round(af * (Number(pct) / 100) * 100) / 100 : ""
+      const isGW = (item.request.bu === "GW")
+      return [
+        item.request.documentNo, (item.request as any).crNo || "", item.request.brandName || "", isGW ? "GW" : (item.request.bu || "NYG"),
+        item.style || "", item.so || "", item.sub || "", item.customerPO || "", item.description || "", item.grossWeight ?? "",
+        fmtD(item.originalShipmentDate), fmtD(item.planShipmentDate), item.qtyOriginalShipment ?? item.qtyRequestAir ?? "", item.qtyRequestAir ?? "",
+        item.reasonDelay || "", item.factory || "", item.country || "", item.port || "",
+        invNo, hawbNo, hawbGrp?.totalCost || "",
+        d[0]?.dept ? (DEPT_LABEL[d[0].dept] || d[0].dept) : "", d[0]?.pct ?? "", deptAmt(d[0]?.pct), d[0]?.reason || "",
+        d[1]?.dept ? (DEPT_LABEL[d[1].dept] || d[1].dept) : "", d[1]?.pct ?? "", deptAmt(d[1]?.pct), d[1]?.reason || "",
+        d[2]?.dept ? (DEPT_LABEL[d[2].dept] || d[2].dept) : "", d[2]?.pct ?? "", deptAmt(d[2]?.pct), d[2]?.reason || "",
+      ]
+    })
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+    ws["!cols"] = [16, 14, 16, 6, 14, 12, 8, 14, 24, 10, 20, 20, 22, 22, 16, 14, 12, 12, 16, 16, 20, 14, 8, 18, 16, 14, 8, 18, 16, 14, 8, 18, 16].map(w => ({ wch: w }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "LG")
+    XLSX.writeFile(wb, `LG_Booking_${allLgItems.length}tx.xlsx`)
+  }
+
+  // Import back: read SO/SUB → INV NO., and HAWB# + EXPENSE/HAWB → rebuild the HAWB groups.
+  const importXlsx = async (file: File) => {
+    const XLSX = await import("xlsx")
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" }) as any[]
+    const updates: Record<string, string> = {}
+    const hawbMap: Record<string, { hawbNo: string; invNos: Set<string>; totalCost: string }> = {}
+    rows.forEach(row => {
+      const soNo = String(row["SO"] || row["SO No."] || "").trim()
+      const subNo = String(row["SUB"] || "").trim()
+      const inv = String(row["INV NO."] || row["Invoice No"] || "").trim()
+      const hawbNo = String(row["HAWB#"] || "").trim()
+      const hawbCost = String(row["EXPENSE/HAWB"] || row["Total HAWB#"] || row["HAWB Total Cost (THB)"] || "").trim()
+      if (!soNo || !inv) return
+      const found = allLgItems.find((i: any) => i.so === soNo && (i.sub || "") === subNo)
+      if (found) updates[found.id] = inv
+      if (hawbNo && inv) { if (!hawbMap[hawbNo]) hawbMap[hawbNo] = { hawbNo, invNos: new Set(), totalCost: hawbCost }; hawbMap[hawbNo].invNos.add(inv) }
+    })
+    if (Object.keys(updates).length > 0) setSoInvMap(p => ({ ...p, ...updates }))
+    if (Object.keys(hawbMap).length > 0) setHawbGroups(Object.values(hawbMap).map(h => ({ id: Math.random().toString(36).slice(2), hawbNo: h.hawbNo, bookingDate: "", totalCost: h.totalCost, invNos: [...h.invNos] })))
+    alert(`Import: อัปเดต INV ${Object.keys(updates).length} SO · HAWB ${Object.keys(hawbMap).length} กลุ่ม`)
+  }
+
   const deleteAtt = async (attId: string) => {
     if (!confirm("ลบไฟล์นี้?")) return
     setSaving(true)
@@ -241,6 +298,10 @@ export default function LgEntryPage() {
               <p className="text-xs text-orange-500 mt-0.5">① กรอก QTY/Ship Date → ② แนบไฟล์ → ③ ใส่ INV → ④ จัด HAWB (Total Cost → generate Actual)</p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={exportXlsx} disabled={saving} className="bg-white border border-orange-300 text-orange-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-50 disabled:opacity-50">⬇ Export</button>
+              <label className={`bg-white border border-orange-300 text-orange-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-50 cursor-pointer ${saving ? "opacity-50 pointer-events-none" : ""}`}>⬆ Import
+                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
+              </label>
               <button onClick={() => setFwOpen(true)} disabled={saving} className="bg-white border border-blue-300 text-blue-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50">↪ Forward</button>
               <button onClick={saveDraft} disabled={saving} className="bg-white border border-gray-300 text-gray-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">Save Draft</button>
               <button onClick={send} disabled={saving} className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50">Send →</button>
