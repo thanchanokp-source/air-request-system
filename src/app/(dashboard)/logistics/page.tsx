@@ -26,6 +26,28 @@ export default function LgBookingPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [openBrands, setOpenBrands] = useState<Set<string>>(new Set())
   const toggleBrand = (b: string) => setOpenBrands(p => { const n = new Set(p); n.has(b) ? n.delete(b) : n.add(b); return n })
+  const [noAir, setNoAir] = useState<{ reqId: string; docNo: string; ids: string[] } | null>(null)
+  const [noAirReason, setNoAirReason] = useState("No air")
+  const [sending, setSending] = useState(false)
+
+  const openNoAir = (req: any, docIds: string[]) => {
+    const ids = docIds.filter(id => selected.has(id))
+    if (ids.length === 0) { alert("ติ๊กเลือก SO ที่ไม่ได้ air ในเอกสารนี้ก่อน"); return }
+    setNoAirReason("No air"); setNoAir({ reqId: req.id, docNo: req.documentNo, ids })
+  }
+  const doNoAir = async () => {
+    if (!noAir || !noAirReason.trim()) return
+    setSending(true)
+    for (const id of noAir.ids) {
+      await fetch(`/api/requests/${noAir.reqId}/approve`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "lg_reject_so", itemId: id, comment: noAirReason.trim() }),
+      }).catch(() => {})
+    }
+    setSelected(p => { const n = new Set(p); noAir!.ids.forEach(id => n.delete(id)); return n })
+    setNoAir(null); setSending(false)
+    const d = await fetch("/api/requests").then(r => r.json()); setRequests(Array.isArray(d) ? d : [])
+  }
 
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => { setRequests(Array.isArray(d) ? d : []); setLoading(false) })
@@ -158,6 +180,13 @@ export default function LgBookingPage() {
                           </tbody>
                         </table>
                       </div>
+                      {/* No air — send back the ticked SOs of THIS document */}
+                      <div className="px-4 py-2 border-t border-gray-100 flex justify-end">
+                        <button onClick={() => openNoAir(req, docIds)}
+                          className="text-xs text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 font-medium">
+                          ✕ No air — ส่งกลับ SO ที่เลือก
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
@@ -175,6 +204,24 @@ export default function LgBookingPage() {
           <button onClick={openSelected} className="ml-auto bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700">
             เปิดทำงาน {selected.size} transaction →
           </button>
+        </div>
+      )}
+
+      {/* No air modal */}
+      {noAir && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="bg-red-600 text-white px-5 py-3 font-semibold text-sm">No air — ส่งกลับ {noAir.ids.length} SO</div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-gray-500">{noAir.docNo} · {noAir.ids.length} SO ที่เลือก — ยืนยันว่าไม่ได้ air จริง? ระบบจะส่งกลับก่อน claim (แจ้ง MER/SCM)</p>
+              <textarea value={noAirReason} onChange={e => setNoAirReason(e.target.value)} rows={3} placeholder="เหตุผล (เช่น No air / ไม่ได้ ship air)"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
+              <div className="flex gap-2">
+                <button onClick={() => setNoAir(null)} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">ยกเลิก</button>
+                <button onClick={doNoAir} disabled={!noAirReason.trim() || sending} className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">{sending ? "..." : "ยืนยัน No air"}</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
