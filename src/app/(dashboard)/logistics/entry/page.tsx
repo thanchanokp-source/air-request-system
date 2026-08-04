@@ -31,8 +31,6 @@ export default function LgEntryPage() {
   const [lgQuickInv, setLgQuickInv] = useState("")
   const [lgQuickSo, setLgQuickSo] = useState("")
   const [lgSelectedSoIds, setLgSelectedSoIds] = useState<Set<string>>(new Set())
-  const [lgRejectId, setLgRejectId] = useState<string | null>(null)
-  const [lgRejectReason, setLgRejectReason] = useState("")
   const [prefilled, setPrefilled] = useState(false)
 
   // Forward
@@ -186,16 +184,6 @@ export default function LgEntryPage() {
     await load(); setSaving(false)
   }
 
-  const lgRejectSo = async (itemId: string, reqId: string) => {
-    setSaving(true)
-    const res = await fetch(`/api/requests/${reqId}/approve`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "lg_reject_so", itemId, comment: lgRejectReason.trim() }),
-    })
-    if (res.ok) { setLgRejectId(null); setLgRejectReason(""); await load() } else alert("Send back ไม่สำเร็จ")
-    setSaving(false)
-  }
-
   const forward = async () => {
     const t = fwTargets.find(x => x.email === fwTo)
     if (!t) { alert("เลือกผู้รับก่อน"); return }
@@ -257,7 +245,7 @@ export default function LgEntryPage() {
               <table className="w-full text-xs">
                 <thead className="bg-gray-50"><tr>
                   <th className="px-2 py-1 text-left">DOC</th><th className="px-2 py-1 text-left">SO</th><th className="px-2 py-1 text-left">STYLE</th>
-                  <th className="px-2 py-1 text-right">QTY Air</th><th className="px-2 py-1 text-left">Plan Ship Date</th><th className="px-2 py-1 text-center">Send back</th>
+                  <th className="px-2 py-1 text-right">QTY Air</th><th className="px-2 py-1 text-left">Plan Ship Date</th>
                 </tr></thead>
                 <tbody>
                   {allLgItems.map((it: any) => {
@@ -276,17 +264,6 @@ export default function LgEntryPage() {
                           <input type="date" className="border border-gray-300 rounded px-2 py-1"
                             value={soShipData[it.id]?.date ?? toDateInput(it.planShipmentDate)}
                             onChange={e => setSoShipData(p => ({ ...p, [it.id]: { ...p[it.id], date: e.target.value } }))} />
-                        </td>
-                        <td className="px-2 py-1 text-center">
-                          {lgRejectId === it.id ? (
-                            <div className="flex items-center gap-1">
-                              <input autoFocus placeholder="เหตุผล" value={lgRejectReason} onChange={e => setLgRejectReason(e.target.value)} className="w-48 border border-red-300 rounded px-2 py-1" />
-                              <button onClick={() => lgRejectSo(it.id, it.request.id)} disabled={!lgRejectReason.trim()} className="px-2 py-1 bg-red-600 text-white rounded disabled:opacity-50">OK</button>
-                              <button onClick={() => { setLgRejectId(null); setLgRejectReason("") }} className="px-2 py-1 bg-gray-100 text-gray-600 rounded">✕</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => { setLgRejectId(it.id); setLgRejectReason("") }} className="px-2 py-0.5 text-red-600 border border-red-200 rounded hover:bg-red-50">✕ Send back</button>
-                          )}
                         </td>
                       </tr>
                     )
