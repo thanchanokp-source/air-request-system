@@ -9,7 +9,8 @@ import { sendVerificationEmail } from "@/lib/notify"
 // MER_GW (not MER_USER, which is NYG). Getting this wrong makes a GW user register as NYG.
 function resolveRole(position: string, bu: string): string | null {
   if (position === "ACCOUNTING") return "ACCOUNTING" // cross-BU (both NYG & GW)
-  if (position === "MER") return bu === "GW" ? "MER_GW" : bu === "EA" ? "MER_EA" : bu === "TRM" ? "MER_TRM" : "MER_USER"
+  // "DPM Merchandise" behaves exactly like Merchandise → same BU-based MER role.
+  if (position === "MER" || position === "DPM_MER") return bu === "GW" ? "MER_GW" : bu === "EA" ? "MER_EA" : bu === "TRM" ? "MER_TRM" : "MER_USER"
   if (position === "VISITOR") return "VISITOR" // read-only viewer (all BU, no actions)
   return null
 }

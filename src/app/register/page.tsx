@@ -6,6 +6,7 @@ import Image from "next/image"
 
 const POSITIONS = [
   { value: "MER", label: "Merchandise" },
+  { value: "DPM_MER", label: "DPM Merchandise" }, // same role/behaviour as Merchandise (MER)
   { value: "ACCOUNTING", label: "ACCOUNTING" },
   { value: "VISITOR", label: "Visitor (view only)" },
 ]
