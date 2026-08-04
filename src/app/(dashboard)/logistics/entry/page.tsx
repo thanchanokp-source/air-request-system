@@ -167,7 +167,7 @@ export default function LgEntryPage() {
 
   const send = async () => {
     const ready = involvedReqIds.filter(docComplete)
-    if (ready.length === 0) { alert("ยังไม่มีเอกสารพร้อมส่ง — SO ที่คำนวณต้องอยู่ใน HAWB (มี HAWB No), มี Ship Date, Booking Date และแนบไฟล์ ≥1"); return }
+    if (ready.length === 0) { alert("ยังไม่มีเอกสารพร้อมส่ง — SO ที่คำนวณต้องอยู่ใน HAWB (มี HAWB No), มี Ship Date และ Booking Date ครบ"); return }
     if (!confirm(`ส่งต่อ ${ready.length} เอกสารที่พร้อม? (ที่เหลือบันทึกเป็นร่าง)`)) return
     setSaving(true); await persist(new Set(ready)); await load(); setSaving(false)
     alert(`ส่งต่อแล้ว ${ready.length} เอกสาร`)
@@ -181,10 +181,22 @@ export default function LgEntryPage() {
     const fmtD = (v: any) => { if (!v) return ""; const d = new Date(v); if (isNaN(d.getTime())) return ""; return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}` }
     const DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
     // Port + CR NO removed. Header colours by role part: MER = blue, LG = orange, Claim/SCM = green.
-    const headers = ["No_Document", "Brand name", "BU", "STYLE", "SO", "SUB", "CUSTOMER PO", "DESCRIPTION", "WEIGHT(KG)", "Original Shipment Date", "Plan Shipment Date", "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "Factory", "Country", "INV NO.", "HAWB#", "EXPENSE/HAWB", "CLAIM DEPT 1", "%CLAIM1", "ACTUAL AIRFREIGHT1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "ACTUAL AIRFREIGHT2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "ACTUAL AIRFREIGHT3", "REASON 3"]
-    const widths = [16, 16, 6, 14, 12, 8, 14, 24, 10, 20, 20, 20, 20, 14, 12, 16, 16, 18, 14, 8, 16, 16, 14, 8, 16, 16, 14, 8, 16, 16]
-    const MER_C = "FFDDEBF7", LG_C = "FFFCE4D6", CLAIM_C = "FFE2EFDA" // blue / orange / green (LG = INV/HAWB#/EXPENSE cols 15-17)
-    const colorOf = (i: number) => (i >= 15 && i <= 17) ? LG_C : (i >= 18 ? CLAIM_C : MER_C)
+    // GW's header differs when it reaches LG: LG column is "Actual Airfreight" (not EXPENSE/HAWB) and
+    // its claim block has no per-dept ACTUAL AIRFREIGHTn. Pick the header set by the selection's BU.
+    const isGwExport = allLgItems.length > 0 && allLgItems.every((i: any) => i.request.bu === "GW")
+    const mixed = allLgItems.some((i: any) => i.request.bu === "GW") && allLgItems.some((i: any) => i.request.bu !== "GW")
+    if (mixed && !confirm("เลือกปน GW กับ BU อื่น — จะ export ด้วยหัวแบบ NYG (EXPENSE/HAWB). ดำเนินการต่อ?")) return
+    const base = ["No_Document", "Brand name", "BU", "STYLE", "SO", "SUB", "CUSTOMER PO", "DESCRIPTION", "WEIGHT(KG)", "Original Shipment Date", "Plan Shipment Date", "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "Factory", "Country"]
+    const baseW = [16, 16, 6, 14, 12, 8, 14, 24, 10, 20, 20, 20, 20, 14, 12]
+    const headers = isGwExport
+      ? [...base, "INV NO.", "Actual Airfreight", "HAWB#", "CLAIM DEPT 1", "%CLAIM1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "REASON 3"]
+      : [...base, "INV NO.", "HAWB#", "EXPENSE/HAWB", "CLAIM DEPT 1", "%CLAIM1", "ACTUAL AIRFREIGHT1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "ACTUAL AIRFREIGHT2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "ACTUAL AIRFREIGHT3", "REASON 3"]
+    const widths = isGwExport
+      ? [...baseW, 16, 18, 16, 14, 8, 16, 14, 8, 16, 14, 8, 16]
+      : [...baseW, 16, 16, 18, 14, 8, 16, 16, 14, 8, 16, 16, 14, 8, 16, 16]
+    const MER_C = "FFDDEBF7", LG_C = "FFFCE4D6", CLAIM_C = "FFE2EFDA" // blue / orange / green
+    const lgStart = base.length, lgEnd = base.length + 2 // LG occupies 3 columns after the base block
+    const colorOf = (i: number) => (i >= lgStart && i <= lgEnd) ? LG_C : (i > lgEnd ? CLAIM_C : MER_C)
 
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet("LG")
@@ -204,20 +216,23 @@ export default function LgEntryPage() {
       const invNo = soInvMap[item.id] || ""
       const hawbGrp = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
       const hawbNo = hawbGrp?.hawbNo || ""
+      const total = hawbGrp?.totalCost || ""
       const af = hawbGrp && parseFloat(hawbGrp.totalCost) > 0 ? Math.round(liveQty(item) * getHawbCalc(hawbGrp).avgPerUnit * 100) / 100 : (typeof item.actualAirFreight === "number" ? item.actualAirFreight : 0)
       const d: any[] = Array.isArray(item.claimDepts) && item.claimDepts.length > 0 ? item.claimDepts : []
       const deptAmt = (pct: any) => (af > 0 && pct) ? Math.round(af * (Number(pct) / 100) * 100) / 100 : ""
+      const dept = (x: any) => x?.dept ? (DEPT_LABEL[x.dept] || x.dept) : ""
+      // Delay reason = Delay Code + its Detail (both surfaced in the REASON column).
+      const reason = (x: any) => [x?.reason, x?.reasonDetail].filter(Boolean).join(" - ")
       const isGW = (item.request.bu === "GW")
-      ws.addRow([
+      const baseRow = [
         item.request.documentNo, item.request.brandName || "", isGW ? "GW" : (item.request.bu || "NYG"),
         item.style || "", item.so || "", item.sub || "", item.customerPO || "", item.description || "", item.grossWeight ?? "",
         fmtD(item.originalShipmentDate), fmtD(item.planShipmentDate), item.qtyOriginalShipment ?? item.qtyRequestAir ?? "", item.qtyRequestAir ?? "",
         item.factory || "", item.country || "",
-        invNo, hawbNo, hawbGrp?.totalCost || "",
-        d[0]?.dept ? (DEPT_LABEL[d[0].dept] || d[0].dept) : "", d[0]?.pct ?? "", deptAmt(d[0]?.pct), d[0]?.reason || "",
-        d[1]?.dept ? (DEPT_LABEL[d[1].dept] || d[1].dept) : "", d[1]?.pct ?? "", deptAmt(d[1]?.pct), d[1]?.reason || "",
-        d[2]?.dept ? (DEPT_LABEL[d[2].dept] || d[2].dept) : "", d[2]?.pct ?? "", deptAmt(d[2]?.pct), d[2]?.reason || "",
-      ])
+      ]
+      ws.addRow(isGwExport
+        ? [...baseRow, invNo, total, hawbNo, dept(d[0]), d[0]?.pct ?? "", reason(d[0]), dept(d[1]), d[1]?.pct ?? "", reason(d[1]), dept(d[2]), d[2]?.pct ?? "", reason(d[2])]
+        : [...baseRow, invNo, hawbNo, total, dept(d[0]), d[0]?.pct ?? "", deptAmt(d[0]?.pct), reason(d[0]), dept(d[1]), d[1]?.pct ?? "", deptAmt(d[1]?.pct), reason(d[1]), dept(d[2]), d[2]?.pct ?? "", deptAmt(d[2]?.pct), reason(d[2])])
     })
 
     const buf = await wb.xlsx.writeBuffer()
@@ -239,7 +254,7 @@ export default function LgEntryPage() {
       const subNo = String(row["SUB"] || "").trim()
       const inv = String(row["INV NO."] || row["Invoice No"] || "").trim()
       const hawbNo = String(row["HAWB#"] || "").trim()
-      const hawbCost = String(row["EXPENSE/HAWB"] || row["Total HAWB#"] || row["HAWB Total Cost (THB)"] || "").trim()
+      const hawbCost = String(row["EXPENSE/HAWB"] || row["Actual Airfreight"] || row["Total HAWB#"] || row["HAWB Total Cost (THB)"] || "").trim()
       if (!soNo || !inv) return
       const found = allLgItems.find((i: any) => i.so === soNo && (i.sub || "") === subNo)
       if (found) updates[found.id] = inv
