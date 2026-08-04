@@ -478,6 +478,7 @@ export default function UsersPage() {
             </optgroup>
             <optgroup label="── General">
               <option value="MER_USER">Merchandise User (NYG)</option>
+              <option value="MER_USER">DPM Merchandise (NYG)</option>{/* same MER_USER role/behaviour — matches the signup option */}
               <option value="MER_GW">Merchandise (GW)</option>
               <option value="ADMIN">Admin</option>
             </optgroup>
