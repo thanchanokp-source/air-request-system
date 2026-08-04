@@ -175,12 +175,15 @@ export default function LgEntryPage() {
     alert(`ส่งต่อแล้ว ${ready.length} เอกสาร`)
   }
 
-  const uploadLgFile = async (file: File, category: string, reqId: string) => {
+  // One attach action → attaches the file to EVERY selected document (so each doc satisfies the
+  // "≥1 file before Send" rule without LG having to upload document by document).
+  const uploadLgFileAll = async (file: File, category: string) => {
     setSaving(true)
-    const form = new FormData(); form.append("file", file); form.append("category", category)
-    const res = await fetch(`/api/requests/${reqId}/attachments`, { method: "POST", body: form })
-    if (res.ok) await load(); else alert("อัปโหลดไฟล์ไม่สำเร็จ")
-    setSaving(false)
+    for (const reqId of involvedReqIds) {
+      const form = new FormData(); form.append("file", file); form.append("category", category)
+      await fetch(`/api/requests/${reqId}/attachments`, { method: "POST", body: form }).catch(() => {})
+    }
+    await load(); setSaving(false)
   }
 
   const lgRejectSo = async (itemId: string, reqId: string) => {
@@ -293,30 +296,33 @@ export default function LgEntryPage() {
             </div>
           </div>
 
-          {/* ② Attach files — per document */}
-          <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
-            <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(ต่อเอกสาร · ต้องมี ≥1 ไฟล์ก่อน Send)</span></p>
-            <div className="space-y-2">
-              {involvedReqIds.map(reqId => {
-                const r = docMap[reqId]
-                const cnt = lgFileCount(r)
-                return (
-                  <div key={reqId} className="flex items-center gap-3 flex-wrap border border-gray-100 rounded-lg px-3 py-2">
-                    <Link href={`/requests/${reqId}`} className="text-xs font-medium text-blue-600 hover:underline">{r?.documentNo}</Link>
-                    {cnt > 0 ? <span className="text-[11px] text-green-600">✓ {cnt} file(s)</span> : <span className="text-[11px] text-red-500">* need ≥1</span>}
-                    <div className="ml-auto flex items-center gap-1.5">
-                      {["INV", "AWB", "EXPENSE", "COMBINE"].map(cat => (
-                        <label key={cat} className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer">
-                          +{cat}
-                          <input type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadLgFile(f, cat, reqId) }} />
-                        </label>
-                      ))}
-                    </div>
+          {/* ② Attach files — one attach, applied to every selected document */}
+          {(() => {
+            const allHaveFile = involvedReqIds.every(id => lgFileCount(docMap[id]) > 0)
+            const missing = involvedReqIds.filter(id => lgFileCount(docMap[id]) === 0).length
+            return (
+              <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(แนบครั้งเดียว ใช้กับทุกเอกสารที่เลือก · ต้องมี ≥1)</span></p>
+                  {allHaveFile ? <span className="text-[11px] text-green-600">✓ แนบครบทุกเอกสาร</span> : <span className="text-[11px] text-red-500">* ยังขาด {missing} เอกสาร</span>}
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {["INV", "AWB", "EXPENSE", "COMBINE"].map(cat => (
+                      <label key={cat} className="text-[11px] px-2.5 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer">
+                        +{cat}
+                        <input type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadLgFileAll(f, cat) }} />
+                      </label>
+                    ))}
                   </div>
-                )
-              })}
-            </div>
-          </div>
+                </div>
+                {/* Files already on the selected documents */}
+                <div className="flex flex-wrap gap-2">
+                  {involvedReqIds.flatMap(id => (docMap[id]?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).map((a: any) => (
+                    <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline bg-blue-50 border border-blue-100 rounded px-2 py-0.5">📎 {a.category} · {a.fileName}</a>
+                  )))}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* ③ INV assignment */}
           <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
