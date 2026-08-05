@@ -14,7 +14,8 @@ model User {
   name             String?
   email            String    @unique
   password         String?
-  role             String    @default("MER_USER")   // primary role (login/session)
+  role             String    @default("MER_USER")   // primary role (login/session) — drives permissions
+  title            String?                            // display-only position label (e.g. "DPM Merchandise"); overrides the role label in the UI, permissions still follow `role`
   roles            String[]  @default([])            // all roles this person holds (incl. primary) — 1 person, many positions
   claimDepartment  String?
   isActive         Boolean   @default(true)

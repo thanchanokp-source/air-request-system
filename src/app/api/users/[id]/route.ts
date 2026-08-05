@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const { id } = await params
   try {
-    const { name, email, password, role, roles, bu, isActive, priority, claimDepartment, procurementType } = await req.json()
+    const { name, email, password, role, title, roles, bu, isActive, priority, claimDepartment, procurementType } = await req.json()
     const emailLc = String(email || "").toLowerCase().trim()
     // Guard: email is unique. If another user already owns this email, reject clearly
     // (to give ONE person several roles, don't create/rename to a shared email — use the
@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     // GW-only roles always belong to BU "GW". SCM_NYK* exist in BOTH BU → bu from form.
     const isGwOnlyRole = role.endsWith("_GW") || role.startsWith("SCM_NYG")
-    const data: any = { name, email: emailLc, role, bu: isGwOnlyRole ? "GW" : (bu || "NYG"), isActive, priority: priority ?? null }
+    const data: any = { name, email: emailLc, role, title: title ?? null, bu: isGwOnlyRole ? "GW" : (bu || "NYG"), isActive, priority: priority ?? null }
     // Keep the multi-role list: use an explicit `roles` if sent, else preserve the
     // person's existing extra roles and just ensure the primary role is included.
     const existing = await (prisma.user as any).findUnique({ where: { id }, select: { roles: true } })

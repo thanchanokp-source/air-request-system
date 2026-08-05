@@ -10,7 +10,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const users = await (prisma.user as any).findMany({
     orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, email: true, role: true, roles: true, bu: true, claimDepartment: true, procurementType: true, isActive: true, priority: true, createdAt: true }
+    select: { id: true, name: true, email: true, role: true, title: true, roles: true, bu: true, claimDepartment: true, procurementType: true, isActive: true, priority: true, createdAt: true }
   })
   return NextResponse.json(users)
 }
@@ -18,7 +18,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const { name, email, role, bu, claimDepartment, priority, procurementType, sendEmail } = await req.json()
+  const { name, email, role, title, bu, claimDepartment, priority, procurementType, sendEmail } = await req.json()
   if (!email || !role) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
 
   const token = crypto.randomUUID()
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     const user = await (prisma.user as any).create({
       data: {
         name, email: emailLc, password: null,
-        role, roles: [role], bu: resolvedBu,
+        role, roles: [role], bu: resolvedBu, title: title ?? null,
         claimDepartment: ["CLAIM_GW", "SCM_NYK", "SCM_NYG", "CLAIM_PRODUCTION", "VP_PRODUCTION"].includes(role) ? (claimDepartment || null) : null,
         procurementType: isProcurement ? (procurementType || null) : null,
         priority: priority ?? null,

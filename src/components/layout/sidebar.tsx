@@ -64,7 +64,7 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
           </Link>
         ))}
       </nav>
-      <div className="p-3 text-xs border-t" style={{borderColor:"#8b2a2a",color:"#e8b0b0"}}>{ROLE_LABEL[role] || role}</div>
+      <div className="p-3 text-xs border-t" style={{borderColor:"#8b2a2a",color:"#e8b0b0"}}>{(session?.user as any)?.title || ROLE_LABEL[role] || role}</div>
     </div>
   )
 }

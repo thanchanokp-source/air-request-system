@@ -19,6 +19,7 @@ const ROLE_LABEL: Record<string, string> = {
 }
 
 function roleLabel(user: any): string {
+  if (user?.title) return user.title   // display-only position label (e.g. "DPM Merchandise")
   if (user?.role === "CLAIM_NEXT_APPROVER") {
     const d = user?.claimDepartment
     return d ? `Claim — ${deptLabel(d)}` : "Claim Approver"

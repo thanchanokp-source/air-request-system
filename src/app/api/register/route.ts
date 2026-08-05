@@ -67,6 +67,8 @@ export async function POST(req: NextRequest) {
       email: normalEmail,
       password: hashed,
       role, bu,
+      // "DPM Merchandise" behaves as MER but shows a distinct display label.
+      ...(position === "DPM_MER" ? { title: "DPM Merchandise" } : {}),
       isActive: false,
       resetToken: token,
       resetTokenExpiry: expiry,

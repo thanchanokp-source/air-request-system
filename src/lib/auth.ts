@@ -224,6 +224,12 @@ export const authOptions: NextAuthOptions = {
         token.claimDepartment = (user as any).claimDepartment
         token.priority = (user as any).priority ?? null
         if ((user as any).claimNextToken) token.claimNextToken = (user as any).claimNextToken
+        // Display-only position label (e.g. "DPM Merchandise"); permissions still follow `role`.
+        ;(token as any).title = null
+        if (user.id && !String(user.id).includes("guest")) {
+          const dbu = await (prisma.user as any).findUnique({ where: { id: user.id }, select: { title: true } }).catch(() => null)
+          ;(token as any).title = dbu?.title ?? null
+        }
       }
       return token
     },
@@ -236,6 +242,7 @@ export const authOptions: NextAuthOptions = {
         ;(session.user as any).claimDepartment = token.claimDepartment
         ;(session.user as any).priority = token.priority ?? null
         ;(session.user as any).claimNextToken = (token as any).claimNextToken ?? null
+        ;(session.user as any).title = (token as any).title ?? null
       }
       return session
     }

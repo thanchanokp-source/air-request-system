@@ -291,7 +291,9 @@ export default function UsersPage() {
     const nygPos = u.role === "CLAIM_GW" && u.claimDepartment === "NYG"
       ? CLAIM_GW_NYG_POSITIONS.find(p => p.priority === u.priority)?.label || ""
       : ""
-    setForm({ name: u.name || "", email: u.email, role: u.role, bu: u.bu || "NYG",
+    // A "DPM Merchandise" person is stored as MER_USER + title; surface it as the DPM_MER option.
+    const formRole = (u.role === "MER_USER" && u.title === "DPM Merchandise") ? "DPM_MER" : u.role
+    setForm({ name: u.name || "", email: u.email, role: formRole, bu: u.bu || "NYG",
       priority: u.priority != null ? String(u.priority) : "", claimDepartment: u.claimDepartment || "", nygPosition: nygPos,
       procurementType: u.procurementType || "", sendEmail: false })
     setError("")
@@ -303,8 +305,12 @@ export default function UsersPage() {
     setSaveStatus("saving"); setSaveMsg("")
     const url = editId ? `/api/users/${editId}` : "/api/users"
     const method = editId ? "PATCH" : "POST"
+    // "DPM Merchandise" = MER_USER role + a display-only title; every other role clears the title.
+    const isDpm = form.role === "DPM_MER"
     const payload = {
       ...form,
+      role: isDpm ? "MER_USER" : form.role,
+      title: isDpm ? "DPM Merchandise" : null,
       priority: form.priority !== "" ? parseInt(form.priority) : null,
       claimDepartment: form.claimDepartment || null,
       procurementType: form.procurementType || null,
@@ -478,7 +484,7 @@ export default function UsersPage() {
             </optgroup>
             <optgroup label="── General">
               <option value="MER_USER">Merchandise User (NYG)</option>
-              <option value="MER_USER">DPM Merchandise (NYG)</option>{/* same MER_USER role/behaviour — matches the signup option */}
+              <option value="DPM_MER">DPM Merchandise (NYG)</option>{/* stored as MER_USER + a "DPM Merchandise" display title */}
               <option value="MER_GW">Merchandise (GW)</option>
               <option value="ADMIN">Admin</option>
             </optgroup>
