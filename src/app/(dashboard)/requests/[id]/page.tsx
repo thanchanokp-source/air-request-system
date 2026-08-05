@@ -1429,6 +1429,15 @@ export default function RequestDetailPage() {
     setSubmitting(null)
   }
 
+  // Delete the whole document (only allowed at Merchandise after a recall — enforced server-side too).
+  const deleteRequest = async () => {
+    if (!confirm(`ลบเอกสาร ${req?.documentNo} ทั้งหมด?\nการลบนี้ย้อนกลับไม่ได้ (SO / ไฟล์แนบ / ประวัติ ทั้งหมดจะถูกลบ)`)) return
+    setSubmitting("_del")
+    const res = await fetch(`/api/requests/${id}`, { method: "DELETE" })
+    if (res.ok) { router.push("/requests") }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "ลบไม่สำเร็จ"); setSubmitting(null) }
+  }
+
   // NYG/EA: SCM sends the whole document back to the MER who uploaded it, with a reason (+ emails MER).
   const backToMerNyg = async () => {
     if (!backToMerReason.trim()) return
@@ -3993,10 +4002,16 @@ export default function RequestDetailPage() {
           {renderEditTable(true)}
           {renderReupload(true)}
           {renderExtraAttach()}
-          <button onClick={resubmitMerGw} disabled={submitting === "_" || Object.keys(editRows).length > 0}
-            className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
-            {submitting === "_" ? "..." : "Re-submit to DPM"}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={resubmitMerGw} disabled={submitting === "_" || Object.keys(editRows).length > 0}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
+              {submitting === "_" ? "..." : "Re-submit to DPM"}
+            </button>
+            <button onClick={deleteRequest} disabled={submitting === "_del"}
+              className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-50 disabled:opacity-50">
+              {submitting === "_del" ? "..." : "🗑 Delete document"}
+            </button>
+          </div>
           {Object.keys(editRows).length > 0 && <p className="text-[11px] text-orange-600">กด “Save changes” ก่อน แล้วจึง Re-submit</p>}
         </div>
       )}
@@ -4017,10 +4032,16 @@ export default function RequestDetailPage() {
           {renderEditTable(false)}
           {renderReupload(false)}
           {renderExtraAttach()}
-          <button onClick={resubmitMerNyg} disabled={submitting === "_" || Object.keys(editRows).length > 0}
-            className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
-            {submitting === "_" ? "..." : "Re-submit"}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={resubmitMerNyg} disabled={submitting === "_" || Object.keys(editRows).length > 0}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
+              {submitting === "_" ? "..." : "Re-submit"}
+            </button>
+            <button onClick={deleteRequest} disabled={submitting === "_del"}
+              className="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-50 disabled:opacity-50">
+              {submitting === "_del" ? "..." : "🗑 Delete document"}
+            </button>
+          </div>
           {Object.keys(editRows).length > 0 && <p className="text-[11px] text-orange-600">กด “Save changes” ก่อน แล้วจึง Re-submit</p>}
         </div>
       )}

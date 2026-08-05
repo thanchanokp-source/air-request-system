@@ -39,7 +39,23 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
   const request = await prisma.airRequest.findUnique({ where: { id } })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
-  return NextResponse.json({ error: "Deleting a Document is not allowed. Please have the VP Merchandise Reject it instead" }, { status: 403 })
+  const email = String((session.user as any).email || "").toLowerCase()
+  const isAdmin = role === "ADMIN" || email === "jariya.t@nanyangtextile.com"
+  const isCreator = request.createdById === userId
+  // Only deletable while the doc is back at Merchandise (recalled / sent back), by the uploader or admin.
+  // Anywhere else in the flow → must be Rejected by an approver instead.
+  const atMerchandise = ["PENDING_MER", "PENDING_MER_GW", "DRAFT"].includes(request.status)
+  if (!(atMerchandise && (isCreator || isAdmin))) {
+    return NextResponse.json({ error: "Delete is only allowed at Merchandise (after a recall) by the uploader or admin. Otherwise please have the approver Reject it." }, { status: 403 })
+  }
+  // Remove all children first so the delete never hits a foreign-key constraint.
+  await (prisma as any).claimApproval.deleteMany({ where: { item: { requestId: id } } }).catch(() => {})
+  await (prisma as any).hawbGroup.deleteMany({ where: { requestId: id } }).catch(() => {})
+  await (prisma as any).approvalSignature.deleteMany({ where: { requestId: id } }).catch(() => {})
+  await (prisma as any).claimForward.deleteMany({ where: { requestId: id } }).catch(() => {})
+  await (prisma as any).requestAttachment.deleteMany({ where: { requestId: id } }).catch(() => {})
+  await (prisma as any).approvalLog.deleteMany({ where: { requestId: id } }).catch(() => {})
+  await (prisma as any).airRequestItem.deleteMany({ where: { requestId: id } }).catch(() => {})
   await prisma.airRequest.delete({ where: { id } })
   return NextResponse.json({ ok: true })
 }
