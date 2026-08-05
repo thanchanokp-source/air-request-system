@@ -1649,6 +1649,30 @@ export default function RequestDetailPage() {
     </div>
   )
 
+  // On resubmit, MER can also attach extra supporting documents (doc-level attachments).
+  const renderExtraAttach = () => {
+    const docAtts = (req?.attachments || []).filter((a: any) => !a.itemId)
+    return (
+      <div className="border border-blue-200 rounded-lg p-3 space-y-2 bg-blue-50/40">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-xs font-semibold text-blue-800">แนบไฟล์เพิ่มเติม (เอกสารประกอบ) <span className="font-normal text-gray-500">— แนบได้หลายไฟล์</span></p>
+          <label className={`text-xs px-3 py-1.5 rounded-lg border font-medium cursor-pointer ${uploadingItem === "_req" ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "bg-white border-blue-300 text-blue-600 hover:bg-blue-50"}`}>
+            {uploadingItem === "_req" ? "Uploading..." : "＋ แนบไฟล์"}
+            <input type="file" multiple className="hidden" disabled={uploadingItem === "_req"}
+              onChange={async e => { const fs = Array.from(e.target.files || []); e.target.value = ""; for (const f of fs) await attachFileFn(f) }} />
+          </label>
+        </div>
+        {docAtts.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {docAtts.map((a: any) => (
+              <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline bg-white border border-blue-100 rounded px-2 py-0.5 truncate max-w-[240px]">📎 {a.fileName}</a>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // Ask the SERVER for the original uploaded file + injected claim-dept dropdown, named
   // SCM_<documentNo>.xlsx. Same-origin fetch (no CORS) → we read the blob and force a download.
   // Returns true if downloaded; false → caller should fall back to generating a sheet.
@@ -3968,6 +3992,7 @@ export default function RequestDetailPage() {
           )}
           {renderEditTable(true)}
           {renderReupload(true)}
+          {renderExtraAttach()}
           <button onClick={resubmitMerGw} disabled={submitting === "_" || Object.keys(editRows).length > 0}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
             {submitting === "_" ? "..." : "Re-submit to DPM"}
@@ -3991,6 +4016,7 @@ export default function RequestDetailPage() {
           )}
           {renderEditTable(false)}
           {renderReupload(false)}
+          {renderExtraAttach()}
           <button onClick={resubmitMerNyg} disabled={submitting === "_" || Object.keys(editRows).length > 0}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
             {submitting === "_" ? "..." : "Re-submit"}
