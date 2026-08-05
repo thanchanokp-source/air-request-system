@@ -300,7 +300,7 @@ export default function RequestsPage() {
 
   const curUnit = isEaBu ? "USD" : "THB"
   const SO_COLS = [
-    ["SO",""],["BU",""],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
+    ["SO",""],["BU",""],["BRAND","min-w-[90px]"],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
     [`EST. AIR FREIGHT (${curUnit})`,"min-w-[120px]"],[`ACTUAL AIR FREIGHT (${curUnit})`,"min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],
@@ -581,6 +581,7 @@ export default function RequestsPage() {
                                   <tr className={`hover:bg-blue-50/30 ${row.itemStatus === "REJECTED" ? "opacity-50" : ""}`}>
                                     <td className="px-3 py-2 font-medium whitespace-nowrap">{row.so}</td>
                                     <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-600">{row.request.bu || row.request.buName || "-"}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">{row.brand || row.request.brandName || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.customerPO || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
