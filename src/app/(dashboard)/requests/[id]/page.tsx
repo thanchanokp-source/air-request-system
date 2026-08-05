@@ -6344,7 +6344,7 @@ export default function RequestDetailPage() {
       )}
 
       {/* Actions */}
-      {canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && role !== "PRESIDENT" && role !== "LOGISTICS" && !primaryIsClaimRole && (
+      {canAct && !isStyleApprover && !isClaimApprover && !isVpScmAtScm && !isScmAtVpMer && !isPresidentRole && !isLogisticsRole && !isGWApprover && role !== "PRESIDENT" && role !== "LOGISTICS" && !primaryIsClaimRole && req.status !== "PENDING_MER" && req.status !== "PENDING_MER_GW" && (
         <div className="bg-white rounded-xl border p-5 space-y-4">
           <div className="flex items-center gap-2 border-b pb-2">
             <h2 className="font-semibold text-gray-800">ACTIONS</h2>
