@@ -510,6 +510,7 @@ export default function RequestDetailPage() {
   const [lgRejectId, setLgRejectId] = useState<string | null>(null)
   const [lgRejectReason, setLgRejectReason] = useState("")
   const [crNoInput, setCrNoInput] = useState("")
+  const [crByItem, setCrByItem] = useState<Record<string, string>>({}) // per-SO CR NO (grouped by INV in the UI)
   const [savingCr, setSavingCr] = useState(false)
   const [reassign, setReassign] = useState<Record<string, { dept: string; pct: string; reason: string }[]>>({})
   // Resubmit edit (at PENDING_MER / PENDING_MER_GW) — per-item field overrides the MER can change
@@ -4639,46 +4640,63 @@ export default function RequestDetailPage() {
               Approver has approved every SCM NYK SO. */}
           {role === "SCM_NYK" && (() => {
             // NYK split dept is "SCM NYK" in GW but "NYK" in NYG — accept both.
-            const nykSOs = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && getSplits(i).some((s: any) => (s.dept === "SCM NYK" || s.dept === "NYK") && s.status !== "REJECTED"))
+            const isNyk = (s: any) => (s.dept === "SCM NYK" || s.dept === "NYK") && s.status !== "REJECTED"
+            const nykSOs = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && getSplits(i).some(isNyk))
             const approverAllDone = nykSOs.length > 0 && nykSOs.every((i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER"))
             const awaitingCount = nykSOs.filter((i: any) => !(i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER")).length
-            const crLocked = !approverAllDone && !req.crNo
+            const crLocked = !approverAllDone
+            // CR NO per SO — usually 1 CR per INV, but an INV may carry several → editable per SO.
+            const crOf = (it: any) => crByItem[it.id] ?? (getSplits(it).find(isNyk)?.crNo || "")
+            const byInv: Record<string, any[]> = {}
+            for (const it of nykSOs) (byInv[it.invoiceNo || "(no INV)"] ||= []).push(it)
+            const invGroups = Object.entries(byInv).sort((a, b) => a[0].localeCompare(b[0]))
+            const commonCr = (its: any[]) => { const s = new Set(its.map((it: any) => String(crOf(it)).trim())); return s.size === 1 ? [...s][0] : "" }
+            const setInvCr = (its: any[], v: string) => setCrByItem(p => { const n = { ...p }; its.forEach((it: any) => n[it.id] = v); return n })
+            const allFilled = nykSOs.length > 0 && nykSOs.every((it: any) => String(crOf(it)).trim())
+            const finalize = async () => {
+              const map: Record<string, string> = {}
+              nykSOs.forEach((it: any) => { const v = String(crOf(it)).trim(); if (v) map[it.id] = v })
+              setSavingCr(true)
+              const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "finalize_cr_gw", crByItem: map }) })
+              if (res.ok) { setReq(await res.json()); setCrByItem({}) }
+              else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
+              setSavingCr(false)
+            }
             return (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 space-y-1.5">
-              <p className="text-[11px] text-blue-700 leading-relaxed">
-                {crLocked
-                  ? <>⏳ Waiting for the <b>SCM NYK Approver</b> to approve first — you can enter the CR NO once all SOs are approved{awaitingCount > 0 ? ` (${awaitingCount} SO remaining)` : ""}</>
-                  : <>💡 Once you have the CR number, enter it here once for the entire document (runs in parallel with the EVP approval)</>}
-              </p>
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-blue-800 shrink-0">CR NO <span className="text-red-500">*</span></label>
-                <input
-                  value={crNoInput}
-                  onChange={e => setCrNoInput(e.target.value)}
-                  disabled={crLocked || !!req.crNo || savingCr}
-                  placeholder={req.crNo ? req.crNo : crLocked ? "Waiting for the SCM NYK Approver…" : "Enter CR NO once you have the number"}
-                  className={`flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:bg-gray-50 disabled:text-gray-500 ${!crNoInput.trim() && !req.crNo ? "border-blue-200 bg-white" : "border-blue-200 bg-white"}`}
-                />
-                {req.crNo
-                  ? <span className="text-xs text-green-700 font-medium shrink-0 whitespace-nowrap">✓ Saved: {req.crNo}</span>
-                  : <button
-                      onClick={async () => {
-                        if (!crNoInput.trim()) return
-                        setSavingCr(true)
-                        const res = await fetch(`/api/requests/${id}/approve`, {
-                          method: "POST", headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ action: "finalize_cr_gw", crNo: crNoInput.trim() })
-                        })
-                        if (res.ok) { setReq(await res.json()); setCrNoInput("") }
-                        else { const e = await res.json(); alert(e.error || "Error") }
-                        setSavingCr(false)
-                      }}
-                      disabled={crLocked || !crNoInput.trim() || savingCr}
-                      className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 shrink-0 whitespace-nowrap">
-                      {savingCr ? "..." : "Save CR NO"}
-                    </button>}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-3 space-y-2">
+                <p className="text-[11px] text-blue-700 leading-relaxed">
+                  {crLocked
+                    ? <>⏳ Waiting for the <b>SCM NYK Approver</b> to approve all SOs first{awaitingCount > 0 ? ` (${awaitingCount} SO remaining)` : ""} — then enter CR NO per INV</>
+                    : <>💡 Enter a <b>CR NO per INV</b> (one INV may hold several CRs — edit a specific SO if needed). Fill in every INV, then Finalize → Accounting.</>}
+                </p>
+                {!crLocked && invGroups.map(([inv, its]) => (
+                  <div key={inv} className="border border-blue-100 rounded-lg bg-white p-2 space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-blue-800">INV {inv}</span>
+                      <span className="text-[10px] text-gray-400">{its.length} SO</span>
+                      <input value={commonCr(its)} onChange={e => setInvCr(its, e.target.value)} placeholder="CR NO for this INV"
+                        className="ml-auto w-44 border border-blue-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300" />
+                    </div>
+                    {its.length > 1 && (
+                      <div className="pl-3 space-y-1 border-l-2 border-blue-50">
+                        {its.map((it: any) => (
+                          <div key={it.id} className="flex items-center gap-2">
+                            <span className="text-[11px] text-gray-500 flex-1 truncate">SO {it.so} · {it.style}</span>
+                            <input value={crOf(it)} onChange={e => setCrByItem(p => ({ ...p, [it.id]: e.target.value }))} placeholder="CR NO"
+                              className="w-40 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {!crLocked && (
+                  <button onClick={finalize} disabled={!allFilled || savingCr}
+                    className="text-xs bg-blue-600 text-white px-4 py-1.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
+                    {savingCr ? "..." : "Finalize CR → Accounting"}
+                  </button>
+                )}
               </div>
-            </div>
             )
           })()}
 
