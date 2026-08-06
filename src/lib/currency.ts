@@ -1,10 +1,9 @@
-// Currency of a single SO's air-freight amounts. Most BUs price in THB; EA prices in USD for the
-// whole BU; and within GW the customer "RHONE" (any spelling starting with RHONE, e.g. "RHONE
-// APPAREL INC.") is priced in USD too — so a GW document can mix THB and USD line items.
+// Currency of a single SO's air-freight amounts. Only EA prices in USD; every other BU (incl. GW,
+// even the RHONE customer — they now enter THB) prices in THB. `brand` is kept in the signature so
+// the per-SO plumbing stays intact if a brand-level rule is ever reinstated.
 // Pure function → usable on both server (freight calc) and client (display labels).
-export function soCurrency(bu: string | null | undefined, brand: string | null | undefined): "USD" | "THB" {
+export function soCurrency(bu: string | null | undefined, _brand?: string | null | undefined): "USD" | "THB" {
   if (bu === "EA") return "USD"
-  if (bu === "GW" && String(brand || "").trim().toUpperCase().startsWith("RHONE")) return "USD"
   return "THB"
 }
 
