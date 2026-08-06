@@ -8,6 +8,7 @@ const nav = [
   { href: "/dashboard", label: "DASHBOARD" },
   { href: "/requests", label: "AIR REQUESTS" },
   { href: "/approvals", label: "APPROVALS" },
+  { href: "/claim-status", label: "CLAIM STATUS" },
   { href: "/files", label: "REPORT" },
   { href: "/requests/nyk-import", label: "NYK IMPORT", roles: ["ADMIN", "SCM_NYK_APPROVER", "SCM_NYK", "SCM_NYK_EVP"] },
   { href: "/logistics", label: "LG BOOKING", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM"] },

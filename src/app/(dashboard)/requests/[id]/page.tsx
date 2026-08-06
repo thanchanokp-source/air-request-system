@@ -9,7 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, chainFor, type PosSpec } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, chainFor, claimSplitState, type PosSpec } from "@/lib/claim"
 import { validateUploadRows } from "@/lib/upload-validate"
 import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 
@@ -214,6 +214,119 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
         </button>
         <span className="text-[11px] text-gray-400">Finalizes this document and sends it to Accounting</span>
       </div>
+    </div>
+  )
+}
+
+// ── Claim Status Board (ADDITIVE) ─────────────────────────────────
+// At-a-glance panel: for every claim department, is its portion Accepted / still
+// In-progress / Rejected — across all SOs. Purely read-only; doesn't touch any
+// existing claim UI. Works for both NYG (DVM→VP per dept) and GW (parallel per dept).
+function ClaimStatusBoard({ req }: { req: any }) {
+  const [open, setOpen] = useState(true)
+  const items: any[] = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
+  const soCur = (item: any) => soCurrency(req?.bu, item?.brand ?? req?.brandName)
+
+  // Group every split by its department across all SOs.
+  type Row = { so: string; state: "approved" | "rejected" | "pending"; label: string; amount: number; cur: "THB" | "USD"; crNo?: string | null }
+  const byDept: Record<string, Row[]> = {}
+  for (const i of items) {
+    const cur = soCur(i)
+    const act = Number(i.actualAirFreight ?? i.airFreight) || 0
+    for (const sp of getSplits(i)) {
+      const st = claimSplitState(sp.dept, sp.status)
+      ;(byDept[sp.dept] ||= []).push({
+        so: i.so, state: st.s, label: st.label,
+        amount: act * (Number(sp.pct) || 0) / 100, cur, crNo: sp.crNo,
+      })
+    }
+  }
+  const depts = Object.keys(byDept)
+  if (depts.length === 0) return null
+
+  // Order depts: those needing attention (pending) first, then rejected, then done.
+  const deptRank = (rows: Row[]) => rows.some(r => r.state === "pending") ? 0 : rows.some(r => r.state === "rejected") ? 1 : 2
+  const deptOrder = depts.sort((a, b) => deptRank(byDept[a]) - deptRank(byDept[b]) || a.localeCompare(b))
+
+  // Overall tally (per dept, not per SO) for the header summary.
+  const deptStateOf = (rows: Row[]): "approved" | "pending" | "rejected" =>
+    rows.every(r => r.state === "approved") ? "approved" : rows.some(r => r.state === "pending") ? "pending" : "rejected"
+  const tally = { approved: 0, pending: 0, rejected: 0 }
+  for (const d of depts) tally[deptStateOf(byDept[d])]++
+
+  const CHIP: Record<string, string> = {
+    approved: "bg-green-100 text-green-700 border-green-200",
+    pending: "bg-amber-100 text-amber-700 border-amber-200",
+    rejected: "bg-red-100 text-red-700 border-red-200",
+  }
+  const DOT: Record<string, string> = { approved: "bg-green-500", pending: "bg-amber-500", rejected: "bg-red-500" }
+  const CARD: Record<string, string> = { approved: "border-green-200", pending: "border-amber-200", rejected: "border-red-200" }
+  const stateWord: Record<string, string> = { approved: "Accepted", pending: "In progress", rejected: "Rejected" }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <button type="button" onClick={() => setOpen(v => !v)} className="w-full flex items-center gap-3 px-4 py-3 text-left">
+        <span className="font-semibold text-gray-800">📊 Claim Status by Department</span>
+        <div className="flex items-center gap-1.5 text-[11px]">
+          {tally.approved > 0 && <span className={`px-2 py-0.5 rounded-full border font-medium ${CHIP.approved}`}>{tally.approved} Accepted</span>}
+          {tally.pending > 0 && <span className={`px-2 py-0.5 rounded-full border font-medium ${CHIP.pending}`}>{tally.pending} In progress</span>}
+          {tally.rejected > 0 && <span className={`px-2 py-0.5 rounded-full border font-medium ${CHIP.rejected}`}>{tally.rejected} Rejected</span>}
+        </div>
+        <span className="ml-auto text-gray-400 text-sm">{open ? "▲ Hide" : "▼ Show"}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {deptOrder.map(dept => {
+            const rows = byDept[dept]
+            const total = rows.length
+            const approved = rows.filter(r => r.state === "approved").length
+            const rejected = rows.filter(r => r.state === "rejected").length
+            const pending = rows.filter(r => r.state === "pending").length
+            const dstate = deptStateOf(rows)
+            // The stage most SOs are waiting on (only meaningful while pending).
+            const pendLabels = rows.filter(r => r.state === "pending").map(r => r.label)
+            const stageLabel = pendLabels.length ? pendLabels.sort((a, b) =>
+              pendLabels.filter(x => x === b).length - pendLabels.filter(x => x === a).length)[0] : null
+            const amt = splitByCurrency(rows.map(r => ({ amount: r.amount, bu: r.cur === "USD" ? "EA" : "NYG" })))
+            const crs = [...new Set(rows.map(r => r.crNo).filter(Boolean))]
+            const pct = total > 0 ? Math.round((approved / total) * 100) : 0
+            return (
+              <div key={dept} className={`rounded-lg border ${CARD[dstate]} p-3 flex flex-col gap-2`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-gray-800 text-sm">{deptLabel(dept)}</span>
+                  <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border font-medium ${CHIP[dstate]}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${DOT[dstate]}`} />{stateWord[dstate]}
+                  </span>
+                </div>
+                {/* progress: accepted share */}
+                <div>
+                  <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                    <span>{approved}/{total} SO accepted</span>
+                    {stageLabel && dstate === "pending" && <span className="text-amber-600 font-medium">{stageLabel}</span>}
+                  </div>
+                  <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                    <div className={`h-full ${DOT[dstate]} rounded-full`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+                {/* per-SO chips coloured by state */}
+                <div className="flex flex-wrap gap-1">
+                  {rows.map((r, k) => (
+                    <span key={k} title={`${r.so} — ${r.label}`}
+                      className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-medium ${CHIP[r.state]}`}>
+                      <span className={`w-1 h-1 rounded-full ${DOT[r.state]}`} />{r.so}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between text-[11px] pt-0.5 border-t border-gray-100">
+                  <span className="text-gray-500">Claim: <span className="font-semibold text-gray-700 tabular-nums">{fmtSplit(amt, (n) => fmtNum(n))}</span></span>
+                  {crs.length > 0 && <span className="text-blue-600 font-medium">CR: {crs.join(", ")}</span>}
+                </div>
+                {rejected > 0 && <p className="text-[10px] text-red-600">{rejected} SO rejected</p>}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -2160,6 +2273,9 @@ export default function RequestDetailPage() {
           </div>
         )
       })()}
+
+      {/* Claim Status by Department — additive at-a-glance board (all roles) */}
+      <ClaimStatusBoard req={req} />
 
       {/* Rejection Reason */}
       {req.rejectionReason && (

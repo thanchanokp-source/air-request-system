@@ -151,6 +151,20 @@ export function deptLabel(dept: string): string {
   return dept
 }
 
+// Coarse read-only state of one department's split, with a human stage label.
+// Used by the per-doc Claim Status board and the cross-doc CLAIM STATUS page.
+// Handles both NYG (DVM→VP per dept) and GW (parallel per dept, incl. NYK 3-role).
+export function claimSplitState(dept: string, status: string | null | undefined): { s: "approved" | "rejected" | "pending"; label: string } {
+  if (status === "REJECTED") return { s: "rejected", label: "Rejected" }
+  if (status === "COMPLETED" || status === GW_DEPT_APPROVED || status === "ACCT_PENDING") return { s: "approved", label: "Accepted" }
+  if (isNoApprovalGwDept(dept)) return { s: "approved", label: "No approval needed" }
+  if (status === NYG_SPLIT.CLAIM_PASSED) return { s: "pending", label: "Waiting VP" }
+  if (status === GW_NYK_APPROVER_PASSED) return { s: "pending", label: "Waiting EVP / CR" }
+  if (status === GW_DEPT_ACCEPTED) return { s: "pending", label: "Waiting CR NO" }
+  if (status === SPLIT_STATUS.SCM_REASSIGN) return { s: "pending", label: "Back to SCM" }
+  return { s: "pending", label: "Waiting approval" }
+}
+
 // Split dept values covered by a canonical dept (SUPPLIER has sub-tags).
 export function expandClaimDept(dept: string): string[] {
   if (dept === "SUPPLIER") return ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
