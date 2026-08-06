@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/renderer"
 import { getSplits, deptLabel, chainFor } from "@/lib/claim"
+import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 
 // Thai-capable font (Sarabun) so Thai text (reasons, names, remarks) renders.
 // Registered as two families to keep the existing regular/bold style split.
@@ -249,6 +250,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
   const est = Number(item.airFreight) || 0
   const actual = item.actualAirFreight != null ? Number(item.actualAirFreight) : null
   const grandTotal = actual != null ? actual : est
+  const CUR = soCurrency(req.bu, item.brand ?? req.brandName) // this SO's currency (EA/RHONE → USD)
   const dept = isGW ? "GW" : "NYG"
   const C = { no: 16, so: 48, style: 54, sub: 28, hawb: 46, inv: 48, qty: 34, gross: 40, est: 48, act: 48 }
 
@@ -313,8 +315,8 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           <Text style={[s.th, { width: C.inv }]}>INVOICE</Text>
           <Text style={[s.th, { width: C.qty }]}>QTY AIR</Text>
           <Text style={[s.th, { width: C.gross }]}>GROSS (KG)</Text>
-          <Text style={[s.th, { width: C.est }]}>EST. (THB)</Text>
-          <Text style={[s.th, { width: C.act, borderRightWidth: 0 }]}>ACTUAL (THB)</Text>
+          <Text style={[s.th, { width: C.est }]}>EST. ({CUR})</Text>
+          <Text style={[s.th, { width: C.act, borderRightWidth: 0 }]}>ACTUAL ({CUR})</Text>
         </View>
         <View style={s.tr}>
           <Text style={[s.td, { width: C.no }]}>1</Text>
@@ -340,7 +342,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
       {item.hawbNo && actual != null && (
         <Text style={s.remark}>
           <Text style={s.remarkLabel}>HAWB {item.hawbNo} : </Text>
-          this SO&apos;s actual air freight ({fmtNum(actual)} THB) is its allocated share of the HAWB bill total.
+          this SO&apos;s actual air freight ({fmtNum(actual)} {CUR}) is its allocated share of the HAWB bill total.
         </Text>
       )}
 
@@ -353,7 +355,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
         <View style={s.totalBox}>
           <View style={s.totalBoxRowLast}>
             <Text style={s.totalBoxK}>TOTAL</Text>
-            <Text style={s.totalBoxV}>{fmtNum(grandTotal)} <Text style={{ fontSize: 8, color: "#111" }}>THB</Text></Text>
+            <Text style={s.totalBoxV}>{fmtNum(grandTotal)} <Text style={{ fontSize: 8, color: "#111" }}>{CUR}</Text></Text>
           </View>
         </View>
       </View>
@@ -400,28 +402,31 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
   }
   const totQty = rows.reduce((n, i) => n + (Number(i.qtyRequestAir) || 0), 0)
   const totGross = rows.reduce((n, i) => n + (Number(i.grossWeight) || 0), 0)
-  const totEst = rows.reduce((n, i) => n + (Number(i.airFreight) || 0), 0)
   const anyActual = rows.some(i => i.actualAirFreight != null)
-  const totActual = rows.reduce((n, i) => n + (Number(i.actualAirFreight) || 0), 0)
-  const grand = anyActual ? totActual : totEst
   // Claim split by department (across all SO): amount = (Actual, else Est) × claim %.
   // Sum the RAW (un-rounded) shares first, then round ONCE per dept — otherwise
   // rounding each SO before adding makes the dept total drift from the grand TOTAL
   // (e.g. 29,687.5 + 20,312.5 = 50,000, but round-each = 29,688 + 20,313 = 50,001).
-  const claimByDeptRaw: Record<string, number> = {}
+  // A GW document can mix currencies (RHONE SOs are USD, the rest THB), so each dept's claim is
+  // tracked per-currency and never summed across the two.
+  const claimByDeptRaw: Record<string, { THB: number; USD: number }> = {}
   for (const it of rows) {
     const base = it.actualAirFreight != null ? Number(it.actualAirFreight) : (Number(it.airFreight) || 0)
+    const cur = soCurrency(req.bu, it.brand ?? req.brandName)
     for (const sp of getSplits(it)) {
       if (!sp.dept) continue
-      claimByDeptRaw[sp.dept] = (claimByDeptRaw[sp.dept] || 0) + base * (Number(sp.pct) || 0) / 100
+      if (!claimByDeptRaw[sp.dept]) claimByDeptRaw[sp.dept] = { THB: 0, USD: 0 }
+      claimByDeptRaw[sp.dept][cur] += base * (Number(sp.pct) || 0) / 100
     }
   }
-  const claimByDept: Record<string, number> = {}
-  for (const [d, v] of Object.entries(claimByDeptRaw)) claimByDept[d] = Math.round(v)
+  const claimByDept: Record<string, { THB: number; USD: number }> = {}
+  for (const [d, v] of Object.entries(claimByDeptRaw)) claimByDept[d] = { THB: Math.round(v.THB), USD: Math.round(v.USD) }
   const claimDeptRows = Object.entries(claimByDept)
-  // EA amounts are stored in USD (est = gross × USD rate); every other BU is in THB. No conversion.
-  const cvt = (n: any) => Number(n) || 0
-  const CUR = (req as any)?.bu === "EA" ? "USD" : "THB"
+  // Per-SO currency (EA / GW-RHONE → USD, else THB). One SO's amount is labelled with its own unit;
+  // any total over several SOs is split so THB and USD are never added into one figure.
+  const soCur = (it: any) => soCurrency(req.bu, it.brand ?? req.brandName)
+  const splitLabel = (pick: (it: any) => any) =>
+    fmtSplit(splitByCurrency(rows.map(it => ({ amount: Number(pick(it)) || 0, bu: req.bu, brand: it.brand ?? req.brandName }))))
   // Portrait A4 (usable ~551pt). REASON takes the remaining width (flex) and wraps.
   // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
   // wrap, so a too-narrow column overflows and overlaps its neighbour. Fixed cols sum ≈ 482
@@ -510,8 +515,8 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
               <Text style={[s.td, { width: C.inv }]}>{softWrap(item.invoiceNo)}</Text>
               <Text style={[s.td, { width: C.qty }]}>{fmtNum(item.qtyRequestAir)}</Text>
               <Text style={[s.td, { width: C.gross }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
-              <Text style={[s.tdR, { width: C.est }]}>{fmtNum(cvt(item.airFreight))}</Text>
-              <Text style={[s.tdR, { width: C.act }]}>{item.actualAirFreight != null ? fmtNum(cvt(item.actualAirFreight)) : "-"}</Text>
+              <Text style={[s.tdR, { width: C.est }]}>{fmtNum(item.airFreight)} {soCur(item)}</Text>
+              <Text style={[s.tdR, { width: C.act }]}>{item.actualAirFreight != null ? `${fmtNum(item.actualAirFreight)} ${soCur(item)}` : "-"}</Text>
               <Text style={[s.tdL, { width: C.claim, borderRightWidth: 0 }]}>{claimOf(item)}</Text>
             </View>
           ))}
@@ -519,8 +524,8 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
             <Text style={[s.tdR, { flex: 1, fontFamily: "SarabunB" }]}>TOTAL</Text>
             <Text style={[s.td, { width: C.qty, fontFamily: "SarabunB" }]}>{fmtNum(totQty)}</Text>
             <Text style={[s.td, { width: C.gross, fontFamily: "SarabunB" }]}>{fmtNum(totGross, 2)}</Text>
-            <Text style={[s.tdR, { width: C.est, fontFamily: "SarabunB" }]}>{fmtNum(cvt(totEst))}</Text>
-            <Text style={[s.tdR, { width: C.act, fontFamily: "SarabunB", color: "#1E3A8A" }]}>{anyActual ? fmtNum(cvt(totActual)) : "-"}</Text>
+            <Text style={[s.tdR, { width: C.est, fontFamily: "SarabunB" }]}>{splitLabel(it => it.airFreight)}</Text>
+            <Text style={[s.tdR, { width: C.act, fontFamily: "SarabunB", color: "#1E3A8A" }]}>{anyActual ? splitLabel(it => it.actualAirFreight) : "-"}</Text>
             <Text style={[s.td, { width: C.claim, borderRightWidth: 0 }]}> </Text>
           </View>
         </View>
@@ -534,7 +539,7 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
           <View style={s.totalBox}>
             <View style={s.totalBoxRowLast}>
               <Text style={s.totalBoxK}>TOTAL</Text>
-              <Text style={s.totalBoxV}>{fmtNum(cvt(grand))} <Text style={{ fontSize: 8, color: "#111" }}>{CUR}</Text></Text>
+              <Text style={s.totalBoxV}>{anyActual ? splitLabel(it => it.actualAirFreight) : splitLabel(it => it.airFreight)}</Text>
             </View>
           </View>
         </View>
@@ -544,12 +549,12 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
           <View style={{ marginTop: 8, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 3, borderStyle: "solid", maxWidth: 260 }} wrap={false}>
             <View style={{ flexDirection: "row", backgroundColor: "#1e3a8a", paddingVertical: 3, paddingHorizontal: 8 }}>
               <Text style={{ color: "#fff", fontSize: 8, flex: 1 }}>CLAIM BY DEPARTMENT</Text>
-              <Text style={{ color: "#fff", fontSize: 8, textAlign: "right", width: 90 }}>CLAIM ({CUR})</Text>
+              <Text style={{ color: "#fff", fontSize: 8, textAlign: "right", width: 90 }}>CLAIM</Text>
             </View>
             {claimDeptRows.map(([d, amt], i) => (
               <View key={d} style={{ flexDirection: "row", paddingVertical: 2.5, paddingHorizontal: 8, borderTopWidth: i === 0 ? 0 : 0.5, borderTopColor: "#e2e8f0", borderStyle: "solid" }}>
                 <Text style={{ fontSize: 8, flex: 1 }}>{deptLabel(d)}</Text>
-                <Text style={{ fontSize: 8, textAlign: "right", width: 90 }}>{fmtNum(cvt(amt))}</Text>
+                <Text style={{ fontSize: 8, textAlign: "right", width: 90 }}>{fmtSplit(amt)}</Text>
               </View>
             ))}
           </View>

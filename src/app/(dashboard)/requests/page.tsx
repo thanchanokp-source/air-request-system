@@ -6,6 +6,7 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits, deptLabel } from "@/lib/claim"
 import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 import { ApprovalChain } from "@/components/ApprovalChain"
+import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING_DVM_MER: "Pending DVM Merchandise",
@@ -166,9 +167,11 @@ export default function RequestsPage() {
     (r.items || []).map((item: any) => ({ ...item, request: r }))
   )
 
-  // EA amounts are stored in USD (est = gross × USD rate); every other BU in THB. Just label the unit.
-  const isEaBu = activeBu === "EA"
-  const money = (v: number, _req?: any) => `${fmtNum(v || 0)} ${isEaBu ? "USD" : "THB"}`
+  // Currency is per-SO (EA → USD, GW + brand RHONE → USD, else THB). One SO's amount is labelled with
+  // its own unit; a total over many SOs is split so THB and USD are never summed into one number.
+  const soUnit = (row: any) => soCurrency(row.request?.bu, row.brand ?? row.request?.brandName)
+  const groupSplit = (rows: any[], pick: (r: any) => number) =>
+    fmtSplit(splitByCurrency(rows.map(r => ({ amount: pick(r) || 0, bu: r.request?.bu, brand: r.brand ?? r.request?.brandName }))))
 
   // ── Stage helpers — shared by the Pending-by-Stage tiles AND the Stage filter. President
   // moved to the END (final approver, after Logistics ∥ Claim). ──
@@ -298,11 +301,10 @@ export default function RequestsPage() {
     if (res.ok) setRequests(prev => prev.filter(r => r.id !== reqId))
   }
 
-  const curUnit = isEaBu ? "USD" : "THB"
   const SO_COLS = [
     ["SO",""],["BU",""],["BRAND","min-w-[90px]"],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
-    [`EST. AIR FREIGHT (${curUnit})`,"min-w-[120px]"],[`ACTUAL AIR FREIGHT (${curUnit})`,"min-w-[130px]"],
+    ["EST. AIR FREIGHT","min-w-[120px]"],["ACTUAL AIR FREIGHT","min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],
     ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"]
   ] as [string,string][]
@@ -520,8 +522,8 @@ export default function RequestsPage() {
                 {dg.request.status === "REJECTED" && dg.request.approvalLogs?.[0] && (
                   <span className="text-xs text-red-500 shrink-0">by {dg.request.approvalLogs[0].user?.name}</span>
                 )}
-                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ml-auto">EST {money(dg.estTotal, dg.request)}</span>
-                <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {money(dg.actTotal, dg.request)}</span>
+                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0 ml-auto">EST {groupSplit(dg.styles.flatMap((s: any) => s.rows), (r: any) => r.airFreight)}</span>
+                <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {groupSplit(dg.styles.flatMap((s: any) => s.rows), (r: any) => r.actualAirFreight)}</span>
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{dg.styles.length} style(s) · {dg.total} transactions</span>
                 {(() => {
                   // Collapse multiple attachment chips → first file + "+N" so the row stays on ONE line.
@@ -588,8 +590,8 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2">{row.qtyOriginalShipment}</td>
                                     <td className="px-3 py-2 font-semibold">{row.qtyRequestAir}</td>
                                     <td className="px-3 py-2 text-blue-700">{fmtNum(row.grossWeight, 2)}</td>
-                                    <td className="px-3 py-2 text-blue-700">{fmtNum(row.airFreight)}</td>
-                                    <td className="px-3 py-2 font-semibold text-green-700">{fmtNum(row.actualAirFreight)}</td>
+                                    <td className="px-3 py-2 text-blue-700">{row.airFreight != null ? `${fmtNum(row.airFreight)} ${soUnit(row)}` : "-"}</td>
+                                    <td className="px-3 py-2 font-semibold text-green-700">{row.actualAirFreight != null ? `${fmtNum(row.actualAirFreight)} ${soUnit(row)}` : "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.factory}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.country}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">

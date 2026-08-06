@@ -9,6 +9,7 @@ import {
 import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits, splitAirCost, deptLabel } from "@/lib/claim"
 import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
+import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 
 // Delay reasons come from the claim splits (REASON 1/2/3); fall back to the SO's reasonDelay.
 function rowReasonEntries(r: any): { reason: string; cost: number; qty: number; dept: string }[] {
@@ -667,6 +668,14 @@ export default function DashboardPage() {
   const totalQAir  = filtered.reduce((s,r)=>s+(Number(r.qtyRequestAir)||0),0)
   const totalEst   = filtered.reduce((s,r)=>s+(r.airFreight||0),0)
   const totalAct   = filtered.reduce((s,r)=>s+(r.actualAirFreight||0),0)
+  // Currency is per-SO (EA / GW-RHONE → USD, else THB); a doc can mix. Totals are split so THB and
+  // USD are never summed. Charts label their axis with the single currency present, or "mixed".
+  const rowCur = (r:any) => soCurrency(r.request?.bu ?? r.bu, r.brand ?? r.request?.brandName)
+  const splitOf = (pick:(r:any)=>number) => splitByCurrency(filtered.map(r=>({amount:pick(r)||0, bu:r.request?.bu, brand:r.brand??r.request?.brandName})))
+  const estSplit   = splitOf(r=>r.airFreight)
+  const actSplit   = splitOf(r=>r.actualAirFreight)
+  const cursPresent= new Set(filtered.map(rowCur))
+  const curLabel   = cursPresent.size > 1 ? "mixed" : ((cursPresent.values().next().value as string) || CUR)
   const airRatePct = totalQOrig>0 ? totalQAir/totalQOrig*100 : 0
   const varPct     = totalEst>0 && totalAct>0 ? (totalAct-totalEst)/totalEst*100 : null
   const compDone   = filtered.filter(r=>r.itemStatus==="COMPLETED"||r.itemStatus==="ACCOUNTING_PENDING").length
@@ -741,21 +750,30 @@ export default function DashboardPage() {
   // Claim amount per claim department (each split's share): actual = actualAirFreight × claim%,
   // est = airFreight × claim%. Summed across all filtered SO, biggest first.
   const claimByDept = useMemo(()=>{
-    const m: Record<string,{amt:number,est:number,qty:number}> = {}
+    const m: Record<string,{amt:{THB:number,USD:number},est:{THB:number,USD:number},qty:number}> = {}
     filtered.forEach(r=>{
       const est=Number(r.airFreight)||0
+      const cur=rowCur(r)
       for(const s of getSplits(r)){
         const lbl=deptLabel(s.dept)||"-"; const pct=Number(s.pct)||0
-        if(!m[lbl]) m[lbl]={amt:0,est:0,qty:0}
-        m[lbl].amt+=splitAirCost(r,s)
-        m[lbl].est+=Math.round(est*pct/100)
+        if(!m[lbl]) m[lbl]={amt:{THB:0,USD:0},est:{THB:0,USD:0},qty:0}
+        m[lbl].amt[cur]+=splitAirCost(r,s)
+        m[lbl].est[cur]+=est*pct/100
         m[lbl].qty+=Math.round((Number(r.qtyRequestAir)||0)*pct/100)
       }
     })
-    return Object.entries(m).map(([dept,v])=>({dept,...v})).sort((a,b)=>(b.amt||b.est)-(a.amt||a.est))
+    // _mag = combined magnitude (THB+USD) — used ONLY for relative bar length & ranking, never shown.
+    return Object.entries(m).map(([dept,v])=>({
+      dept,
+      amt:{THB:Math.round(v.amt.THB),USD:Math.round(v.amt.USD)},
+      est:{THB:Math.round(v.est.THB),USD:Math.round(v.est.USD)},
+      qty:v.qty,
+      _mag:(v.amt.THB+v.amt.USD)||(v.est.THB+v.est.USD),
+    })).sort((a,b)=>b._mag-a._mag)
   },[filtered])
-  const claimAmtTotal = claimByDept.reduce((s,d)=>s+d.amt,0)
-  const claimEstTotal = claimByDept.reduce((s,d)=>s+d.est,0)
+  const claimAmtTotal = claimByDept.reduce((s,d)=>({THB:s.THB+d.amt.THB,USD:s.USD+d.amt.USD}),{THB:0,USD:0})
+  const claimEstTotal = claimByDept.reduce((s,d)=>({THB:s.THB+d.est.THB,USD:s.USD+d.est.USD}),{THB:0,USD:0})
+  const claimMagTotal = claimByDept.reduce((s,d)=>s+d._mag,0)
 
   const monthlyDelay = useMemo(()=>{
     const m:Record<string,{total:number;count:number;ym:string}>={}
@@ -854,8 +872,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {([
           ["QTY SHIP AIR","pcs",fmtNum(totalQAir),"text-orange-700","bg-orange-50 border-orange-200","Requested air"],
-          ["EST. AIRFREIGHT",CUR,fmtK(totalEst),"text-sky-700","bg-sky-50 border-sky-200",`${fmtNum(totalEst)} ${CUR}`],
-          ["ACTUAL AIRFREIGHT",CUR,fmtK(totalAct),"text-teal-700","bg-teal-50 border-teal-200",`${fmtNum(totalAct)} ${CUR}`],
+          ["EST. AIRFREIGHT",curLabel,fmtSplit(estSplit,fmtK),"text-sky-700","bg-sky-50 border-sky-200",fmtSplit(estSplit)],
+          ["ACTUAL AIRFREIGHT",curLabel,fmtSplit(actSplit,fmtK),"text-teal-700","bg-teal-50 border-teal-200",fmtSplit(actSplit)],
           ["ACTUAL vs EST","%",varPct!=null?(varPct>0?"↑":"↓")+Math.abs(varPct).toFixed(1)+"%":"N/A",varPct!=null&&varPct>0?"text-red-600":varPct!=null&&varPct<0?"text-green-600":"text-gray-400","bg-orange-50 border-orange-200",varPct!=null?`Variance ${fmtPct(varPct)}`:"Actual N/A"],
         ] as [string,string,any,string,string,string][]).map(([label,unit,value,tc,bg,sub])=>(
           <div key={label} className={`${bg} border rounded-xl p-4`}>
@@ -871,14 +889,14 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
           <div className="flex items-baseline justify-between flex-wrap gap-1">
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.15em]">Claim by department</p>
-            <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtK(claimAmtTotal)} · Est {fmtK(claimEstTotal)} {CUR}</p>
+            <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtSplit(claimAmtTotal,fmtK)} · Est {fmtSplit(claimEstTotal,fmtK)}</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {(()=>{ const barMax = Math.max(...claimByDept.map(d=>d.amt||d.est), 1); return claimByDept.map(d=>{
-              // % label = this dept's share of the TOTAL claim (all depts sum ~100%).
-              const share = claimAmtTotal>0 ? d.amt/claimAmtTotal*100 : (claimEstTotal>0 ? d.est/claimEstTotal*100 : 0)
+            {(()=>{ const barMax = Math.max(...claimByDept.map(d=>d._mag), 1); return claimByDept.map(d=>{
+              // % label = this dept's share of the TOTAL claim (combined magnitude — all depts sum ~100%).
+              const share = claimMagTotal>0 ? d._mag/claimMagTotal*100 : 0
               // Bar length = relative to the LARGEST dept (biggest = full) so the ranking reads at a glance.
-              const barPct = (d.amt||d.est)/barMax*100
+              const barPct = d._mag/barMax*100
               const c = deptColor(d.dept)
               return (
                 <div key={d.dept} title={`${fmtNum(d.qty)} pcs · ${share.toFixed(0)}% of total claim`}
@@ -887,13 +905,13 @@ export default function DashboardPage() {
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:c}}/>
                     <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide truncate">{d.dept}</span>
                   </div>
-                  <p className="text-[26px] font-bold text-gray-900 leading-none tabular-nums">{fmtK(d.amt)}<span className="text-[11px] font-medium text-gray-300 ml-1">{CUR}</span></p>
+                  <p className="text-[22px] font-bold text-gray-900 leading-none tabular-nums">{fmtSplit(d.amt,fmtK)}</p>
                   <div className="mt-3 h-1 rounded-full bg-gray-100 overflow-hidden">
                     <div className="h-full rounded-full" style={{width:`${Math.max(2,Math.min(100,barPct))}%`, background:c}}/>
                   </div>
                   <div className="flex items-center justify-between mt-2 text-[10px] text-gray-400 tabular-nums">
                     <span className="font-medium text-gray-500">{share.toFixed(0)}% of total</span>
-                    <span>est {fmtK(d.est)}</span>
+                    <span>est {fmtSplit(d.est,fmtK)}</span>
                   </div>
                 </div>
               )
@@ -944,13 +962,13 @@ export default function DashboardPage() {
 
       {/* ── Delay Reason Overview (below filters) ───────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <ReasonPanel rows={filtered} height={180} cur={CUR}/>
-        <LogisticsCostBar rows={filtered} cur={CUR}/>
+        <ReasonPanel rows={filtered} height={180} cur={curLabel}/>
+        <LogisticsCostBar rows={filtered} cur={curLabel}/>
       </div>
 
       {/* ── Column Headers ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>EST vs ACTUAL AIR FREIGHT ({CUR})</div>
+        <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>EST vs ACTUAL AIR FREIGHT ({curLabel})</div>
         <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>QTY SHIP AIR (pcs)</div>
         <div className="text-center text-[11px] font-bold text-white rounded-lg py-2 tracking-wide" style={{background:"#6b1a1a"}}>AVG DELAY DAYS (Plan − Original)</div>
       </div>
@@ -958,7 +976,7 @@ export default function DashboardPage() {
       {/* ── Row 1: By Ship Month ─────────────────────────────────────────── */}
       <SectionRow label="By Ship Month"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <Paged data={monthlyCost} fromEnd>{(s)=><CostBar data={s} height={H} cur={CUR}/>}</Paged>
+        <Paged data={monthlyCost} fromEnd>{(s)=><CostBar data={s} height={H} cur={curLabel}/>}</Paged>
         <Paged data={monthlyQty} fromEnd>{(s)=><QtyBar data={s} height={H}/>}</Paged>
         <Paged data={monthlyDelay} fromEnd>{(s)=><DelayBar data={s} rows={filtered} groupFn={moKey} height={H}/>}</Paged>
       </div>
@@ -966,7 +984,7 @@ export default function DashboardPage() {
       {/* ── Row 2: By Brand ─────────────────────────────────────────────── */}
       <SectionRow label="By Brand"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <Paged data={brandCost}>{(s)=><CostBar data={s} height={H} cur={CUR}/>}</Paged>
+        <Paged data={brandCost}>{(s)=><CostBar data={s} height={H} cur={curLabel}/>}</Paged>
         <Paged data={brandQty}>{(s)=><QtyBar data={s} height={H}/>}</Paged>
         <Paged data={brandDelay}>{(s)=><DelayBar data={s} rows={filtered} groupFn={(r:any)=>brandKey(r)} height={H}/>}</Paged>
       </div>
@@ -974,7 +992,7 @@ export default function DashboardPage() {
       {/* ── Row 3: By Country ────────────────────────────────────────────── */}
       <SectionRow label="By Country"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <Paged data={countryCost}>{(s)=><CostBar data={s} height={H} cur={CUR}/>}</Paged>
+        <Paged data={countryCost}>{(s)=><CostBar data={s} height={H} cur={curLabel}/>}</Paged>
         <Paged data={countryQty}>{(s)=><QtyBar data={s} height={H}/>}</Paged>
         <Paged data={countryDelay}>{(s)=><DelayBar data={s} rows={filtered.filter(cRows)} groupFn={cKey} height={H}/>}</Paged>
       </div>
@@ -982,7 +1000,7 @@ export default function DashboardPage() {
       {/* ── Row 4: By BU ────────────────────────────────────────────────── */}
       <SectionRow label="By BU"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <CostBar  data={buCost}  height={H} cur={CUR}/>
+        <CostBar  data={buCost}  height={H} cur={curLabel}/>
         <QtyBar   data={buQty}   height={H}/>
         <DelayBar data={buDelay} rows={filtered} groupFn={(r:any)=>r.request?.buName||"N/A"} height={H}/>
       </div>
@@ -990,7 +1008,7 @@ export default function DashboardPage() {
       {/* ── Row 5: By Claim Dept ─────────────────────────────────────────── */}
       <SectionRow label="By Claim Dept"/>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <CostBar  data={deptCost}  height={H} cur={CUR}/>
+        <CostBar  data={deptCost}  height={H} cur={curLabel}/>
         <QtyBar   data={deptQty}   height={H}/>
         <DelayBar data={deptDelay} rows={filtered} groupFn={(r:any)=>r.claimDepartment||"Unassigned"} height={H}/>
       </div>

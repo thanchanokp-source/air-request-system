@@ -11,6 +11,7 @@ import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
 import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, chainFor, type PosSpec } from "@/lib/claim"
 import { validateUploadRows } from "@/lib/upload-validate"
+import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtDT = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` }
@@ -95,26 +96,31 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
   const a = bu === "GW"
     ? { border: "border-emerald-200", btn: "bg-emerald-600 hover:bg-emerald-700", badge: "bg-emerald-100 text-emerald-700", bar: "bg-emerald-500", strong: "text-emerald-700" }
     : { border: "border-blue-200", btn: "bg-blue-600 hover:bg-blue-700", badge: "bg-blue-100 text-blue-700", bar: "bg-blue-500", strong: "text-blue-700" }
-  const CUR = req?.bu === "EA" ? "USD" : "THB"
+  // Currency is per-SO (EA / GW-RHONE → USD, else THB); totals are split so THB and USD never sum.
+  const soCur = (item: any) => soCurrency(req?.bu, item?.brand ?? req?.brandName)
+  const splitLabel = (rows: any[], pick: (it: any) => number) =>
+    fmtSplit(splitByCurrency((rows || []).map(it => ({ amount: pick(it) || 0, bu: req?.bu, brand: it.brand ?? req?.brandName }))), (n) => fmtNum(n))
   const items: any[] = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
-  const totalEst = items.reduce((s, i) => s + (Number(i.airFreight) || 0), 0)
-  const totalAct = items.reduce((s, i) => s + (Number(i.actualAirFreight) || 0), 0)
-  // Aggregate claim amount per department: actual air freight × that dept's percentage.
-  const deptMap: Record<string, number> = {}
+  // Aggregate claim amount per department, split by currency: actual air freight × that dept's %.
+  const deptMap: Record<string, { THB: number; USD: number }> = {}
   for (const i of items) {
     const act = Number(i.actualAirFreight) || 0
+    const cur = soCur(i)
     for (const sp of getSplits(i)) {
-      deptMap[sp.dept] = (deptMap[sp.dept] || 0) + act * (Number(sp.pct) || 0) / 100
+      if (!deptMap[sp.dept]) deptMap[sp.dept] = { THB: 0, USD: 0 }
+      deptMap[sp.dept][cur] += act * (Number(sp.pct) || 0) / 100
     }
   }
-  const deptRows = Object.entries(deptMap).map(([dept, amt]) => ({ dept, amt })).sort((x, y) => y.amt - x.amt)
-  const totalClaim = deptRows.reduce((s, d) => s + d.amt, 0)
-  const claimShareOfActual = totalAct > 0 ? Math.round((totalClaim / totalAct) * 100) : 0
+  // _mag = combined magnitude, used only for the relative share bar / ranking (never shown as money).
+  const deptRows = Object.entries(deptMap)
+    .map(([dept, amt]) => ({ dept, amt, _mag: amt.THB + amt.USD }))
+    .sort((x, y) => y._mag - x._mag)
+  const totalClaimMag = deptRows.reduce((s, d) => s + d._mag, 0)
 
-  const Stat = ({ label, value, sub, big }: { label: string; value: number; sub?: string; big?: boolean }) => (
+  const Stat = ({ label, value, sub, big }: { label: string; value: string; sub?: string; big?: boolean }) => (
     <div className="px-4 py-3.5">
       <p className="text-[10px] font-semibold text-gray-400 tracking-wide uppercase">{label}</p>
-      <p className={`tabular-nums font-bold ${big ? `text-2xl ${a.strong}` : "text-lg text-gray-700"}`}>{fmtNum(value)}</p>
+      <p className={`tabular-nums font-bold ${big ? `text-2xl ${a.strong}` : "text-lg text-gray-700"}`}>{value}</p>
       {sub && <p className="text-[10px] text-gray-400 tabular-nums">{sub}</p>}
     </div>
   )
@@ -130,8 +136,8 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
 
       {/* Headline figures — ACTUAL is the number the President is here to sign off. */}
       <div className="grid grid-cols-2 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/60">
-        <Stat label="Est. Air Freight" value={totalEst} sub={CUR} />
-        <Stat label="Actual Air Freight" value={totalAct} sub={CUR} big />
+        <Stat label="Est. Air Freight" value={splitLabel(items, (i) => i.airFreight)} />
+        <Stat label="Actual Air Freight" value={splitLabel(items, (i) => i.actualAirFreight)} big />
       </div>
 
       {/* Who claims how much */}
@@ -140,13 +146,13 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
           <p className="text-[11px] font-semibold text-gray-400 tracking-wide uppercase mb-3">Claim breakdown by department</p>
           <div className="space-y-2.5">
             {deptRows.map(d => {
-              const share = totalClaim > 0 ? (d.amt / totalClaim) * 100 : 0
+              const share = totalClaimMag > 0 ? (d._mag / totalClaimMag) * 100 : 0
               return (
                 <div key={d.dept}>
                   <div className="flex items-center justify-between text-sm mb-1">
                     <span className="font-medium text-gray-700">{d.dept}</span>
                     <span className="tabular-nums text-gray-800">
-                      <span className="font-semibold">{fmtNum(d.amt)}</span> <span className="text-gray-400 text-xs">{CUR}</span>
+                      <span className="font-semibold">{fmtSplit(d.amt, (n) => fmtNum(n))}</span>
                       <span className="text-gray-400 text-xs ml-2">{Math.round(share)}%</span>
                     </span>
                   </div>
@@ -165,8 +171,8 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
         <table className="text-xs w-full">
           <thead className="bg-gray-50">
             <tr>
-              {["STYLE", "SO", "QTY AIR", "EST. (THB)", "ACTUAL (THB)", "CLAIM"].map(h =>
-                <th key={h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${["QTY AIR", "EST. (THB)", "ACTUAL (THB)"].includes(h) ? "text-right" : "text-left"}`}>{h.replace("THB", CUR)}</th>)}
+              {["STYLE", "SO", "QTY AIR", "EST.", "ACTUAL", "CLAIM"].map(h =>
+                <th key={h} className={`px-3 py-2 font-medium text-gray-500 whitespace-nowrap ${["QTY AIR", "EST.", "ACTUAL"].includes(h) ? "text-right" : "text-left"}`}>{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -175,8 +181,8 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
                 <td className="px-3 py-2 font-medium whitespace-nowrap">{item.style}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{item.so}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmtNum(item.qtyRequestAir)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-blue-600">{fmtNum(item.airFreight)}</td>
-                <td className="px-3 py-2 text-right tabular-nums font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-blue-600">{fmtNum(item.airFreight)} <span className="text-gray-400 text-[10px]">{soCur(item)}</span></td>
+                <td className="px-3 py-2 text-right tabular-nums font-semibold text-green-700">{item.actualAirFreight != null ? <>{fmtNum(item.actualAirFreight)} <span className="text-gray-400 text-[10px]">{soCur(item)}</span></> : "-"}</td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
                     {getSplits(item).map((sp: any, k: number) => (
@@ -192,8 +198,8 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
           <tfoot>
             <tr className="border-t-2 border-gray-100 bg-gray-50/60 font-semibold">
               <td className="px-3 py-2 text-gray-600" colSpan={3}>Total</td>
-              <td className="px-3 py-2 text-right tabular-nums text-blue-600">{fmtNum(totalEst)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-green-700">{fmtNum(totalAct)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-blue-600">{splitLabel(items, (i) => i.airFreight)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-green-700">{splitLabel(items, (i) => i.actualAirFreight)}</td>
               <td className="px-3 py-2"></td>
             </tr>
           </tfoot>
@@ -1971,6 +1977,11 @@ export default function RequestDetailPage() {
   if (!req) return <div className="text-center py-20 text-gray-400">Not found</div>
   // Currency label for money amounts: EA documents are stored/shown in USD, all others in THB.
   const CUR = req?.bu === "EA" ? "USD" : "THB"
+  // Currency is per-SO (EA / GW-RHONE → USD, else THB); a GW doc can mix. One SO's amount is labelled
+  // with its own unit; a total over several SOs is split so THB and USD are never summed into one.
+  const soCur = (item: any) => soCurrency(req?.bu, item?.brand ?? req?.brandName)
+  const splitLabel = (items: any[], pick: (it: any) => number, fmt: (n: number) => string = (n) => fmtNum(n)) =>
+    fmtSplit(splitByCurrency((items || []).map(it => ({ amount: pick(it) || 0, bu: req?.bu, brand: it.brand ?? req?.brandName }))), fmt)
 
   const activeItems = req.items?.filter((i: any) => i.itemStatus !== "REJECTED") || []
   const pendingScmItems = req?.status === "PENDING_SCM" ? activeItems.filter((i: any) => i.itemStatus === "PENDING") : activeItems
@@ -2112,13 +2123,15 @@ export default function RequestDetailPage() {
         const isClaimDeptRole = isDvmClaim || isVpClaim || isClaimNextApprover || isClaimP1ForForward
         const summaryItems = isClaimDeptRole && myClaimItems.length > 0 ? myClaimItems : (req.items || [])
         const allItems = summaryItems
-        const estTotal = allItems.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
-        const actTotal = allItems.reduce((s: number, i: any) => {
-          if (!isClaimDeptRole || !claimDept) return s + (i.actualAirFreight || 0)
+        // Actual per SO — prorated to this reviewer's claim dept when acting in a claim-dept role.
+        const actOf = (i: any) => {
+          if (!isClaimDeptRole || !claimDept) return i.actualAirFreight || 0
           const depts: any[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0 ? i.claimDepts : (i.claimDepartment ? [{ dept: i.claimDepartment, pct: 100 }] : [])
           const match = depts.find((d: any) => d.dept === claimDept)
-          return s + (match ? (i.actualAirFreight || 0) * match.pct / 100 : (i.actualAirFreight || 0))
-        }, 0)
+          return match ? (i.actualAirFreight || 0) * match.pct / 100 : (i.actualAirFreight || 0)
+        }
+        const estTotal = allItems.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
+        const actTotal = allItems.reduce((s: number, i: any) => s + actOf(i), 0)
         const hasActual = allItems.some((i: any) => i.actualAirFreight > 0)
         const totalSo = allItems.length
         const fmtThb = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 })
@@ -2130,14 +2143,14 @@ export default function RequestDetailPage() {
             <div className="flex flex-wrap gap-5">
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">Est. Air Freight</p>
-                <p className="text-sm font-bold text-blue-700">{fmtThb(estTotal)} <span className="text-xs font-normal text-gray-400">{CUR}</span></p>
+                <p className="text-sm font-bold text-blue-700">{splitLabel(allItems, (i: any) => i.airFreight, fmtThb)}</p>
               </div>
               {hasActual && (
                 <>
                   <div className="w-px h-8 bg-gray-100 self-center" />
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase tracking-wider">Actual Air Freight</p>
-                    <p className="text-sm font-bold text-green-700">{fmtThb(actTotal)} <span className="text-xs font-normal text-gray-400">{CUR}</span></p>
+                    <p className="text-sm font-bold text-green-700">{splitLabel(allItems, actOf, fmtThb)}</p>
                   </div>
                 </>
               )}
@@ -2399,10 +2412,10 @@ export default function RequestDetailPage() {
                     <div className="hidden sm:flex items-center gap-3 text-xs">
                       <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
                       <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} {CUR}</span></span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{splitLabel(g.items, (i: any) => i.airFreight)}</span></span>
                       {(g as any).totalActual > 0 && <>
                         <span className="text-gray-300">|</span>
-                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} {CUR}</span></span>
+                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{splitLabel(g.items, (i: any) => i.actualAirFreight)}</span></span>
                       </>}
                     </div>
                   </div>
@@ -2659,10 +2672,10 @@ export default function RequestDetailPage() {
                     <div className="hidden sm:flex items-center gap-3 text-xs">
                       <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
                       <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} {CUR}</span></span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{splitLabel(g.items, (i: any) => i.airFreight)}</span></span>
                       {(g as any).totalActual > 0 && <>
                         <span className="text-gray-300">|</span>
-                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} {CUR}</span></span>
+                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{splitLabel(g.items, (i: any) => i.actualAirFreight)}</span></span>
                       </>}
                     </div>
                   </div>
@@ -2780,10 +2793,10 @@ export default function RequestDetailPage() {
                     <div className="hidden sm:flex items-center gap-3 text-xs">
                       <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
                       <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} {CUR}</span></span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{splitLabel(g.items, (i: any) => i.airFreight)}</span></span>
                       {(g as any).totalActual > 0 && <>
                         <span className="text-gray-300">|</span>
-                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{fmtNum((g as any).totalActual)} {CUR}</span></span>
+                        <span className="text-gray-500">Actual = <span className="font-medium text-green-600">{splitLabel(g.items, (i: any) => i.actualAirFreight)}</span></span>
                       </>}
                     </div>
                   </div>
@@ -3049,7 +3062,7 @@ export default function RequestDetailPage() {
                     <div className="hidden sm:flex items-center gap-3 text-xs">
                       <span className="text-gray-500">Gross Weight = <span className="font-medium text-gray-700">{fmtNum((g as any).totalGross, 2)} KG</span></span>
                       <span className="text-gray-300">|</span>
-                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{fmtNum((g as any).totalEst)} {CUR}</span></span>
+                      <span className="text-gray-500">EST Airfreight = <span className="font-medium text-blue-600">{splitLabel(g.items, (i: any) => i.airFreight)}</span></span>
                     </div>
                   </div>
                   <span className="text-xs text-gray-400 shrink-0">{g.items.length} SO(s)</span>
