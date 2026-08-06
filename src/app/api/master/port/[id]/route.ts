@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { releasePendingRateDocs } from "@/lib/freight"
 import { canEditMaster } from "@/lib/master-access"
+import { soCurrency } from "@/lib/currency"
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -23,11 +24,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         country: { equals: item.country, mode: "insensitive" },
         request: { status: { notIn: ["COMPLETED", "REJECTED"] }, ...(item.bu !== "ALL" ? { bu: item.bu } : {}) },
       },
-      select: { id: true, grossWeight: true, request: { select: { bu: true } } },
+      select: { id: true, grossWeight: true, brand: true, request: { select: { bu: true } } },
     })
     let recalculated = 0
     for (const it of affected) {
-      const r = it.request?.bu === "EA" ? rateUsd : rateThb
+      const r = soCurrency(it.request?.bu, it.brand) === "USD" ? rateUsd : rateThb
       if (r <= 0) continue
       await prisma.airRequestItem.update({ where: { id: it.id }, data: { airFreight: (it.grossWeight || 0) * r, marketRatePerKg: r } })
       recalculated++

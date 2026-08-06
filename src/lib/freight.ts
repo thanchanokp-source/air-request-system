@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { notifyStatusChange } from "@/lib/notify"
+import { soCurrency } from "@/lib/currency"
 
 // Canonical country key for freight-rate matching — folds common aliases so
 // "United States", "U.S.A", "USA", "US" all match the same Master rate.
@@ -40,14 +41,15 @@ export async function releaseHeldDocs() {
 
   for (const doc of held) {
     const items = doc.items as any[]
-    const dr = doc.bu === "EA" ? ratesUsd : rates   // EA prices freight in USD
-    const rateOk = items.filter(i => i.country).every(i => (dr[rateKey(i.country)] || 0) > 0)
+    // Rate currency is per-SO (EA / GW-RHONE = USD, else THB).
+    const rateOf = (it: any) => (soCurrency(doc.bu, it.brand) === "USD" ? ratesUsd : rates)[rateKey(it.country)] || 0
+    const rateOk = items.filter(i => i.country).every(i => rateOf(i) > 0)
     const wtOk = items.filter(i => i.description).every(i => (wts[descKey(i.description)] || 0) > 0)
     // Recompute Gross + Est. for every item now that data may have been added.
     // Gross uses QTY ORIGINAL Shipment (not QTY Air) — see recomputeRequestFreight note.
     for (const it of items) {
       const wt = wts[descKey(it.description)] || 0
-      const rate = dr[rateKey(it.country)] || 0
+      const rate = rateOf(it)
       const gross = (it.qtyOriginalShipment || 0) * wt
       await prisma.airRequestItem.update({
         where: { id: it.id },
@@ -73,13 +75,14 @@ export async function recomputeRequestFreight(requestId: string): Promise<void> 
   const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
   const rates: Record<string, number> = {}, ratesUsd: Record<string, number> = {}
   for (const r of rateList) { rates[rateKey(r.country)] = r.ratePerKg; ratesUsd[rateKey(r.country)] = r.rateUsd || 0 }
-  const dr = req?.bu === "EA" ? ratesUsd : rates   // EA prices freight in USD
   const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
   const wts: Record<string, number> = {}
   for (const d of descList) wts[descKey(d.name)] = d.weightPerUnit || 0
+  // Rate currency is per-SO (EA / GW-RHONE = USD, else THB).
+  const rateOf = (it: any) => (soCurrency(req?.bu, it.brand) === "USD" ? ratesUsd : rates)[rateKey(it.country)] || 0
   for (const it of items) {
     const wt = wts[descKey(it.description)] || 0
-    const rate = dr[rateKey(it.country)] || 0
+    const rate = rateOf(it)
     const gross = (it.qtyOriginalShipment || 0) * wt
     await prisma.airRequestItem.update({
       where: { id: it.id },

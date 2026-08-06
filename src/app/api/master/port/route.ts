@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { releasePendingRateDocs } from "@/lib/freight"
 import { canEditMaster } from "@/lib/master-access"
+import { soCurrency } from "@/lib/currency"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -67,11 +68,11 @@ async function recalcOpenItems(country: string, rateThb: number, rateUsd: number
       country: { equals: country, mode: "insensitive" },
       request: { status: { notIn: ["COMPLETED", "REJECTED"] }, ...(bu !== "ALL" ? { bu } : {}) },
     },
-    select: { id: true, grossWeight: true, request: { select: { bu: true } } },
+    select: { id: true, grossWeight: true, brand: true, request: { select: { bu: true } } },
   })
   let n = 0
   for (const it of affected) {
-    const r = it.request?.bu === "EA" ? rateUsd : rateThb
+    const r = soCurrency(it.request?.bu, it.brand) === "USD" ? rateUsd : rateThb
     if (r <= 0) continue
     await prisma.airRequestItem.update({
       where: { id: it.id },

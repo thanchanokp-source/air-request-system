@@ -10,6 +10,7 @@
 import { prisma } from "@/lib/prisma"
 import { canonCountry } from "@/lib/freight"
 import { normalizeSo } from "@/lib/so"
+import { soCurrency } from "@/lib/currency"
 import { forceImportReason } from "@/lib/claim"
 
 // Normalize a year that may be 2-digit or Thai Buddhist (B.E.) to Gregorian.
@@ -95,9 +96,13 @@ export async function buildRequestItems(
   const freightRates: Record<string, number> = {}       // THB per kg (NYG / GW / TRM)
   const freightRatesUsd: Record<string, number> = {}    // USD per kg (EA)
   for (const r of rateList) { freightRates[rateKey(r.country)] = r.ratePerKg; freightRatesUsd[rateKey(r.country)] = r.rateUsd || 0 }
-  // EA prices freight in USD → use the USD rate map; everyone else uses THB.
-  const activeRates = opts.isEA ? freightRatesUsd : freightRates
-  const missingRates = combos.filter(x => !(activeRates[rateKey(x.country)] > 0))
+  // Currency is per-SO: EA = USD, GW+RHONE = USD, everyone else = THB (a GW doc can mix).
+  const docBu = opts.isGW ? "GW" : opts.isEA ? "EA" : "NYG"
+  const rateFor = (country: string, brand: string) => (soCurrency(docBu, brand) === "USD" ? freightRatesUsd : freightRates)[rateKey(country)] || 0
+  // A country is "missing a rate" if any of its SOs lack the rate in its own currency.
+  const missingRates = combos.filter(x => items.some((i: any) =>
+    rateKey(String(col(i, "Country") || "")) === rateKey(x.country) &&
+    rateFor(x.country, String(col(i, "Brand name") || col(i, "BRAND") || "")) <= 0))
 
   const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
   const descWeights: Record<string, number> = {}
@@ -131,7 +136,7 @@ export async function buildRequestItems(
     const itemBrand = String(col(item, "Brand name") || col(item, "BRAND") || "").trim()
     const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
     const qtyOrig = Number(col(item, "QTY Original Shipment (pcs)") || 0)
-    const rate = activeRates[rateKey(country)] || 0
+    const rate = rateFor(country, itemBrand)
     const fileWeight = Number(String(col(item, "WEIGHT(KG)") ?? col(item, "WEIGHT") ?? "").replace(/,/g, "")) || 0
     const gw = (isHistorical && fileWeight > 0) ? fileWeight : qtyOrig * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
     let claimDepts: any = null, claimDept: string | null = null, claimPct: number | null = null

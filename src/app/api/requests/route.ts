@@ -9,6 +9,7 @@ import { canonCountry } from "@/lib/freight"
 import { attachGarmentPo } from "@/lib/bom"
 import { normalizeSo } from "@/lib/so"
 import { forceImportReason } from "@/lib/claim"
+import { soCurrency } from "@/lib/currency"
 import crypto from "crypto"
 
 // Normalize a year that may be 2-digit or Thai Buddhist (B.E.) to Gregorian.
@@ -151,17 +152,16 @@ export async function POST(req: NextRequest) {
     // in USD (rateUsd) → EA est is in USD; every other BU uses the THB rate (ratePerKg).
     const docBuForRate = isGW ? "GW" : isEA ? "EA" : isTRM ? "TRM" : "NYG"
     const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true }, orderBy: { updatedAt: "asc" } })
-    const allRates: Record<string, number> = {}, buRates: Record<string, number> = {}
+    const thbAll: Record<string, number> = {}, thbBu: Record<string, number> = {}, usdAll: Record<string, number> = {}, usdBu: Record<string, number> = {}
     for (const r of rateList) {
-      const val = isEA ? (r.rateUsd || 0) : (r.ratePerKg || 0)
-      const key = rateKey(r.country)
-      if (val <= 0) continue
-      if (r.bu === "ALL") allRates[key] = val
-      else if (r.bu === docBuForRate) buRates[key] = val
+      const key = rateKey(r.country), thb = r.ratePerKg || 0, usd = r.rateUsd || 0
+      if (r.bu === "ALL") { if (thb > 0) thbAll[key] = thb; if (usd > 0) usdAll[key] = usd }
+      else if (r.bu === docBuForRate) { if (thb > 0) thbBu[key] = thb; if (usd > 0) usdBu[key] = usd }
     }
-    const freightRates: Record<string, number> = { ...allRates, ...buRates } // BU-specific wins over shared
-
-    const missingRates = combos.filter(x => !(rateKey(x.country) in freightRates))
+    const thbRates = { ...thbAll, ...thbBu }, usdRates = { ...usdAll, ...usdBu } // BU-specific wins over shared
+    // Currency is per-SO: EA = USD, GW+RHONE = USD, everyone else = THB → pick the matching rate map.
+    const rateFor = (country: string, brand: string) => (soCurrency(docBuForRate, brand) === "USD" ? usdRates : thbRates)[rateKey(country)] || 0
+    const missingRates = combos.filter(x => items.some((i: any) => rateKey(String(col(i, "Country") || "")) === rateKey(x.country) && rateFor(x.country, String(col(i, "Brand name") || col(i, "BRAND") || "")) <= 0))
     const missingCountryInfo = missingRates
 
     // Gross Weight = QTY Air × WT Charge/pc of the DESCRIPTION (MER no longer types weight).
@@ -258,7 +258,7 @@ export async function POST(req: NextRequest) {
             const itemBrand = String(col(item, "Brand name") || col(item, "BRAND") || "").trim()
             const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
             const qtyOrig = Number(col(item, "QTY Original Shipment (pcs)") || 0)
-            const rate = freightRates[rateKey(country)] || 0
+            const rate = rateFor(country, itemBrand)
             // Gross Weight & Est. Air Freight are computed from QTY ORIGINAL Shipment (always
             // filled by MER) × WT Charge — NOT QTY Air (which MER may leave blank → would be 0).
             // 0 only if the description has no WT Charge yet (held).
