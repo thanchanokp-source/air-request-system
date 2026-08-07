@@ -41,6 +41,8 @@ function SoApprovalTable({ items, selected, onToggle, canApprove, statusOf, show
     { h: "GROSS (KG)", get: it => it.grossWeight != null ? fmtNum(it.grossWeight, 2) : "-" },
     { h: "EST. (THB)", get: it => fmtNum(it.airFreight) },
     ...(showActual ? [{ h: "ACTUAL (THB)", get: (it: any) => fmtNum(it.actualAirFreight) }] : []),
+    { h: "INV NO.", get: it => it.invoiceNo || "-" },
+    { h: "HAWB#", get: it => it.hawbNo || "-" },
     { h: "CLAIM DEPT", get: it => getSplits(it).map((s: any) => deptLabel(s.dept)).join(", ") || "-" },
   ]
   return (
@@ -4897,6 +4899,8 @@ export default function RequestDetailPage() {
               { h: "GROSS (KG)", get: it => it.grossWeight != null ? fmtNum(it.grossWeight, 2) : "-" },
               { h: "EST. (THB)", get: it => fmtNum(it.airFreight) },
               { h: "ACTUAL (THB)", get: it => fmtNum(it.actualAirFreight) },
+              { h: "INV NO.", get: it => it.invoiceNo || "-" },
+              { h: "HAWB#", get: it => it.hawbNo || "-" },
               { h: "CLAIM DEPT", get: it => getSplits(it).map((s: any) => deptLabel(s.dept)).join(", ") || "-" },
             ]
             return (
@@ -5259,6 +5263,8 @@ export default function RequestDetailPage() {
               { h: "GROSS (KG)", get: it => it.grossWeight != null ? fmtNum(it.grossWeight, 2) : "-" },
               { h: "EST. (THB)", get: it => fmtNum(it.airFreight) },
               { h: "ACTUAL (THB)", get: it => fmtNum(it.actualAirFreight) },
+              { h: "INV NO.", get: it => it.invoiceNo || "-" },
+              { h: "HAWB#", get: it => it.hawbNo || "-" },
               { h: "CLAIM DEPT", get: it => getSplits(it).map((s: any) => deptLabel(s.dept)).join(", ") || "-" },
             ]
             return (
