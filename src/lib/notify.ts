@@ -546,10 +546,16 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
     // Claim dept rejected an SO → alert MER (GW) to re-select the claim department.
     if (newStatus === "CLAIM_REJECTED_GW") {
       const rejItems = await prisma.airRequestItem.findMany({ where: { requestId, itemStatus: "CLAIM_REJECT_GW" }, select: { so: true, itemComment: true } })
-      const merUsers = await (prisma.user as any).findMany({ where: { role: "MER_GW", isActive: true }, select: { email: true } })
+      const isImport = !!(req as any).nykDirect
+      // Import (NYK Direct) docs skip Merchandise → there is no MER uploader to re-assign the claim.
+      // Alert the admin (Jariya) instead so she can handle / re-import the rejected document.
+      const merUsers = isImport
+        ? []
+        : await (prisma.user as any).findMany({ where: { role: "MER_GW", isActive: true }, select: { email: true } })
       const emails = merUsers.map((u: any) => u.email).filter(Boolean)
       const creator = await (prisma.user as any).findUnique({ where: { id: (req as any).createdById }, select: { email: true } })
       if (creator?.email) emails.push(creator.email)
+      if (isImport) emails.push("jariya.t@nanyangtextile.com")
       const recipients = [...new Set(emails)] as string[]
       if (!recipients.length) return
       const link = `${APP_URL}/requests/${requestId}`
@@ -557,12 +563,15 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const html = `<div style="font-family:Arial;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
         <p style="font-size:11px;letter-spacing:2px;color:#94a3b8;text-transform:uppercase;margin:0">Nan Yang Textile · Air Request</p>
         <h2 style="font-size:18px;margin:6px 0 2px">${(req as any).documentNo}</h2>
-        <p style="font-size:13px;color:#b91c1c;margin:8px 0;font-weight:600">A claim department has rejected the claim. Please re-select the claim department for the following SO(s):</p>
+        <p style="font-size:13px;color:#b91c1c;margin:8px 0;font-weight:600">${isImport ? "SCM NYK has rejected this <b>imported (NYK Direct)</b> document. This document has no Merchandise step — <b>admin</b> please review and re-import / fix the following SO(s):" : "A claim department has rejected the claim. Please re-select the claim department for the following SO(s):"}</p>
         <table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial"><thead><tr style="background:#fef2f2"><th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">Reason</th></tr></thead><tbody>${rows}</tbody></table>
         <div style="text-align:center;margin-top:20px"><a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 30px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Open Document →</a></div>
         ${loginLinkBlock()}
       </div>`
-      await sendMail(recipients, `[Merchandise – GW] Claim Rejected — please re-assign — ${(req as any).documentNo}`, html)
+      const subject = isImport
+        ? `[Admin] Imported doc rejected by SCM NYK — please handle — ${(req as any).documentNo}`
+        : `[Merchandise – GW] Claim Rejected — please re-assign — ${(req as any).documentNo}`
+      await sendMail(recipients, subject, html)
       return
     }
 
