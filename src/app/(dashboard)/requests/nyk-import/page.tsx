@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import * as XLSX from "xlsx"
 
-const NYK_ROLES = ["SCM_NYK_APPROVER", "SCM_NYK", "SCM_NYK_EVP"]
 const numOf = (v: any) => { const n = parseFloat(String(v ?? "").replace(/,/g, "")); return isNaN(n) ? 0 : n }
 const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 })
 const colLike = (row: any, ...subs: string[]) => {
@@ -17,8 +16,7 @@ export default function NykImportPage() {
   const router = useRouter()
   const { data: session } = useSession()
   const role = (session?.user as any)?.role || ""
-  const roles: string[] = [role, ...(((session?.user as any)?.roles) || [])]
-  const allowed = role === "ADMIN" || roles.some(r => NYK_ROLES.includes(r))
+  const allowed = role === "ADMIN" // NYK IMPORT is admin-only
 
   const [rows, setRows] = useState<any[]>([])
   const [bu, setBu] = useState("GW")
@@ -51,7 +49,22 @@ export default function NykImportPage() {
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(new Uint8Array(buf), { type: "array" })
       const ws = wb.Sheets[wb.SheetNames[0]]
-      const parsed = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[]
+      // The GW template has a TWO-ROW header: a merged banner (MER / LOGISTICS) on
+      // top, then the real column names (No_Document / SO / HAWB# / …) below. Don't
+      // assume row 1 is the header — find the row that actually contains an "SO" column
+      // and build records from the rows beneath it.
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as any[][]
+      const norm = (v: any) => String(v ?? "").trim().toLowerCase()
+      const hdrIdx = aoa.findIndex(row => Array.isArray(row) && row.some(c => norm(c) === "so"))
+      if (hdrIdx === -1) { setError("ไม่พบคอลัมน์ SO — ตรวจว่าใช้เทมเพลต GW (มีหัวตาราง No_Document / SO / HAWB# …)"); return }
+      const headers = (aoa[hdrIdx] || []).map(h => String(h ?? "").trim())
+      const parsed = aoa.slice(hdrIdx + 1)
+        .filter(row => Array.isArray(row) && row.some(c => String(c ?? "").trim() !== "")) // skip blank rows
+        .map(row => {
+          const obj: any = {}
+          headers.forEach((h, i) => { if (h) obj[h] = row[i] ?? "" })
+          return obj
+        })
       const valid = parsed.filter(r => String(get(r, "SO") || "").trim())
       if (valid.length === 0) { setError("ไม่พบข้อมูล — ต้องมีคอลัมน์ SO และข้อมูลตามเทมเพลต GW"); return }
       setRows(valid); setFileName(file.name)
@@ -77,7 +90,7 @@ export default function NykImportPage() {
     } catch (e: any) { setError(e?.message || "Error"); setBusy(false) }
   }
 
-  if (!allowed) return <div className="text-center py-20 text-gray-400">เฉพาะ Admin หรือ SCM NYK เท่านั้น</div>
+  if (!allowed) return <div className="text-center py-20 text-gray-400">เฉพาะ Admin เท่านั้น</div>
 
   return (
     <div className="space-y-5 max-w-5xl">
