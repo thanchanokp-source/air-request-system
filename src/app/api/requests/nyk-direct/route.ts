@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange } from "@/lib/notify"
 import { normalizeSo } from "@/lib/so"
+import { buildRequestItems } from "@/lib/build-items"
 import crypto from "crypto"
 
 // "NYK Direct" GW import. Special GW flow that SKIPS every approver (MER/DPM/GM/President/LG) and
@@ -75,27 +76,36 @@ export async function POST(req: NextRequest) {
   const documentNo = await generateDocumentNo(bu)
   const userId = (session.user as any).id
 
-  const itemData = items.map((it: any) => {
-    const qty = Number(numOf(col(it, "QTY Request ship Air (pcs)") ?? col(it, "QTY AIR")))
+  // Compute Gross Weight + EST air freight with the SAME master lookups as a normal upload
+  // (gross = QTY Original × weightPerUnit from Master Description; est = gross × country rate).
+  // `built[i]` is index-aligned with `items` and carries port/dates/qty too — reuse them, then
+  // OVERRIDE the claim (SCM NYK 100%), Logistics (INV/HAWB), actual, and status for NYK Direct.
+  const calc = await buildRequestItems(items, { isGW: bu === "GW", isEA: bu === "EA" })
+  const built = calc.items
+
+  const itemData = items.map((it: any, idx: number) => {
+    const b = built[idx] || {}
     const reason = String(col(it, "REASON 1") || col(it, "Reason delay") || "").trim() || null
     // Claim = SCM NYK 100% (this import is NYK-only). Status null → PRES_PASSED (awaiting SCM NYK).
     const claimDepts = [{ dept: "SCM NYK", pct: 100, reason, status: null, crNo: null }]
     return {
-      style: String(col(it, "STYLE") || ""),
-      so: normalizeSo(col(it, "SO")),
-      brand: String(col(it, "Brand name") || col(it, "BRAND") || "") || null,
-      sub: String(col(it, "SUB") || "") || null,
-      customerPO: String(col(it, "CUSTOMER PO") || ""),
-      description: String(col(it, "DESCRIPTION") || ""),
-      originalShipmentDate: parseDate(col(it, "Original Shipment Date")),
-      planShipmentDate: parseDate(col(it, "Plan Shipment Date")),
-      qtyOriginalShipment: Number(numOf(col(it, "QTY Original Shipment (pcs)"))),
-      qtyRequestAir: qty,
-      reasonDelay: String(col(it, "Reason delay") || ""),
-      factory: String(col(it, "Factory") || ""),
-      country: String(col(it, "Country") || ""),
-      port: String(col(it, "PORT") || col(it, "Port") || ""), // required field; template dropped the Port column → default ""
-      grossWeight: numOf(col(it, "WEIGHT(KG)") ?? col(it, "GROSS")) || 0,
+      style: b.style ?? String(col(it, "STYLE") || ""),
+      so: b.so ?? normalizeSo(col(it, "SO")),
+      brand: b.brand ?? (String(col(it, "Brand name") || col(it, "BRAND") || "") || null),
+      sub: b.sub ?? null,
+      customerPO: b.customerPO ?? String(col(it, "CUSTOMER PO") || ""),
+      description: b.description ?? String(col(it, "DESCRIPTION") || ""),
+      originalShipmentDate: b.originalShipmentDate ?? parseDate(col(it, "Original Shipment Date")),
+      planShipmentDate: b.planShipmentDate ?? parseDate(col(it, "Plan Shipment Date")),
+      qtyOriginalShipment: b.qtyOriginalShipment ?? Number(numOf(col(it, "QTY Original Shipment (pcs)"))),
+      qtyRequestAir: b.qtyRequestAir ?? Number(numOf(col(it, "QTY Request ship Air (pcs)") ?? col(it, "QTY AIR"))),
+      reasonDelay: b.reasonDelay ?? String(col(it, "Reason delay") || ""),
+      factory: b.factory ?? String(col(it, "Factory") || ""),
+      country: b.country ?? String(col(it, "Country") || ""),
+      port: b.port ?? String(col(it, "PORT") || col(it, "Port") || ""),
+      grossWeight: b.grossWeight ?? 0,           // = QTY Orig × weightPerUnit (Master Description)
+      airFreight: b.airFreight ?? 0,             // = gross × country rate (Master Rate)
+      marketRatePerKg: b.marketRatePerKg ?? null,
       invoiceNo: String(col(it, "INV NO.") || col(it, "Invoice No") || "") || null,
       hawbNo: String(col(it, "HAWB#") || "") || null,
       actualAirFreight: actualOf(it),
