@@ -630,6 +630,9 @@ export default function RequestDetailPage() {
   const [crByItem, setCrByItem] = useState<Record<string, string>>({}) // per-SO CR NO (grouped by INV in the UI)
   const [savingCr, setSavingCr] = useState(false)
   const [reassign, setReassign] = useState<Record<string, { dept: string; pct: string; reason: string }[]>>({})
+  // Claim-reject resubmit: batch controls (apply one dept to ALL rejected SOs at once).
+  const [batchReassignDept, setBatchReassignDept] = useState("SCM NYK")
+  const [showPerSoReassign, setShowPerSoReassign] = useState(false)
   // Resubmit edit (at PENDING_MER / PENDING_MER_GW) — per-item field overrides the MER can change
   // before re-submitting. Empty = unchanged (reads from the item). GW also edits claim splits.
   const [editRows, setEditRows] = useState<Record<string, any>>({})
@@ -4189,7 +4192,45 @@ export default function RequestDetailPage() {
           </div>
           {/* Attach extra supporting files on resubmit (e.g. corrected invoice / HAWB) */}
           {renderExtraAttach()}
-          {(req.items || []).filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW").map((item: any) => {
+
+          {/* ── BATCH: apply one claim dept to ALL rejected SOs and resubmit in one click ── */}
+          {(() => {
+            const rejectedItems = (req.items || []).filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
+            const doBatch = async () => {
+              if (!batchReassignDept) { alert("เลือกแผนก claim ก่อน"); return }
+              if (!confirm(`Resubmit ทั้งหมด ${rejectedItems.length} SO เป็น ${batchReassignDept} 100% ?`)) return
+              setSubmitting("_batchReassign")
+              const res = await fetch(`/api/requests/${id}/approve`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "resubmit_claim_gw_batch", claimDepts: [{ dept: batchReassignDept, pct: 100, reason: null }] })
+              })
+              if (res.ok) { setReq(await res.json()); setReassign({}) }
+              else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
+              setSubmitting(null)
+            }
+            const isSub = submitting === "_batchReassign"
+            return (
+              <div className="border border-green-300 bg-green-50/60 rounded-lg p-3 flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-gray-700">ตั้งทั้งหมด ({rejectedItems.length} SO):</span>
+                <select value={batchReassignDept} onChange={e => setBatchReassignDept(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white">
+                  {["SCM NYK", "SCM NYG", "GW", "SUPPLIER"].map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <span className="text-sm text-gray-500">100%</span>
+                <button onClick={doBatch} disabled={isSub}
+                  className="ml-auto px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50">
+                  {isSub ? "กำลัง Resubmit..." : `Resubmit ทั้งหมด → Claim (${rejectedItems.length} SO)`}
+                </button>
+                <button type="button" onClick={() => setShowPerSoReassign(v => !v)}
+                  className="text-xs text-gray-500 hover:text-gray-800 underline w-full sm:w-auto">
+                  {showPerSoReassign ? "ซ่อนการแก้รายตัว" : "หรือแก้แผนกรายตัว (บาง SO ต่างกัน) »"}
+                </button>
+              </div>
+            )
+          })()}
+
+          {/* Per-SO cards — hidden by default; open only when a few SOs need a different dept */}
+          {showPerSoReassign && (req.items || []).filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW").map((item: any) => {
             const rows = reassign[item.id] || getSplits(item).map((s: any) => ({ dept: s.dept, pct: String(s.pct ?? ""), reason: s.reason || "" }))
             const setRows = (r: any[]) => setReassign(p => ({ ...p, [item.id]: r }))
             const total = rows.reduce((a: number, r: any) => a + (Number(r.pct) || 0), 0)

@@ -1340,6 +1340,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
+  // Batch re-submit — re-assign the claim dept for ALL rejected SOs in ONE request (the common
+  // case: every SO back to "SCM NYK 100%"), so nobody clicks 13 SOs one by one. `claimDepts` is
+  // the shared split applied to every rejected SO; `perItem` optionally overrides specific SOs.
+  // One DB pass + ONE notify (no email-per-SO flood).
+  if (action === "resubmit_claim_gw_batch" && (userRole === "MER_GW" || userRole === "ADMIN")) {
+    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const commonSplits = Array.isArray(body.claimDepts) ? body.claimDepts : null
+    const perItem: Record<string, any[]> = (body.perItem && typeof body.perItem === "object") ? body.perItem : {}
+    const rejected = request.items.filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
+    if (rejected.length === 0) return NextResponse.json({ error: "No rejected SO to resubmit" }, { status: 400 })
+    let count = 0
+    for (const it of rejected) {
+      const raw = (perItem[it.id] && perItem[it.id].length) ? perItem[it.id] : commonSplits
+      if (!raw || raw.length === 0) continue
+      const totalPctVal = raw.reduce((s: number, x: any) => s + (Number(x.pct) || 0), 0)
+      if (Math.round(totalPctVal) !== 100) return NextResponse.json({ error: `SO ${it.so}: total %CLAIM must equal 100` }, { status: 400 })
+      if (raw.some((x: any) => !x.dept)) return NextResponse.json({ error: `SO ${it.so}: select a claim department` }, { status: 400 })
+      const newSplits = raw.map((x: any) => ({ dept: String(x.dept), pct: Number(x.pct) || 0, reason: x.reason || null, status: null, crNo: null }))
+      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: newSplits as any, claimDepartment: newSplits[0].dept, itemStatus: "LOG_PASSED" } as any })
+      count++
+    }
+    if (count === 0) return NextResponse.json({ error: "Nothing to resubmit — set a claim department" }, { status: 400 })
+    await prisma.approvalLog.create({ data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: "PENDING_CLAIM_GW", comment: `Re-submitted ${count} SO to Claim (batch)` } })
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+    if (nextDocStatus === "PENDING_CLAIM_GW") await notifyStatusChange(id, "PENDING_CLAIM_GW").catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
   // Batch version of approve_so_claim_gw — approve MANY SO in ONE request so it
   // doesn't fire an email + doc-status recalc per SO (that made 30+ SO very slow).
   // DB writes per item, then a single recalc + single notify at the end.
