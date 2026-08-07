@@ -85,6 +85,10 @@ export const NEXT_STATUS: Record<string, { approve: string; reject?: string }> =
   PENDING_PRESIDENT_GW: { approve: "PENDING_LOGISTICS_GW", reject: "REJECTED" },
   PENDING_LOGISTICS_GW: { approve: "PENDING_CLAIM_GW" },
   PENDING_CLAIM_GW: { approve: "PENDING_ACCOUNTING", reject: "REJECTED" },
+  // Partially-rejected GW claim (some SOs sent back, others still pending). Needs an entry so the
+  // generic statusMap gate (statusMap.approve) doesn't crash before the dedicated GW-claim
+  // handlers run for the remaining SOs.
+  PENDING_CLAIM_REJECT_GW: { approve: "PENDING_ACCOUNTING", reject: "REJECTED" },
   PENDING_SCM_GW: { approve: "PENDING_ACCOUNTING", reject: "REJECTED" },
   PENDING_ACCOUNTING: { approve: "COMPLETED", reject: "REJECTED" },
 }
