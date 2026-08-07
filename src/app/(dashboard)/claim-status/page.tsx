@@ -13,9 +13,15 @@ import { viewableBus, requestInBu } from "@/lib/bu"
 type CellState = "approved" | "pending" | "rejected"
 type DeptAgg = { approved: number; pending: number; rejected: number; total: number }
 
-// SUPPLIER has sub-tags (IN/OUT) — collapse to one column.
-const canonDept = (d: string) => (d === "SUPPLIER_IN" || d === "SUPPLIER_OUT") ? "SUPPLIER" : d
-const DEPT_ORDER_GW = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
+// Collapse dept variants to ONE column key: SUPPLIER sub-tags → SUPPLIER, and the
+// GW/NYG "SCM NYK"/"SCM NYG" vs plain "NYK"/"NYG" spellings → the same NYK/NYG column.
+const canonDept = (d: string) => {
+  if (d === "SUPPLIER_IN" || d === "SUPPLIER_OUT") return "SUPPLIER"
+  if (d === "SCM NYK") return "NYK"
+  if (d === "SCM NYG") return "NYG"
+  return d
+}
+const DEPT_ORDER_GW = ["NYK", "NYG", "GW", "SUPPLIER"]
 const DEPT_ORDER_NYG = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
@@ -67,11 +73,13 @@ export default function ClaimStatusPage() {
     fetch("/api/requests").then(r => r.json()).then(d => { setRequests(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
   }, [])
 
-  // Docs in this BU that have reached the claim stage (have at least one split).
+  // Docs in this BU that have reached the claim stage (have at least one split)
+  // OR are already completed (older/imported docs may carry no per-dept breakdown
+  // but should still show as Accepted — never hide a finished document).
   const docs = requests
     .filter(r => requestInBu(r, activeBu) && (!r.isTest || role === "ADMIN"))
     .map(r => ({ r, map: docDeptMap(r) }))
-    .filter(x => Object.keys(x.map).length > 0)
+    .filter(x => Object.keys(x.map).length > 0 || x.r.status === "COMPLETED")
 
   // Columns = preferred order filtered to depts actually present, + any extras.
   const preferred = activeBu === "GW" ? DEPT_ORDER_GW : DEPT_ORDER_NYG
@@ -79,10 +87,11 @@ export default function ClaimStatusPage() {
   docs.forEach(x => Object.keys(x.map).forEach(d => present.add(d)))
   const cols = [...preferred.filter(d => present.has(d)), ...[...present].filter(d => !preferred.includes(d)).sort()]
 
-  // Overall doc state across its involved depts.
-  const docStateOf = (map: Record<string, DeptAgg>): CellState => {
+  // Overall doc state across its involved depts. No dept data (older/imported docs)
+  // → fall back to the document status: COMPLETED = Accepted, else In progress.
+  const docStateOf = (map: Record<string, DeptAgg>, status?: string): CellState => {
     const states = Object.values(map).map(cellStateOf)
-    if (states.length === 0) return "pending"
+    if (states.length === 0) return status === "COMPLETED" ? "approved" : "pending"
     if (states.every(s => s === "approved")) return "approved"
     if (states.some(s => s === "pending")) return "pending"
     return "rejected"
@@ -93,14 +102,14 @@ export default function ClaimStatusPage() {
     if (q && !String(r.documentNo || "").toLowerCase().includes(q.toLowerCase())) return false
     if (deptF && !map[deptF]) return false
     if (statusF) {
-      const s = deptF ? cellStateOf(map[deptF]) : docStateOf(map)
+      const s = deptF ? cellStateOf(map[deptF]) : docStateOf(map, r.status)
       if (s !== statusF) return false
     }
     return true
   })
 
   const tally = { approved: 0, pending: 0, rejected: 0 }
-  rows.forEach(({ map }) => { tally[docStateOf(map)]++ })
+  rows.forEach(({ r, map }) => { tally[docStateOf(map, r.status)]++ })
 
   return (
     <div className="space-y-5">
@@ -176,7 +185,7 @@ export default function ClaimStatusPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {rows.map(({ r, map }) => {
-                const overall = docStateOf(map)
+                const overall = docStateOf(map, r.status)
                 return (
                   <tr key={r.id} className="hover:bg-gray-50/60">
                     <td className="px-4 py-2 whitespace-nowrap">
