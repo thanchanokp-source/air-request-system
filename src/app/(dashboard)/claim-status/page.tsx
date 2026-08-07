@@ -30,9 +30,12 @@ const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isN
 function docDeptMap(doc: any): Record<string, DeptAgg> {
   const map: Record<string, DeptAgg> = {}
   for (const it of doc?.items || []) {
+    // A rejected / sent-back SO marks its department portions as rejected — the reject sets the
+    // item's status (CLAIM_REJECT_GW / REJECTED) but not the per-split status, so check both.
+    const itemRejected = it.itemStatus === "REJECTED" || it.itemStatus === "CLAIM_REJECT_GW"
     for (const sp of getSplits(it)) {
       const dept = canonDept(sp.dept)
-      const st = claimSplitState(sp.dept, sp.status).s
+      const st: CellState = itemRejected ? "rejected" : claimSplitState(sp.dept, sp.status).s
       const m = (map[dept] ||= { approved: 0, pending: 0, rejected: 0, total: 0 })
       m[st]++; m.total++
     }
