@@ -94,6 +94,7 @@ export async function POST(req: NextRequest) {
       reasonDelay: String(col(it, "Reason delay") || ""),
       factory: String(col(it, "Factory") || ""),
       country: String(col(it, "Country") || ""),
+      port: String(col(it, "PORT") || col(it, "Port") || ""), // required field; template dropped the Port column → default ""
       grossWeight: numOf(col(it, "WEIGHT(KG)") ?? col(it, "GROSS")) || 0,
       invoiceNo: String(col(it, "INV NO.") || col(it, "Invoice No") || "") || null,
       hawbNo: String(col(it, "HAWB#") || "") || null,
