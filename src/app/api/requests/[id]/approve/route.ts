@@ -1277,7 +1277,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-    await notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
+    // Alert only when the doc FIRST enters the reject state — not once per SO (avoids an email flood
+    // when several SOs are sent back). Later rejects on an already-rejected doc stay silent.
+    if (request.status !== "PENDING_CLAIM_REJECT_GW") await notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -1297,7 +1299,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await prisma.approvalLog.create({ data: { requestId: id, userId, action: "LG_REJECT_SO", fromStatus: request.status, toStatus: "PENDING_CLAIM_REJECT_GW", comment: `SO: ${item.so} — Logistics rejected (back before claim): ${comment}` } })
       const nextDocStatus = await recalcDocStatusGW(id)
       if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-      await notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
+      // Only on first entry into the reject state — avoid one email per SO.
+      if (request.status !== "PENDING_CLAIM_REJECT_GW") await notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
     } else {
       // NYG: the claim split is assigned by SCM → reset the SO and send it back to SCM (before claim).
       await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "PENDING", claimDepartment: null, claimDepts: null, itemComment: comment } as any })
