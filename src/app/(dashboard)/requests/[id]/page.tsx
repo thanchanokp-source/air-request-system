@@ -1879,15 +1879,34 @@ export default function RequestDetailPage() {
   const attachFileFn = async (file: File, itemId?: string) => {
     setUploadingItem(itemId || "_req")
     try {
-      const form = new FormData()
-      form.append("file", file)
-      if (itemId) { form.append("itemId", itemId); form.append("claimDept", claimDeptRole) }
-      const res = await fetch(`/api/requests/${id}/attachments`, { method: "POST", body: form })
-      if (res.ok) {
-        const att = await res.json()
+      // 1) Get a signed URL and upload the file DIRECTLY to Supabase — bypasses Vercel's
+      //    ~4.5MB serverless body limit (large invoice / email PDFs failed before).
+      const signRes = await fetch(`/api/requests/${id}/attachments/sign`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name }),
+      })
+      if (!signRes.ok) { const e = await signRes.json().catch(() => ({})); alert(`Upload failed: ${e.error || "could not get upload URL"}`); return }
+      const { uploadUrl, path } = await signRes.json()
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT", body: file,
+        headers: { "content-type": file.type || "application/octet-stream", "x-upsert": "true" },
+      })
+      if (!putRes.ok) { alert(`Upload failed (storage ${putRes.status}) — ${file.name}`); return }
+      // 2) Register the attachment metadata row.
+      const regRes = await fetch(`/api/requests/${id}/attachments`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path, fileName: file.name, fileSize: file.size,
+          mimeType: file.type || "application/octet-stream",
+          itemId: itemId || null, claimDept: itemId ? claimDeptRole : null,
+        }),
+      })
+      if (regRes.ok) {
+        const att = await regRes.json()
         setReq((prev: any) => ({ ...prev, attachments: [...(prev.attachments || []), att] }))
-      } else { alert("Upload failed") }
-    } finally { setUploadingItem(null) }
+      } else { const e = await regRes.json().catch(() => ({})); alert(`Upload failed: ${e.error || "register"}`) }
+    } catch (e: any) { alert(`Upload failed: ${e?.message || e}`) }
+    finally { setUploadingItem(null) }
   }
 
   // Request Admin to add a NEW person for the next position (no forward until approved).

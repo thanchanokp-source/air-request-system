@@ -81,10 +81,22 @@ export default function NykImportPage() {
       })
       if (!res.ok) { const e = await res.json().catch(() => ({})); setError(e.error || "Create failed"); setBusy(false); return }
       const { id } = await res.json()
-      // Upload each attachment to the new document.
+      // Upload each attachment DIRECTLY to Supabase (signed URL) → register, so large PDFs
+      // don't hit Vercel's ~4.5MB request-body limit.
       for (const f of attachments) {
-        const form = new FormData(); form.append("file", f); form.append("category", "NYK_IMPORT")
-        await fetch(`/api/requests/${id}/attachments`, { method: "POST", body: form }).catch(() => {})
+        try {
+          const signRes = await fetch(`/api/requests/${id}/attachments/sign`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileName: f.name }),
+          })
+          if (!signRes.ok) continue
+          const { uploadUrl, path } = await signRes.json()
+          const putRes = await fetch(uploadUrl, { method: "PUT", body: f, headers: { "content-type": f.type || "application/octet-stream", "x-upsert": "true" } })
+          if (!putRes.ok) continue
+          await fetch(`/api/requests/${id}/attachments`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path, fileName: f.name, fileSize: f.size, mimeType: f.type || "application/octet-stream", category: "NYK_IMPORT" }),
+          })
+        } catch { /* skip a failed attachment, don't block the import */ }
       }
       router.push(`/requests/${id}`)
     } catch (e: any) { setError(e?.message || "Error"); setBusy(false) }

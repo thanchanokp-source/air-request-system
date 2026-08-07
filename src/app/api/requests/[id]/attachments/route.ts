@@ -22,6 +22,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const userId = (session.user as any).id
   const { id } = await params
 
+  // JSON body = file was already uploaded DIRECTLY to Supabase via a signed URL
+  // (see /attachments/sign) — bypasses Vercel's ~4.5MB body limit. Just register the row.
+  const contentType = req.headers.get("content-type") || ""
+  if (contentType.includes("application/json")) {
+    const b = await req.json().catch(() => ({}))
+    if (!b?.path || !b?.fileName) return NextResponse.json({ error: "path and fileName required" }, { status: 400 })
+    const attachment = await prisma.requestAttachment.create({
+      data: {
+        requestId: id,
+        itemId: b.itemId || null,
+        uploadedById: userId,
+        fileName: String(b.fileName),
+        filePath: String(b.path),
+        fileSize: Number(b.fileSize) || 0,
+        mimeType: b.mimeType || "application/octet-stream",
+        claimDept: b.claimDept || null,
+        category: b.category || null,
+      },
+      include: { uploadedBy: { select: { name: true, role: true } } }
+    })
+    return NextResponse.json(attachment)
+  }
+
   const form = await req.formData()
   const file = form.get("file") as File
   const itemId = form.get("itemId") as string | null
