@@ -1801,7 +1801,20 @@ export default function RequestDetailPage() {
         {docAtts.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {docAtts.map((a: any) => (
-              <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline bg-white border border-blue-100 rounded px-2 py-0.5 truncate max-w-[240px]">📎 {a.fileName}</a>
+              <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-white border border-blue-100 rounded px-2 py-0.5 max-w-[260px]">
+                <a href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline truncate">📎 {a.fileName}</a>
+                <button
+                  disabled={deletingAtt === a.id}
+                  onClick={async () => {
+                    if (!confirm(`ลบไฟล์ "${a.fileName}" ?`)) return
+                    setDeletingAtt(a.id)
+                    await fetch(`/api/attachments/${a.id}`, { method: "DELETE" }).catch(() => {})
+                    setReq((prev: any) => ({ ...prev, attachments: (prev.attachments || []).filter((x: any) => x.id !== a.id) }))
+                    setDeletingAtt(null)
+                  }}
+                  className="text-red-400 hover:text-red-600 font-bold leading-none disabled:opacity-40 shrink-0"
+                  title="ลบไฟล์">{deletingAtt === a.id ? "…" : "✕"}</button>
+              </span>
             ))}
           </div>
         )}
