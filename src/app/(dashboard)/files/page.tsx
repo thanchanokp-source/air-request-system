@@ -153,7 +153,11 @@ export default function FilesPage() {
   const portOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.port))), [folderFiltered])
   const shipOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.planShipmentDate ? fmtDate(i.planShipmentDate) : null))), [folderFiltered])
 
-  const hasFilter = [brandF, styleF, soF, cpF, claimF, invoiceF, portF, shipF].some(f => f.length > 0)
+  const hasFilter = [brandF, styleF, soF, cpF, claimF, invoiceF, portF, shipF].some(f => f.length > 0) || hawbQuery.trim().length > 0
+
+  // HAWB# box (also used for "Print by HAWB") doubles as a live filter — case-insensitive contains.
+  const hawbNorm = hawbQuery.trim().toLowerCase()
+  const hawbMatch = (h: any) => !hawbNorm || String(h || "").trim().toLowerCase().includes(hawbNorm)
 
   // Item-level filter — used to filter the SO rows WITHIN a document ("By Document" view) so a
   // selected SO/Style/etc. actually narrows the rows shown, not just which documents appear.
@@ -164,6 +168,7 @@ export default function FilesPage() {
     if (invoiceF.length && !invoiceF.includes(it.invoiceNo)) return false
     if (portF.length && !portF.includes(it.port)) return false
     if (shipF.length && !shipF.includes(fmtDate(it.planShipmentDate))) return false
+    if (!hawbMatch(it.hawbNo)) return false
     return true
   }
 
@@ -177,9 +182,10 @@ export default function FilesPage() {
     if (claimF.length && !items.some((i: any) => getSplits(i).some((s: any) => claimF.includes(s.dept)) || claimF.includes(i.claimDepartment))) return false
     if (portF.length && !items.some((i: any) => portF.includes(i.port))) return false
     if (shipF.length && !items.some((i: any) => shipF.includes(fmtDate(i.planShipmentDate)))) return false
+    if (hawbNorm && !items.some((i: any) => hawbMatch(i.hawbNo))) return false
     if (unbookedOnly && unbookedCount(r) === 0) return false
     return true
-  }), [folderFiltered, brandF, styleF, soF, cpF, invoiceF, claimF, portF, shipF, unbookedOnly])
+  }), [folderFiltered, brandF, styleF, soF, cpF, invoiceF, claimF, portF, shipF, hawbNorm, unbookedOnly])
 
   // Flat SO rows for the LG "By SO" view — item-level filtering, then group by Port/Ship Date.
   const soRows = useMemo(() => {
@@ -193,10 +199,11 @@ export default function FilesPage() {
       if (invoiceF.length && !invoiceF.includes(it.invoiceNo)) return
       if (portF.length && !portF.includes(it.port)) return
       if (shipF.length && !shipF.includes(fmtDate(it.planShipmentDate))) return
+      if (!hawbMatch(it.hawbNo)) return
       rows.push({ req: r, item: it })
     }))
     return rows
-  }, [filtered, unbookedOnly, styleF, soF, cpF, invoiceF, portF, shipF])
+  }, [filtered, unbookedOnly, styleF, soF, cpF, invoiceF, portF, shipF, hawbNorm])
 
   const soGroups = useMemo(() => {
     const m: Record<string, { req: any; item: any }[]> = {}
@@ -511,7 +518,7 @@ export default function FilesPage() {
               <MultiSelect label="Invoice No..." options={invoiceOpts} value={invoiceF} onChange={setInvoiceF} />
             </div>
             {hasFilter && (
-              <button onClick={() => { setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setClaimF([]); setInvoiceF([]); setPortF([]); setShipF([]) }}
+              <button onClick={() => { setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setClaimF([]); setInvoiceF([]); setPortF([]); setShipF([]); setHawbQuery("") }}
                 className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 font-medium shrink-0 mt-0.5">Clear</button>
             )}
           </div>
