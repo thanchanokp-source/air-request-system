@@ -1146,6 +1146,26 @@ export default function RequestDetailPage() {
     XLSX.utils.book_append_sheet(wb, ws, "Claim")
     XLSX.writeFile(wb, `${req?.documentNo || "claim"}_${(gwFwdCanonicalDept || "claim").replace(/\s+/g, "")}.xlsx`)
   }
+
+  // Generic Excel export of a claim-approver's SO list — works for ANY BU / approver screen
+  // (SCM NYK, CLAIM_NEXT_APPROVER, etc.) so a reviewer can pull the data when there are many SOs.
+  const exportItemsExcel = (items: any[], suffix: string) => {
+    const CUR = req?.bu === "EA" ? "USD" : "THB"
+    const rows = (items || []).map((it: any, i: number) => ({
+      "No.": i + 1, "SO": it.so, "STYLE": it.style, "SUB": it.sub || "", "BRAND": it.brand || "",
+      "CUSTOMER PO": it.customerPO || "", "DESCRIPTION": it.description || "",
+      "QTY AIR": it.qtyRequestAir ?? "", "GROSS (KG)": it.grossWeight ?? "",
+      [`EST. (${CUR})`]: it.airFreight ?? "", [`ACTUAL (${CUR})`]: it.actualAirFreight ?? "",
+      "INVOICE NO": it.invoiceNo || "", "HAWB#": it.hawbNo || "",
+      "CLAIM DEPT": getSplits(it).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", "),
+      "STATUS": it.itemStatus,
+    }))
+    if (rows.length === 0) { alert("ไม่มีข้อมูลให้ export"); return }
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Data")
+    XLSX.writeFile(wb, `${req?.documentNo || "doc"}_${String(suffix || "claim").replace(/\s+/g, "")}.xlsx`)
+  }
   // Current position + next required position (with factory / branch context).
   const myFwdRow = myClaimFwdRow
   const gwCurrentPos = role === "CLAIM_NEXT_APPROVER" ? (myFwdRow?.position ?? 0) : 0
@@ -3919,6 +3939,10 @@ export default function RequestDetailPage() {
                   className="flex items-center gap-1 text-xs font-semibold text-white bg-indigo-600 rounded-lg px-3 py-1.5 hover:bg-indigo-700 shadow-sm">
                   {claimTableView ? "▤ Card view" : "▤ Table view"}
                 </button>
+                <button onClick={() => exportItemsExcel(nextItems, nextApproverDept || "claim")}
+                  className="text-xs text-green-700 border border-green-300 rounded-lg px-2.5 py-1.5 hover:bg-green-50 font-medium">
+                  ⬇ Export Excel
+                </button>
                 <span className={pendingItems.length > 0 ? "text-yellow-600" : "text-gray-300"}>{pendingItems.length} pending</span>
                 <span className="text-green-600">{approvedCount} approved</span>
                 {pendingItems.length > 0 && (
@@ -4915,6 +4939,19 @@ export default function RequestDetailPage() {
           })()}
 
           {/* Quick-select: type the full SO + Enter to tick it */}
+          {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <button onClick={() => setClaimTableView(v => !v)}
+                className="flex items-center gap-1 text-xs font-semibold text-white bg-indigo-600 rounded-lg px-3 py-1.5 hover:bg-indigo-700 shadow-sm">
+                {claimTableView ? "▤ Card view" : "▤ Table view"}
+              </button>
+              <button onClick={() => exportItemsExcel(myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED"), "SCMNYK")}
+                className="text-xs text-green-700 border border-green-300 rounded-lg px-2.5 py-1.5 hover:bg-green-50 font-medium">
+                ⬇ Export Excel
+              </button>
+              <span className="text-xs text-gray-400">{myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").length} SO</span>
+            </div>
+          )}
           {myClaimItems.filter((i: any) => i.itemStatus !== "REJECTED").length > 0 && (
             <div className="flex items-center gap-2 flex-wrap">
               <div className="relative">
