@@ -424,7 +424,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
-  if (!statusMap) return NextResponse.json({ error: "Invalid status" }, { status: 400 })
+  // GW claim can enter a partially-rejected state (PENDING_CLAIM_REJECT_GW) — some SOs were sent
+  // back while others still need claim approval. It has no NEXT_STATUS entry but must still reach
+  // its dedicated GW-claim handlers below, so don't reject it as "Invalid status" here.
+  if (!statusMap && request.status !== "PENDING_CLAIM_REJECT_GW") return NextResponse.json({ error: "Invalid status" }, { status: 400 })
 
   // GW VP_MER: per-style approve/reject at PENDING_VP_MER_GW
   if (request.status === "PENDING_VP_MER_GW" && (action === "approve_style" || action === "reject_style")) {
@@ -974,7 +977,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // reaches Accounting when Claim is also fully approved.
   if (action === "approve" && (userRole === "LOGISTICS_GW" || (isFwdTarget && request.bu === "GW"))) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (!["PENDING_CLAIM_GW", "PENDING_LOGISTICS_GW", "PENDING_PRESIDENT_GW"].includes(request.status)) {
+    if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW", "PENDING_LOGISTICS_GW", "PENDING_PRESIDENT_GW"].includes(request.status)) {
       return NextResponse.json({ error: "Request is not at the Logistics stage" }, { status: 400 })
     }
     if (itemActuals && typeof itemActuals === "object") {
@@ -1037,7 +1040,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW CLAIM: batch approve multiple SOs at once
   if (action === "batch_approve_so" && userRole === "CLAIM_GW") {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (request.status !== "PENDING_CLAIM_GW" && request.status !== "PENDING_LOGISTICS_GW") {
+    if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW", "PENDING_LOGISTICS_GW"].includes(request.status)) {
       return NextResponse.json({ error: "Request is not at Claim stage" }, { status: 400 })
     }
     if (!Array.isArray(itemIds) || itemIds.length === 0) return NextResponse.json({ error: "itemIds required" }, { status: 400 })
@@ -1213,8 +1216,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (action === "finalize_cr_gw" && userRole === "SCM_NYK") {
     // NYK Direct imports ride the GW claim machinery regardless of the doc's tagged BU.
     const isGW = request.bu === "GW" || !!(request as any).nykDirect
-    const expectedStatus = isGW ? "PENDING_CLAIM_GW" : "PENDING_CLAIM"
-    if (request.status !== expectedStatus) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
+    const expectedStatuses = isGW ? ["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"] : ["PENDING_CLAIM"]
+    if (!expectedStatuses.includes(request.status)) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
     const nykDept = isGW ? "SCM NYK" : "NYK"
     const doneStatus = isGW ? GW_DEPT_APPROVED : "COMPLETED"
     // CR NO is now per-SO (usually 1 CR per INV, but an INV can carry several). Accept a per-item map
@@ -1260,7 +1263,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW claim dept rejects → send SO back to MER (GW) to re-select the claim dept.
   if (action === "claim_back_to_mer_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG", "CLAIM_NEXT_APPROVER"].includes(userRole)) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
+    if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(request.status)) return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     if (!comment) return NextResponse.json({ error: "Please provide a reason" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
@@ -1338,7 +1341,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // DB writes per item, then a single recalc + single notify at the end.
   if (action === "batch_approve_claim_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
+    if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(request.status)) return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     if (!Array.isArray(itemIds) || itemIds.length === 0) return NextResponse.json({ error: "itemIds required" }, { status: 400 })
     const crNo = (request as any).crNo || null
 
@@ -1408,7 +1411,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (action === "approve_so_claim_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    if (request.status !== "PENDING_CLAIM_GW") return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
+    if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(request.status)) return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
     if (!itemData || itemData.requestId !== id) return NextResponse.json({ error: "Item not found" }, { status: 404 })
@@ -1536,7 +1539,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // independent). Works for both BU. SCM NYK keeps its own CR flow (excluded).
   if (action === "finalize_claim_dept" && heldRoles.some(r => ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER"].includes(r))) {
     const isGW = request.bu === "GW"
-    const expected = isGW ? ["PENDING_CLAIM_GW"] : ["PENDING_CLAIM", "PENDING_VP_CLAIM"]
+    const expected = isGW ? ["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"] : ["PENDING_CLAIM", "PENDING_VP_CLAIM"]
     if (!expected.includes(request.status)) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
 
     // Which department does this actor own + their position in the chain?
