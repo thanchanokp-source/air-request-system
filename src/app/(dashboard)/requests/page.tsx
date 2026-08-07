@@ -73,7 +73,19 @@ function soAggBadge(rows: any[]): { label: string; cls: string } | null {
 const AggBadge = ({ rows }: { rows: any[] }) => {
   const b = soAggBadge(rows)
   if (!b) return null
-  return <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold whitespace-nowrap shrink-0 ${b.cls}`}>{b.label}</span>
+  // Reject reason(s) — itemComment set when an SO is sent Back to Merchandise / rejected.
+  const reasons = [...new Set((rows || [])
+    .filter(r => (r.itemStatus === "CLAIM_REJECT_GW" || r.itemStatus === "REJECTED") && r.itemComment)
+    .map(r => String(r.itemComment).trim()).filter(Boolean))]
+  const reasonText = reasons.join(" · ")
+  return (
+    <span className="inline-flex items-center gap-1 min-w-0">
+      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold whitespace-nowrap shrink-0 ${b.cls}`}>{b.label}</span>
+      {reasonText && (
+        <span title={reasonText} className="text-[10px] text-orange-600 italic truncate max-w-[220px]">“{reasonText}”</span>
+      )}
+    </span>
+  )
 }
 
 const STEP_COLORS: Record<string, string> = {
