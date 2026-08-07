@@ -1312,7 +1312,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // MER (GW) re-selects the claim dept for a rejected SO and resubmits to Claim.
-  if (action === "resubmit_claim_gw" && userRole === "MER_GW") {
+  if (action === "resubmit_claim_gw" && (userRole === "MER_GW" || userRole === "ADMIN")) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const splits = Array.isArray(body.claimDepts) ? body.claimDepts : null

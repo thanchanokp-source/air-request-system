@@ -4180,13 +4180,15 @@ export default function RequestDetailPage() {
         </div>
       )}
 
-      {/* MER (GW) re-selects claim dept for SOs a claim dept sent back */}
-      {role === "MER_GW" && isGWRequest && req.status === "PENDING_CLAIM_REJECT_GW" && (
+      {/* MER (GW) / Admin re-selects claim dept for SOs a claim dept sent back (Admin handles imports) */}
+      {(role === "MER_GW" || role === "ADMIN") && isGWRequest && req.status === "PENDING_CLAIM_REJECT_GW" && (
         <div className="bg-white rounded-xl border border-red-200 p-4 space-y-3">
           <div>
             <h2 className="font-semibold text-red-700">Claim Rejected — Re-select Claim Department</h2>
-            <p className="text-xs text-gray-500 mt-0.5">A claim department sent these SO(s) back. Adjust the claim department / % (total must = 100) and resubmit.</p>
+            <p className="text-xs text-gray-500 mt-0.5">A claim department sent these SO(s) back. Adjust the claim department / % (total must = 100), attach any files if needed, and resubmit.</p>
           </div>
+          {/* Attach extra supporting files on resubmit (e.g. corrected invoice / HAWB) */}
+          {renderExtraAttach()}
           {(req.items || []).filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW").map((item: any) => {
             const rows = reassign[item.id] || getSplits(item).map((s: any) => ({ dept: s.dept, pct: String(s.pct ?? ""), reason: s.reason || "" }))
             const setRows = (r: any[]) => setReassign(p => ({ ...p, [item.id]: r }))
