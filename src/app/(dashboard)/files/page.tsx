@@ -155,6 +155,18 @@ export default function FilesPage() {
 
   const hasFilter = [brandF, styleF, soF, cpF, claimF, invoiceF, portF, shipF].some(f => f.length > 0)
 
+  // Item-level filter — used to filter the SO rows WITHIN a document ("By Document" view) so a
+  // selected SO/Style/etc. actually narrows the rows shown, not just which documents appear.
+  const itemMatchesFilters = (it: any) => {
+    if (styleF.length && !styleF.includes(it.style)) return false
+    if (soF.length && !soF.includes(it.so)) return false
+    if (cpF.length && !cpF.includes(it.customerPO)) return false
+    if (invoiceF.length && !invoiceF.includes(it.invoiceNo)) return false
+    if (portF.length && !portF.includes(it.port)) return false
+    if (shipF.length && !shipF.includes(fmtDate(it.planShipmentDate))) return false
+    return true
+  }
+
   const filtered = useMemo(() => folderFiltered.filter(r => {
     const items = r.items || []
     if (brandF.length && !brandF.includes(r.brandName)) return false
@@ -705,7 +717,7 @@ export default function FilesPage() {
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-blue-100">
-                                      {(unbookedOnly ? items.filter((i: any) => !itemBooked(i)) : items).map((item: any) => {
+                                      {items.filter((i: any) => (!unbookedOnly || !itemBooked(i)) && itemMatchesFilters(i)).map((item: any) => {
                                         const key = `${req.id}-${item.id}`
                                         const combineKey = `${req.id}:${item.id}`
                                         const isChecked = selectedForCombine.has(combineKey)
