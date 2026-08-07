@@ -548,14 +548,18 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const rejItems = await prisma.airRequestItem.findMany({ where: { requestId, itemStatus: "CLAIM_REJECT_GW" }, select: { so: true, itemComment: true } })
       const isImport = !!(req as any).nykDirect
       // Import (NYK Direct) docs skip Merchandise → there is no MER uploader to re-assign the claim.
-      // Alert the admin (Jariya) instead so she can handle / re-import the rejected document.
-      const merUsers = isImport
-        ? []
-        : await (prisma.user as any).findMany({ where: { role: "MER_GW", isActive: true }, select: { email: true } })
-      const emails = merUsers.map((u: any) => u.email).filter(Boolean)
-      const creator = await (prisma.user as any).findUnique({ where: { id: (req as any).createdById }, select: { email: true } })
-      if (creator?.email) emails.push(creator.email)
-      if (isImport) emails.push("jariya.t@nanyangtextile.com")
+      // ONLY these go to the admins + Jariya. Normal GW docs still go back to Merchandise (MER_GW).
+      const emails: string[] = []
+      if (isImport) {
+        const admins = await (prisma.user as any).findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } })
+        admins.forEach((u: any) => u.email && emails.push(u.email))
+        emails.push("jariya.t@nanyangtextile.com")
+      } else {
+        const merUsers = await (prisma.user as any).findMany({ where: { role: "MER_GW", isActive: true }, select: { email: true } })
+        merUsers.forEach((u: any) => u.email && emails.push(u.email))
+        const creator = await (prisma.user as any).findUnique({ where: { id: (req as any).createdById }, select: { email: true } })
+        if (creator?.email) emails.push(creator.email)
+      }
       const recipients = [...new Set(emails)] as string[]
       if (!recipients.length) return
       const link = `${APP_URL}/requests/${requestId}`
