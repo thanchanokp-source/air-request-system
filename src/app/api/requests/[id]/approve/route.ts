@@ -65,6 +65,7 @@ async function allNykApproverApproved(reqId: string): Promise<boolean> {
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+ try {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -1922,4 +1923,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   return NextResponse.json(await getUpdated())
+ } catch (e: any) {
+   console.error("[approve] uncaught error:", e)
+   return NextResponse.json({ error: e?.message ? `Server error: ${e.message}` : "Approve failed" }, { status: 500 })
+ }
 }
