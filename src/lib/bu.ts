@@ -76,9 +76,9 @@ export function viewableBus(user: any): { bus: Bu[]; canAll: boolean } {
     if (b === "BOTH") hasBoth = true
     else if (b) set.add(b)
   }
-  // Cross-BU roles (Accounting, SCM_NYK) work across NYG & GW → show both toggles so their
-  // documents in either BU stay visible.
-  if (hasBoth) { set.add("NYG"); set.add("GW") }
+  // Cross-BU roles (Accounting, SCM_NYK) work across ALL BUs — a NYK-Direct import (or its
+  // Accounting step) can be tagged NYG / GW / EA / TRM, so show every BU or those docs vanish.
+  if (hasBoth) BUS.forEach(b => set.add(b))
   if (set.size === 0) set.add("NYG")
   return { bus: BUS.filter(b => set.has(b)), canAll: false }
 }
