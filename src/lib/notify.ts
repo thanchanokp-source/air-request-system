@@ -1610,12 +1610,18 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
       for (const it of (doc.items || [])) for (const s of getSplits(it)) if (s.dept && !doneSt.includes(String(s.status || "")) && !NO_APPROVAL.includes(s.dept)) pendingDepts.add(s.dept)
       const set = new Set<string>()
       const addE = (e: any) => { if (e) set.add(String(e).toLowerCase()) }
-      // A forwarded approver (per dept) is the current holder for their SOs.
-      for (const f of (doc.claimForwards || [])) if (pendingDepts.has(f.dept) && f.nextEmail && (!Array.isArray(f.itemIds) || f.itemIds.length)) addE(f.nextEmail)
+      // A forwarded approver (per dept) is the CURRENT holder for their SOs → alert only them,
+      // NOT the whole department. Track which depts are already forwarded so we don't also ping
+      // the entry-role people (they've already handed it on).
+      const forwardedDepts = new Set<string>()
+      for (const f of (doc.claimForwards || [])) if (pendingDepts.has(f.dept) && f.nextEmail && (!Array.isArray(f.itemIds) || f.itemIds.length)) { addE(f.nextEmail); forwardedDepts.add(f.dept) }
       const roleSet = new Set<string>()
       for (const d of pendingDepts) {
-        if (d === "COMMERCIAL") { addE(doc.assignedVpMer || doc.assignedDvmMer); continue }
-        for (const r of [...claimEntryRoles(d), ...claimVpRoles(d)]) roleSet.add(r)
+        if (forwardedDepts.has(d)) continue // already forwarded → only the current holder above
+        if (d === "COMMERCIAL") { addE(doc.assignedDvmMer || doc.assignedVpMer); continue }
+        // Not yet forwarded → still at the ENTRY step, so remind only the entry role (the VP is
+        // reached later via a forward, which is handled by the branch above — never ping VP early).
+        for (const r of claimEntryRoles(d)) roleSet.add(r)
       }
       if (roleSet.size) {
         const us = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: { in: [...roleSet] } }, { roles: { hasSome: [...roleSet] } }] }, select: { email: true, bu: true, role: true, roles: true } })
