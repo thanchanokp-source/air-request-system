@@ -235,10 +235,14 @@ function ClaimStatusBoard({ req }: { req: any }) {
   for (const i of items) {
     const cur = soCur(i)
     const act = Number(i.actualAirFreight ?? i.airFreight) || 0
-    // A sent-back SO (CLAIM_REJECT_GW) sets itemStatus but not the split status → treat as rejected.
+    // The SO's overall status can override the per-split status (historical/admin imports leave
+    // splits null though the doc is done): COMPLETED/ACCOUNTING = accepted; CLAIM_REJECT_GW = rejected.
     const itemRejected = i.itemStatus === "CLAIM_REJECT_GW"
+    const itemDone = i.itemStatus === "COMPLETED" || i.itemStatus === "ACCOUNTING_PENDING"
     for (const sp of getSplits(i)) {
-      const st = itemRejected ? { s: "rejected" as const, label: "Rejected" } : claimSplitState(sp.dept, sp.status)
+      const st = itemRejected ? { s: "rejected" as const, label: "Rejected" }
+        : itemDone ? { s: "approved" as const, label: "Accepted" }
+        : claimSplitState(sp.dept, sp.status)
       ;(byDept[sp.dept] ||= []).push({
         so: i.so, state: st.s, label: st.label,
         amount: act * (Number(sp.pct) || 0) / 100, cur, crNo: sp.crNo,
