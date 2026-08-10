@@ -212,7 +212,8 @@ export default function RequestsPage() {
     SCM_GW_PENDING: "PENDING_SCM_GW", PRESIDENT_PENDING: "PENDING_PRESIDENT_GW",
   } : {
     DVM_MER_PASSED: "PENDING_VP_MER", VP_MER_PASSED: "PENDING_SCM", PASSED: "PENDING_VP_SCM",
-    VP_PASSED: "PENDING_LOGISTICS", PRES_PASSED: "PENDING_LOGISTICS", LOG_PASSED: "PENDING_CLAIM",
+    // PRES_PASSED only appears on NYK-Direct (NYG-tagged) docs → they sit at the SCM NYK CLAIM stage.
+    VP_PASSED: "PENDING_LOGISTICS", PRES_PASSED: "PENDING_CLAIM", LOG_PASSED: "PENDING_CLAIM",
     PRESIDENT_PENDING: "PENDING_PRESIDENT", CLAIM_PASSED: "PENDING_CLAIM",
   }
   // The stage key(s) an SO row currently sits at (GW's parallel PRES_PASSED can be BOTH LG + Claim).
@@ -245,7 +246,9 @@ export default function RequestsPage() {
   // Which claim department(s) an SO is still waiting on — for the "Claim: <dept>" sub-filter.
   const rowClaimDepts = (row: any): string[] => {
     const depts = getSplits(row).map((s: any) => s.dept).filter(Boolean)
-    return depts.length ? depts : (row.claimDepartment ? [row.claimDepartment] : [])
+    const raw = depts.length ? depts : (row.claimDepartment ? [row.claimDepartment] : [])
+    // Normalise to the filter's labels ("SCM NYK" → "NYK", "SCM NYG" → "NYG") so "Claim: NYK" matches.
+    return [...new Set(raw.map((d: string) => deptLabel(d)))]
   }
 
   const applyFilters = (rows: any[], opts: {
