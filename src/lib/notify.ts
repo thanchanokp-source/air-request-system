@@ -191,7 +191,7 @@ ${EMAIL_HEAD}
                 <tr>
                   <td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
                     <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">DOC NO</span><br>
-                    <span style="color:#1e3a8a;font-size:15px;font-weight:700;font-family:Arial,sans-serif">${req.documentNo}</span>
+                    <span style="color:#1e3a8a;font-size:15px;font-weight:700;font-family:Arial,sans-serif">${req.documentNo}</span>${(req as any).revised ? `<span style="display:inline-block;margin-left:8px;background:#fef3c7;color:#b45309;font-size:10px;font-weight:800;letter-spacing:1px;padding:2px 8px;border-radius:6px;font-family:Arial,sans-serif;vertical-align:middle">↻ REVISE</span>` : ""}
                   </td>
                 </tr>
                 <tr>
