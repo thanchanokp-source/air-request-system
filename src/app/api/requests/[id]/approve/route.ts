@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
-import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi, notifyRecall, notifyGwClaimNyk } from "@/lib/notify"
+import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi, notifyRecall, notifyGwClaimNyk, notifyReviseToLg } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
 import { recomputeRequestFreight } from "@/lib/freight"
@@ -538,6 +538,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_VP_MER_GW", rejectionReason: null, revised: true } as any })
     await notifyStatusChange(id, "PENDING_VP_MER_GW").catch(() => {})
+    if (comment) await notifyReviseToLg(id, comment, session.user?.name || session.user?.email || undefined).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -575,6 +576,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
     await prisma.airRequest.update({ where: { id }, data: { status: firstStatus, rejectionReason: null, revised: true } as any })
     await notifyStatusChange(id, firstStatus).catch(() => {})
+    if (comment) await notifyReviseToLg(id, comment, session.user?.name || session.user?.email || undefined).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

@@ -1386,6 +1386,35 @@ export async function notifyBackToMerGw(requestId: string, reason: string, byNam
   } catch (e) { console.error("[notify] back-to-mer (GW) failed:", e) }
 }
 
+// When Merchandise RE-SUBMITS a revised document, also notify the Logistics team (by BU) with the
+// revise reason — LG needs to know what changed (qty / ship date / etc.) for their booking.
+export async function notifyReviseToLg(requestId: string, reason: string, byName?: string) {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyReviseToLgImpl(requestId, reason, byName))
+}
+async function notifyReviseToLgImpl(requestId: string, reason: string, byName?: string) {
+  try {
+    const req = await (prisma.airRequest as any).findUnique({ where: { id: requestId }, select: { documentNo: true, bu: true, brandName: true } })
+    if (!req) return
+    const bu = req.bu || "NYG"
+    const lgRoles = bu === "GW" ? ["LOGISTICS_GW"] : bu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS"]
+    const us = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: { in: lgRoles } }, { roles: { hasSome: lgRoles } }] }, select: { email: true, bu: true } })
+    const recipients = us.filter((u: any) => bu === "TRM" || !u.bu || u.bu === "ALL" || u.bu === bu).map((u: any) => u.email).filter(Boolean)
+    if (!recipients.length) return
+    const link = `${APP_URL}/logistics`
+    const html = `<div style="font-family:Arial;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+      <p style="font-size:11px;letter-spacing:2px;color:#94a3b8;text-transform:uppercase;margin:0">Nan Yang Textile · Air Request</p>
+      <h2 style="font-size:18px;margin:6px 0 2px">${req.documentNo}</h2>
+      <p style="font-size:13px;color:#334155;margin:8px 0">เอกสารนี้ถูก <b>แก้ไข &amp; ส่งใหม่ (Revise)</b>${byName ? ` โดย ${byName}` : ""} — กรุณาตรวจข้อมูลก่อนจอง/บันทึก LG</p>
+      ${reason ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin:10px 0">
+        <p style="margin:0;color:#b45309;font-size:12px;font-weight:700;font-family:Arial">เหตุผลที่แก้ไข (Revise reason):</p>
+        <p style="margin:4px 0 0;color:#92400e;font-size:13px;font-family:Arial;white-space:pre-wrap">${reason}</p></div>` : ""}
+      <div style="text-align:center;margin-top:18px"><a href="${link}" style="display:inline-block;background:#1e3a8a;color:#fff;padding:12px 30px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">เปิด LG Booking →</a></div>
+      ${loginLinkBlock()}
+    </div>`
+    await sendMail(recipients, `[Logistics] Document revised — ${req.documentNo}`, html)
+  } catch (e) { console.error("[notify] revise-to-LG failed:", e) }
+}
+
 // Recall — MER (creator) / Admin / Jariya pulls an in-flight document back to Merchandise.
 // Alert whoever is CURRENTLY holding it (so they stop), FYI everyone who already approved,
 // and confirm to the creator. TEST docs reroute to the admin.
