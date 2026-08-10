@@ -43,7 +43,7 @@ export default function NykImportPage() {
   // Claim split from the file (CLAIM DEPT 1..3 + %CLAIM1..3). Shows e.g. "NYK 50% · COMMERCIAL 50%".
   const claimLabel = (r: any) => {
     const sp = [1, 2, 3]
-      .map(n => ({ dept: String(get(r, `CLAIM DEPT ${n}`) || "").trim(), pct: numOf(get(r, `%CLAIM${n}`)) }))
+      .map(n => ({ dept: String(colLike(r, "claim", "dept", String(n)) || "").trim(), pct: numOf(colLike(r, "%", "claim", String(n))) }))
       .filter(s => s.dept)
     if (!sp.length || sp.reduce((a, s) => a + s.pct, 0) <= 0) return "NYK 100%"
     return sp.map(s => `${s.dept} ${s.pct}%`).join(" · ")
@@ -147,7 +147,7 @@ export default function NykImportPage() {
           <div className="px-4 py-3 bg-gray-50 border-b flex flex-wrap items-center gap-3 text-xs">
             <span className="font-semibold text-gray-600">พรีวิว actual (คำนวณจาก Total HAWB)</span>
             <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">รวม Actual {fmt(totalActual)} THB</span>
-            <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full font-medium">Claim NYK 100%</span>
+            <span className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded-full font-medium">{rows.every(r => claimLabel(r) === "NYK 100%") ? "Claim NYK 100%" : "Claim: mixed (per SO)"}</span>
             {missingActual > 0 && <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded-full font-medium">⚠ {missingActual} SO ไม่มี Total HAWB → actual = 0</span>}
           </div>
           <div className="overflow-x-auto max-h-96">

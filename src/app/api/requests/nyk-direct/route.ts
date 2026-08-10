@@ -90,8 +90,12 @@ export async function POST(req: NextRequest) {
     // gives no split, default to SCM NYK 100%. In a NYK import, the SCM NYK portion still awaits
     // SCM NYK approval; any OTHER dept (e.g. COMMERCIAL 50%) is a settled cost-allocation → mark it
     // DEPT_APPROVED so it doesn't block, and only SCM NYK needs to sign off.
+    // Tolerant column matching: "CLAIM DEPT 1" / "CLAIMDEPT1" and "%CLAIM1" / "%CLAIM 1" etc.
     const rawSplits = [1, 2, 3]
-      .map(n => ({ dept: normGwDept(String(col(it, `CLAIM DEPT ${n}`) || "")), pct: parseFloat(String(col(it, `%CLAIM${n}`) ?? "")) || 0 }))
+      .map(n => ({
+        dept: normGwDept(String(colLike(it, "claim", "dept", String(n)) || "")),
+        pct: numOf(colLike(it, "%", "claim", String(n))),
+      }))
       .filter(s => s.dept)
     const claimDepts = (rawSplits.length && rawSplits.reduce((a, s) => a + s.pct, 0) > 0)
       ? rawSplits.map(s => ({ dept: s.dept, pct: s.pct, reason, status: s.dept === "SCM NYK" ? null : "DEPT_APPROVED", crNo: null }))
