@@ -358,6 +358,9 @@ export default function ApprovalsPage() {
   const myBackToMer = requests.filter((r: any) => {
     if (r.isTest && !isAdminViewer) return false
     if (showBuToggle && buApprovalView !== "ALL" && !requestInBu(r, buApprovalView)) return false
+    // Only the person who UPLOADED the document sees it here — not other Merchandise users.
+    const isCreator = !!userEmail && String(r.createdBy?.email || "").toLowerCase() === userEmail.toLowerCase()
+    if (!isCreator) return false
     const nyg = r.status === "PENDING_MER" && myRoles.some((x: string) => ["MER_USER", "MER_EA", "MER_TRM"].includes(x))
     const gw = r.status === "PENDING_MER_GW" && myRoles.includes("MER_GW")
     return nyg || gw
