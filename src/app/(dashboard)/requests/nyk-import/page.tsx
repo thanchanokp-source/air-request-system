@@ -46,6 +46,10 @@ export default function NykImportPage() {
       .map(n => ({ dept: String(colLike(r, "claim", "dept", String(n)) || "").trim(), pct: numOf(colLike(r, "%", "claim", String(n))) }))
       .filter(s => s.dept)
     if (!sp.length || sp.reduce((a, s) => a + s.pct, 0) <= 0) return "NYK 100%"
+    // Blank/0 primary % = the remainder (e.g. file lists COMMERCIAL 50 → NYK = 50).
+    const known = sp.reduce((a, s) => a + s.pct, 0)
+    const blanks = sp.filter(s => s.pct <= 0)
+    if (blanks.length === 1 && known > 0 && known < 100) blanks[0].pct = 100 - known
     return sp.map(s => `${s.dept} ${s.pct}%`).join(" · ")
   }
   const totalActual = rows.reduce((s, r) => s + actualOf(r), 0)

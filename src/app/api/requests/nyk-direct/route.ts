@@ -97,6 +97,13 @@ export async function POST(req: NextRequest) {
         pct: numOf(colLike(it, "%", "claim", String(n))),
       }))
       .filter(s => s.dept)
+    // Some files fill only the SECONDARY dept's % (e.g. COMMERCIAL 50) and leave the primary
+    // (NYK) blank → it's the remainder. If exactly one dept has a blank/0 %, give it 100 − others.
+    {
+      const known = rawSplits.reduce((a, s) => a + s.pct, 0)
+      const blanks = rawSplits.filter(s => s.pct <= 0)
+      if (blanks.length === 1 && known > 0 && known < 100) blanks[0].pct = 100 - known
+    }
     const claimDepts = (rawSplits.length && rawSplits.reduce((a, s) => a + s.pct, 0) > 0)
       ? rawSplits.map(s => ({ dept: s.dept, pct: s.pct, reason, status: s.dept === "SCM NYK" ? null : "DEPT_APPROVED", crNo: null }))
       : [{ dept: "SCM NYK", pct: 100, reason, status: null, crNo: null }]
