@@ -362,7 +362,10 @@ export default function LgEntryPage() {
               <label className={`bg-white border border-orange-300 text-orange-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-50 cursor-pointer ${saving ? "opacity-50 pointer-events-none" : ""}`}>⬆ Import
                 <input type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
               </label>
-              <button onClick={() => setFwOpen(true)} disabled={saving} className="bg-white border border-blue-300 text-blue-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50">↪ Forward</button>
+              {/* EA has no LG-forward handoff → hide the Forward button for EA-only selections. */}
+              {!(allLgItems.length > 0 && allLgItems.every((i: any) => i.request.bu === "EA")) && (
+                <button onClick={() => setFwOpen(true)} disabled={saving} className="bg-white border border-blue-300 text-blue-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 disabled:opacity-50">↪ Forward</button>
+              )}
               <button onClick={saveDraft} disabled={saving} className="bg-white border border-gray-300 text-gray-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">Save Draft</button>
               <button onClick={send} disabled={saving} className="bg-orange-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50">Send →</button>
             </div>
