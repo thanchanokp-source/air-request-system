@@ -22,6 +22,16 @@ export const BU_META: Record<string, { label: string; active: string }> = {
 //   • ACCOUNTING — the final step for both NYG and GW documents
 const BOTH_BU_ROLES = new Set(["ACCOUNTING", "SCM_NYK", "SCM_NYK_APPROVER", "SCM_NYK_EVP"])
 
+// Claim-department approver roles work ACROSS BUs (claim is a shared stage; production/commercial/
+// procurement approvers get forwarded docs from NYG/GW/EA/TRM). Their bare role names would
+// otherwise map to NYG only. They see every BU (per-doc actions stay gated to their own splits).
+const CLAIM_ALLBU_ROLES = new Set([
+  "CLAIM_NEXT_APPROVER",
+  "CLAIM_COMMERCIAL", "CLAIM_PROCUREMENT", "CLAIM_PRODUCTION",
+  "VP_COMMERCIAL", "VP_PROCUREMENT", "VP_PRODUCTION",
+  "DVM_COMMERCIAL", "DVM_PROCUREMENT", "DVM_PRODUCTION",
+])
+
 // A role → its BU. Shared roles return "BOTH" (they see NYG + GW, pin no single BU).
 export function roleBu(role: string): Bu | "BOTH" | null {
   if (!role) return null
@@ -54,6 +64,8 @@ export function viewableBus(user: any): { bus: Bu[]; canAll: boolean } {
   // (e.g. a MER_GW whose bu was left "NYG"), which would wrongly grant a second BU.
   const set = new Set<Bu>()
   let hasBoth = false
+  // A claim-dept approver sees every BU (their work is forwarded from any BU).
+  if (roles.some(r => CLAIM_ALLBU_ROLES.has(r))) return { bus: [...BUS], canAll: false }
   for (const r of roles) {
     // "LOGISTICS" (bare, no _EA/_TRM/_GW suffix) is a SHARED role name distinguished ONLY by
     // User.bu: NYG (Aoyjai) vs EA (Quynh). There is no LOGISTICS_EA role, so here user.bu IS
