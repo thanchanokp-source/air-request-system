@@ -86,8 +86,17 @@ export async function POST(req: NextRequest) {
   const itemData = items.map((it: any, idx: number) => {
     const b = built[idx] || {}
     const reason = String(col(it, "REASON 1") || col(it, "Reason delay") || "").trim() || null
-    // Claim = SCM NYK 100% (this import is NYK-only). Status null → PRES_PASSED (awaiting SCM NYK).
-    const claimDepts = [{ dept: "SCM NYK", pct: 100, reason, status: null, crNo: null }]
+    // Claim splits from the file (CLAIM DEPT 1..3 + %CLAIM1..3). "NYK" → "SCM NYK". If the file
+    // gives no split, default to SCM NYK 100%. In a NYK import, the SCM NYK portion still awaits
+    // SCM NYK approval; any OTHER dept (e.g. COMMERCIAL 50%) is a settled cost-allocation → mark it
+    // DEPT_APPROVED so it doesn't block, and only SCM NYK needs to sign off.
+    const rawSplits = [1, 2, 3]
+      .map(n => ({ dept: normGwDept(String(col(it, `CLAIM DEPT ${n}`) || "")), pct: parseFloat(String(col(it, `%CLAIM${n}`) ?? "")) || 0 }))
+      .filter(s => s.dept)
+    const claimDepts = (rawSplits.length && rawSplits.reduce((a, s) => a + s.pct, 0) > 0)
+      ? rawSplits.map(s => ({ dept: s.dept, pct: s.pct, reason, status: s.dept === "SCM NYK" ? null : "DEPT_APPROVED", crNo: null }))
+      : [{ dept: "SCM NYK", pct: 100, reason, status: null, crNo: null }]
+    const nykFirst = claimDepts.find(s => s.dept === "SCM NYK") || claimDepts[0]
     return {
       style: b.style ?? String(col(it, "STYLE") || ""),
       so: b.so ?? normalizeSo(col(it, "SO")),
@@ -109,9 +118,9 @@ export async function POST(req: NextRequest) {
       invoiceNo: String(col(it, "INV NO.") || col(it, "Invoice No") || "") || null,
       hawbNo: String(col(it, "HAWB#") || "") || null,
       actualAirFreight: actualOf(it),
-      claimDepartment: "SCM NYK",
+      claimDepartment: nykFirst.dept,
       claimDepts: claimDepts as any,
-      claimPercentage: 100,
+      claimPercentage: nykFirst.pct,
       // NYK split pending → the SO sits at the GW claim/NYK stage.
       itemStatus: "PRES_PASSED",
     }

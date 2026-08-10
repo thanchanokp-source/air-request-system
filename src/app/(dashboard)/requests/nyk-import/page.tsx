@@ -40,6 +40,14 @@ export default function NykImportPage() {
     if (!g || g.sumQty <= 0 || g.total <= 0) return 0
     return Math.round(numOf(get(r, "QTY Request ship Air (pcs)") || get(r, "QTY AIR")) * (g.total / g.sumQty) * 100) / 100
   }
+  // Claim split from the file (CLAIM DEPT 1..3 + %CLAIM1..3). Shows e.g. "NYK 50% · COMMERCIAL 50%".
+  const claimLabel = (r: any) => {
+    const sp = [1, 2, 3]
+      .map(n => ({ dept: String(get(r, `CLAIM DEPT ${n}`) || "").trim(), pct: numOf(get(r, `%CLAIM${n}`)) }))
+      .filter(s => s.dept)
+    if (!sp.length || sp.reduce((a, s) => a + s.pct, 0) <= 0) return "NYK 100%"
+    return sp.map(s => `${s.dept} ${s.pct}%`).join(" · ")
+  }
   const totalActual = rows.reduce((s, r) => s + actualOf(r), 0)
   const missingActual = rows.filter(r => String(get(r, "HAWB#") || "").trim() && actualOf(r) <= 0).length
 
@@ -159,7 +167,7 @@ export default function NykImportPage() {
                     <td className="px-3 py-1.5">{get(r, "HAWB#") || "-"}</td>
                     <td className="px-3 py-1.5 text-gray-500">{numOf(colLike(r, "total", "hawb")) > 0 ? fmt(numOf(colLike(r, "total", "hawb"))) : "-"}</td>
                     <td className="px-3 py-1.5 font-semibold text-green-700">{fmt(actualOf(r))}</td>
-                    <td className="px-3 py-1.5 text-amber-800">NYK 100%</td>
+                    <td className="px-3 py-1.5 text-amber-800 whitespace-nowrap">{claimLabel(r)}</td>
                   </tr>
                 ))}
               </tbody>
