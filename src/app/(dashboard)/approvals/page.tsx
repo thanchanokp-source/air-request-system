@@ -353,6 +353,16 @@ export default function ApprovalsPage() {
     .filter(r => !showBuToggle || buApprovalView === "ALL" || requestInBu(r, buApprovalView))
     .filter(personMatch)
 
+  // Docs sent BACK to Merchandise for this user to fix & resend (shown as a separate, distinct
+  // section — NOT a normal approval row). NYG/EA/TRM → PENDING_MER; GW → PENDING_MER_GW.
+  const myBackToMer = requests.filter((r: any) => {
+    if (r.isTest && !isAdminViewer) return false
+    if (showBuToggle && buApprovalView !== "ALL" && !requestInBu(r, buApprovalView)) return false
+    const nyg = r.status === "PENDING_MER" && myRoles.some((x: string) => ["MER_USER", "MER_EA", "MER_TRM"].includes(x))
+    const gw = r.status === "PENDING_MER_GW" && myRoles.includes("MER_GW")
+    return nyg || gw
+  })
+
   const isClaimRole = role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG"
   const myDepts = isClaimRole ? gwDeptsForRole(role, userClaimDept) : []
   // Sum of this SO's air-freight portion for the current claim role's departments.
@@ -379,6 +389,29 @@ export default function ApprovalsPage() {
           )}
         </div>
       </div>
+
+      {/* Sent back to Merchandise — a distinct section (different header/colour from approvals). */}
+      {myBackToMer.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="font-bold text-orange-700">↩ ส่งกลับให้แก้ไข (Back to Merchandise)</h2>
+            <span className="text-xs bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full font-bold">{myBackToMer.length}</span>
+          </div>
+          <p className="text-xs text-orange-600">เอกสารที่ถูกส่งกลับมาให้แก้ไข — กดเปิดเพื่อแก้แล้ว Re-submit (ไม่ใช่รายการรออนุมัติ)</p>
+          <div className="space-y-1.5">
+            {myBackToMer.map((r: any) => (
+              <Link key={r.id} href={`/requests/${r.id}`}
+                className="flex items-center gap-2 flex-wrap bg-white border border-orange-200 rounded-lg px-3 py-2 hover:bg-orange-100/50 transition-colors">
+                <span className="font-semibold text-blue-700">{r.documentNo}</span>
+                <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">ต้องแก้ไข</span>
+                <span className="text-xs text-gray-500">{r.bu || r.buName}</span>
+                {r.rejectionReason && <span className="text-xs text-red-600 truncate max-w-[460px]" title={r.rejectionReason}>เหตุผล: {r.rejectionReason}</span>}
+                <span className="ml-auto text-xs text-orange-600 font-semibold whitespace-nowrap">เปิดแก้ไข →</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Admin-only: find every pending doc that a given person is on (assigned/creator/forward). */}
       {isAdminViewer && (
@@ -417,7 +450,7 @@ export default function ApprovalsPage() {
       </div>
 
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
-      {!loading && docGroups.length === 0 && (
+      {!loading && docGroups.length === 0 && myBackToMer.length === 0 && (
         <div className="text-center py-20 text-gray-400">No pending approvals</div>
       )}
 
