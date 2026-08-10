@@ -323,7 +323,7 @@ export default function RequestsPage() {
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
     ["EST. AIR FREIGHT","min-w-[120px]"],["ACTUAL AIR FREIGHT","min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],
-    ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"]
+    ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"],["REASON","min-w-[180px]"]
   ] as [string,string][]
 
   const [claimExpanded, setClaimExpanded] = useState(false)
@@ -627,6 +627,10 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2 whitespace-nowrap">{row.invoiceNo || "-"}</td>
                                     <td className="px-3 py-2"><SoBadge s={row.itemStatus} docStatus={row.request.status} /></td>
                                     <td className="px-3 py-2"><CurrentStepBadge row={row} /></td>
+                                    {(() => {
+                                      const reason = row.itemComment || row.request.rejectionReason || ""
+                                      return <td className="px-3 py-2 text-orange-700 max-w-[240px] truncate" title={reason}>{reason || "-"}</td>
+                                    })()}
                                   </tr>
                                   <tr className="bg-gray-50/40">
                                     <td colSpan={20} className="px-6 py-1.5">

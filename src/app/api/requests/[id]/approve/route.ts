@@ -559,13 +559,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // NYG/EA MER re-submits after a "Back to Merchandise" → restart approval from the first merch approver.
   if (action === "resubmit_mer_nyg" && ["MER_USER", "MER_EA", "MER_TRM", "ADMIN"].includes(userRole) && request.status === "PENDING_MER") {
-    const firstStatus = request.bu === "EA" ? "PENDING_DVM_MER_EA" : request.bu === "TRM" ? "PENDING_DVM_MER_TRM" : "PENDING_DVM_MER"
+    // If SCM sent it back (it had already passed Merchandise) → resubmit STRAIGHT to SCM, skipping
+    // the DVM/VP Merchandise re-approval. If it was recalled from an early merch stage instead,
+    // restart from the first merch approver. Decide by where the last send-back came FROM.
+    const lastBack = await (prisma.approvalLog as any).findFirst({ where: { requestId: id, toStatus: "PENDING_MER" }, orderBy: { createdAt: "desc" } })
+    const cameFromScm = lastBack?.fromStatus === "PENDING_SCM"
+    const firstStatus = cameFromScm ? "PENDING_SCM"
+      : request.bu === "EA" ? "PENDING_DVM_MER_EA" : request.bu === "TRM" ? "PENDING_DVM_MER_TRM" : "PENDING_DVM_MER"
     await prisma.airRequestItem.updateMany({
       where: { requestId: id, itemStatus: { notIn: ["REJECTED"] } },
       data: { itemStatus: "PENDING" },
     })
     await prisma.approvalLog.create({
-      data: { requestId: id, userId, action: "RESUBMIT", fromStatus: "PENDING_MER", toStatus: firstStatus, comment: "Merchandise re-submitted" }
+      data: { requestId: id, userId, action: "RESUBMIT", fromStatus: "PENDING_MER", toStatus: firstStatus, comment: cameFromScm ? "Merchandise re-submitted → SCM (skipped merch re-approval)" : "Merchandise re-submitted" }
     })
     await prisma.airRequest.update({ where: { id }, data: { status: firstStatus, rejectionReason: null } })
     await notifyStatusChange(id, firstStatus).catch(() => {})
