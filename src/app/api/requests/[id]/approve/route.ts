@@ -534,7 +534,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: { itemStatus: "PENDING" },
     })
     await prisma.approvalLog.create({
-      data: { requestId: id, userId, action: "RESUBMIT", fromStatus: "PENDING_MER_GW", toStatus: "PENDING_VP_MER_GW", comment: "Merchandise re-submitted" }
+      data: { requestId: id, userId, action: "RESUBMIT", fromStatus: "PENDING_MER_GW", toStatus: "PENDING_VP_MER_GW", comment: `Merchandise re-submitted${comment ? ` — Revise: ${comment}` : ""}` }
     })
     await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_VP_MER_GW", rejectionReason: null, revised: true } as any })
     await notifyStatusChange(id, "PENDING_VP_MER_GW").catch(() => {})
@@ -571,7 +571,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: { itemStatus: "PENDING" },
     })
     await prisma.approvalLog.create({
-      data: { requestId: id, userId, action: "RESUBMIT", fromStatus: "PENDING_MER", toStatus: firstStatus, comment: cameFromScm ? "Merchandise re-submitted → SCM (skipped merch re-approval)" : "Merchandise re-submitted" }
+      data: { requestId: id, userId, action: "RESUBMIT", fromStatus: "PENDING_MER", toStatus: firstStatus, comment: `${cameFromScm ? "Merchandise re-submitted → SCM (skipped merch re-approval)" : "Merchandise re-submitted"}${comment ? ` — Revise: ${comment}` : ""}` }
     })
     await prisma.airRequest.update({ where: { id }, data: { status: firstStatus, rejectionReason: null, revised: true } as any })
     await notifyStatusChange(id, firstStatus).catch(() => {})

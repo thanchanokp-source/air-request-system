@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, Fragment } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { getSplits, deptLabel } from "@/lib/claim"
+import { getSplits, deptLabel, itemHasReassignSplit } from "@/lib/claim"
 import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 import { ApprovalChain } from "@/components/ApprovalChain"
 import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
@@ -70,6 +70,7 @@ function soAggBadge(rows: any[], docStatus?: string): { label: string; cls: stri
   // so flag it as "Back to Merchandise" instead of a plain "Pending".
   if (docStatus === "PENDING_MER" || docStatus === "PENDING_MER_GW") return { label: "Back to Merchandise", cls: "bg-orange-100 text-orange-700 border-orange-200" }
   if (st.some(s => s === "CLAIM_REJECT_GW")) return { label: "Back to Merchandise", cls: "bg-orange-100 text-orange-700 border-orange-200" }
+  if (rows.some(r => itemHasReassignSplit(r))) return { label: "Back to SCM", cls: "bg-amber-100 text-amber-700 border-amber-200" }
   if (st.every(s => s === "COMPLETED" || s === "ACCOUNTING_PENDING")) return { label: "Done", cls: "bg-green-100 text-green-700 border-green-200" }
   return { label: "Pending", cls: "bg-yellow-100 text-yellow-700 border-yellow-200" }
 }
@@ -253,11 +254,13 @@ export default function RequestsPage() {
   }) => rows.filter(row => {
     const r = row.request
     const rowBkm = row.itemStatus === "CLAIM_REJECT_GW" || r?.status === "PENDING_MER" || r?.status === "PENDING_MER_GW"
+    const rowBscm = !rowBkm && itemHasReassignSplit(row)
     const statusMatch = !statusFilter.length || statusFilter.some(s =>
       (s === "COMPLETED" && row.itemStatus === "COMPLETED") ||
       (s === "REJECTED" && row.itemStatus === "REJECTED") ||
       (s === "BACK TO MERCHANDISE" && rowBkm) ||
-      (s === "PENDING" && row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED" && !rowBkm)
+      (s === "BACK TO SCM" && rowBscm) ||
+      (s === "PENDING" && row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED" && !rowBkm && !rowBscm)
     )
     const stageMatch = !opts.stage?.length || (() => {
       const keys = rowStageKeys(row)
@@ -356,10 +359,13 @@ export default function RequestsPage() {
   // "Back to Merchandise" = sent back to fix & resubmit (still in-flight — NOT rejected). Counted
   // separately from Pending/Rejected so it doesn't look dead or hide among normal pending work.
   const isBackToMer = (r: any) => r.itemStatus === "CLAIM_REJECT_GW" || r.request?.status === "PENDING_MER" || r.request?.status === "PENDING_MER_GW"
+  // NYG claim reject → the split is sent BACK TO SCM to re-pick the department (SCM_REASSIGN).
+  const isBackToScm = (r: any) => itemHasReassignSplit(r)
   const totalCompleted = filtered.filter(r => DONE_ST(r.itemStatus)).length
   const totalRejected = filtered.filter(r => r.itemStatus === "REJECTED").length
   const totalBackToMer = filtered.filter(r => r.itemStatus !== "REJECTED" && !DONE_ST(r.itemStatus) && isBackToMer(r)).length
-  const totalPending = filtered.filter(r => !DONE_ST(r.itemStatus) && r.itemStatus !== "REJECTED" && !isBackToMer(r)).length
+  const totalBackToScm = filtered.filter(r => r.itemStatus !== "REJECTED" && !DONE_ST(r.itemStatus) && !isBackToMer(r) && isBackToScm(r)).length
+  const totalPending = filtered.filter(r => !DONE_ST(r.itemStatus) && r.itemStatus !== "REJECTED" && !isBackToMer(r) && !isBackToScm(r)).length
 
   return (
     <div className="space-y-4">
@@ -396,7 +402,7 @@ export default function RequestsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
         <div className="border rounded-xl p-3 sm:p-4 bg-green-50 border-green-200 flex items-center gap-2 sm:gap-4">
           <div className="text-2xl sm:text-3xl font-bold text-green-600">{totalCompleted}</div>
           <div><div className="text-xs sm:text-sm font-semibold text-green-700">COMPLETED</div><div className="text-xs text-green-500">transactions</div></div>
@@ -408,6 +414,10 @@ export default function RequestsPage() {
         <div className="border rounded-xl p-3 sm:p-4 bg-orange-50 border-orange-200 flex items-center gap-2 sm:gap-4">
           <div className="text-2xl sm:text-3xl font-bold text-orange-600">{totalBackToMer}</div>
           <div><div className="text-xs sm:text-sm font-semibold text-orange-700">BACK TO MERCHANDISE</div><div className="text-xs text-orange-500">transactions</div></div>
+        </div>
+        <div className="border rounded-xl p-3 sm:p-4 bg-amber-50 border-amber-200 flex items-center gap-2 sm:gap-4">
+          <div className="text-2xl sm:text-3xl font-bold text-amber-600">{totalBackToScm}</div>
+          <div><div className="text-xs sm:text-sm font-semibold text-amber-700">BACK TO SCM</div><div className="text-xs text-amber-500">transactions</div></div>
         </div>
         <div className="border rounded-xl p-3 sm:p-4 bg-red-50 border-red-200 flex items-center gap-2 sm:gap-4">
           <div className="text-2xl sm:text-3xl font-bold text-red-600">{totalRejected}</div>
@@ -506,7 +516,7 @@ export default function RequestsPage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-1.5">
           <MultiSelect label="All Stage" options={stageOptions} value={stageF} onChange={setStageF} />
-          <MultiSelect label="All Status" options={["COMPLETED","PENDING","BACK TO MERCHANDISE","REJECTED"]} value={statusFilter} onChange={setStatusFilter} />
+          <MultiSelect label="All Status" options={["COMPLETED","PENDING","BACK TO MERCHANDISE","BACK TO SCM","REJECTED"]} value={statusFilter} onChange={setStatusFilter} />
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF} />

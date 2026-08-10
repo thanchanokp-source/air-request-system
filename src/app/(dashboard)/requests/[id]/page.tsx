@@ -642,6 +642,7 @@ export default function RequestDetailPage() {
   const [editRows, setEditRows] = useState<Record<string, any>>({})
   const [editingItems, setEditingItems] = useState(false)
   const [editSearch, setEditSearch] = useState("") // filter the resubmit edit table (huge docs = 100s of SOs)
+  const [reviseReason, setReviseReason] = useState("") // MER/SCM revise note captured before Re-submit
   const [editSaved, setEditSaved] = useState(false)
   const [reupBusy, setReupBusy] = useState(false)
   const [reupErr, setReupErr] = useState("")
@@ -1583,7 +1584,7 @@ export default function RequestDetailPage() {
     setSubmitting("_")
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "resubmit_mer_gw" })
+      body: JSON.stringify({ action: "resubmit_mer_gw", comment: reviseReason.trim() })
     })
     if (res.ok) setReq(await res.json())
     else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
@@ -1640,7 +1641,7 @@ export default function RequestDetailPage() {
     setSubmitting("_")
     const res = await fetch(`/api/requests/${id}/approve`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "resubmit_mer_nyg" })
+      body: JSON.stringify({ action: "resubmit_mer_nyg", comment: reviseReason.trim() })
     })
     if (res.ok) setReq(await res.json())
     else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
@@ -4228,6 +4229,12 @@ export default function RequestDetailPage() {
           {renderEditTable(true)}
           {renderReupload(true)}
           {renderExtraAttach()}
+          <div className="border border-blue-200 rounded-lg p-3 bg-blue-50/30">
+            <label className="text-xs font-semibold text-blue-800">เหตุผลที่แก้ไข (Revise reason) <span className="font-normal text-gray-400">— optional</span></label>
+            <textarea value={reviseReason} onChange={e => setReviseReason(e.target.value)} rows={2}
+              placeholder="ระบุสิ่งที่แก้ไข / เหตุผล ก่อน Re-submit…"
+              className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={resubmitMerGw} disabled={submitting === "_" || Object.keys(editRows).length > 0}
               className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
@@ -4258,6 +4265,12 @@ export default function RequestDetailPage() {
           {renderEditTable(false)}
           {renderReupload(false)}
           {renderExtraAttach()}
+          <div className="border border-blue-200 rounded-lg p-3 bg-blue-50/30">
+            <label className="text-xs font-semibold text-blue-800">เหตุผลที่แก้ไข (Revise reason) <span className="font-normal text-gray-400">— optional</span></label>
+            <textarea value={reviseReason} onChange={e => setReviseReason(e.target.value)} rows={2}
+              placeholder="ระบุสิ่งที่แก้ไข / เหตุผล ก่อน Re-submit…"
+              className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={resubmitMerNyg} disabled={submitting === "_" || Object.keys(editRows).length > 0}
               className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
