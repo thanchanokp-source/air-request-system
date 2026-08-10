@@ -197,7 +197,10 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
       if (s.status === "COMPLETED" || s.status === "DEPT_APPROVED") dmap[s.dept].done++
     }
     const claimDepts = Object.entries(dmap).map(([dept, c]) => ({ dept, done: c.done === c.total }))
-    const claimReached = completed || cur >= CLAIM_ORD
+    // NYK-Direct imports (GW machinery, NYG-tagged) sit at the SCM NYK claim stage with a GW-style
+    // itemStatus (PRES_PASSED) that maps below CLAIM_ORD → force claim-reached so the NYK chip shows
+    // active (amber) with the approver name instead of a greyed-out "not reached".
+    const claimReached = completed || cur >= CLAIM_ORD || !!req?.nykDirect
     // Logistics runs IN PARALLEL with Claim (not a linear step): green ONLY after LG presses
     // "Save & Send" (req.logisticsSent) — NOT on Save Draft (which also fills Actual freight).
     const lgDone = !!req?.logisticsSent
