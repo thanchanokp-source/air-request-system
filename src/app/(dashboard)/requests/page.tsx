@@ -351,9 +351,13 @@ export default function RequestsPage() {
   const DONE_ST = (s: string) => s === "COMPLETED" || s === "ACCOUNTING_PENDING"
   // Count tiles follow the active filters (use `filtered`, not `allRows`) so the numbers
   // match what's shown below when a filter is applied.
+  // "Back to Merchandise" = sent back to fix & resubmit (still in-flight — NOT rejected). Counted
+  // separately from Pending/Rejected so it doesn't look dead or hide among normal pending work.
+  const isBackToMer = (r: any) => r.itemStatus === "CLAIM_REJECT_GW" || r.request?.status === "PENDING_MER" || r.request?.status === "PENDING_MER_GW"
   const totalCompleted = filtered.filter(r => DONE_ST(r.itemStatus)).length
   const totalRejected = filtered.filter(r => r.itemStatus === "REJECTED").length
-  const totalPending = filtered.filter(r => !DONE_ST(r.itemStatus) && r.itemStatus !== "REJECTED").length
+  const totalBackToMer = filtered.filter(r => r.itemStatus !== "REJECTED" && !DONE_ST(r.itemStatus) && isBackToMer(r)).length
+  const totalPending = filtered.filter(r => !DONE_ST(r.itemStatus) && r.itemStatus !== "REJECTED" && !isBackToMer(r)).length
 
   return (
     <div className="space-y-4">
@@ -390,7 +394,7 @@ export default function RequestsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <div className="border rounded-xl p-3 sm:p-4 bg-green-50 border-green-200 flex items-center gap-2 sm:gap-4">
           <div className="text-2xl sm:text-3xl font-bold text-green-600">{totalCompleted}</div>
           <div><div className="text-xs sm:text-sm font-semibold text-green-700">COMPLETED</div><div className="text-xs text-green-500">transactions</div></div>
@@ -398,6 +402,10 @@ export default function RequestsPage() {
         <div className="border rounded-xl p-3 sm:p-4 bg-yellow-50 border-yellow-200 flex items-center gap-2 sm:gap-4">
           <div className="text-2xl sm:text-3xl font-bold text-yellow-600">{totalPending}</div>
           <div><div className="text-xs sm:text-sm font-semibold text-yellow-700">PENDING</div><div className="text-xs text-yellow-500">transactions</div></div>
+        </div>
+        <div className="border rounded-xl p-3 sm:p-4 bg-orange-50 border-orange-200 flex items-center gap-2 sm:gap-4">
+          <div className="text-2xl sm:text-3xl font-bold text-orange-600">{totalBackToMer}</div>
+          <div><div className="text-xs sm:text-sm font-semibold text-orange-700">BACK TO MERCHANDISE</div><div className="text-xs text-orange-500">transactions</div></div>
         </div>
         <div className="border rounded-xl p-3 sm:p-4 bg-red-50 border-red-200 flex items-center gap-2 sm:gap-4">
           <div className="text-2xl sm:text-3xl font-bold text-red-600">{totalRejected}</div>
