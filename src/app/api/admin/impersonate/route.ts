@@ -18,14 +18,22 @@ export async function GET(req: NextRequest) {
   }
   const role = (req.nextUrl.searchParams.get("role") || "").trim()
   const bu = (req.nextUrl.searchParams.get("bu") || "").trim()
-  if (!role) return NextResponse.json({ error: "role required" }, { status: 400 })
+  const userId = (req.nextUrl.searchParams.get("userId") || "").trim()
 
-  // First active holder of the role (+ BU for BU-specific roles; SCM_NYK_* are cross-BU).
-  const where: any = { isActive: true, OR: [{ role }, { roles: { has: role } }] }
-  if (bu && bu !== "ALL" && !role.startsWith("SCM_NYK")) where.bu = { in: [bu, "ALL"] }
-  const target = await (prisma.user as any).findFirst({ where, orderBy: [{ priority: "asc" }, { createdAt: "asc" }] })
-  if (!target) {
-    return NextResponse.redirect(new URL(`/approvals?impersonate_error=${encodeURIComponent(`No user with role ${role}${bu ? " ("+bu+")" : ""}`)}`, req.url))
+  let target: any = null
+  if (userId) {
+    // View as a SPECIFIC person → see exactly their pages/queue (their BU, claim dept, assignments).
+    target = await (prisma.user as any).findFirst({ where: { id: userId, isActive: true } })
+    if (!target) return NextResponse.redirect(new URL(`/approvals?impersonate_error=${encodeURIComponent("User not found or inactive")}`, req.url))
+  } else {
+    if (!role) return NextResponse.json({ error: "role or userId required" }, { status: 400 })
+    // First active holder of the role (+ BU for BU-specific roles; SCM_NYK_* are cross-BU).
+    const where: any = { isActive: true, OR: [{ role }, { roles: { has: role } }] }
+    if (bu && bu !== "ALL" && !role.startsWith("SCM_NYK")) where.bu = { in: [bu, "ALL"] }
+    target = await (prisma.user as any).findFirst({ where, orderBy: [{ priority: "asc" }, { createdAt: "asc" }] })
+    if (!target) {
+      return NextResponse.redirect(new URL(`/approvals?impersonate_error=${encodeURIComponent(`No user with role ${role}${bu ? " ("+bu+")" : ""}`)}`, req.url))
+    }
   }
 
   // Remember the ORIGINAL admin (only on the first hop; keep it while switching roles).

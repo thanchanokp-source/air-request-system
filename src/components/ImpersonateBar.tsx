@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 // Roles selectable per BU for admin "View as". Value = role code, label = display.
 const ROLES_BY_BU: Record<string, { role: string; label: string }[]> = {
@@ -63,10 +63,22 @@ export default function ImpersonateBar({ isAdmin, isImpersonating, actingLabel }
   const [open, setOpen] = useState(false)
   const [bu, setBu] = useState("NYG")
   const [role, setRole] = useState("")
+  // Person picker: view as a SPECIFIC named user (their exact BU/claim-dept/assignments).
+  const [people, setPeople] = useState<any[]>([])
+  const [pq, setPq] = useState("")
+  useEffect(() => {
+    if (!open || people.length) return
+    fetch("/api/users").then(r => r.json()).then(d => setPeople(Array.isArray(d) ? d.filter((u: any) => u.isActive && u.role !== "ADMIN") : [])).catch(() => {})
+  }, [open, people.length])
   if (!isAdmin && !isImpersonating) return null
 
   const go = () => { if (role) window.location.href = `/api/admin/impersonate?role=${encodeURIComponent(role)}&bu=${encodeURIComponent(bu)}` }
+  const goUser = (id: string) => { window.location.href = `/api/admin/impersonate?userId=${encodeURIComponent(id)}` }
   const roles = ROLES_BY_BU[bu] || []
+  const pqn = pq.trim().toLowerCase()
+  const matchedPeople = pqn
+    ? people.filter((u: any) => `${u.name || ""} ${u.email || ""} ${u.title || u.role || ""} ${u.bu || ""}`.toLowerCase().includes(pqn)).slice(0, 30)
+    : []
 
   return (
     <div className={`w-full ${isImpersonating ? "bg-amber-500" : "bg-slate-800"} text-white text-sm`}>
@@ -103,7 +115,27 @@ export default function ImpersonateBar({ isAdmin, isImpersonating, actingLabel }
             className="bg-white text-slate-800 font-semibold px-3 py-1 rounded-md text-xs hover:bg-gray-100 disabled:opacity-40">
             View as →
           </button>
-          <span className="text-[11px] opacity-80">Instantly act as that role (no login needed) · view the Approvals pages that need action</span>
+          <span className="text-[11px] opacity-80">Instantly act as that role (no login needed)</span>
+
+          {/* ── OR view as a specific person (by name) ── */}
+          <span className="opacity-60 text-xs mx-1">|</span>
+          <div className="relative">
+            <input value={pq} onChange={e => setPq(e.target.value)} placeholder="🔍 หรือค้นหาชื่อคน…"
+              className="text-gray-800 rounded-md px-2 py-1 text-xs w-56" />
+            {pqn && (
+              <div className="absolute left-0 top-full mt-1 bg-white text-gray-800 rounded-lg shadow-2xl border border-gray-200 w-72 max-h-72 overflow-auto z-50">
+                {matchedPeople.length === 0 && <div className="px-3 py-2 text-xs text-gray-400">ไม่พบชื่อ</div>}
+                {matchedPeople.map((u: any) => (
+                  <button key={u.id} onClick={() => goUser(u.id)}
+                    className="w-full text-left px-3 py-1.5 hover:bg-blue-50 border-b border-gray-50 last:border-0">
+                    <div className="text-xs font-medium text-gray-800">{u.name || u.email}</div>
+                    <div className="text-[10px] text-gray-400">{u.title || u.role}{u.bu ? ` · ${u.bu}` : ""}{u.email ? ` · ${u.email}` : ""}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <span className="text-[11px] opacity-80">พิมพ์ชื่อ → เห็นหน้าของคนนั้นเป๊ะ</span>
         </div>
       )}
     </div>
