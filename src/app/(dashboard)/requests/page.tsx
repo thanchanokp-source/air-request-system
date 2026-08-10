@@ -252,10 +252,12 @@ export default function RequestsPage() {
     port?: string[], country?: string[], claim?: string[], invoice?: string[], hawb?: string[], stage?: string[]
   }) => rows.filter(row => {
     const r = row.request
+    const rowBkm = row.itemStatus === "CLAIM_REJECT_GW" || r?.status === "PENDING_MER" || r?.status === "PENDING_MER_GW"
     const statusMatch = !statusFilter.length || statusFilter.some(s =>
       (s === "COMPLETED" && row.itemStatus === "COMPLETED") ||
       (s === "REJECTED" && row.itemStatus === "REJECTED") ||
-      (s === "PENDING" && row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED")
+      (s === "BACK TO MERCHANDISE" && rowBkm) ||
+      (s === "PENDING" && row.itemStatus !== "COMPLETED" && row.itemStatus !== "REJECTED" && !rowBkm)
     )
     const stageMatch = !opts.stage?.length || (() => {
       const keys = rowStageKeys(row)
@@ -504,7 +506,7 @@ export default function RequestsPage() {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-1.5">
           <MultiSelect label="All Stage" options={stageOptions} value={stageF} onChange={setStageF} />
-          <MultiSelect label="All Status" options={["COMPLETED","PENDING","REJECTED"]} value={statusFilter} onChange={setStatusFilter} />
+          <MultiSelect label="All Status" options={["COMPLETED","PENDING","BACK TO MERCHANDISE","REJECTED"]} value={statusFilter} onChange={setStatusFilter} />
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF} />
