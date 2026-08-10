@@ -637,6 +637,7 @@ export default function RequestDetailPage() {
   // before re-submitting. Empty = unchanged (reads from the item). GW also edits claim splits.
   const [editRows, setEditRows] = useState<Record<string, any>>({})
   const [editingItems, setEditingItems] = useState(false)
+  const [editSearch, setEditSearch] = useState("") // filter the resubmit edit table (huge docs = 100s of SOs)
   const [editSaved, setEditSaved] = useState(false)
   const [reupBusy, setReupBusy] = useState(false)
   const [reupErr, setReupErr] = useState("")
@@ -1690,9 +1691,21 @@ export default function RequestDetailPage() {
   // The editable SO table shown on the resubmit panel. NYG/EA: style/date/qty/factory/country.
   // GW: the above + claim dept / % / reason (per SO, total 100).
   const renderEditTable = (isGWDoc: boolean) => {
-    const items = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
-    if (!items.length) return null
+    const allItems = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
+    if (!allItems.length) return null
     const dirty = Object.keys(editRows).length > 0
+    // Big documents can carry hundreds of SOs — rendering an editable input for every one freezes
+    // the page (each keystroke re-renders all rows). Search to narrow; otherwise cap the rows shown.
+    const ROW_CAP = 40
+    const q = editSearch.trim().toLowerCase()
+    const matched = q
+      ? allItems.filter((i: any) => String(i.so || "").toLowerCase().includes(q) || String(i.style || "").toLowerCase().includes(q))
+      : allItems
+    // Always keep already-edited rows visible so pending changes aren't hidden by the cap.
+    const editedIds = new Set(Object.keys(editRows))
+    const capped = q ? matched : matched.filter((i: any, idx: number) => idx < ROW_CAP || editedIds.has(i.id))
+    const items = capped
+    const hiddenCount = matched.length - items.length
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1705,6 +1718,13 @@ export default function RequestDetailPage() {
               className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-40">
               {editingItems ? "กำลังบันทึก..." : "💾 Save changes"}</button>
           </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <input value={editSearch} onChange={e => setEditSearch(e.target.value)}
+            placeholder="🔍 ค้นหา SO / Style ที่จะแก้..."
+            className="w-64 border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300" />
+          <span className="text-[11px] text-gray-400">{allItems.length} SO ทั้งหมด{q ? ` · พบ ${matched.length}` : ""}</span>
+          {hiddenCount > 0 && <span className="text-[11px] text-amber-600">ซ่อนอยู่ {hiddenCount} แถว — พิมพ์ค้นหาเพื่อแก้ SO ที่ต้องการ</span>}
         </div>
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
           <table className="w-full text-xs">

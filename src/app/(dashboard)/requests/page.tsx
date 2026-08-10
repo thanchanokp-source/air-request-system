@@ -62,16 +62,19 @@ const getSoCurrentStep = (row: any): string => {
 
 // Aggregate status for a group of SO (a whole document or one style) so you can
 // see at a glance where it stands: Done / Pending / Rejected / Back to. (Both BU.)
-function soAggBadge(rows: any[]): { label: string; cls: string } | null {
+function soAggBadge(rows: any[], docStatus?: string): { label: string; cls: string } | null {
   if (!rows || rows.length === 0) return null
   const st = rows.map(r => r.itemStatus)
   if (st.some(s => s === "REJECTED")) return { label: "Rejected", cls: "bg-red-100 text-red-700 border-red-200" }
+  // A document sent back to Merchandise sits at PENDING_MER / PENDING_MER_GW (items reset to PENDING),
+  // so flag it as "Back to Merchandise" instead of a plain "Pending".
+  if (docStatus === "PENDING_MER" || docStatus === "PENDING_MER_GW") return { label: "Back to Merchandise", cls: "bg-orange-100 text-orange-700 border-orange-200" }
   if (st.some(s => s === "CLAIM_REJECT_GW")) return { label: "Back to Merchandise", cls: "bg-orange-100 text-orange-700 border-orange-200" }
   if (st.every(s => s === "COMPLETED" || s === "ACCOUNTING_PENDING")) return { label: "Done", cls: "bg-green-100 text-green-700 border-green-200" }
   return { label: "Pending", cls: "bg-yellow-100 text-yellow-700 border-yellow-200" }
 }
-const AggBadge = ({ rows }: { rows: any[] }) => {
-  const b = soAggBadge(rows)
+const AggBadge = ({ rows, docStatus }: { rows: any[]; docStatus?: string }) => {
+  const b = soAggBadge(rows, docStatus)
   if (!b) return null
   // Reject reason(s) — itemComment set when an SO is sent Back to Merchandise / rejected.
   const reasons = [...new Set((rows || [])
@@ -519,7 +522,7 @@ export default function RequestsPage() {
                 <span className="text-gray-400 text-xs w-4 shrink-0">{isDocExp ? "▼" : "▶"}</span>
                 <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
                   className="font-bold text-blue-700 hover:underline text-sm shrink-0">{dg.request.documentNo}</Link>
-                <AggBadge rows={dg.styles.flatMap((s: any) => s.rows)} />
+                <AggBadge rows={dg.styles.flatMap((s: any) => s.rows)} docStatus={dg.request.status} />
                 <span className="text-xs text-gray-500 truncate shrink-0">{dg.request.bu || dg.request.buName}</span>
                 {(dg.request.createdBy?.name || dg.request.createdBy?.email) && (
                   <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0" title="Uploaded by / Requested by">
@@ -578,7 +581,7 @@ export default function RequestsPage() {
                         <div className="flex items-center gap-3 px-6 py-2.5 cursor-pointer hover:bg-blue-50/30 select-none" onClick={() => toggleStyle(styleKey)}>
                           <span className="text-gray-300 text-xs w-4">{isStyleExp ? "▼" : "▶"}</span>
                           <span className="font-semibold text-gray-700 text-sm">{sg.style}</span>
-                          <AggBadge rows={sg.rows} />
+                          <AggBadge rows={sg.rows} docStatus={dg.request.status} />
                           <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{sg.rows.length} transactions</span>
                         </div>
                         {isStyleExp && (
