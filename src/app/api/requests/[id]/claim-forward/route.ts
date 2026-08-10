@@ -63,9 +63,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const heldRoles: string[] = [role, ...dbUserRoles.filter((r: string) => r && r !== role)]
   const isClaimRole = (r: string) => (r.startsWith("CLAIM_") && r !== "CLAIM_NEXT_APPROVER") || r.startsWith("DVM_") || r === "SCM_NYK" || r === "SCM_NYG"
 
-  // Must be a claim owner (master role, incl. via roles[]) or a forwarded Claim Next Approver
+  // Must be a claim owner (master role, incl. via roles[]) or a forward recipient. A recipient is
+  // matched by EMAIL, so they can act whether they logged in via the magic link (CLAIM_NEXT_APPROVER)
+  // or with their normal role (e.g. VP_PRODUCTION being viewed-as / logging in directly).
   const isClaimP1 = heldRoles.some(isClaimRole)
-  const isClaimNext = role === "CLAIM_NEXT_APPROVER"
+  const myFwdCount = await (prisma as any).claimForward.count({ where: { requestId: id, nextEmail: { equals: String(session.user?.email || ""), mode: "insensitive" } } })
+  const isClaimNext = role === "CLAIM_NEXT_APPROVER" || myFwdCount > 0
   if (!isClaimP1 && !isClaimNext) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
@@ -92,7 +95,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (isClaimNext) {
     ownerRow = claimNextToken
       ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, token: claimNextToken } })
-      : await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: userEmail } })
+      : await (prisma as any).claimForward.findFirst({ where: { requestId: id, nextEmail: { equals: userEmail, mode: "insensitive" } } })
     if (!ownerRow) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
     forwarderDept = ownerRow.dept
     currentPos = ownerRow.position ?? 0

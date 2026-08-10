@@ -951,6 +951,15 @@ export default function RequestDetailPage() {
   const canAct = req && ROLE_ACTIONS[role]?.includes(req.status) && (!isGWRole || isGWRequest)
   const isStyleApprover = req && STYLE_APPROVER_STATUSES.includes(req.status)
   const CLAIM_VP_ROLES_LOCAL = ["VP_COMMERCIAL", "VP_PROCUREMENT", "VP_NYK", "VP_PRODUCTION"]
+  // A forward recipient is identified by EMAIL — so they can see & act on a forwarded claim whether
+  // they signed in via the magic link (role CLAIM_NEXT_APPROVER) OR with their normal role
+  // (e.g. VP_PRODUCTION logging in / being viewed-as). The dept comes from the ClaimForward row.
+  const myEmailLc = String((session?.user as any)?.email || "").toLowerCase()
+  const myFwdRowsAll = ((req?.claimForwards || []) as any[]).filter((f: any) => String(f.nextEmail || "").toLowerCase() === myEmailLc)
+  const myFwdTok = (session?.user as any)?.claimNextToken || null
+  const myFwdRow0 = (myFwdTok ? myFwdRowsAll.find((f: any) => f.token === myFwdTok) : null) || myFwdRowsAll[0] || null
+  const isEmailFwdRecipient = myFwdRowsAll.length > 0 && ["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_CLAIM_GW"].includes(req?.status || "")
+  const actingAsClaimNext = role === "CLAIM_NEXT_APPROVER" || isEmailFwdRecipient
   // Multi-role: the session carries ONE primary role, but a person may hold more via
   // roles[]. When the primary role can't act on this doc's claim yet a held role can
   // (its dept has a pending split here), act as that claim role — so a VP MER who is
@@ -961,6 +970,8 @@ export default function RequestDetailPage() {
     || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG"
     || CLAIM_VP_ROLES_LOCAL.includes(role) || role === "CLAIM_NEXT_APPROVER"
   const claimRole: string = (() => {
+    // A forward addressed to my email = I act as the forwarded approver (regardless of my own role).
+    if (isEmailFwdRecipient) return "CLAIM_NEXT_APPROVER"
     if (primaryIsClaimRole) return role
     const others: string[] = (((session?.user as any)?.roles) || []).filter((r: string) => r && r !== role)
     const items = req?.items || []
@@ -1026,7 +1037,7 @@ export default function RequestDetailPage() {
   //   GW:  CLAIM_GW (GW/SUPPLIER), SCM_NYG      NYG: CLAIM_COMMERCIAL/PRODUCTION/PROCUREMENT
   //   plus a forwarded CLAIM_NEXT_APPROVER (scoped to dept + position via ClaimForward).
   const gwFwdCanonicalDept: string | null =
-    claimRole === "CLAIM_NEXT_APPROVER" ? (myClaimDept || null)
+    claimRole === "CLAIM_NEXT_APPROVER" ? (myFwdRow0?.dept || myClaimDept || null)
     // NYG entry approver → the dept they act on (forward-direction mapping).
     : (!isGWRequest && nygActing && !nygActing.isVp) ? nygActing.dept
     : claimRole === "CLAIM_GW" ? (myClaimDept === "SUPPLIER" ? "SUPPLIER" : "GW")
@@ -1052,16 +1063,14 @@ export default function RequestDetailPage() {
     : (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_VP_CLAIM")
   const isGwForwardRole = isClaimStageStatus && (fwdEntryRole || claimRole === "CLAIM_NEXT_APPROVER")
   const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED"]
-  // My forward row (CLAIM_NEXT_APPROVER = the row I logged in with, by token).
-  const myClaimToken = (session?.user as any)?.claimNextToken || null
-  const myClaimFwdRow = role === "CLAIM_NEXT_APPROVER"
-    ? (req?.claimForwards || []).find((f: any) => myClaimToken ? f.token === myClaimToken : (f.dept === gwFwdCanonicalDept && f.nextEmail === (session?.user as any)?.email))
-    : null
+  // My forward row — resolved by token (magic link) or by email (normal login / viewed-as).
+  const myClaimToken = myFwdTok
+  const myClaimFwdRow = myFwdRow0
   // Claim-Production is split BY FACTORY G-GROUP (rushan G1/G3, pk G2/G4; VP "ALL" = every
   // group). The ENTRY claimer only handles SOs whose factory group they cover. Skip this for
-  // CLAIM_NEXT_APPROVER (already scoped by the forward's itemIds) and non-production depts.
+  // a forward recipient (already scoped by the forward's itemIds) and non-production depts.
   const coversMyProdG = (i: any) => {
-    if (gwFwdCanonicalDept !== "PRODUCTION" || role === "CLAIM_NEXT_APPROVER" || !myClaimDept) return true
+    if (gwFwdCanonicalDept !== "PRODUCTION" || actingAsClaimNext || !myClaimDept) return true
     const g = vpProdGroup(i.factory)
     return !g || prodGroupCovers(myClaimDept, g)
   }
@@ -1075,7 +1084,7 @@ export default function RequestDetailPage() {
   // their row's SO; the entry owner sees SO not yet forwarded to a later position.
   const gwFwdItems = (() => {
     if (!isGwForwardRole) return []
-    if (role === "CLAIM_NEXT_APPROVER") {
+    if (actingAsClaimNext) {
       // MERGE every forward addressed to THIS person (by email), not just the one link's
       // token. e.g. the Production EVP (khomkrit) gets a separate forward from rushan (G1/G3)
       // and pk (G2/G4) → both land here as ONE combined view. Whichever link they open shows

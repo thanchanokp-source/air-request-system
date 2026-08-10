@@ -1576,7 +1576,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // A claim department (owner role or a forwarded CLAIM_NEXT_APPROVER) finalizes
   // ITS OWN splits across the doc. Other departments are untouched (parallel,
   // independent). Works for both BU. SCM NYK keeps its own CR flow (excluded).
-  if (action === "finalize_claim_dept" && heldRoles.some(r => ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER"].includes(r))) {
+  if (action === "finalize_claim_dept") {
+    const email = (session.user?.email || "").toLowerCase()
+    const allFwdRows = await (prisma as any).claimForward.findMany({ where: { requestId: id } })
+    const myEmailFwds = allFwdRows.filter((r: any) => String(r.nextEmail || "").toLowerCase() === email)
+    // A forward addressed to my email = I act as the forwarded approver, even if I logged in with
+    // my normal role (e.g. VP_PRODUCTION) rather than via the magic link (CLAIM_NEXT_APPROVER).
+    const actAsNext = userRole === "CLAIM_NEXT_APPROVER" || myEmailFwds.length > 0
+    const isClaimOwnerRole = heldRoles.some(r => ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER"].includes(r))
+    if (!isClaimOwnerRole && !actAsNext) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     const isGW = request.bu === "GW"
     const expected = isGW ? ["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"] : ["PENDING_CLAIM", "PENDING_VP_CLAIM"]
     if (!expected.includes(request.status)) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
@@ -1586,15 +1594,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let currentPos = 0
     let ownerRow: any = null
     let myFwdRows: any[] = []
-    if (userRole === "CLAIM_NEXT_APPROVER") {
-      const email = (session.user?.email || "").toLowerCase()
+    if (actAsNext) {
       const tok = (session.user as any).claimNextToken || null
       // MERGE every forward addressed to this person (e.g. the Production EVP gets one forward
       // from the G1/G3 approver and one from the G2/G4 approver) → finish them together, no
       // matter which link they came in on. Scope to the dept of the row matching their token.
-      const tokRow = tok ? await (prisma as any).claimForward.findFirst({ where: { requestId: id, token: tok } }) : null
-      const allRows = await (prisma as any).claimForward.findMany({ where: { requestId: id } })
-      myFwdRows = allRows.filter((r: any) => String(r.nextEmail || "").toLowerCase() === email && (!tokRow || r.dept === tokRow.dept))
+      const tokRow = tok ? allFwdRows.find((r: any) => r.token === tok) : null
+      myFwdRows = myEmailFwds.filter((r: any) => !tokRow || r.dept === tokRow.dept)
       ownerRow = tokRow || myFwdRows[0]
       if (!ownerRow) return NextResponse.json({ error: "You are not the current approver for any department on this document" }, { status: 403 })
       dept = ownerRow.dept

@@ -198,23 +198,28 @@ export default function ApprovalsPage() {
   // role CLAIM_NEXT_APPROVER, session email = the recipient's real email). Show the
   // SO forwarded TO them that still await their action, scoped by email match.
   const myClaimToken = (session?.user as any)?.claimNextToken || null
+  // A forward recipient is identified by EMAIL — works whether they logged in via the magic link
+  // (role CLAIM_NEXT_APPROVER) OR with their normal role (e.g. VP_PRODUCTION). The dept comes from
+  // the ClaimForward row itself, not the session, so it's correct regardless of how they signed in.
   const claimNextItems = (r: any) => {
-    if (role !== "CLAIM_NEXT_APPROVER") return []
     const fwds: any[] = Array.isArray(r.claimForwards) ? r.claimForwards : []
     const mine = fwds.filter((f: any) => String(f.nextEmail || "").toLowerCase() === String(userEmail || "").toLowerCase())
     if (!mine.length) return []
+    const myDepts = new Set<string>(mine.map((f: any) => f.dept))
     const myIds = new Set<string>(mine.flatMap((f: any) => Array.isArray(f.itemIds) ? f.itemIds : []))
-    // Empty itemIds across my rows = whole-department scope (legacy rows stored []).
-    const wholeDept = myIds.size === 0
-    const dept = (session?.user as any)?.claimDepartment || null
+    const wholeDept = mine.some((f: any) => !Array.isArray(f.itemIds) || f.itemIds.length === 0)
     return (r.items || []).filter((i: any) => {
       if (["REJECTED", "COMPLETED", "ACCOUNTING_PENDING"].includes(i.itemStatus)) return false
-      if (!wholeDept && !myIds.has(i.id)) return false
-      if (!dept) return !wholeDept
-      const onDept = getSplits(i).some((s: any) => s.dept === dept)
-      if (wholeDept && !onDept) return false
+      const dept = getSplits(i).map((s: any) => s.dept).find((d: string) => myDepts.has(d))
+      if (!dept) return false
+      // Addressed to me: by explicit itemId, or whole-dept scope covering this SO's dept.
+      if (!(myIds.has(i.id) || wholeDept)) return false
       const ss = deptSplitStatus(i, dept)
-      return ss == null || ss === "CLAIM_PENDING" || ss === "CLAIM_PASSED" // not yet finalized
+      if (!(ss == null || ss === "CLAIM_PENDING" || ss === "CLAIM_PASSED")) return false // finalized already
+      // Not moved ON to a later position past me → I'm still the current holder.
+      const myPos = Math.max(...mine.filter((f: any) => f.dept === dept).map((f: any) => f.position ?? 0))
+      const laterHolds = fwds.some((f: any) => f.dept === dept && (f.position ?? 0) > myPos && (Array.isArray(f.itemIds) ? f.itemIds.includes(i.id) : true))
+      return !laterHolds
     })
   }
 
