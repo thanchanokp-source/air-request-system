@@ -151,12 +151,10 @@ export default function ApprovalsPage() {
     // (/logistics, grouped by brand). A Logistics person still sees APPROVALS only when they are an
     // actual approver via some OTHER role (handled by the other branches here). Admin is separate
     // (isAdminViewer above shows every in-flight doc). NYG/EA/TRM LG booking branches intentionally removed.
-    if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
-      return items.some((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
-    }
-    if (CLAIM_VP_ROLES.includes(role)) {
-      return items.some((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
-    }
+    // NOTE: NYG/EA claim relevance (DVM_/CLAIM_/VP_ claim roles) is NOT decided here — a naive
+    // "claimDept + LOG_PASSED" match ignored the forced-position FORWARD (an entry who forwarded
+    // an SO on still matched, so it never left their queue). Relevance now comes ONLY from the
+    // forward-aware heldClaimItems() / claimNextItems() in the myRequests filter.
     if ((myRoles.includes("DPM_GW") || myRoles.includes("VP_MER_GW")) && (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW") && !r.pendingRate && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail || r.status === "PENDING_DPM_GW")) return true
     if (myRoles.includes("GM_GW") && r.status === "PENDING_GM_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")) return true
     // President (GW) is now the FINAL approver — items sit at PRESIDENT_PENDING
@@ -250,12 +248,11 @@ export default function ApprovalsPage() {
     if (myRoles.includes("PRESIDENT") || myRoles.includes("PRESIDENT_GW")) return items.filter((i: any) => i.itemStatus === "PRESIDENT_PENDING")
     if (myRoles.includes("LOGISTICS") && r.bu !== "GW") return items.filter((i: any) => i.itemStatus !== "REJECTED")
     if (myRoles.includes("LOGISTICS_TRM") && r.bu === "TRM") return items.filter((i: any) => i.itemStatus !== "REJECTED")
-    if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) {
-      return items.filter((i: any) => i.itemStatus === "LOG_PASSED" && i.claimDepartment === claimDept)
-    }
-    if (CLAIM_VP_ROLES.includes(role)) {
-      return items.filter((i: any) => i.itemStatus === "CLAIM_PASSED" && i.claimDepartment === claimDept)
-    }
+    // NYG/EA claim items are supplied by the forward-aware heldClaimItems()/claimNextItems() union
+    // (see getRelevantItems `extra`), NOT here — a naive claimDept match ignored forwards so an
+    // entry who forwarded an SO on still saw it. Return [] so only the forward-aware source counts.
+    if ((role.startsWith("DVM_") || role.startsWith("CLAIM_")) && !role.endsWith("_GW")) return []
+    if (CLAIM_VP_ROLES.includes(role)) return []
     if ((myRoles.includes("DPM_GW") || myRoles.includes("VP_MER_GW")) && (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW")) return items.filter((i: any) => i.itemStatus === "PENDING")
     if (myRoles.includes("GM_GW") && r.status === "PENDING_GM_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
     if (myRoles.includes("MER_GW") && r.bu === "GW") return items.filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
