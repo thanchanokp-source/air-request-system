@@ -639,7 +639,7 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2"><CurrentStepBadge row={row} /></td>
                                     {(() => {
                                       const reason = row.itemComment || row.request.rejectionReason || ""
-                                      return <td className="px-3 py-2 text-orange-700 max-w-[240px] truncate" title={reason}>{reason || "-"}</td>
+                                      return <td className="px-3 py-2 text-orange-700 align-top min-w-[220px] max-w-[360px] whitespace-normal break-words" title={reason}>{reason || "-"}</td>
                                     })()}
                                   </tr>
                                   <tr className="bg-gray-50/40">
