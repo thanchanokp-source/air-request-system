@@ -76,13 +76,12 @@ export default function ClaimStatusPage() {
     fetch("/api/requests").then(r => r.json()).then(d => { setRequests(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
   }, [])
 
-  // Docs in this BU that have reached the claim stage (have at least one split)
-  // OR are already completed (older/imported docs may carry no per-dept breakdown
-  // but should still show as Accepted — never hide a finished document).
+  // Show EVERY submitted document in this BU (not only claim-stage ones) so nothing is missing.
+  // Docs not yet at the claim stage have no per-dept breakdown → Overall "In progress", cells "–".
+  // Only unsubmitted drafts are hidden.
   const docs = requests
-    .filter(r => requestInBu(r, activeBu) && (!r.isTest || role === "ADMIN"))
+    .filter(r => requestInBu(r, activeBu) && (!r.isTest || role === "ADMIN") && r.status !== "DRAFT")
     .map(r => ({ r, map: docDeptMap(r) }))
-    .filter(x => Object.keys(x.map).length > 0 || x.r.status === "COMPLETED")
 
   // Columns = preferred order filtered to depts actually present, + any extras.
   const preferred = activeBu === "GW" ? DEPT_ORDER_GW : DEPT_ORDER_NYG
