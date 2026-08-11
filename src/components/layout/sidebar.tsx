@@ -7,6 +7,7 @@ import { MASTER_EDITOR_EMAILS } from "@/lib/master-access"
 const nav = [
   { href: "/dashboard", label: "DASHBOARD" },
   { href: "/requests", label: "AIR REQUESTS" },
+  { href: "/pull-material", label: "PULL MATERIAL" },
   { href: "/approvals", label: "APPROVALS" },
   { href: "/claim-status", label: "CLAIM STATUS" },
   { href: "/files", label: "REPORT" },
