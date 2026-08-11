@@ -12,6 +12,7 @@ export type ClaimSplit = {
   dept: string
   pct: number
   reason?: string | null
+  detail?: string | null
   status?: string | null
   crNo?: string | null
 }
@@ -42,6 +43,7 @@ export function getSplits(item: any): ClaimSplit[] {
       dept: String(s.dept || ""),
       pct: Number(s.pct) || 0,
       reason: s.reason ?? null,
+      detail: s.detail ?? s.reasonDetail ?? null,   // some rows store the field as `reasonDetail`
       status: s.status ?? null,
       crNo: s.crNo ?? null,
     })).filter(s => s.dept)
@@ -51,11 +53,27 @@ export function getSplits(item: any): ClaimSplit[] {
       dept: String(item.claimDepartment),
       pct: item.claimPercentage != null ? Number(item.claimPercentage) : 100,
       reason: null,
+      detail: null,
       status: null,
       crNo: null,
     }]
   }
   return []
+}
+
+// ── Claim REASON / DETAIL display text ─────────────────────────────
+// One source of truth for showing reason + detail across every claim table/export.
+// Reasons/details from each split are joined; reason falls back to the SO's reasonDelay.
+export function claimReasonText(item: any): string {
+  const r = getSplits(item).map(s => s.reason).filter(Boolean).join("; ")
+  return r || item?.reasonDelay || ""
+}
+export function claimDetailText(item: any): string {
+  return getSplits(item).map(s => s.detail).filter(Boolean).join("; ")
+}
+// Combined "DEPT pct%" label across all splits (e.g. "NYK 50%, COMMERCIAL 50%").
+export function claimDeptText(item: any): string {
+  return getSplits(item).map(s => `${deptLabel(s.dept)} ${s.pct}%`).join(", ")
 }
 
 // Air cost allocated to a split = (actual or estimated freight) × pct / 100.

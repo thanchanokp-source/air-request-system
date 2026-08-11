@@ -9,7 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
-import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, chainFor, claimSplitState, type PosSpec } from "@/lib/claim"
+import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, chainFor, claimSplitState, claimReasonText, claimDetailText, type PosSpec } from "@/lib/claim"
 import { validateUploadRows } from "@/lib/upload-validate"
 import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 
@@ -44,6 +44,8 @@ function SoApprovalTable({ items, selected, onToggle, canApprove, statusOf, show
     { h: "INV NO.", get: it => it.invoiceNo || "-" },
     { h: "HAWB#", get: it => it.hawbNo || "-" },
     { h: "CLAIM DEPT", get: it => getSplits(it).map((s: any) => deptLabel(s.dept)).join(", ") || "-" },
+    { h: "REASON", get: it => claimReasonText(it) || "-" },
+    { h: "DETAIL", get: it => claimDetailText(it) || "-" },
   ]
   return (
     <div className="border border-gray-200 rounded-xl overflow-auto max-h-[70vh]">
@@ -73,7 +75,8 @@ function SoApprovalTable({ items, selected, onToggle, canApprove, statusOf, show
                 </td>
                 {cols.map(c => (
                   <td key={c.h}
-                    className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""}`}>
+                    className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "REASON" || c.h === "DETAIL" ? "max-w-[220px] truncate text-gray-600" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""}`}
+                    title={c.h === "REASON" || c.h === "DETAIL" ? String(c.get(item)) : undefined}>
                     {c.get(item)}
                   </td>
                 ))}
@@ -1147,15 +1150,17 @@ export default function RequestDetailPage() {
         "QTY AIR": it.qtyRequestAir ?? "", "GROSS (KG)": it.grossWeight ?? "",
         "HAWB#": it.hawbNo || "", "INVOICE NO": it.invoiceNo || "",
         [`EST. FREIGHT (${CUR})`]: it.airFreight ?? "", [`ACTUAL (${CUR})`]: r.actual,
+        "CLAIM DEPT": deptLabel(r.sp?.dept || "") || "",
         "CLAIM %": r.pct, [`MY EST (${CUR})`]: r.myEst, [`MY CLAIM (${CUR})`]: r.amt,
+        "REASON": r.sp?.reason || "", "DETAIL": (r.sp as any)?.detail || "",
         "PLAN DATE": fmtDate(it.planShipmentDate),
         "FACTORY": it.factory || "", "COUNTRY": it.country || "",
       }
     })
     rows.push({ "No.": "", "SO": "TOTAL", "STYLE": "", "CUSTOMER PO": "", "QTY AIR": claimTotals.qty,
       "GROSS (KG)": "", "HAWB#": "", "INVOICE NO": "", [`EST. FREIGHT (${CUR})`]: claimTotals.est,
-      [`ACTUAL (${CUR})`]: claimTotals.actual, "CLAIM %": "", [`MY EST (${CUR})`]: claimTotals.myEst, [`MY CLAIM (${CUR})`]: claimTotals.amt,
-      "PLAN DATE": "", "FACTORY": "", "COUNTRY": "" } as any)
+      [`ACTUAL (${CUR})`]: claimTotals.actual, "CLAIM DEPT": "", "CLAIM %": "", [`MY EST (${CUR})`]: claimTotals.myEst, [`MY CLAIM (${CUR})`]: claimTotals.amt,
+      "REASON": "", "DETAIL": "", "PLAN DATE": "", "FACTORY": "", "COUNTRY": "" } as any)
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Claim")
@@ -1173,6 +1178,8 @@ export default function RequestDetailPage() {
       [`EST. (${CUR})`]: it.airFreight ?? "", [`ACTUAL (${CUR})`]: it.actualAirFreight ?? "",
       "INVOICE NO": it.invoiceNo || "", "HAWB#": it.hawbNo || "",
       "CLAIM DEPT": getSplits(it).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", "),
+      "REASON": getSplits(it).map((s: any) => s.reason).filter(Boolean).join("; ") || it.reasonDelay || "",
+      "DETAIL": getSplits(it).map((s: any) => s.detail).filter(Boolean).join("; "),
       "STATUS": it.itemStatus,
     }))
     if (rows.length === 0) { alert("ไม่มีข้อมูลให้ export"); return }
@@ -2393,6 +2400,8 @@ export default function RequestDetailPage() {
           { h: "EST FREIGHT", v: it => it.airFreight != null ? Number(it.airFreight).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "-", right: true },
           { h: "ACTUAL", v: it => it.actualAirFreight != null ? Number(it.actualAirFreight).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "-", right: true },
           { h: "CLAIM DEPT", v: it => getSplits(it).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "-" },
+          { h: "REASON", v: it => claimReasonText(it) || "-" },
+          { h: "DETAIL", v: it => claimDetailText(it) || "-" },
           { h: "INV NO", v: it => it.invoiceNo || "-" }, { h: "HAWB#", v: it => it.hawbNo || "-" },
           { h: "STATUS", v: it => it.itemStatus },
         ]
@@ -2812,7 +2821,7 @@ export default function RequestDetailPage() {
                         <td className="px-3 py-2 text-right text-blue-600">{fmtNum(item.airFreight)}</td>
                         <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i}>{deptLabel(s.dept)} {s.pct}%</div>) : "-"}</td>
                         <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="font-medium text-amber-800">{s.reason || "-"}</div>) : "-"}</td>
-                        <td className="px-3 py-2 whitespace-normal max-w-[16rem]">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="text-gray-500">{(s as any).reasonDetail || "-"}</div>) : "-"}</td>
+                        <td className="px-3 py-2 whitespace-normal max-w-[16rem]">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="text-gray-500">{s.detail || "-"}</div>) : "-"}</td>
                         <td className="px-3 py-2">{item.factory}</td>
                         <td className="px-3 py-2">{item.country}</td>
                         {idx === 0 && <td rowSpan={n} className="px-3 py-2 align-top">
@@ -2942,7 +2951,7 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                             <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i}>{deptLabel(s.dept)} {s.pct}%</div>) : "-"}</td>
                             <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="font-medium text-amber-800">{s.reason || "-"}</div>) : "-"}</td>
-                            <td className="px-3 py-2 whitespace-normal max-w-[16rem]">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="text-gray-500">{(s as any).reasonDetail || "-"}</div>) : "-"}</td>
+                            <td className="px-3 py-2 whitespace-normal max-w-[16rem]">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="text-gray-500">{s.detail || "-"}</div>) : "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "-"}</td>
                             <td className="px-3 py-2">{item.airFreight != null ? Number(item.airFreight).toLocaleString() : "-"}</td>
@@ -3067,7 +3076,7 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                             <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i}>{deptLabel(s.dept)} {s.pct}%</div>) : "-"}</td>
                             <td className="px-3 py-2">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="font-medium text-amber-800">{s.reason || "-"}</div>) : "-"}</td>
-                            <td className="px-3 py-2 whitespace-normal max-w-[16rem]">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="text-gray-500">{(s as any).reasonDetail || "-"}</div>) : "-"}</td>
+                            <td className="px-3 py-2 whitespace-normal max-w-[16rem]">{getSplits(item).length ? getSplits(item).map((s: any, i: number) => <div key={i} className="text-gray-500">{s.detail || "-"}</div>) : "-"}</td>
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{item.grossWeight != null ? Number(item.grossWeight).toFixed(2) : "-"}</td>
                             <td className="px-3 py-2">{item.airFreight != null ? Number(item.airFreight).toLocaleString() : "-"}</td>
@@ -3317,7 +3326,7 @@ export default function RequestDetailPage() {
                   <div className="border-t border-gray-100 overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. AIR FREIGHT (${CUR})`,"CLAIM DEPT","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. AIR FREIGHT (${CUR})`,"CLAIM DEPT","REASON","DETAIL","FACTORY","COUNTRY"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -3333,7 +3342,9 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2">{item.qtyRequestAir}</td>
                             <td className="px-3 py-2">{fmtNum(item.grossWeight, 2)}</td>
                             <td className="px-3 py-2">{fmtNum(item.airFreight)}</td>
-                            <td className="px-3 py-2">{req.claimDepartment ?? "-"}</td>
+                            <td className="px-3 py-2">{getSplits(item).map((s: any) => deptLabel(s.dept)).join(", ") || "-"}</td>
+                            <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimReasonText(item)}>{claimReasonText(item) || "-"}</td>
+                            <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimDetailText(item)}>{claimDetailText(item) || "-"}</td>
                             <td className="px-3 py-2">{item.factory}</td>
                             <td className="px-3 py-2">{item.country}</td>
                           </tr>
@@ -3613,7 +3624,7 @@ export default function RequestDetailPage() {
               <button onClick={async () => {
                 const XLSX = await import("xlsx")
                 // Full MER template columns; LG fills INV NO. / Actual Airfreight (= HAWB total) / HAWB#.
-                const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","Actual Airfreight","HAWB#","CLAIM DEPT 1","%CLAIM1","REASON 1","CLAIM DEPT 2","%CLAIM2","REASON 2","CLAIM DEPT 3","%CLAIM3","REASON 3"]
+                const headers = ["No_Document","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","Actual Airfreight","HAWB#","CLAIM DEPT 1","%CLAIM1","REASON 1","DETAIL 1","CLAIM DEPT 2","%CLAIM2","REASON 2","DETAIL 2","CLAIM DEPT 3","%CLAIM3","REASON 3","DETAIL 3"]
                 const rows = presPassedItems.map((i: any) => {
                   const d: any[] = getSplits(i)
                   return [
@@ -3621,13 +3632,13 @@ export default function RequestDetailPage() {
                     i.description || "", i.grossWeight ?? "", fmtDate(i.originalShipmentDate), fmtDate(i.planShipmentDate),
                     i.qtyOriginalShipment ?? "", i.qtyRequestAir ?? "", i.reasonDelay || "", i.factory || "", i.country || "", i.port || "",
                     i.invoiceNo || "", i.actualAirFreight ?? "", i.hawbNo || "",
-                    d[0]?.dept || "", d[0]?.pct ?? "", d[0]?.reason || "",
-                    d[1]?.dept || "", d[1]?.pct ?? "", d[1]?.reason || "",
-                    d[2]?.dept || "", d[2]?.pct ?? "", d[2]?.reason || "",
+                    d[0]?.dept || "", d[0]?.pct ?? "", d[0]?.reason || "", d[0]?.detail || "",
+                    d[1]?.dept || "", d[1]?.pct ?? "", d[1]?.reason || "", d[1]?.detail || "",
+                    d[2]?.dept || "", d[2]?.pct ?? "", d[2]?.reason || "", d[2]?.detail || "",
                   ]
                 })
                 const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-                ws["!cols"] = [16,16,6,14,12,8,14,24,10,20,20,22,22,16,14,12,12,16,16,16,14,8,16,14,8,16,14,8,16].map(w => ({ wch: w }))
+                ws["!cols"] = [16,16,6,14,12,8,14,24,10,20,20,22,22,16,14,12,12,16,16,16,14,8,16,24,14,8,16,24,14,8,16,24].map(w => ({ wch: w }))
                 const wb = XLSX.utils.book_new()
                 XLSX.utils.book_append_sheet(wb, ws, "GW")
                 XLSX.writeFile(wb, `${req?.documentNo || id}_LG.xlsx`)
@@ -4148,7 +4159,7 @@ export default function RequestDetailPage() {
                     <div className="border-t border-gray-100 overflow-x-auto">
                       <table className="text-xs w-full">
                         <thead className="bg-gray-50">
-                          <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","CLAIM DEPT","FACTORY","COUNTRY"].map(h =>
+                          <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","CLAIM DEPT","REASON","DETAIL","FACTORY","COUNTRY"].map(h =>
                             <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                           </tr>
                         </thead>
@@ -4168,6 +4179,8 @@ export default function RequestDetailPage() {
                             <td className="px-3 py-2 whitespace-nowrap">{item.invoiceNo || "—"}</td>
                             <td className="px-3 py-2 whitespace-nowrap">{item.hawbNo || "—"}</td>
                             <td className="px-3 py-2">{getSplits(item).map((s: any) => `${deptLabel(s.dept)} ${s.pct}%`).join(", ") || "—"}</td>
+                            <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimReasonText(item)}>{claimReasonText(item) || "—"}</td>
+                            <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimDetailText(item)}>{claimDetailText(item) || "—"}</td>
                             <td className="px-3 py-2">{item.factory || "—"}</td>
                             <td className="px-3 py-2">{item.country || "—"}</td>
                           </tr>
@@ -4491,9 +4504,12 @@ export default function RequestDetailPage() {
               { h: "INVOICE", get: it => it.invoiceNo || "-" },
               { h: "BOOKING DATE", get: it => fmtDate(it.bookingDate) },
               { h: "ACTUAL (THB)", get: it => fmtNum(it.actualAirFreight) },
+              { h: "CLAIM DEPT", get: it => deptLabel(claimRow(it).sp?.dept || "") || "-" },
               { h: "CLAIM %", get: it => `${claimRow(it).pct}%` },
               { h: "MY EST (THB)", get: it => fmtNum(claimRow(it).myEst) },
               { h: "MY CLAIM (THB)", get: it => fmtNum(claimRow(it).amt) },
+              { h: "REASON", get: it => claimRow(it).sp?.reason || "-" },
+              { h: "DETAIL", get: it => (claimRow(it).sp as any)?.detail || "-" },
             ]
             return (
             <div className="border border-gray-200 rounded-xl overflow-auto max-h-[70vh]">
@@ -4525,8 +4541,8 @@ export default function RequestDetailPage() {
                         </td>
                         {cols.map(c => (
                           <td key={c.h}
-                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700 font-semibold" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""} ${c.h === "DESCRIPTION" ? "max-w-[180px] truncate" : ""}`}
-                            title={c.h === "DESCRIPTION" || c.h === "DELAY REASON" ? String(c.get(item)) : undefined}>
+                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "MY CLAIM (THB)" ? "text-blue-700 font-semibold" : ""} ${c.h === "CLAIM DEPT" ? "font-medium text-gray-700" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""} ${c.h === "DESCRIPTION" ? "max-w-[180px] truncate" : ""} ${c.h === "REASON" || c.h === "DETAIL" ? "max-w-[220px] truncate text-gray-600" : ""}`}
+                            title={c.h === "DESCRIPTION" || c.h === "DELAY REASON" || c.h === "REASON" || c.h === "DETAIL" ? String(c.get(item)) : undefined}>
                             {c.get(item)}
                           </td>
                         ))}
@@ -5062,6 +5078,8 @@ export default function RequestDetailPage() {
               { h: "INV NO.", get: it => it.invoiceNo || "-" },
               { h: "HAWB#", get: it => it.hawbNo || "-" },
               { h: "CLAIM DEPT", get: it => getSplits(it).map((s: any) => deptLabel(s.dept)).join(", ") || "-" },
+              { h: "REASON", get: it => claimReasonText(it) || "-" },
+              { h: "DETAIL", get: it => claimDetailText(it) || "-" },
             ]
             return (
             <div className="border border-gray-200 rounded-xl overflow-auto max-h-[70vh]">
@@ -5091,7 +5109,8 @@ export default function RequestDetailPage() {
                         </td>
                         {cols.map(c => (
                           <td key={c.h}
-                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""}`}>
+                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "REASON" || c.h === "DETAIL" ? "max-w-[220px] truncate text-gray-600" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""}`}
+                            title={c.h === "REASON" || c.h === "DETAIL" ? String(c.get(item)) : undefined}>
                             {c.get(item)}
                           </td>
                         ))}
@@ -5426,6 +5445,8 @@ export default function RequestDetailPage() {
               { h: "INV NO.", get: it => it.invoiceNo || "-" },
               { h: "HAWB#", get: it => it.hawbNo || "-" },
               { h: "CLAIM DEPT", get: it => getSplits(it).map((s: any) => deptLabel(s.dept)).join(", ") || "-" },
+              { h: "REASON", get: it => claimReasonText(it) || "-" },
+              { h: "DETAIL", get: it => claimDetailText(it) || "-" },
             ]
             return (
             <div className="border border-gray-200 rounded-xl overflow-auto max-h-[70vh]">
@@ -5455,7 +5476,8 @@ export default function RequestDetailPage() {
                         </td>
                         {cols.map(c => (
                           <td key={c.h}
-                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""}`}>
+                            className={`px-3 py-1.5 ${RIGHT.has(c.h) ? "text-right tabular-nums" : "whitespace-nowrap"} ${c.h === "ACTUAL (THB)" ? "text-green-700 font-semibold" : ""} ${c.h === "REASON" || c.h === "DETAIL" ? "max-w-[220px] truncate text-gray-600" : ""} ${c.h === "SO" ? `font-semibold text-gray-800 sticky left-8 z-10 ${sel ? "bg-blue-50/40" : "bg-white"}` : ""}`}
+                            title={c.h === "REASON" || c.h === "DETAIL" ? String(c.get(item)) : undefined}>
                             {c.get(item)}
                           </td>
                         ))}
@@ -6050,7 +6072,7 @@ export default function RequestDetailPage() {
                   const isGW = req.bu === "GW"
                   const fmtD = (v: any) => { if (!v) return ""; const d = new Date(v); if (isNaN(d.getTime())) return ""; return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}` }
                   const DEPT_LABEL: Record<string,string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
-                  const headers = ["No_Document","CR NO","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","HAWB#","EXPENSE/HAWB","CLAIM DEPT 1","%CLAIM1","ACTUAL AIRFREIGHT1","REASON 1","CLAIM DEPT 2","%CLAIM2","ACTUAL AIRFREIGHT2","REASON 2","CLAIM DEPT 3","%CLAIM3","ACTUAL AIRFREIGHT3","REASON 3"]
+                  const headers = ["No_Document","CR NO","Brand name","BU","STYLE","SO","SUB","CUSTOMER PO","DESCRIPTION","WEIGHT(KG)","Original Shipment Date","Plan Shipment Date","QTY Original Shipment (pcs)","QTY Request ship Air (pcs)","Reason delay","Factory","Country","Port","INV NO.","HAWB#","EXPENSE/HAWB","CLAIM DEPT 1","%CLAIM1","ACTUAL AIRFREIGHT1","REASON 1","DETAIL 1","CLAIM DEPT 2","%CLAIM2","ACTUAL AIRFREIGHT2","REASON 2","DETAIL 2","CLAIM DEPT 3","%CLAIM3","ACTUAL AIRFREIGHT3","REASON 3","DETAIL 3"]
                   const rows = allLgItems.map((item: any) => {
                     const invNo = soInvMap[item.id] || ""
                     const hawbGrp = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
@@ -6070,13 +6092,13 @@ export default function RequestDetailPage() {
                       item.reasonDelay || "", item.factory || "",
                       item.country || "", item.port || "",
                       invNo, hawbNo, hawbGrp?.totalCost || "",
-                      d[0]?.dept ? (DEPT_LABEL[d[0].dept] || d[0].dept) : "", d[0]?.pct ?? "", deptAmt(d[0]?.pct), d[0]?.reason || "",
-                      d[1]?.dept ? (DEPT_LABEL[d[1].dept] || d[1].dept) : "", d[1]?.pct ?? "", deptAmt(d[1]?.pct), d[1]?.reason || "",
-                      d[2]?.dept ? (DEPT_LABEL[d[2].dept] || d[2].dept) : "", d[2]?.pct ?? "", deptAmt(d[2]?.pct), d[2]?.reason || "",
+                      d[0]?.dept ? (DEPT_LABEL[d[0].dept] || d[0].dept) : "", d[0]?.pct ?? "", deptAmt(d[0]?.pct), d[0]?.reason || "", d[0]?.reasonDetail || d[0]?.detail || "",
+                      d[1]?.dept ? (DEPT_LABEL[d[1].dept] || d[1].dept) : "", d[1]?.pct ?? "", deptAmt(d[1]?.pct), d[1]?.reason || "", d[1]?.reasonDetail || d[1]?.detail || "",
+                      d[2]?.dept ? (DEPT_LABEL[d[2].dept] || d[2].dept) : "", d[2]?.pct ?? "", deptAmt(d[2]?.pct), d[2]?.reason || "", d[2]?.reasonDetail || d[2]?.detail || "",
                     ]
                   })
                   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-                  ws["!cols"] = [16,14,16,6,14,12,8,14,24,10,20,20,22,22,16,14,12,12,16,16,20,14,8,18,16,14,8,18,16,14,8,18,16].map(w => ({ wch: w }))
+                  ws["!cols"] = [16,14,16,6,14,12,8,14,24,10,20,20,22,22,16,14,12,12,16,16,20,14,8,18,16,24,14,8,18,16,24,14,8,18,16,24].map(w => ({ wch: w }))
                   const wb = XLSX.utils.book_new()
                   XLSX.utils.book_append_sheet(wb, ws, isGW ? "GW" : "NYG")
                   XLSX.writeFile(wb, `${req.documentNo}_LG.xlsx`)
@@ -7127,9 +7149,9 @@ export default function RequestDetailPage() {
                               onChange={e => setScmSelectedIds(e.target.checked ? new Set(pendingScmItems.map((i: any) => i.id)) : new Set())} />
                           </th>
                           {["SO","SUB","STYLE","BRAND","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","FACTORY","COUNTRY","PORT",
-                            "CLAIM DEPT 1","%CLAIM1","REASON 1",
-                            "CLAIM DEPT 2","%CLAIM2","REASON 2",
-                            "CLAIM DEPT 3","%CLAIM3","REASON 3",""].map(h =>
+                            "CLAIM DEPT 1","%CLAIM1","REASON 1","DETAIL 1",
+                            "CLAIM DEPT 2","%CLAIM2","REASON 2","DETAIL 2",
+                            "CLAIM DEPT 3","%CLAIM3","REASON 3","DETAIL 3",""].map(h =>
                             <th key={h} className={`px-3 py-2 text-left text-gray-500 font-medium ${h.startsWith("%") ? "text-center" : ""}`}>{h}</th>)}
                         </tr>
                       </thead>
@@ -7178,6 +7200,17 @@ export default function RequestDetailPage() {
                                         })}
                                         className={`rounded px-2 py-0.5 text-xs w-28 focus:ring-1 focus:outline-none border
                                           ${!d.reason || !String(d.reason).trim() ? "border-red-400 bg-red-50 focus:ring-red-400" : "border-gray-200 focus:ring-blue-400"}`} />
+                                    ) : <span className="text-gray-300 text-xs">—</span>}
+                                  </td>,
+                                  <td key={`detail${n}`} className="px-3 py-2 min-w-[120px]">
+                                    {d ? (
+                                      <input type="text" placeholder="Detail..." value={d.reasonDetail || ""}
+                                        onChange={e => setSoClaimDepts(p => {
+                                          const n2 = {...p}
+                                          n2[item.id] = (n2[item.id] || []).map((x: any, i: number) => i === n ? {...x, reasonDetail: e.target.value} : x)
+                                          return n2
+                                        })}
+                                        className="rounded px-2 py-0.5 text-xs w-28 border border-gray-200 focus:ring-1 focus:ring-blue-400 focus:outline-none" />
                                     ) : <span className="text-gray-300 text-xs">—</span>}
                                   </td>
                                 ]

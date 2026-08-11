@@ -23,7 +23,7 @@ export function ClaimSplitBadges({ item, showReason = false }: { item: any; show
   return (
     <div className="flex flex-wrap gap-1">
       {splits.map((s: ClaimSplit, i: number) => {
-        const detail = (s as any).reasonDetail as string | undefined
+        const detail = s.detail as string | undefined
         return (
           <span key={i} className="inline-flex flex-col gap-0.5 text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-lg">
             <span className="inline-flex items-center gap-1 whitespace-nowrap">
@@ -70,7 +70,7 @@ export function ClaimSplitTable({ item, highlightDept, showCrNo = false }: { ite
                 <td className="px-3 py-1.5 font-semibold text-green-700">{fmt(splitAirCost(item, s))}</td>
                 <td className="px-3 py-1.5 text-gray-500">
                   {s.reason ? <span className="font-medium text-gray-700">{s.reason}</span> : "-"}
-                  {(s as any).reasonDetail && <span className="block text-[10px] text-gray-400">{(s as any).reasonDetail}</span>}
+                  {s.detail && <span className="block text-[10px] text-gray-400">{s.detail}</span>}
                 </td>
                 {showCrNo && <td className="px-3 py-1.5 font-medium text-blue-700">{s.crNo || "-"}</td>}
                 <td className="px-3 py-1.5">{st ? <span className={`px-2 py-0.5 rounded-full ${st.cls}`}>{st.text}</span> : "-"}</td>

@@ -841,6 +841,7 @@ export default function DashboardPage() {
         "CLAIM DEPT":     (getSplits(row).map((s:any)=>deptLabel(s.dept)).join(" · ")) || (row.claimDepartment ?? ""),
         "CLAIM %":        getSplits(row).map((s:any)=>s.pct!=null?`${s.pct}%`:"").filter(Boolean).join(" · "),
         "REASON":         ([...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))].join(" · ")),
+        "DETAIL":         ([...new Set(getSplits(row).map((s:any)=>s.detail).filter(Boolean))].join(" · ")),
         "STATUS":         soStage(row), // by-position status incl. PENDING_LG_BOOKING/CLAIM (matches the table)
       }
     })
