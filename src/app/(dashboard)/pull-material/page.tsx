@@ -22,8 +22,16 @@ type Bom = {
 type Item = Bom & {
   key: string
   estAir: string; estSea: string; ltAir: string; ltSea: string   // Logistics
-  weight: string                                                 // Purchasing
+  pc: string; weight: string                                     // Purchasing (PC = owner of the SO)
   invNo: string; actualAir: string                               // LG actual
+}
+
+// Company email convention: firstname + "." + first letter of last name.
+// e.g. "Thanchanok Phon" → thanchanok.p@nanyangtextile.com
+function emailFromName(name: string): string {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean)
+  if (parts.length < 2) return ""
+  return `${parts[0].toLowerCase()}.${parts[1][0].toLowerCase()}@nanyangtextile.com`
 }
 
 const STAGES = [
@@ -65,7 +73,7 @@ export default function PullMaterialMockup() {
   const addItem = (b: Bom) => {
     const key = `${b.soNoDoc}|${b.style || ""}|${b.customerPo || ""}`
     if (items.some(i => i.key === key)) return
-    setItems(prev => [...prev, { ...b, key, estAir: "", estSea: "", ltAir: "", ltSea: "", weight: "", invNo: "", actualAir: "" }])
+    setItems(prev => [...prev, { ...b, key, estAir: "", estSea: "", ltAir: "", ltSea: "", pc: "", weight: "", invNo: "", actualAir: "" }])
   }
   const removeItem = (key: string) => setItems(prev => prev.filter(i => i.key !== key))
   const patch = (key: string, field: keyof Item, v: string) =>
@@ -187,12 +195,13 @@ export default function PullMaterialMockup() {
 
       {/* ── STAGE 3 · PURCHASING ──────────────────────────────────────── */}
       {stage === 2 && (
-        <Card title="จัดซื้อ — น้ำหนัก material" desc="กรอกน้ำหนักวัตถุดิบ (ต่อ SO)">
+        <Card title="จัดซื้อ (PC) — น้ำหนัก material" desc="PC = เจ้าของ SO (มาจาก BOM) เป็นคนกรอกน้ำหนักของ SO ตัวเอง · อีเมลถูกแปลงอัตโนมัติจากชื่อ">
           <EditTable items={items}
-            fixed={i => [i.soNoDoc, i.customerName || "-", i.style || "-", i.vendorName || "-"]}
-            fixedCols={["SO", "ลูกค้า", "STYLE", "VENDOR"]}
-            fields={[{ h: "น้ำหนัก (KG)", f: "weight" }]}
+            fixed={i => [i.soNoDoc, i.customerName || "-", i.style || "-", emailFromName(i.pc) || "—"]}
+            fixedCols={["SO", "ลูกค้า", "STYLE", "อีเมล PC (auto)"]}
+            fields={[{ h: "PC (เจ้าของ SO)", f: "pc" }, { h: "น้ำหนัก (KG)", f: "weight" }]}
             patch={patch} />
+          <p className="text-[11px] text-amber-700 mt-2">⚙ ของจริง: ช่อง PC จะดึงจากคอลัมน์ PC ใน BOM อัตโนมัติ (job ต้องเพิ่มคอลัมน์นี้)</p>
         </Card>
       )}
 
@@ -218,14 +227,27 @@ export default function PullMaterialMockup() {
       )}
 
       {/* ── STAGE 5 · ALERT ───────────────────────────────────────────── */}
-      {stage === 4 && (
-        <Card title="อนุมัติแล้ว — แจ้งเตือน" desc="ระบบส่งแจ้งเตือนไปยังผู้เกี่ยวข้อง">
-          <div className="grid sm:grid-cols-2 gap-3">
-            <AlertCard icon="✈" title="แจ้ง Logistics (LG)" body="เพื่อไปจองแอร์ (book air) ตามรายการที่อนุมัติ" tone="blue" />
-            <AlertCard icon="🛒" title="แจ้ง Purchasing (PC)" body="แจ้งผู้ดูแลจัดซื้อ (PC จาก BOM — คอลัมน์ PC จะเพิ่มภายหลัง)" tone="green" />
-          </div>
-        </Card>
-      )}
+      {stage === 4 && (() => {
+        const pcs = Array.from(new Set(items.map(i => i.pc.trim()).filter(Boolean)))
+        return (
+          <Card title="อนุมัติแล้ว — แจ้งเตือน" desc="ระบบส่งแจ้งเตือนไปยังผู้เกี่ยวข้อง">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <AlertCard icon="✈" title="แจ้ง Logistics (LG)" body="เพื่อไปจองแอร์ (book air) ตามรายการที่อนุมัติ" tone="blue" />
+              <div className="rounded-xl border p-4 bg-green-50 border-green-200 text-green-800">
+                <div className="text-2xl">🛒</div>
+                <div className="font-semibold mt-1">แจ้ง Purchasing (PC — เจ้าของ SO)</div>
+                {pcs.length ? (
+                  <ul className="text-xs mt-1.5 space-y-1">
+                    {pcs.map(p => (
+                      <li key={p}>• {p} → <span className="font-mono">{emailFromName(p) || "(ต้องมีชื่อ-สกุล)"}</span></li>
+                    ))}
+                  </ul>
+                ) : <div className="text-xs mt-0.5 opacity-80">ยังไม่ได้ระบุ PC (กลับไป stage 3)</div>}
+              </div>
+            </div>
+          </Card>
+        )
+      })()}
 
       {/* ── STAGE 6 · LG ACTUAL ───────────────────────────────────────── */}
       {stage === 5 && (
