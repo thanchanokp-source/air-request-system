@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A company email is required (@nanyangtextile.com)" }, { status: 400 })
   }
 
-  if (bu !== "NYG" && bu !== "GW" && bu !== "EA" && bu !== "TRM") {
+  if (bu !== "NYG" && bu !== "GW" && bu !== "EA" && bu !== "TRM" && bu !== "ALL") {
     return NextResponse.json({ error: "Invalid BU" }, { status: 400 })
   }
   const role = resolveRole(position, bu)
