@@ -26,6 +26,12 @@ type Item = Bom & {
   invNo: string; actualAir: string                               // LG actual
 }
 
+// A BOM row = one material line (SO can have many, one per vendor/PO). Identify a
+// selectable line by SO + style + vendor + PO so each material can be picked on its own.
+function bomKey(b: Bom): string {
+  return `${b.soNoDoc}|${b.style || ""}|${b.vendorName || ""}|${b.poNoDoc || ""}`
+}
+
 // Company email convention: firstname + "." + first letter of last name.
 // e.g. "Thanchanok Phon" → thanchanok.p@nanyangtextile.com
 function emailFromName(name: string): string {
@@ -54,12 +60,23 @@ export default function PullMaterialMockup() {
   const [searching, setSearching] = useState(false)
   const [items, setItems] = useState<Item[]>([])
   const [requester, setRequester] = useState("")
+  const [lastSync, setLastSync] = useState<string | null>(null)
 
   useEffect(() => {
     fetch("/api/bom", { method: "POST" }).then(r => r.json()).then(d => {
       if (Array.isArray(d.bus) && d.bus.length) { setBus(d.bus); setBu(d.bus[0]) }
+      if (d.lastSync) setLastSync(d.lastSync)
     }).catch(() => {})
   }, [])
+
+  // Freshness of the BOM data (job refreshes ~09:00). Warn if the latest row is not from today.
+  const syncInfo = (() => {
+    if (!lastSync) return null
+    const d = new Date(lastSync)
+    const stale = d.toDateString() !== new Date().toDateString()
+    const txt = d.toLocaleString("th-TH", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    return { txt, stale }
+  })()
 
   const search = async () => {
     setSearching(true)
@@ -71,7 +88,7 @@ export default function PullMaterialMockup() {
   }
 
   const addItem = (b: Bom) => {
-    const key = `${b.soNoDoc}|${b.style || ""}|${b.customerPo || ""}`
+    const key = bomKey(b)
     if (items.some(i => i.key === key)) return
     setItems(prev => [...prev, { ...b, key, estAir: "", estSea: "", ltAir: "", ltSea: "", pc: "", weight: "", invNo: "", actualAir: "" }])
   }
@@ -117,6 +134,13 @@ export default function PullMaterialMockup() {
       {stage === 0 && (
         <div className="space-y-4">
           <Card title="เลือกข้อมูลจาก Bill of Material" desc="เลือก BU แล้วค้นหา SO / ลูกค้า / PO — ระบบดึงจาก BOM (อัปเดตทุก 09:00)">
+            {syncInfo && (
+              <div className={`mb-3 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${
+                syncInfo.stale ? "bg-amber-50 border-amber-300 text-amber-800" : "bg-green-50 border-green-300 text-green-800"}`}>
+                {syncInfo.stale ? "⚠ ข้อมูล BOM อาจไม่สด" : "● BOM อัปเดตล่าสุด"}: {syncInfo.txt}
+                {syncInfo.stale && <span className="opacity-80">— job 09:00 อาจไม่ได้รัน</span>}
+              </div>
+            )}
             <div className="flex items-center gap-2 flex-wrap">
               <select value={bu} onChange={e => setBu(e.target.value)}
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
@@ -141,7 +165,7 @@ export default function PullMaterialMockup() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {results.map((b, i) => {
-                      const key = `${b.soNoDoc}|${b.style || ""}|${b.customerPo || ""}`
+                      const key = bomKey(b)
                       const added = items.some(x => x.key === key)
                       return (
                         <tr key={i} className="hover:bg-gray-50">

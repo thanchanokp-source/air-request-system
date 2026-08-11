@@ -48,8 +48,10 @@ export async function POST() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   try {
     const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT DISTINCT bu FROM ${SRC} WHERE bu IS NOT NULL ORDER BY bu`)
-    return NextResponse.json({ bus: rows.map(r => r.bu) })
+    // Latest refresh time — lets the UI show data freshness (the 09:00 job may not have run).
+    const ts = await prisma.$queryRawUnsafe<any[]>(`SELECT MAX("updatedAt") AS "lastSync" FROM ${SRC}`)
+    return NextResponse.json({ bus: rows.map(r => r.bu), lastSync: ts?.[0]?.lastSync ?? null })
   } catch {
-    return NextResponse.json({ bus: ["NYG"] })
+    return NextResponse.json({ bus: ["NYG"], lastSync: null })
   }
 }
