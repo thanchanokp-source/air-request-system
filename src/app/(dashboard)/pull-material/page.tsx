@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
 
 // ─────────────────────────────────────────────────────────────────────────
 // PULL MATERIAL — mockup (clickable prototype)
@@ -52,6 +53,9 @@ const STAGES = [
 const MAROON = "#6b1a1a"
 
 export default function PullMaterialMockup() {
+  const { data: session, status } = useSession()
+  const isAdmin = (session?.user as any)?.role === "ADMIN"
+
   const [stage, setStage] = useState(0)
   const [bus, setBus] = useState<string[]>(["NYG"])
   const [bu, setBu] = useState("NYG")
@@ -99,6 +103,19 @@ export default function PullMaterialMockup() {
   const canNext =
     stage === 0 ? items.length > 0 && requester.trim().length > 0 :
     stage === 3 ? true : true
+
+  // Locked while under test — Admin only. (Wait for the session before deciding, so it
+  // doesn't flash the block screen for admins during load.)
+  if (status === "loading") return <div className="p-10 text-center text-gray-400 text-sm">กำลังโหลด…</div>
+  if (!isAdmin) {
+    return (
+      <div className="p-10 max-w-lg mx-auto text-center">
+        <div className="text-5xl">🔒</div>
+        <h1 className="text-lg font-bold mt-3" style={{ color: MAROON }}>Pull Material — อยู่ระหว่างทดสอบ</h1>
+        <p className="text-sm text-gray-500 mt-2">ฟีเจอร์นี้กำลังทดสอบโดย Admin · จะเปิดให้ทุกคนใช้เมื่อทดสอบเสร็จ</p>
+      </div>
+    )
+  }
 
   return (
     <div className="p-5 max-w-[1400px] mx-auto space-y-5">

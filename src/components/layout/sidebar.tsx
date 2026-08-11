@@ -68,10 +68,23 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
         )}
       </div>
 
-      {/* Top-level family tabs: Claim Air | Pull Material */}
+      {/* Top-level family tabs: Claim Air | Pull Material.
+          Pull Material is still under test → locked (grey) for everyone except ADMIN. */}
       <div className="p-3 grid grid-cols-2 gap-2 border-b" style={{ borderColor: "#8b2a2a" }}>
         {FAMILIES.map(f => {
           const active = family === f.key
+          const locked = f.key === "pull" && !isAdmin
+          if (locked) {
+            return (
+              <div key={f.key} title="อยู่ระหว่างทดสอบ — เปิดเฉพาะ Admin"
+                className="rounded-lg px-2 py-2.5 text-center opacity-50 cursor-not-allowed"
+                style={{ background: "#7a2323", color: "#c79a9a" }}>
+                <div className="text-lg leading-none">{f.icon}</div>
+                <div className="text-[11px] font-bold mt-1">{f.label}</div>
+                <div className="text-[9px] mt-0.5">🔒 ทดสอบ</div>
+              </div>
+            )
+          }
           return (
             <Link key={f.key} href={f.home} onClick={onClose}
               className="rounded-lg px-2 py-2.5 text-center transition-colors"
@@ -80,6 +93,7 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
                 : { background: "#8b2a2a", color: "#f0d0d0" }}>
               <div className="text-lg leading-none">{f.icon}</div>
               <div className="text-[11px] font-bold mt-1">{f.label}</div>
+              {f.key === "pull" && <div className="text-[9px] mt-0.5 opacity-80">🧪 admin test</div>}
             </Link>
           )
         })}
