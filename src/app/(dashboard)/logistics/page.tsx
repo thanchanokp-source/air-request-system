@@ -90,7 +90,7 @@ export default function LgBookingPage() {
       const byDoc: Record<string, any[]> = {}
       for (const row of brandRows) (byDoc[row.request.id] ||= []).push(row)
       const docs = Object.values(byDoc).map(items => ({ request: items[0].request, items }))
-      return { brand, docs, count: brandRows.length, ids: brandRows.map(r => r.id) }
+      return { brand, docs, count: brandRows.length, ids: brandRows.map(r => r.id), draftCount: brandRows.filter((r: any) => r.hawbNo || r.actualAirFreight != null).length }
     })
   }, [rows, q])
 
@@ -118,7 +118,7 @@ export default function LgBookingPage() {
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
       {!loading && brands.length === 0 && <div className="text-center py-20 text-gray-400">No SOs waiting on LG</div>}
 
-      {brands.map(({ brand, docs, count, ids }) => {
+      {brands.map(({ brand, docs, count, ids, draftCount }) => {
         const allOn = ids.every(id => selected.has(id))
         const open = openBrands.has(brand)
         return (
@@ -130,6 +130,7 @@ export default function LgBookingPage() {
                 <span className={`text-gray-400 text-[10px] w-3 transition-transform ${open ? "rotate-90" : ""}`}>▸</span>
                 <span className="text-[15px] font-semibold text-gray-700 group-hover:text-gray-900 tracking-tight">{brand}</span>
                 <span className="text-xs text-gray-400 font-normal">{count} transaction · {docs.length} Document</span>
+                {draftCount > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 font-medium whitespace-nowrap">📝 draft {draftCount} SO</span>}
               </button>
             </div>
 
@@ -140,11 +141,13 @@ export default function LgBookingPage() {
                   const act = items.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
                   const docIds = items.map((i: any) => i.id)
                   const docAllOn = docIds.every((id: string) => selected.has(id))
+                  const docDraft = items.filter((i: any) => i.hawbNo || i.actualAirFreight != null).length
                   return (
                     <div key={req.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-4 py-3 bg-gray-50/70 border-b border-gray-100 flex flex-wrap items-center gap-2">
                         <input type="checkbox" checked={docAllOn} onChange={() => toggleMany(docIds, !docAllOn)} className="rounded" />
                         <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm">{req.documentNo}</Link>
+                        {docDraft > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 font-medium whitespace-nowrap">📝 draft {docDraft} SO</span>}
                         <span className="text-xs text-gray-500">{req.bu}</span>
                         <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">EST {fmtNum(est)} THB</span>
                         <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">ACT {fmtNum(act)} THB</span>
