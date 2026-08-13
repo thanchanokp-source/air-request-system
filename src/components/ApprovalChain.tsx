@@ -230,9 +230,15 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
         nykWho = `NYK: ${parts.join(" + ") || "finalizing"}`
       }
     }
-    // Per-SO rows: when THIS SO has advanced to President (ord 6) but the DOC status still lags
-    // (other styles mid-claim), resolve the President name from the SO's own stage, not the doc's.
-    const soStageKey = (soItem && cur === 6) ? "PENDING_PRESIDENT" : status
+    // The waiting label must follow the SO's OWN stage (item status), not the doc status —
+    // e.g. after SCM forwards, the SO sits at VP SCM (cur=3) while the doc still reads PENDING_SCM,
+    // which wrongly labelled it "SCM: <scm user>". Remap the linear pre-claim stages (cur ≤ 3) and
+    // President (6); Logistics/Claim (4–5) are surfaced separately by lgWho/claimWho.
+    const soStageKey = soItem
+      ? (cur === 6 ? "PENDING_PRESIDENT"
+        : cur <= 3 ? (NYG_STAGES.find(s => s.ord === cur)?.key ?? status)
+        : status)
+      : status
     const stageWho = !completed && !rejected ? currentStageWho(soStageKey, bu, soItem, req, approvers) : ""
     // LG runs parallel with Claim → surface it as pending until Actual is entered.
     // TRM logistics = LOGISTICS_TRM (Urairat, whose bu=GW) → look up by that role with NO bu filter
