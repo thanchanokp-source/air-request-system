@@ -465,7 +465,7 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
           </View>
           <View style={s.docBox}>
             <Text style={s.docLabel}>Document No.</Text>
-            <Text style={s.docVal}>{allDocNos.join("\n") || req.documentNo}</Text>
+            <Text style={[s.docVal, allDocNos.length > 1 ? { fontSize: 8, lineHeight: 1.35 } : {}]}>{allDocNos.join("\n") || req.documentNo}</Text>
           </View>
         </View>
         <View style={s.rule} />
