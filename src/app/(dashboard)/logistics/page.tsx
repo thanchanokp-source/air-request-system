@@ -18,7 +18,7 @@ export default function LgBookingPage() {
   const roles: string[] = [role, ...(((session?.user as any)?.roles) || [])]
   const userBu = (session?.user as any)?.bu || "NYG"
   const isAdmin = role === "ADMIN"
-  const allowed = isAdmin || roles.some(r => ["LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM"].includes(r))
+  const allowed = isAdmin || roles.some(r => ["LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "LOGISTICS_SUB"].includes(r))
 
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,7 +56,7 @@ export default function LgBookingPage() {
   const lgBus = useMemo(() => {
     if (isAdmin) return new Set(["NYG", "EA", "TRM", "GW"])
     const s = new Set<string>()
-    if (roles.includes("LOGISTICS")) s.add(userBu === "EA" ? "EA" : "NYG")
+    if (roles.includes("LOGISTICS") || roles.includes("LOGISTICS_SUB")) s.add(userBu === "EA" ? "EA" : "NYG")
     if (roles.includes("LOGISTICS_TRM")) s.add("TRM")
     if (roles.includes("LOGISTICS_GW")) s.add("GW")
     return s

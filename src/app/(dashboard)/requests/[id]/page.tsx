@@ -1143,15 +1143,17 @@ export default function RequestDetailPage() {
   const claimActIds: string[] = claimSelIds.length ? claimSelIds : gwFwdItems.map((i: any) => i.id)
   const exportClaimExcel = async () => {
     const CUR = req?.bu === "EA" ? "USD" : "THB"
-    const headers = ["No.", "SO", "STYLE", "CUSTOMER PO", "QTY AIR", "GROSS (KG)", "HAWB#", "INVOICE NO",
-      `EST. FREIGHT (${CUR})`, `ACTUAL (${CUR})`, "CLAIM DEPT", "CLAIM %", `MY EST (${CUR})`, `MY CLAIM (${CUR})`,
-      "REASON", "DETAIL", "PLAN DATE", "FACTORY", "COUNTRY"]
-    const dataRows = gwFwdItemsSorted.map((it: any, i: number) => {
+    // Same column ORDER as the on-screen claim table.
+    const headers = ["SO", "SUB", "STYLE", "BRAND", "CUSTOMER PO", "DESCRIPTION", "ORIG. DATE", "PLAN DATE",
+      "QTY ORIG", "QTY AIR", "GROSS (KG)", `EST. (${CUR})`, "FACTORY", "COUNTRY", "HAWB#", "INVOICE", "BOOKING DATE",
+      `ACTUAL (${CUR})`, "CLAIM DEPT", "CLAIM %", `MY EST (${CUR})`, `MY CLAIM (${CUR})`, "REASON", "DETAIL"]
+    const dataRows = gwFwdItemsSorted.map((it: any) => {
       const r = claimRow(it)
-      return [i + 1, it.so, it.style, it.customerPO || "", it.qtyRequestAir ?? "", it.grossWeight ?? "",
-        it.hawbNo || "", it.invoiceNo || "", it.airFreight ?? "", r.actual, deptLabel(r.sp?.dept || "") || "",
-        r.pct, r.myEst, r.amt, r.sp?.reason || "", (r.sp as any)?.detail || "",
-        fmtDate(it.planShipmentDate), it.factory || "", it.country || ""]
+      return [it.so, it.sub || "", it.style, it.brand || "", it.customerPO || "", it.description || "",
+        fmtDate(it.originalShipmentDate), fmtDate(it.planShipmentDate), it.qtyOriginalShipment ?? "", it.qtyRequestAir ?? "",
+        it.grossWeight ?? "", it.airFreight ?? "", it.factory || "", it.country || "", it.hawbNo || "", it.invoiceNo || "",
+        fmtDate(it.bookingDate), r.actual, deptLabel(r.sp?.dept || "") || "", r.pct, r.myEst, r.amt,
+        r.sp?.reason || "", (r.sp as any)?.detail || ""]
     })
     // exceljs (not the community xlsx) so the header row can be coloured. No TOTAL row.
     const ExcelJSMod: any = await import("exceljs")
@@ -1168,7 +1170,7 @@ export default function RequestDetailPage() {
       c.alignment = { vertical: "middle", horizontal: "left" }
     })
     hr.height = 20
-    const widths = [6, 12, 14, 14, 9, 10, 12, 14, 14, 12, 16, 8, 14, 14, 30, 24, 12, 10, 14]
+    const widths = [12, 6, 14, 20, 14, 18, 11, 11, 9, 9, 10, 12, 10, 12, 12, 12, 12, 12, 16, 8, 14, 14, 30, 24]
     widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
     const buf = await wb.xlsx.writeBuffer()
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })

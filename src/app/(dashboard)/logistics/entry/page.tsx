@@ -16,7 +16,7 @@ export default function LgEntryPage() {
   const { data: session } = useSession()
   const role = (session?.user as any)?.role || ""
   const roles: string[] = [role, ...(((session?.user as any)?.roles) || [])]
-  const allowed = role === "ADMIN" || roles.some(r => ["LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM"].includes(r))
+  const allowed = role === "ADMIN" || roles.some(r => ["LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "LOGISTICS_SUB"].includes(r))
 
   const [entryIds, setEntryIds] = useState<string[]>([])
   const [requests, setRequests] = useState<any[]>([])

@@ -12,7 +12,7 @@ const claimNav = [
   { href: "/claim-status", label: "CLAIM STATUS" },
   { href: "/files", label: "DOCUMENT FOR LOGISTICS & ACCOUNTING" },
   { href: "/requests/nyk-import", label: "NYK IMPORT", adminOnly: true },
-  { href: "/logistics", label: "LG BOOKING", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM"] },
+  { href: "/logistics", label: "LG BOOKING", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "LOGISTICS_SUB"] },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
   { href: "/master/port", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "MER_USER", "MER_GW", "DVM_MER"], masterEdit: true },
   { href: "/master/description", label: "MASTER DESCRIPTION", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "MER_USER", "DVM_MER"], masterEdit: true },
