@@ -377,6 +377,44 @@ export default function FilesPage() {
     finally { setCombineLoading(false) }
   }
 
+  // One combined PDF of EVERY filtered SO across ALL visible documents (no manual selection) —
+  // respects the active filters + unbooked toggle, same SOs as shown on screen.
+  const downloadAllFilteredPdf = async () => {
+    setCombineLoading(true)
+    try {
+      const docItems = filtered
+        .map(req => ({ req, ids: (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && (!unbookedOnly || !itemBooked(i)) && itemMatchesFilters(i)).map((i: any) => i.id) }))
+        .filter(d => d.ids.length > 0)
+      if (docItems.length === 0) { alert("ไม่มี SO ที่ตรงกับ filter"); return }
+      const reqDataMap: Record<string, any> = {}
+      await Promise.all(docItems.map(async d => { reqDataMap[d.req.id] = await fetch(`/api/requests/${d.req.id}`).then(r => r.json()) }))
+      const pages: { req: any; item: any }[] = []
+      docItems.forEach(d => {
+        const fullReq = reqDataMap[d.req.id]
+        ;(d.req.items || []).forEach((item: any) => {
+          if (d.ids.includes(item.id)) pages.push({ req: fullReq || d.req, item: fullReq?.items?.find((i: any) => i.id === item.id) || item })
+        })
+      })
+      if (pages.length === 0) return
+      const [{ pdf }, { CombinedPdfDocument }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/request-pdf"),
+      ])
+      const element = React.createElement(CombinedPdfDocument as any, { pages })
+      const blob = await (pdf(element as any) as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `Combined_filtered_${pages.length}SO.pdf`
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch { alert("PDF generation failed") }
+    finally { setCombineLoading(false) }
+  }
+
+  // Total filtered SOs across all visible docs (for the "print all filtered" button label).
+  const filteredSoTotal = filtered.reduce((n, req) => n + (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && (!unbookedOnly || !itemBooked(i)) && itemMatchesFilters(i)).length, 0)
+
   // Select/deselect every SO in a group (port / ship-date) at once.
   const setGroupSelected = (rows: { req: any; item: any }[], on: boolean) => {
     setSelectedForCombine(prev => {
@@ -490,6 +528,12 @@ export default function FilesPage() {
               <button onClick={() => { setCombineMode(m => !m); setSelectedForCombine(new Set()) }}
                 className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${combineMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"}`}>
                 {combineMode ? "✕ Cancel Combine" : "⊞ Combine Mode"}
+              </button>
+              {/* One PDF of ALL filtered SOs across every visible document (no manual selection). */}
+              <button onClick={downloadAllFilteredPdf} disabled={combineLoading || filteredSoTotal === 0}
+                title="รวม SO ที่ filter จากทุกเอกสารเป็น PDF เดียว"
+                className="text-xs px-3 py-1.5 rounded-lg font-medium border border-green-600 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
+                {combineLoading ? "…" : `↓ PDF รวม (${filteredSoTotal} SO)`}
               </button>
               {/* Print by HAWB — type (or pick) a HAWB# → consolidated PDF of all its SO */}
               <div className="flex items-center gap-1">
