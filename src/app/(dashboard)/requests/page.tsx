@@ -132,6 +132,7 @@ export default function RequestsPage() {
   const [brandF, setBrandF] = useState<string[]>([])
   const [styleF, setStyleF] = useState<string[]>([])
   const [soF, setSoF] = useState<string[]>([])
+  const [docNoF, setDocNoF] = useState<string[]>([])
   const [cpF, setCpF] = useState<string[]>([])
   const [portF, setPortF] = useState<string[]>([])
   const [countryF, setCountryF] = useState<string[]>([])
@@ -253,7 +254,7 @@ export default function RequestsPage() {
 
   const applyFilters = (rows: any[], opts: {
     brand?: string[], style?: string[], so?: string[], cp?: string[],
-    port?: string[], country?: string[], claim?: string[], invoice?: string[], hawb?: string[], stage?: string[]
+    port?: string[], country?: string[], claim?: string[], invoice?: string[], hawb?: string[], stage?: string[], docNo?: string[]
   }) => rows.filter(row => {
     const r = row.request
     const rowBkm = row.itemStatus === "CLAIM_REJECT_GW" || r?.status === "PENDING_MER" || r?.status === "PENDING_MER_GW"
@@ -282,7 +283,8 @@ export default function RequestsPage() {
       (!opts.country?.length || opts.country.includes(row.country)) &&
       (!opts.claim?.length || getSplits(row).some((s: any) => opts.claim!.includes(s.dept)) || opts.claim.includes(row.claimDepartment)) &&
       (!opts.invoice?.length || opts.invoice.includes(row.invoiceNo)) &&
-      (!opts.hawb?.length || opts.hawb.includes(row.hawbNo))
+      (!opts.hawb?.length || opts.hawb.includes(row.hawbNo)) &&
+      (!opts.docNo?.length || opts.docNo.includes(row.request?.documentNo))
   })
   const uniq = (arr: (string | null | undefined)[]) => [...new Set(arr.filter(Boolean) as string[])].sort()
 
@@ -295,8 +297,9 @@ export default function RequestsPage() {
   const countries = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, claim: claimF, invoice: invoiceF }).map(r => r.country))
   const invoices = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF }).map(r => r.invoiceNo))
   const hawbs    = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.hawbNo))
+  const docNos   = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF }).map(r => r.request?.documentNo))
 
-  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF, stage: stageF })
+  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF, stage: stageF, docNo: docNoF })
   // Stage filter options: the pipeline stages + a "Claim: <dept>" sub-option per claim department.
   const claimDeptOpts = activeBu === "GW" ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
   const stageOptions = [...POSITIONS.map(p => p.label), ...claimDeptOpts.map(d => `Claim: ${d}`)]
@@ -325,7 +328,7 @@ export default function RequestsPage() {
   }
 
   const SO_COLS = [
-    ["SO",""],["BU",""],["BRAND","min-w-[90px]"],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
+    ["SO",""],["SUB",""],["BU",""],["BRAND","min-w-[90px]"],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
     ["EST. AIR FREIGHT","min-w-[120px]"],["ACTUAL AIR FREIGHT","min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],
@@ -510,14 +513,15 @@ export default function RequestsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {!!(stageF.length || statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length) && (
-            <button onClick={() => { setStageF([]); setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]) }}
+          {!!(stageF.length || statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length || docNoF.length) && (
+            <button onClick={() => { setStageF([]); setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]); setDocNoF([]) }}
               className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
               Clear All
             </button>
           )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-1.5">
+          <MultiSelect label="Doc No..." options={docNos} value={docNoF} onChange={setDocNoF} />
           <MultiSelect label="All Stage" options={stageOptions} value={stageF} onChange={setStageF} />
           <MultiSelect label="All Status" options={["COMPLETED","PENDING","BACK TO MERCHANDISE","BACK TO SCM","REJECTED"]} value={statusFilter} onChange={setStatusFilter} />
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
@@ -620,6 +624,7 @@ export default function RequestsPage() {
                                   <Fragment key={row.id}>
                                   <tr className={`hover:bg-blue-50/30 ${row.itemStatus === "REJECTED" ? "opacity-50" : ""}`}>
                                     <td className="px-3 py-2 font-medium whitespace-nowrap">{row.so}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap text-gray-500">{row.sub || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-600">{row.request.bu || row.request.buName || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.brand || row.request.brandName || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.customerPO || "-"}</td>
