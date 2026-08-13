@@ -405,7 +405,7 @@ export default function FilesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">REPORT</h1>
+        <h1 className="text-2xl font-bold text-gray-900">DOCUMENT FOR LOGISTICS &amp; ACCOUNTING</h1>
         <p className="text-xs text-gray-400 mt-0.5">All approved documents in one place — filter by BU and status</p>
       </div>
 

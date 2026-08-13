@@ -10,7 +10,7 @@ const claimNav = [
   { href: "/requests", label: "AIR REQUESTS" },
   { href: "/approvals", label: "APPROVALS" },
   { href: "/claim-status", label: "CLAIM STATUS" },
-  { href: "/files", label: "REPORT" },
+  { href: "/files", label: "DOCUMENT FOR LOGISTICS & ACCOUNTING" },
   { href: "/requests/nyk-import", label: "NYK IMPORT", adminOnly: true },
   { href: "/logistics", label: "LG BOOKING", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM"] },
   { href: "/users", label: "USER MANAGEMENT", adminOnly: true },
