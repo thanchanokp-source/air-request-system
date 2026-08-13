@@ -139,11 +139,13 @@ export default function ClaimStatusPage() {
   // only THAT dept's claim portion (Σ item.airFreight × dept%); otherwise the whole-doc EST.
   const CUR = activeBu === "EA" ? "USD" : "THB"
   const fmtMoney = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 })
-  const docEstOf = (r: any) => (r.items || []).reduce((s: number, it: any) => {
-    if (!deptF) return s + (Number(it.airFreight) || 0)
-    const sp = getSplits(it).find((x: any) => canonDept(x.dept) === deptF)
+  // A department's claim portion of a doc's EST air freight: Σ item.airFreight × dept%.
+  const deptEstOf = (r: any, dept: string) => (r.items || []).reduce((s: number, it: any) => {
+    const sp = getSplits(it).find((x: any) => canonDept(x.dept) === dept)
     return s + (Number(it.airFreight) || 0) * (sp ? (Number(sp.pct) || 0) / 100 : 0)
   }, 0)
+  // Left "EST" column: filtered-dept portion when a dept is selected, else the whole-doc EST.
+  const docEstOf = (r: any) => deptF ? deptEstOf(r, deptF) : (r.items || []).reduce((s: number, it: any) => s + (Number(it.airFreight) || 0), 0)
   const totalEst = rows.reduce((s, { r }) => s + docEstOf(r), 0)
 
   return (
@@ -241,11 +243,14 @@ export default function ClaimStatusPage() {
                       const cs = cellStateOf(a)
                       return (
                         <td key={d} className="px-3 py-2 text-center">
-                          <span title={`${a.approved} accepted · ${a.pending} in progress · ${a.notstarted} not started · ${a.rejected} rejected (of ${a.total})`}
-                            className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border font-medium ${CHIP[cs]}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${DOT[cs]}`} />
-                            {cs === "approved" ? "✓" : `${a.approved}/${a.total}`}
-                          </span>
+                          <div className="inline-flex flex-col items-center gap-0.5">
+                            <span title={`${a.approved} accepted · ${a.pending} in progress · ${a.notstarted} not started · ${a.rejected} rejected (of ${a.total})`}
+                              className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border font-medium ${CHIP[cs]}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${DOT[cs]}`} />
+                              {cs === "approved" ? "✓" : `${a.approved}/${a.total}`}
+                            </span>
+                            <span className="text-[10px] text-gray-500 tabular-nums">{fmtMoney(deptEstOf(r, d))}</span>
+                          </div>
                         </td>
                       )
                     })}
