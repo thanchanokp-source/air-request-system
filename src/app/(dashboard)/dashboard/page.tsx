@@ -333,7 +333,7 @@ function ReasonPanel({ rows, height=200, cur="THB" }: { rows:any[]; height?:numb
       // "Reason" mode now ranks by pieces (qty); cost mode by cost.
       .sort((a,b)=>mode==='cost'?b.cost-a.cost:b.qty-a.qty)
   },[rows,mode])
-  const MODES:[string,string,string][] = [['count','Reason','#e07878'],['cost','Actual Cost','#d96060'],['qty','Actual QTY','#f0907a']]
+  const MODES:[string,string,string][] = [['count','Reason','#e07878'],['cost','Department Cost','#d96060'],['qty','Department QTY','#f0907a']]
   return (
     <div className="bg-white rounded-xl border p-3">
       <p className="text-[11px] font-extrabold mb-2 uppercase tracking-wide" style={{color:"#6b1a1a"}}>DELAY REASON</p>
@@ -415,7 +415,7 @@ function ReasonPanel({ rows, height=200, cur="THB" }: { rows:any[]; height?:numb
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
                     <XAxis type="number" tick={{fontSize:12}} tickFormatter={mode==='cost'?fmtK:undefined} allowDecimals={false}/>
                     <YAxis type="category" dataKey="name" tick={{fontSize:10}} width={132} interval={0}/>
-                    <Tooltip formatter={(v:any)=>mode==='cost'?[fmtNum(v)+' '+cur,'Actual Cost']:[fmtNum(v)+' pcs','QTY Air']}/>
+                    <Tooltip formatter={(v:any)=>mode==='cost'?[fmtNum(v)+' '+cur,'Department Cost']:[fmtNum(v)+' pcs','Department QTY']}/>
                     <Bar dataKey={mode==='cost'?'cost':'qty'} radius={[0,3,3,0]}
                       cursor={drillDept?undefined:'pointer'} onClick={(d:any)=>{ if(!drillDept && d?.name) setDrillDept(d.name) }}>
                       {chartData.map((d:any,i:number)=><Cell key={i} fill={drillDept?deptColor(drillDept):deptColor(d.name)}/>)}
