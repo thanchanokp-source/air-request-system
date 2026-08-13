@@ -417,7 +417,7 @@ export default function LgEntryPage() {
             // One file may sit on several documents (attached to all selected) — group by name+category
             // so it shows ONCE, and delete removes every copy.
             const groups: Record<string, { rep: any; ids: string[] }> = {}
-            involvedReqIds.forEach(id => (docMap[id]?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).forEach((a: any) => {
+            involvedReqIds.forEach(id => (docMap[id]?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category) || String(a.category || "").startsWith("HAWB:")).forEach((a: any) => {
               const k = `${a.category}|${a.fileName}`
               if (!groups[k]) groups[k] = { rep: a, ids: [] }
               groups[k].ids.push(a.id)
@@ -433,24 +433,45 @@ export default function LgEntryPage() {
             const slots = [{ key: "INV", label: "INV" }, { key: "AWB", label: "AWB" }, { key: "EXPENSE", label: "Expense" }]
             return (
               <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
-                <p className="text-xs font-semibold text-orange-800">② Attach files <span className="font-normal text-gray-500">(optional · attach once, applies to all selected documents)</span>{fileGroups.length > 0 && <span className="ml-1 text-green-600">✓ {fileGroups.length} file(s)</span>}</p>
-                {/* Per-category slots */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {slots.map(s => {
-                    const files = byCat(s.key)
-                    return (
-                      <div key={s.key} className={`rounded-lg border p-2 space-y-1.5 ${files.length ? "border-green-300 bg-green-50/40" : "border-gray-200 bg-gray-50"}`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-gray-700">{s.label} {files.length > 0 && <span className="text-green-600">✓{files.length}</span>}</p>
-                          <label className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer whitespace-nowrap shrink-0">＋ Attach
-                            <input type="file" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadLgFileAll(f, s.key) }} />
-                          </label>
+                {(() => {
+                  // HAWB list = the HAWB numbers typed in section ④ below. One attach slot per HAWB so
+                  // LG sees which HAWB already has documents and which is still missing.
+                  const hawbList = [...new Set(hawbGroups.map(g => String(g.hawbNo || "").trim()).filter(Boolean))]
+                  const missing = hawbList.filter(h => byCat(`HAWB:${h}`).length === 0)
+                  return (
+                    <>
+                      <p className="text-xs font-semibold text-orange-800">② Attach files by HAWB <span className="font-normal text-gray-500">(แนบตามเลข HAWB · applies to all selected documents)</span>
+                        {hawbList.length > 0 && (missing.length === 0
+                          ? <span className="ml-1 text-green-600">✓ ครบทุก HAWB</span>
+                          : <span className="ml-1 text-red-500 font-semibold">⚠ {missing.length}/{hawbList.length} HAWB ยังไม่มีเอกสาร</span>)}
+                      </p>
+                      {hawbList.length === 0 ? (
+                        <p className="text-[11px] text-gray-400 bg-gray-50 border border-dashed border-gray-200 rounded-lg p-2">พิมพ์เลข HAWB ในส่วน ④ ด้านล่างก่อน แล้วช่องแนบไฟล์จะเด้งขึ้นมาที่นี่</p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {hawbList.map(h => {
+                            const files = byCat(`HAWB:${h}`)
+                            const has = files.length > 0
+                            return (
+                              <div key={h} className={`rounded-lg border p-2 space-y-1.5 ${has ? "border-green-300 bg-green-50/50" : "border-red-300 bg-red-50/40"}`}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-semibold text-gray-800 truncate">🚢 {h}
+                                    {has ? <span className="ml-1 text-[10px] font-normal text-green-600">✓ {files.length} ไฟล์</span>
+                                         : <span className="ml-1 text-[10px] font-normal text-red-500">⚠ ยังไม่มีเอกสาร</span>}
+                                  </p>
+                                  <label className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer whitespace-nowrap shrink-0">＋ Add files
+                                    <input type="file" multiple className="hidden" onChange={async e => { const fs = Array.from(e.target.files || []); e.target.value = ""; for (const f of fs) await uploadLgFileAll(f, `HAWB:${h}`) }} />
+                                  </label>
+                                </div>
+                                <div className="flex flex-wrap gap-1">{has ? files.map(chip) : <span className="text-[10px] text-gray-400">— no files —</span>}</div>
+                              </div>
+                            )
+                          })}
                         </div>
-                        <div className="flex flex-wrap gap-1">{files.length ? files.map(chip) : <span className="text-[10px] text-gray-400">— no files —</span>}</div>
-                      </div>
-                    )
-                  })}
-                </div>
+                      )}
+                    </>
+                  )
+                })()}
                 {/* Combine — multiple files */}
                 <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/40 p-2 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
