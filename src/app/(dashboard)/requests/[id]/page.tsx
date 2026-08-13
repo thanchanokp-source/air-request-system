@@ -4583,7 +4583,7 @@ export default function RequestDetailPage() {
                       <div className="overflow-x-auto">
                         <table className="text-xs w-full">
                           <thead className="bg-gray-50">
-                            <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
+                            <tr>{["SO","STYLE","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY","REASON","DETAIL"].map(h =>
                               <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                             </tr>
                           </thead>
@@ -4605,6 +4605,8 @@ export default function RequestDetailPage() {
                               <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                               <td className="px-3 py-2">{item.factory}</td>
                               <td className="px-3 py-2">{item.country}</td>
+                              <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimReasonText(item)}>{claimReasonText(item) || "-"}</td>
+                              <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimDetailText(item)}>{claimDetailText(item) || "-"}</td>
                             </tr>
                           </tbody>
                         </table>
@@ -5303,7 +5305,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY","REASON","DETAIL"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -5327,6 +5329,8 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                           <td className="px-3 py-2">{item.factory}</td>
                           <td className="px-3 py-2">{item.country}</td>
+                          <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimReasonText(item)}>{claimReasonText(item) || "-"}</td>
+                          <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimDetailText(item)}>{claimDetailText(item) || "-"}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -5621,7 +5625,7 @@ export default function RequestDetailPage() {
                     <div className="overflow-x-auto">
                     <table className="text-xs w-full">
                       <thead className="bg-gray-50">
-                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY"].map(h =>
+                        <tr>{["SO","STYLE","BRAND","CUSTOMER PO","PO GARMENT","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. FREIGHT (${CUR})`,`ACTUAL (${CUR})`,"INVOICE NO","HAWB#","BOOKING DATE","FACTORY","COUNTRY","REASON","DETAIL"].map(h =>
                           <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                         </tr>
                       </thead>
@@ -5645,6 +5649,8 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                           <td className="px-3 py-2">{item.factory}</td>
                           <td className="px-3 py-2">{item.country}</td>
+                          <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimReasonText(item)}>{claimReasonText(item) || "-"}</td>
+                          <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimDetailText(item)}>{claimDetailText(item) || "-"}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -5846,6 +5852,8 @@ export default function RequestDetailPage() {
                           <td className="px-3 py-2 whitespace-nowrap">{fmtDate(item.bookingDate)}</td>
                           <td className="px-3 py-2">{item.factory}</td>
                           <td className="px-3 py-2">{item.country}</td>
+                          <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimReasonText(item)}>{claimReasonText(item) || "-"}</td>
+                          <td className="px-3 py-2 max-w-[220px] truncate text-gray-600" title={claimDetailText(item)}>{claimDetailText(item) || "-"}</td>
                         </tr>
                       </tbody>
                     </table>
