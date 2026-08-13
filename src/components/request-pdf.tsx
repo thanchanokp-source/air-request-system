@@ -385,6 +385,23 @@ export function RequestPdfDocument({ req, item }: { req: any; item: any }) {
 // descriptions listed once up top (A, B, C…) and referenced by letter, one grand
 // total, and the signature ONCE at the end (all SO share the same approvers).
 export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbNo?: string }) {
+  // Group SOs by their source document → each document keeps its OWN header, totals and
+  // signatures. A cross-document combined PDF becomes several sections, not one merged header.
+  const groups: { req: any; pages: { req: any; item: any }[] }[] = []
+  for (const p of pages) {
+    let g = groups.find(x => x.req?.id === p.req?.id)
+    if (!g) { g = { req: p.req, pages: [] }; groups.push(g) }
+    g.pages.push(p)
+  }
+  const title = groups.length <= 1 ? `${groups[0]?.req?.documentNo || "Combined"}` : `Combined_${groups.length}docs`
+  return (
+    <Document title={title}>
+      {groups.map((g, i) => <DocSection key={(g.req?.id || "") + i} pages={g.pages} hawbNo={hawbNo} />)}
+    </Document>
+  )
+}
+
+function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbNo?: string }) {
   const req = pages[0]?.req || {}
   const isGW = req.bu === "GW"
   const dept = isGW ? "GW" : "NYG"
@@ -433,8 +450,7 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
   // → REASON (flex) gets the rest.
   const C = { no: 14, so: 42, style: 52, sub: 20, desc: 24, fac: 38, ctry: 44, hawb: 42, inv: 46, qty: 26, gross: 30, est: 36, act: 36, claim: 44 }
   return (
-    <Document title={`${req.documentNo || "Combined"}`}>
-      <Page size="A4" style={s.pageFlow} wrap>
+    <Page size="A4" style={s.pageFlow} wrap>
         {/* Letterhead */}
         <View style={s.lh}>
           <Image style={s.logo} src="/LOGO.png" />
@@ -568,7 +584,6 @@ export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item
           <Text>{COMPANY.name}</Text>
         </View>
       </Page>
-    </Document>
   )
 }
 
