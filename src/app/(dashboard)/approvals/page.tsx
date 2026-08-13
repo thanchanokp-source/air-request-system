@@ -94,6 +94,10 @@ export default function ApprovalsPage() {
     const fwds: any[] = Array.isArray(r.claimForwards) ? r.claimForwards : []
     return (r.items || []).filter((i: any) => {
       if (["REJECTED", "COMPLETED", "ACCOUNTING_PENDING"].includes(i.itemStatus)) return false
+      // Only SOs that have REACHED the claim stage (LOG_PASSED/CLAIM_PASSED). Before that the SO is
+      // still upstream (PENDING/PASSED at DVM/VP-MER/SCM/VP-SCM) — the claim dept is ASSIGNED but not
+      // yet its turn, so it must NOT show as "pending your action" (the detail page has no panel yet).
+      if (!["LOG_PASSED", "CLAIM_PASSED"].includes(i.itemStatus)) return false
       const act = actingClaimForSO(myRoles, getSplits(i).map((s: any) => s.dept))
       if (!act) return false
       // COMMERCIAL claim = the SPECIFIC merch people picked on this doc (DVM MER entry / VP MER VP),
