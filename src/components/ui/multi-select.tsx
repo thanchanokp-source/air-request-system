@@ -45,7 +45,7 @@ export function MultiSelect({ label, options, value, onChange }: Props) {
               </button>
             </div>
           )}
-          <div className="max-h-52 overflow-y-auto">
+          <div className="max-h-72 overflow-y-auto">
             {filtered.length === 0 && <p className="text-xs text-gray-400 px-3 py-2">No results</p>}
             {filtered.map(opt => (
               <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">

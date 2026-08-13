@@ -449,7 +449,7 @@ export default function FilesPage() {
         </div>
 
         {/* Right: content */}
-        <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200">
           {/* Header */}
           <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
             <div>
