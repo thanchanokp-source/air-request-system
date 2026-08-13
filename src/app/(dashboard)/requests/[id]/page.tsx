@@ -1318,7 +1318,7 @@ export default function RequestDetailPage() {
   }
   const LG_REQUIRED_FILES = [{ key: "INV", label: "INV" }, { key: "AWB", label: "AWB" }, { key: "EXPENSE", label: "Expense" }]
   const LG_FILE_CATS = ["INV", "AWB", "EXPENSE", "COMBINE"]
-  const lgFileCount = (req?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).length
+  const lgFileCount = (req?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category) || String(a.category || "").startsWith("HAWB:")).length
   // "Complete" = every LG SO has an INV assigned AND that INV sits in a HAWB group with a
   // HAWB No. (so actual air freight is computed). Draft can be saved without this.
   // SOs pulled into a HAWB = "being calculated" (they get an Actual Air Freight). SOs not in any
@@ -6285,30 +6285,66 @@ export default function RequestDetailPage() {
             const combineAtts = (req?.attachments || []).filter((a: any) => a.category === "COMBINE")
             return (
             <div className="bg-white rounded-xl border border-orange-200 p-3 space-y-2">
-              <p className="text-xs font-semibold text-orange-800">
-                Attach files <span className="font-normal text-gray-500">(INV · AWB · Expense are optional — attach at least 1 file, any slot)</span>
-                {lgFileCount > 0 ? <span className="ml-1 text-green-600">✓ {lgFileCount} file(s)</span> : <span className="ml-1 text-red-500">* need ≥ 1</span>}
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {LG_REQUIRED_FILES.map(f => {
-                  const att = (req?.attachments || []).find((a: any) => a.category === f.key)
-                  return (
-                    <div key={f.key} className={`rounded-lg border p-2 flex items-center justify-between gap-2 ${att ? "border-green-300 bg-green-50" : "border-gray-300 bg-gray-50"}`}>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-gray-700">{f.label} {att && "✓"}</p>
-                        {att ? (
-                          <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline truncate block">{att.fileName}</a>
-                        ) : <p className="text-[10px] text-gray-400">Optional</p>}
+              {(() => {
+                // Attach documents grouped BY HAWB. The HAWB list = distinct HAWB No. entered on the SOs.
+                // Each HAWB accepts many files; a red badge flags any HAWB still missing documents so LG
+                // can see at a glance (e.g. after re-opening a saved draft) which ones are incomplete.
+                const hawbList = [...new Set<string>((req?.items || []).map((i: any) => String(i.hawbNo || "").trim()).filter(Boolean))].sort()
+                const filesFor = (h: string) => (req?.attachments || []).filter((a: any) => a.category === `HAWB:${h}`)
+                const missing = hawbList.filter(h => filesFor(h).length === 0)
+                return (
+                  <>
+                    <p className="text-xs font-semibold text-orange-800">
+                      Attach files by HAWB <span className="font-normal text-gray-500">(แนบเอกสารตามเลข HAWB · 1 HAWB ใส่ได้หลายไฟล์)</span>
+                      {hawbList.length > 0 && (missing.length === 0
+                        ? <span className="ml-1 text-green-600">✓ ครบทุก HAWB</span>
+                        : <span className="ml-1 text-red-500 font-semibold">⚠ {missing.length}/{hawbList.length} HAWB ยังไม่มีเอกสาร</span>)}
+                    </p>
+                    {hawbList.length === 0 ? (
+                      <p className="text-[11px] text-gray-400 bg-gray-50 border border-dashed border-gray-200 rounded-lg p-2">ยังไม่มีเลข HAWB — กรอกเลข HAWB ในตารางด้านล่างก่อน แล้วรายการจะขึ้นที่นี่</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {hawbList.map(h => {
+                          const files = filesFor(h)
+                          const has = files.length > 0
+                          return (
+                            <div key={h} className={`rounded-lg border p-2 space-y-1.5 ${has ? "border-green-300 bg-green-50/50" : "border-red-300 bg-red-50/40"}`}>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-semibold text-gray-800 truncate">🚢 {h}
+                                  {has ? <span className="ml-1 text-[10px] font-normal text-green-600">✓ {files.length} ไฟล์</span>
+                                       : <span className="ml-1 text-[10px] font-normal text-red-500">⚠ ยังไม่มีเอกสาร</span>}
+                                </p>
+                                <label className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer whitespace-nowrap shrink-0">
+                                  ＋ Add files
+                                  <input type="file" className="hidden" multiple disabled={lgDraftSaving}
+                                    onChange={async e => { const fs = Array.from(e.target.files || []); e.target.value = ""; for (const f of fs) await uploadLgFile(f, `HAWB:${h}`) }} />
+                                </label>
+                              </div>
+                              {has && (
+                                <div className="flex flex-col gap-0.5">
+                                  {files.map((att: any) => (
+                                    <div key={att.id} className="flex items-center gap-1.5">
+                                      <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline truncate flex-1 min-w-0">📎 {att.fileName}</a>
+                                      <button type="button" disabled={lgDraftSaving} title="ยกเลิกไฟล์"
+                                        onClick={async () => {
+                                          if (!confirm(`ยกเลิกไฟล์ "${att.fileName}" ?`)) return
+                                          const res = await fetch(`/api/attachments/${att.id}`, { method: "DELETE" })
+                                          if (res.ok) setReq((prev: any) => ({ ...prev, attachments: (prev.attachments || []).filter((a: any) => a.id !== att.id) }))
+                                          else { const e = await res.json().catch(() => ({})); alert(e.error || "ยกเลิกไม่สำเร็จ") }
+                                        }}
+                                        className="text-[10px] leading-none text-red-500 hover:text-red-700 shrink-0 disabled:opacity-50">✕</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
-                      <label className="text-[10px] px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer whitespace-nowrap shrink-0">
-                        {att ? "Change" : "Attach"}
-                        <input type="file" className="hidden" disabled={lgDraftSaving}
-                          onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; if (file) uploadLgFile(file, f.key) }} />
-                      </label>
-                    </div>
-                  )
-                })}
-              </div>
+                    )}
+                  </>
+                )
+              })()}
               {/* Combine slot — multiple files in one field */}
               <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/40 p-2">
                 <div className="flex items-center justify-between gap-2">
@@ -6322,7 +6358,17 @@ export default function RequestDetailPage() {
                 {combineAtts.length > 0 && (
                   <div className="mt-1.5 flex flex-col gap-0.5">
                     {combineAtts.map((att: any) => (
-                      <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline truncate">📎 {att.fileName}</a>
+                      <div key={att.id} className="flex items-center gap-1.5">
+                        <a href={`/api/attachments/${att.id}`} target="_blank" rel="noreferrer" className="text-[10px] text-blue-600 hover:underline truncate flex-1 min-w-0">📎 {att.fileName}</a>
+                        <button type="button" disabled={lgDraftSaving} title="ยกเลิกไฟล์"
+                          onClick={async () => {
+                            if (!confirm(`ยกเลิกไฟล์ "${att.fileName}" ?`)) return
+                            const res = await fetch(`/api/attachments/${att.id}`, { method: "DELETE" })
+                            if (res.ok) setReq((prev: any) => ({ ...prev, attachments: (prev.attachments || []).filter((a: any) => a.id !== att.id) }))
+                            else { const e = await res.json().catch(() => ({})); alert(e.error || "ยกเลิกไม่สำเร็จ") }
+                          }}
+                          className="text-[10px] leading-none text-red-500 hover:text-red-700 shrink-0 disabled:opacity-50">✕</button>
+                      </div>
                     ))}
                   </div>
                 )}
