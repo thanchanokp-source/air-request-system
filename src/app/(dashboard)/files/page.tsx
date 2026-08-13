@@ -308,8 +308,10 @@ export default function FilesPage() {
     setPdfLoading(dkey)
     try {
       const fullReq = await fetch(`/api/requests/${req.id}`).then(r => r.json())
-      const items = (fullReq.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
-      if (items.length === 0) return
+      // Only the SOs currently shown (respect the active filters + unbooked toggle), not all SOs.
+      const items = (fullReq.items || []).filter((i: any) =>
+        i.itemStatus !== "REJECTED" && (!unbookedOnly || !itemBooked(i)) && itemMatchesFilters(i))
+      if (items.length === 0) { alert("ไม่มี SO ที่ตรงกับ filter"); return }
       const [{ pdf }, { CombinedPdfDocument }] = await Promise.all([
         import("@react-pdf/renderer"),
         import("@/components/request-pdf"),
@@ -688,7 +690,11 @@ export default function FilesPage() {
                               <span role="button" tabIndex={0}
                                 onClick={e => { e.stopPropagation(); downloadDocPdf(req) }}
                                 className="text-xs bg-gray-700 text-white px-2.5 py-1 rounded hover:bg-gray-800 font-medium cursor-pointer whitespace-nowrap">
-                                {pdfLoading === `doc-${req.id}` ? "..." : "↓ PDF (all SO)"}
+                                {pdfLoading === `doc-${req.id}` ? "..." : (() => {
+                                  const total = items.filter((i: any) => i.itemStatus !== "REJECTED").length
+                                  const n = items.filter((i: any) => i.itemStatus !== "REJECTED" && (!unbookedOnly || !itemBooked(i)) && itemMatchesFilters(i)).length
+                                  return `↓ PDF (${n < total ? `${n} SO` : "all SO"})`
+                                })()}
                               </span>
                             </button>
 
