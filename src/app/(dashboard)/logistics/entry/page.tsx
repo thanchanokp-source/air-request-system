@@ -128,8 +128,7 @@ export default function LgEntryPage() {
     if (!allCalc) return false
     if (!items.every(hasShipDate)) return false
     if (!items.every(it => liveQty(it) > 0)) return false // QTY Air must be filled
-    const groups = hawbGroups.filter(g => g.invNos.some(inv => items.some(it => soInvMap[it.id] === inv)))
-    if (groups.some(g => !g.bookingDate)) return false
+    // Booking Date removed — no longer required to send.
     // Attachments are OPTIONAL — a document does not need its own file to be sent.
     return true
   }
@@ -172,7 +171,7 @@ export default function LgEntryPage() {
     const missingDetail = allLgItems.filter(it => !hasShipDate(it) || !(liveQty(it) > 0))
     if (missingDetail.length) { alert(`Please complete all details before sending — SOs still missing Plan Ship Date / QTY Air:\n${[...new Set(missingDetail.map(i => i.so))].join(", ")}`); return }
     const ready = involvedReqIds.filter(docComplete)
-    if (ready.length === 0) { alert("No documents are ready to send — selected SOs must be in a HAWB (with HAWB No) and have all Booking Dates filled"); return }
+    if (ready.length === 0) { alert("No documents are ready to send — selected SOs must be in a HAWB (with HAWB No)"); return }
     if (!confirm(`Forward ${ready.length} ready document(s)? (the rest will be saved as draft)`)) return
     setSaving(true); await persist(new Set(ready)); await load(); setSaving(false)
     alert(`Forwarded ${ready.length} document(s)`)
@@ -605,8 +604,6 @@ export default function LgEntryPage() {
                         <span className="text-xs font-bold text-orange-800 shrink-0">HAWB #{gi + 1}</span>
                         <div className="flex items-center gap-1.5"><label className="text-xs text-gray-500">HAWB No.</label>
                           <input value={group.hawbNo} placeholder="123-12345678" onChange={e => updateHawb(group.id, { hawbNo: e.target.value })} className="border border-orange-300 rounded-lg px-2.5 py-1 text-xs w-36 focus:ring-1 focus:ring-orange-400 focus:outline-none" /></div>
-                        <div className="flex items-center gap-1.5"><label className="text-xs text-gray-500">Booking Date <span className="text-red-500">*</span></label>
-                          <input type="date" value={group.bookingDate} onChange={e => updateHawb(group.id, { bookingDate: e.target.value })} className={`border rounded-lg px-2.5 py-1 text-xs focus:outline-none ${group.bookingDate ? "border-orange-300" : "border-red-300 bg-red-50"}`} /></div>
                         <div className="flex items-center gap-1.5"><label className="text-xs text-gray-500">Total Cost (THB)</label>
                           <input type="number" value={group.totalCost} placeholder="0" min="0" onChange={e => updateHawb(group.id, { totalCost: e.target.value })} className="border border-orange-300 rounded-lg px-2.5 py-1 text-xs w-32 focus:ring-1 focus:ring-orange-400 focus:outline-none" /></div>
                         {items.length > 0 && hasCost && <span className="text-xs text-orange-600 font-medium">{totalQty.toLocaleString()} pcs · avg {avgPerUnit.toFixed(4)} THB/pc</span>}
