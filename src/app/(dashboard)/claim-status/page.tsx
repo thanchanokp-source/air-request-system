@@ -137,16 +137,12 @@ export default function ClaimStatusPage() {
 
   // Estimate air freight + grand total of the filtered rows. When a department is filtered, show
   // only THAT dept's claim portion (Σ item.airFreight × dept%); otherwise the whole-doc EST.
-  const CUR = activeBu === "EA" ? "USD" : "THB"
   const fmtMoney = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 })
   // A department's claim portion of a doc's EST air freight: Σ item.airFreight × dept%.
   const deptEstOf = (r: any, dept: string) => (r.items || []).reduce((s: number, it: any) => {
     const sp = getSplits(it).find((x: any) => canonDept(x.dept) === dept)
     return s + (Number(it.airFreight) || 0) * (sp ? (Number(sp.pct) || 0) / 100 : 0)
   }, 0)
-  // Left "EST" column: filtered-dept portion when a dept is selected, else the whole-doc EST.
-  const docEstOf = (r: any) => deptF ? deptEstOf(r, deptF) : (r.items || []).reduce((s: number, it: any) => s + (Number(it.airFreight) || 0), 0)
-  const totalEst = rows.reduce((s, { r }) => s + docEstOf(r), 0)
 
   return (
     <div className="space-y-5">
@@ -194,7 +190,7 @@ export default function ClaimStatusPage() {
           <button onClick={() => { setQ(""); setDeptF(""); setStatusF("") }}
             className="text-xs text-gray-500 hover:text-gray-800 underline">Clear</button>
         )}
-        <span className="ml-auto text-xs text-gray-500">{rows.length} document(s) · <span className="font-semibold text-gray-700">EST {fmtMoney(totalEst)} {CUR}</span></span>
+        <span className="ml-auto text-xs text-gray-400">{rows.length} document(s)</span>
       </div>
 
       {/* Legend */}
@@ -218,7 +214,6 @@ export default function ClaimStatusPage() {
                 <th className="px-4 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap">Document</th>
                 <th className="px-3 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap">Created</th>
                 <th className="px-3 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap">Overall</th>
-                <th className="px-3 py-2.5 text-right font-medium text-gray-500 whitespace-nowrap">EST. AIR FREIGHT{deptF ? ` · ${deptLabel(deptF)}` : ""} ({CUR})</th>
                 {cols.map(d => <th key={d} className="px-3 py-2.5 text-center font-medium text-gray-500 whitespace-nowrap">{deptLabel(d)}</th>)}
               </tr>
             </thead>
@@ -236,7 +231,6 @@ export default function ClaimStatusPage() {
                         <span className={`w-1.5 h-1.5 rounded-full ${DOT[overall]}`} />{WORD[overall]}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-700 whitespace-nowrap">{fmtMoney(docEstOf(r))}</td>
                     {cols.map(d => {
                       const a = map[d]
                       if (!a) return <td key={d} className="px-3 py-2 text-center text-gray-300">–</td>
