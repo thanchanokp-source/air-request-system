@@ -33,6 +33,31 @@ export default function LgEntryPage() {
   const [lgSelectedSoIds, setLgSelectedSoIds] = useState<Set<string>>(new Set())
   const [prefilled, setPrefilled] = useState(false)
 
+  // Split-shipment modal (1 SO → many shipments, each own INV + HAWB + qty)
+  const [splitItem, setSplitItem] = useState<any>(null)
+  const [splitRows, setSplitRows] = useState<{ qty: string; inv: string; hawb: string }[]>([])
+  const [splitSaving, setSplitSaving] = useState(false)
+  const openSplit = (it: any) => {
+    setSplitItem(it)
+    setSplitRows([{ qty: String(it.qtyRequestAir || ""), inv: it.invoiceNo || "", hawb: it.hawbNo || "" }, { qty: "", inv: "", hawb: "" }])
+  }
+  const submitSplit = async () => {
+    if (!splitItem) return
+    const shipments = splitRows.map(r => ({ qty: Number(r.qty) || 0, invoiceNo: r.inv.trim(), hawbNo: r.hawb.trim() })).filter(s => s.qty > 0)
+    if (shipments.length < 2) { alert("ต้องมีอย่างน้อย 2 shipment (qty > 0)"); return }
+    const sum = shipments.reduce((a, s) => a + s.qty, 0)
+    const orig = splitItem.qtyRequestAir || sum
+    if (sum !== orig && !confirm(`ผลรวม qty (${sum}) ไม่เท่า QTY Air เดิม (${orig}) — ยืนยันแยกต่อ?`)) return
+    setSplitSaving(true)
+    const res = await fetch(`/api/requests/${splitItem.request.id}/split-shipment`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId: splitItem.id, shipments }),
+    })
+    setSplitSaving(false)
+    if (res.ok) { setSplitItem(null); window.location.reload() }
+    else { const e = await res.json().catch(() => ({})); alert(e.error || "แยก shipment ไม่สำเร็จ") }
+  }
+
   // Forward
   const [fwOpen, setFwOpen] = useState(false)
   // Recipients: pick from a BU-grouped dropdown, or add a manual-typed row.
@@ -377,7 +402,7 @@ export default function LgEntryPage() {
               <table className="w-full text-xs">
                 <thead className="bg-gray-50"><tr>
                   <th className="px-2 py-1 text-left">DOC</th><th className="px-2 py-1 text-left">SO</th><th className="px-2 py-1 text-left">SUB</th><th className="px-2 py-1 text-left">STYLE</th><th className="px-2 py-1 text-left">BRAND</th>
-                  <th className="px-2 py-1 text-right">QTY Air</th><th className="px-2 py-1 text-left">Plan Ship Date</th>
+                  <th className="px-2 py-1 text-right">QTY Air</th><th className="px-2 py-1 text-left">Plan Ship Date</th><th className="px-2 py-1 text-center">Split</th>
                 </tr></thead>
                 <tbody>
                   {allLgItems.map((it: any) => {
@@ -404,6 +429,10 @@ export default function LgEntryPage() {
                             )
                           })()}
                         </td>
+                        <td className="px-2 py-1 text-center">
+                          <button type="button" onClick={() => openSplit(it)} title="แยกเป็นหลาย shipment (คนละ INV/HAWB)"
+                            className="text-[11px] px-2 py-1 rounded border border-purple-300 text-purple-700 hover:bg-purple-50 whitespace-nowrap">✂ Split</button>
+                        </td>
                       </tr>
                     )
                   })}
@@ -411,6 +440,39 @@ export default function LgEntryPage() {
               </table>
             </div>
           </div>
+
+          {/* Split shipment modal */}
+          {splitItem && (
+            <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => !splitSaving && setSplitItem(null)}>
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-4 space-y-3" onClick={e => e.stopPropagation()}>
+                <div>
+                  <h2 className="font-bold text-gray-900">✂ Split shipment</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">SO {splitItem.so} · QTY Air เดิม {splitItem.qtyRequestAir?.toLocaleString?.() ?? splitItem.qtyRequestAir} · แยกเป็นหลายเที่ยว แต่ละเที่ยวคนละ INV + HAWB (claim สืบทอดอัตโนมัติ)</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-[80px_1fr_1fr_28px] gap-2 text-[10px] font-semibold text-gray-500 px-1">
+                    <span>QTY</span><span>INV NO.</span><span>HAWB#</span><span></span>
+                  </div>
+                  {splitRows.map((r, i) => (
+                    <div key={i} className="grid grid-cols-[80px_1fr_1fr_28px] gap-2 items-center">
+                      <input type="number" min="0" value={r.qty} placeholder="qty" onChange={e => setSplitRows(p => p.map((x, k) => k === i ? { ...x, qty: e.target.value } : x))} className="border border-gray-300 rounded px-2 py-1 text-xs text-right" />
+                      <input value={r.inv} placeholder="INV" onChange={e => setSplitRows(p => p.map((x, k) => k === i ? { ...x, inv: e.target.value } : x))} className="border border-gray-300 rounded px-2 py-1 text-xs" />
+                      <input value={r.hawb} placeholder="HAWB#" onChange={e => setSplitRows(p => p.map((x, k) => k === i ? { ...x, hawb: e.target.value } : x))} className="border border-gray-300 rounded px-2 py-1 text-xs" />
+                      <button type="button" disabled={splitRows.length <= 2} onClick={() => setSplitRows(p => p.filter((_, k) => k !== i))} className="text-red-400 hover:text-red-600 disabled:opacity-30 text-sm">✕</button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setSplitRows(p => [...p, { qty: "", inv: "", hawb: "" }])} className="text-xs text-blue-600 hover:underline">＋ เพิ่ม shipment</button>
+                  {(() => { const sum = splitRows.reduce((a, r) => a + (Number(r.qty) || 0), 0); const orig = splitItem.qtyRequestAir || 0; return (
+                    <p className={`text-xs ${sum === orig ? "text-green-600" : "text-amber-600"}`}>รวม {sum.toLocaleString()} / เดิม {orig.toLocaleString()} {sum === orig ? "✓" : "⚠ ไม่เท่ากัน"}</p>
+                  ) })()}
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button type="button" onClick={() => setSplitItem(null)} disabled={splitSaving} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-sm">ยกเลิก</button>
+                  <button type="button" onClick={submitSplit} disabled={splitSaving} className="px-4 py-1.5 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-50">{splitSaving ? "กำลังแยก…" : "แยก shipment"}</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ② Attach files — one attach, applied to every selected document (OPTIONAL) */}
           {(() => {
@@ -472,16 +534,6 @@ export default function LgEntryPage() {
                     </>
                   )
                 })()}
-                {/* Combine — multiple files */}
-                <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/40 p-2 space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-blue-800">Combine File <span className="font-normal text-gray-500">(multiple files allowed)</span> {byCat("COMBINE").length > 0 && <span className="text-green-600">✓{byCat("COMBINE").length}</span>}</p>
-                    <label className="text-[10px] px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-100 cursor-pointer whitespace-nowrap shrink-0">＋ Add files
-                      <input type="file" multiple className="hidden" onChange={async e => { const fs = Array.from(e.target.files || []); e.target.value = ""; for (const f of fs) await uploadLgFileAll(f, "COMBINE") }} />
-                    </label>
-                  </div>
-                  <div className="flex flex-wrap gap-1">{byCat("COMBINE").length ? byCat("COMBINE").map(chip) : <span className="text-[10px] text-gray-400">— no files —</span>}</div>
-                </div>
               </div>
             )
           })()}
