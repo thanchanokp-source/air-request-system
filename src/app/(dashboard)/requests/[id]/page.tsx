@@ -1141,30 +1141,43 @@ export default function RequestDetailPage() {
   // Ticked SO within my scope (per-SO forward). Empty selection = act on all my SO.
   const claimSelIds = [...dvmSelected].filter((idv: string) => gwFwdItems.some((i: any) => i.id === idv))
   const claimActIds: string[] = claimSelIds.length ? claimSelIds : gwFwdItems.map((i: any) => i.id)
-  const exportClaimExcel = () => {
+  const exportClaimExcel = async () => {
     const CUR = req?.bu === "EA" ? "USD" : "THB"
-    const rows = gwFwdItemsSorted.map((it: any, i: number) => {
+    const headers = ["No.", "SO", "STYLE", "CUSTOMER PO", "QTY AIR", "GROSS (KG)", "HAWB#", "INVOICE NO",
+      `EST. FREIGHT (${CUR})`, `ACTUAL (${CUR})`, "CLAIM DEPT", "CLAIM %", `MY EST (${CUR})`, `MY CLAIM (${CUR})`,
+      "REASON", "DETAIL", "PLAN DATE", "FACTORY", "COUNTRY"]
+    const dataRows = gwFwdItemsSorted.map((it: any, i: number) => {
       const r = claimRow(it)
-      return {
-        "No.": i + 1, "SO": it.so, "STYLE": it.style, "CUSTOMER PO": it.customerPO || "",
-        "QTY AIR": it.qtyRequestAir ?? "", "GROSS (KG)": it.grossWeight ?? "",
-        "HAWB#": it.hawbNo || "", "INVOICE NO": it.invoiceNo || "",
-        [`EST. FREIGHT (${CUR})`]: it.airFreight ?? "", [`ACTUAL (${CUR})`]: r.actual,
-        "CLAIM DEPT": deptLabel(r.sp?.dept || "") || "",
-        "CLAIM %": r.pct, [`MY EST (${CUR})`]: r.myEst, [`MY CLAIM (${CUR})`]: r.amt,
-        "REASON": r.sp?.reason || "", "DETAIL": (r.sp as any)?.detail || "",
-        "PLAN DATE": fmtDate(it.planShipmentDate),
-        "FACTORY": it.factory || "", "COUNTRY": it.country || "",
-      }
+      return [i + 1, it.so, it.style, it.customerPO || "", it.qtyRequestAir ?? "", it.grossWeight ?? "",
+        it.hawbNo || "", it.invoiceNo || "", it.airFreight ?? "", r.actual, deptLabel(r.sp?.dept || "") || "",
+        r.pct, r.myEst, r.amt, r.sp?.reason || "", (r.sp as any)?.detail || "",
+        fmtDate(it.planShipmentDate), it.factory || "", it.country || ""]
     })
-    rows.push({ "No.": "", "SO": "TOTAL", "STYLE": "", "CUSTOMER PO": "", "QTY AIR": claimTotals.qty,
-      "GROSS (KG)": "", "HAWB#": "", "INVOICE NO": "", [`EST. FREIGHT (${CUR})`]: claimTotals.est,
-      [`ACTUAL (${CUR})`]: claimTotals.actual, "CLAIM DEPT": "", "CLAIM %": "", [`MY EST (${CUR})`]: claimTotals.myEst, [`MY CLAIM (${CUR})`]: claimTotals.amt,
-      "REASON": "", "DETAIL": "", "PLAN DATE": "", "FACTORY": "", "COUNTRY": "" } as any)
-    const ws = XLSX.utils.json_to_sheet(rows)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Claim")
-    XLSX.writeFile(wb, `${req?.documentNo || "claim"}_${(gwFwdCanonicalDept || "claim").replace(/\s+/g, "")}.xlsx`)
+    // exceljs (not the community xlsx) so the header row can be coloured. No TOTAL row.
+    const ExcelJSMod: any = await import("exceljs")
+    const ExcelJS = ExcelJSMod.default || ExcelJSMod
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet("Claim")
+    ws.addRow(headers)
+    dataRows.forEach(row => ws.addRow(row))
+    // Header row: maroon fill + bold white text.
+    const hr = ws.getRow(1)
+    hr.eachCell((c: any) => {
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4472C4" } }  // Office blue
+      c.font = { bold: true, color: { argb: "FFFFFFFF" } }
+      c.alignment = { vertical: "middle", horizontal: "left" }
+    })
+    hr.height = 20
+    const widths = [6, 12, 14, 14, 9, 10, 12, 14, 14, 12, 16, 8, 14, 14, 30, 24, 12, 10, 14]
+    widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${req?.documentNo || "claim"}_${(gwFwdCanonicalDept || "claim").replace(/\s+/g, "")}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   // Generic Excel export of a claim-approver's SO list — works for ANY BU / approver screen
