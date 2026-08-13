@@ -10,8 +10,13 @@ import { viewableBus, requestInBu } from "@/lib/bu"
 // progress / Rejected — so you can see which department has/hasn't approved
 // across ALL documents without opening each one. Purely additive.
 
-type CellState = "approved" | "pending" | "rejected"
-type DeptAgg = { approved: number; pending: number; rejected: number; total: number }
+type CellState = "approved" | "pending" | "rejected" | "notstarted"
+type DeptAgg = { approved: number; pending: number; rejected: number; notstarted: number; total: number }
+
+// Item statuses at/after the claim stage. Before this (e.g. PASSED = still at VP SCM),
+// a claim dept is assigned but has NOT been reached yet → show it grey "Not started",
+// not amber "In progress" (which wrongly implies the dept is the current blocker).
+const CLAIM_REACHED = new Set(["PRES_PASSED", "LOG_PASSED", "CLAIM_PASSED", "PRESIDENT_PENDING", "ACCOUNTING_PENDING", "COMPLETED"])
 
 // Collapse dept variants to ONE column key: SUPPLIER sub-tags → SUPPLIER, and the
 // GW/NYG "SCM NYK"/"SCM NYG" vs plain "NYK"/"NYG" spellings → the same NYK/NYG column.
@@ -35,10 +40,19 @@ function docDeptMap(doc: any): Record<string, DeptAgg> {
     // = rejected. Otherwise fall back to the per-split claim status.
     const itemRejected = it.itemStatus === "REJECTED" || it.itemStatus === "CLAIM_REJECT_GW"
     const itemDone = it.itemStatus === "COMPLETED" || it.itemStatus === "ACCOUNTING_PENDING"
+    const reachedClaim = CLAIM_REACHED.has(it.itemStatus)
     for (const sp of getSplits(it)) {
       const dept = canonDept(sp.dept)
-      const st: CellState = itemRejected ? "rejected" : itemDone ? "approved" : claimSplitState(sp.dept, sp.status).s
-      const m = (map[dept] ||= { approved: 0, pending: 0, rejected: 0, total: 0 })
+      const base = claimSplitState(sp.dept, sp.status).s
+      // Assigned but the doc hasn't reached the claim stage yet → "notstarted" (grey), unless the
+      // split is already settled (auto-approved GW/SUPPLIER, or rejected).
+      const st: CellState = itemRejected ? "rejected"
+        : itemDone ? "approved"
+        : base === "approved" ? "approved"
+        : base === "rejected" ? "rejected"
+        : reachedClaim ? "pending"
+        : "notstarted"
+      const m = (map[dept] ||= { approved: 0, pending: 0, rejected: 0, notstarted: 0, total: 0 })
       m[st]++; m.total++
     }
   }
@@ -46,15 +60,19 @@ function docDeptMap(doc: any): Record<string, DeptAgg> {
 }
 // One dept's cell state from its tally.
 const cellStateOf = (a: DeptAgg): CellState =>
-  a.total > 0 && a.approved === a.total ? "approved" : a.pending > 0 ? "pending" : "rejected"
+  a.total > 0 && a.approved === a.total ? "approved"
+  : a.pending > 0 ? "pending"
+  : a.rejected > 0 ? "rejected"
+  : "notstarted"
 
 const CHIP: Record<CellState, string> = {
   approved: "bg-green-100 text-green-700 border-green-200",
   pending: "bg-amber-100 text-amber-700 border-amber-200",
   rejected: "bg-red-100 text-red-700 border-red-200",
+  notstarted: "bg-gray-100 text-gray-400 border-gray-200",
 }
-const DOT: Record<CellState, string> = { approved: "bg-green-500", pending: "bg-amber-500", rejected: "bg-red-500" }
-const WORD: Record<CellState, string> = { approved: "Accepted", pending: "In progress", rejected: "Rejected" }
+const DOT: Record<CellState, string> = { approved: "bg-green-500", pending: "bg-amber-500", rejected: "bg-red-500", notstarted: "bg-gray-300" }
+const WORD: Record<CellState, string> = { approved: "Accepted", pending: "In progress", rejected: "Rejected", notstarted: "Not started" }
 
 export default function ClaimStatusPage() {
   const { data: session } = useSession()
@@ -97,7 +115,9 @@ export default function ClaimStatusPage() {
     const states = Object.values(map).map(cellStateOf)
     if (states.length === 0) return status === "COMPLETED" ? "approved" : "pending"
     if (states.every(s => s === "approved")) return "approved"
-    if (states.some(s => s === "pending")) return "pending"
+    // A doc still moving upstream (notstarted) is "In progress" overall — the doc IS being processed,
+    // just not at the claim depts yet. Only reserve "rejected" for docs with an actual rejection.
+    if (states.some(s => s === "pending" || s === "notstarted")) return "pending"
     return "rejected"
   }
 
@@ -112,8 +132,14 @@ export default function ClaimStatusPage() {
     return true
   })
 
-  const tally = { approved: 0, pending: 0, rejected: 0 }
+  const tally: Record<CellState, number> = { approved: 0, pending: 0, rejected: 0, notstarted: 0 }
   rows.forEach(({ r, map }) => { tally[docStateOf(map, r.status)]++ })
+
+  // Estimate air freight (sum of each SO's airFreight) per doc + grand total of the filtered rows.
+  const CUR = activeBu === "EA" ? "USD" : "THB"
+  const fmtMoney = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 })
+  const docEstOf = (r: any) => (r.items || []).reduce((s: number, it: any) => s + (Number(it.airFreight) || 0), 0)
+  const totalEst = rows.reduce((s, { r }) => s + docEstOf(r), 0)
 
   return (
     <div className="space-y-5">
@@ -154,19 +180,20 @@ export default function ClaimStatusPage() {
           <option value="">All statuses</option>
           <option value="approved">Accepted</option>
           <option value="pending">In progress</option>
+          <option value="notstarted">Not started</option>
           <option value="rejected">Rejected</option>
         </select>
         {(q || deptF || statusF) && (
           <button onClick={() => { setQ(""); setDeptF(""); setStatusF("") }}
             className="text-xs text-gray-500 hover:text-gray-800 underline">Clear</button>
         )}
-        <span className="ml-auto text-xs text-gray-400">{rows.length} document(s)</span>
+        <span className="ml-auto text-xs text-gray-500">{rows.length} document(s) · <span className="font-semibold text-gray-700">EST {fmtMoney(totalEst)} {CUR}</span></span>
       </div>
 
       {/* Legend */}
       <div className="flex gap-4 text-[11px] text-gray-500">
-        {(["approved", "pending", "rejected"] as CellState[]).map(s => (
-          <span key={s} className="inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${DOT[s]}`} />{WORD[s]}</span>
+        {(["approved", "pending", "notstarted", "rejected"] as CellState[]).map(s => (
+          <span key={s} className="inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${DOT[s]}`} />{WORD[s]}{s === "notstarted" && " (รอขั้นก่อนหน้า)"}</span>
         ))}
         <span className="inline-flex items-center gap-1.5 text-gray-400">–  not involved</span>
       </div>
@@ -184,6 +211,7 @@ export default function ClaimStatusPage() {
                 <th className="px-4 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap">Document</th>
                 <th className="px-3 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap">Created</th>
                 <th className="px-3 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap">Overall</th>
+                <th className="px-3 py-2.5 text-right font-medium text-gray-500 whitespace-nowrap">EST. AIR FREIGHT ({CUR})</th>
                 {cols.map(d => <th key={d} className="px-3 py-2.5 text-center font-medium text-gray-500 whitespace-nowrap">{deptLabel(d)}</th>)}
               </tr>
             </thead>
@@ -201,13 +229,14 @@ export default function ClaimStatusPage() {
                         <span className={`w-1.5 h-1.5 rounded-full ${DOT[overall]}`} />{WORD[overall]}
                       </span>
                     </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700 whitespace-nowrap">{fmtMoney(docEstOf(r))}</td>
                     {cols.map(d => {
                       const a = map[d]
                       if (!a) return <td key={d} className="px-3 py-2 text-center text-gray-300">–</td>
                       const cs = cellStateOf(a)
                       return (
                         <td key={d} className="px-3 py-2 text-center">
-                          <span title={`${a.approved} accepted · ${a.pending} pending · ${a.rejected} rejected (of ${a.total})`}
+                          <span title={`${a.approved} accepted · ${a.pending} in progress · ${a.notstarted} not started · ${a.rejected} rejected (of ${a.total})`}
                             className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border font-medium ${CHIP[cs]}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${DOT[cs]}`} />
                             {cs === "approved" ? "✓" : `${a.approved}/${a.total}`}
