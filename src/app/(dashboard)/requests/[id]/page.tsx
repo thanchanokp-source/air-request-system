@@ -7369,7 +7369,7 @@ export default function RequestDetailPage() {
           <div className="overflow-x-auto">
             <table className="text-xs w-full">
               <thead className="bg-gray-50 border-b">
-                <tr>{([["STYLE","min-w-[110px]"],["SO","min-w-[90px]"],["CUSTOMER PO","min-w-[110px]"],["DESCRIPTION","min-w-[160px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],["QTY ORIG","min-w-[75px]"],["QTY AIR","min-w-[70px]"],["GROSS WEIGHT (KG)","min-w-[110px]"],[`EST. AIR FREIGHT (${CUR})`,"min-w-[120px]"],[`ACTUAL AIR FREIGHT (${CUR})`,"min-w-[130px]"],["CLAIM DEPT","min-w-[110px]"],["FACTORY","min-w-[70px]"],["COUNTRY","min-w-[110px]"],["STATUS","min-w-[110px]"]] as [string,string][]).map(([h,w]) =>
+                <tr>{([["STYLE","min-w-[110px]"],["SO","min-w-[90px]"],["CUSTOMER PO","min-w-[110px]"],["DESCRIPTION","min-w-[160px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],["QTY ORIG","min-w-[75px]"],["QTY AIR","min-w-[70px]"],["GROSS WEIGHT (KG)","min-w-[110px]"],[`EST. AIR FREIGHT (${CUR})`,"min-w-[120px]"],[`ACTUAL AIR FREIGHT (${CUR})`,"min-w-[130px]"],["CLAIM DEPT","min-w-[110px]"],["FACTORY","min-w-[70px]"],["COUNTRY","min-w-[110px]"]] as [string,string][]).map(([h,w]) =>
                   <th key={h} className={`px-2 py-2 text-left text-gray-600 whitespace-nowrap ${w}`}>{h}</th>)}
                 </tr>
               </thead>
@@ -7385,26 +7385,6 @@ export default function RequestDetailPage() {
                           : item[f] ?? "-"}
                       </td>
                     ))}
-                    <td className="px-2 py-1.5">
-                      {(() => {
-                        const pendingLabel = isGWRequest
-                          ? (req.status === "PENDING_PRESIDENT_GW" ? "President GW" : "DPM GW")
-                          : "VP Merchandise"
-                        const SD: Record<string, [string, string]> = {
-                          PENDING: [pendingLabel, "bg-yellow-100 text-yellow-700"],
-                          VP_MER_PASSED: ["SCM", "bg-blue-100 text-blue-700"],
-                          PASSED: ["VP SCM", "bg-indigo-100 text-indigo-700"],
-                          VP_PASSED: ["President", "bg-purple-100 text-purple-700"],
-                          PRES_PASSED: ["Logistics", "bg-cyan-100 text-cyan-700"],
-                          LOG_PASSED: ["Claim", "bg-teal-100 text-teal-700"],
-                          CLAIM_PASSED: ["VP Claim", "bg-violet-100 text-violet-700"],
-                          COMPLETED: ["Done", "bg-green-100 text-green-700"],
-                          REJECTED: ["Rejected", "bg-red-100 text-red-700"],
-                        }
-                        const [label, cls] = SD[item.itemStatus] || ["Pending", "bg-yellow-100 text-yellow-700"]
-                        return <span className={`text-xs px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${cls}`}>{label}</span>
-                      })()}
-                    </td>
                   </tr>
                 ))}
               </tbody>
