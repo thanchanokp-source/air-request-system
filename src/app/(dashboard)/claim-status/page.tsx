@@ -135,10 +135,15 @@ export default function ClaimStatusPage() {
   const tally: Record<CellState, number> = { approved: 0, pending: 0, rejected: 0, notstarted: 0 }
   rows.forEach(({ r, map }) => { tally[docStateOf(map, r.status)]++ })
 
-  // Estimate air freight (sum of each SO's airFreight) per doc + grand total of the filtered rows.
+  // Estimate air freight + grand total of the filtered rows. When a department is filtered, show
+  // only THAT dept's claim portion (Σ item.airFreight × dept%); otherwise the whole-doc EST.
   const CUR = activeBu === "EA" ? "USD" : "THB"
   const fmtMoney = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 })
-  const docEstOf = (r: any) => (r.items || []).reduce((s: number, it: any) => s + (Number(it.airFreight) || 0), 0)
+  const docEstOf = (r: any) => (r.items || []).reduce((s: number, it: any) => {
+    if (!deptF) return s + (Number(it.airFreight) || 0)
+    const sp = getSplits(it).find((x: any) => canonDept(x.dept) === deptF)
+    return s + (Number(it.airFreight) || 0) * (sp ? (Number(sp.pct) || 0) / 100 : 0)
+  }, 0)
   const totalEst = rows.reduce((s, { r }) => s + docEstOf(r), 0)
 
   return (
@@ -211,7 +216,7 @@ export default function ClaimStatusPage() {
                 <th className="px-4 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap">Document</th>
                 <th className="px-3 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap">Created</th>
                 <th className="px-3 py-2.5 text-left font-medium text-gray-500 whitespace-nowrap">Overall</th>
-                <th className="px-3 py-2.5 text-right font-medium text-gray-500 whitespace-nowrap">EST. AIR FREIGHT ({CUR})</th>
+                <th className="px-3 py-2.5 text-right font-medium text-gray-500 whitespace-nowrap">EST. AIR FREIGHT{deptF ? ` · ${deptLabel(deptF)}` : ""} ({CUR})</th>
                 {cols.map(d => <th key={d} className="px-3 py-2.5 text-center font-medium text-gray-500 whitespace-nowrap">{deptLabel(d)}</th>)}
               </tr>
             </thead>
