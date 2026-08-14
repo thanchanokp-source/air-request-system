@@ -262,6 +262,7 @@ model AirRequestItem {
   assignedDvm          String?
   claimPercentage      Float?
   qtyActualShip        Int?
+  shipmentGroupId      String?          // split shipments of one SO share this → plan totals count the group once
   request              AirRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
   hawbGroup            HawbGroup?      @relation(fields: [hawbGroupId], references: [id], onDelete: SetNull)
   claimApprovals       ClaimApproval[]

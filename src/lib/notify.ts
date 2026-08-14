@@ -685,7 +685,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
       if (lgEmails.length) {
         const t = (req as any).logisticsToken
-        const ml = t ? `${APP_URL}/api/magic-login?token=${t}&redirect=/approvals` : undefined
+        const ml = t ? `${APP_URL}/api/magic-login?token=${t}&redirect=/logistics` : undefined
         await sendMail(lgEmails, `[Logistics – GW] GM Approved — Please prepare Booking — ${req.documentNo}`, buildHtml(req, newStatus, link, undefined, undefined, ml))
       }
       // 2) Claim departments are notified by the PENDING_CLAIM_GW block (the GM-approve flow
@@ -720,7 +720,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const link = `${APP_URL}/requests/${requestId}`
       const lgToken = (req as any).logisticsToken
       const acToken = (req as any).accountingToken
-      const lgMagicLink = lgToken ? `${APP_URL}/api/magic-login?token=${lgToken}&redirect=/approvals` : undefined
+      const lgMagicLink = lgToken ? `${APP_URL}/api/magic-login?token=${lgToken}&redirect=/logistics` : undefined
       const acMagicLink = acToken ? `${APP_URL}/api/magic-login?token=${acToken}&redirect=/approvals` : undefined
       const lgHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, lgMagicLink)
       const acHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, acMagicLink)
@@ -942,7 +942,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
           : { isActive: true, role: "LOGISTICS", bu: { in: [(req as any).bu || "NYG", "ALL"] } }) as any, select: { id: true, email: true } })
         for (const u of lgUsers) {
           if (!u.email) continue
-          const html = buildHtml(req, "PENDING_LOGISTICS", docLink, undefined, undefined, await magicFor(u.id))
+          const html = buildHtml(req, "PENDING_LOGISTICS", docLink, undefined, undefined, await magicLoginFor(u.id, "/logistics"))
           await sendMail(u.email, `[Logistics] Ready for HAWB / Actual (parallel with Claim) — ${req.documentNo}`, html)
         }
       }

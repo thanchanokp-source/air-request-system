@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
-import { getSplits, deptLabel, claimSplitState } from "@/lib/claim"
+import { getSplits, deptLabel, claimSplitState, sumPlanField } from "@/lib/claim"
 import { viewableBus, requestInBu } from "@/lib/bu"
 
 // Cross-document CLAIM STATUS overview (Option B). Read-only matrix: one row per
@@ -139,10 +139,10 @@ export default function ClaimStatusPage() {
   // only THAT dept's claim portion (Σ item.airFreight × dept%); otherwise the whole-doc EST.
   const fmtMoney = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 })
   // A department's claim portion of a doc's EST air freight: Σ item.airFreight × dept%.
-  const deptEstOf = (r: any, dept: string) => (r.items || []).reduce((s: number, it: any) => {
+  const deptEstOf = (r: any, dept: string) => sumPlanField(r.items || [], (it: any) => {
     const sp = getSplits(it).find((x: any) => canonDept(x.dept) === dept)
-    return s + (Number(it.airFreight) || 0) * (sp ? (Number(sp.pct) || 0) / 100 : 0)
-  }, 0)
+    return (Number(it.airFreight) || 0) * (sp ? (Number(sp.pct) || 0) / 100 : 0)
+  })
 
   return (
     <div className="space-y-5">

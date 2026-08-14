@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=invalid-token", req.url))
   }
 
-  const finalRedirect = byLoginToken ? (redirectTo || "/dashboard") : byLgFwd ? `/requests/${byLgFwd.id}` : byClaimNext || byClaimFwd ? (byClaimFwd ? `/requests/${byClaimFwd.requestId}` : redirectTo) : "/approvals"
+  const finalRedirect = byLoginToken ? (redirectTo || "/dashboard") : byLgFwd ? `/requests/${byLgFwd.id}` : byLogistics ? "/logistics" : byClaimNext || byClaimFwd ? (byClaimFwd ? `/requests/${byClaimFwd.requestId}` : redirectTo) : "/approvals"
 
   // Hand off to client-side page which calls signIn() via NextAuth
   const magicAuthUrl = new URL("/magic-auth", req.url)

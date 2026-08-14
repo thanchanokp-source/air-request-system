@@ -3,11 +3,13 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
-// Split ONE SO (item) into several shipments — used when a container is full and the SO must ship in
-// more than one lot, each with its OWN Invoice No + HAWB# + qty. Shipment #1 REUSES the original item;
-// the rest are NEW items that INHERIT the parent's claim data (claimDepts / claimDepartment /
-// claimPercentage) and all descriptive fields, so the claim approval routing is unchanged — the new
-// shipments belong to the same claim department(s) and carry the same approved status.
+// Reconcile ONE SO into shipment lines (split by INV). Each shipment = 1 Invoice No + HAWB# + its own
+// shipped qty (qtyActualShip). Called by the LG split-template import, per (document, SO).
+//
+// Model: every shipment row COPIES the SO's full plan (qtyRequestAir / orig / EST / gross) + claim
+// (claimDepts / dept / % / status) so the plan stays visible when filtering by any INV and the claim
+// routing is unaffected. All shipments of the SO share `shipmentGroupId` → plan TOTALS count the group
+// once (no double). Idempotent: re-import matches by SO + INV, so it updates instead of duplicating.
 const LG_ROLES = ["LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "LOGISTICS_SUB"]
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -21,69 +23,53 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params
   const body = await req.json().catch(() => ({}))
-  const itemId: string = body.itemId
-  const shipments: { qty: number; invoiceNo?: string; hawbNo?: string }[] = Array.isArray(body.shipments) ? body.shipments : []
-  if (!itemId || shipments.length < 2) {
-    return NextResponse.json({ error: "Provide an itemId and at least 2 shipments" }, { status: 400 })
-  }
+  const so: string = String(body.so || "").trim()
+  const sub: string = String(body.sub ?? "").trim()
+  const shipments: { invoiceNo?: string; hawbNo?: string; qtyShip?: any }[] = Array.isArray(body.shipments) ? body.shipments : []
+  if (!so || shipments.length === 0) return NextResponse.json({ error: "Provide SO + shipments" }, { status: 400 })
 
-  const parent = await prisma.airRequestItem.findUnique({ where: { id: itemId } })
-  if (!parent || parent.requestId !== id) return NextResponse.json({ error: "SO not found in this document" }, { status: 404 })
+  const existing = await prisma.airRequestItem.findMany({ where: { requestId: id, so } })
+  const scoped = sub ? existing.filter(i => (i.sub || "") === sub) : existing
+  const template = scoped[0]
+  if (!template) return NextResponse.json({ error: `SO ${so} not found in this document` }, { status: 404 })
+  const groupId = template.id
 
-  const qtys = shipments.map(s => Math.round(Number(s.qty) || 0))
-  if (qtys.some(q => q <= 0)) return NextResponse.json({ error: "Every shipment needs a qty > 0" }, { status: 400 })
-  const sumQty = qtys.reduce((a, b) => a + b, 0)
-  const origQty = parent.qtyRequestAir || sumQty
-  // Split EST air freight + gross weight proportionally by qty share; actual comes later from the HAWB.
-  const est = Number(parent.airFreight) || 0
-  const gross = Number(parent.grossWeight) || 0
-  const share = (q: number, total: number) => (origQty > 0 ? Math.round((total * q / origQty) * 100) / 100 : 0)
-
-  const shipAt = (i: number) => ({
-    qtyRequestAir: qtys[i],
-    invoiceNo: shipments[i].invoiceNo?.trim() || null,
-    hawbNo: shipments[i].hawbNo?.trim() || null,
-    airFreight: share(qtys[i], est),
-    grossWeight: share(qtys[i], gross),
-    actualAirFreight: null,
+  // Fields copied onto every new shipment row (plan + claim inherited verbatim).
+  const inherit = (t: any) => ({
+    requestId: t.requestId, style: t.style, so: t.so, brand: t.brand, sub: t.sub, customerPO: t.customerPO,
+    description: t.description, gmtType: t.gmtType, originalShipmentDate: t.originalShipmentDate,
+    planShipmentDate: t.planShipmentDate, qtyOriginalShipment: t.qtyOriginalShipment, qtyRequestAir: t.qtyRequestAir,
+    airFreight: t.airFreight, grossWeight: t.grossWeight, reasonDelay: t.reasonDelay, factory: t.factory,
+    country: t.country, port: t.port, marketRatePerKg: t.marketRatePerKg, itemStatus: t.itemStatus,
+    itemComment: t.itemComment, assignedDvm: t.assignedDvm, claimDepartment: t.claimDepartment,
+    claimDepts: t.claimDepts as any, claimPercentage: t.claimPercentage,
   })
+
+  const isGroup = shipments.length > 1
+  let created = 0, updated = 0
+  const unmatched = [...scoped]
 
   await prisma.$transaction(async (tx) => {
-    // Shipment #1 reuses the original row.
-    await tx.airRequestItem.update({ where: { id: parent.id }, data: shipAt(0) as any })
-    // Shipments #2..N — new rows copying the parent (claim + descriptive fields inherited verbatim).
-    for (let i = 1; i < shipments.length; i++) {
-      await tx.airRequestItem.create({
-        data: {
-          requestId: parent.requestId,
-          style: parent.style,
-          so: parent.so,
-          brand: parent.brand,
-          sub: parent.sub,
-          customerPO: parent.customerPO,
-          description: parent.description,
-          gmtType: parent.gmtType,
-          originalShipmentDate: parent.originalShipmentDate,
-          planShipmentDate: parent.planShipmentDate,
-          qtyOriginalShipment: parent.qtyOriginalShipment,
-          reasonDelay: parent.reasonDelay,
-          factory: parent.factory,
-          country: parent.country,
-          port: parent.port,
-          marketRatePerKg: parent.marketRatePerKg,
-          itemStatus: parent.itemStatus,
-          itemComment: parent.itemComment,
-          assignedDvm: parent.assignedDvm,
-          // Claim inherited verbatim → same dept(s)/%/status → approval routing unaffected.
-          claimDepartment: parent.claimDepartment,
-          claimDepts: parent.claimDepts as any,
-          claimPercentage: parent.claimPercentage,
-          ...shipAt(i),
-        } as any,
-      })
+    for (const s of shipments) {
+      const inv = String(s.invoiceNo || "").trim() || null
+      const hawb = String(s.hawbNo || "").trim() || null
+      const qtyShip = Math.round(Number(s.qtyShip) || 0) || null
+      // Match an existing row by INV; else reuse a still-un-invoiced existing row; else create.
+      let match = inv ? unmatched.find(i => (i.invoiceNo || "") === inv) : undefined
+      if (!match) match = unmatched.find(i => !i.invoiceNo)
+      const data = { invoiceNo: inv, hawbNo: hawb, qtyActualShip: qtyShip, shipmentGroupId: isGroup ? groupId : (unmatched.length ? null : null) }
+      if (match) {
+        await tx.airRequestItem.update({ where: { id: match.id }, data: data as any })
+        unmatched.splice(unmatched.indexOf(match), 1)
+        updated++
+      } else {
+        await tx.airRequestItem.create({ data: { ...inherit(template), ...data } as any })
+        created++
+      }
     }
+    // Ensure the group marker is on ALL of this SO's shipment rows (so plan totals dedupe correctly).
+    if (isGroup) await tx.airRequestItem.updateMany({ where: { requestId: id, so, ...(sub ? { sub } : {}) }, data: { shipmentGroupId: groupId } })
   })
 
-  const items = await prisma.airRequestItem.findMany({ where: { requestId: id, so: parent.so }, select: { id: true } })
-  return NextResponse.json({ ok: true, so: parent.so, shipments: items.length })
+  return NextResponse.json({ ok: true, so, created, updated })
 }

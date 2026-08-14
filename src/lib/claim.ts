@@ -76,6 +76,21 @@ export function claimDeptText(item: any): string {
   return getSplits(item).map(s => `${deptLabel(s.dept)} ${s.pct}%`).join(", ")
 }
 
+// Sum a per-SO PLAN field (QTY Air, EST air freight, gross, QTY Orig) counting each split-shipment
+// group ONCE. Split shipments copy the plan onto every INV row and share `shipmentGroupId`; real
+// multi-line SOs have no group → counted individually. Use this for any TOTAL of a plan-based field
+// so split rows don't double it. (ACTUAL freight / qtyActualShip are per-shipment → sum normally.)
+export function sumPlanField(items: any[], get: (it: any) => number | null | undefined): number {
+  const seen = new Set<string>()
+  let total = 0
+  for (const it of items || []) {
+    const g = it?.shipmentGroupId
+    if (g) { if (seen.has(g)) continue; seen.add(g) }
+    total += Number(get(it)) || 0
+  }
+  return total
+}
+
 // Air cost allocated to a split = (actual or estimated freight) × pct / 100.
 export function splitAirCost(item: any, split: ClaimSplit): number {
   const total = item?.actualAirFreight ?? item?.airFreight ?? 0

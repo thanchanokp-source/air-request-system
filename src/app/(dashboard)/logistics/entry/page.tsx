@@ -33,30 +33,10 @@ export default function LgEntryPage() {
   const [lgSelectedSoIds, setLgSelectedSoIds] = useState<Set<string>>(new Set())
   const [prefilled, setPrefilled] = useState(false)
 
-  // Split-shipment modal (1 SO → many shipments, each own INV + HAWB + qty)
-  const [splitItem, setSplitItem] = useState<any>(null)
-  const [splitRows, setSplitRows] = useState<{ qty: string; inv: string; hawb: string }[]>([])
-  const [splitSaving, setSplitSaving] = useState(false)
-  const openSplit = (it: any) => {
-    setSplitItem(it)
-    setSplitRows([{ qty: String(it.qtyRequestAir || ""), inv: it.invoiceNo || "", hawb: it.hawbNo || "" }, { qty: "", inv: "", hawb: "" }])
-  }
-  const submitSplit = async () => {
-    if (!splitItem) return
-    const shipments = splitRows.map(r => ({ qty: Number(r.qty) || 0, invoiceNo: r.inv.trim(), hawbNo: r.hawb.trim() })).filter(s => s.qty > 0)
-    if (shipments.length < 2) { alert("ต้องมีอย่างน้อย 2 shipment (qty > 0)"); return }
-    const sum = shipments.reduce((a, s) => a + s.qty, 0)
-    const orig = splitItem.qtyRequestAir || sum
-    if (sum !== orig && !confirm(`ผลรวม qty (${sum}) ไม่เท่า QTY Air เดิม (${orig}) — ยืนยันแยกต่อ?`)) return
-    setSplitSaving(true)
-    const res = await fetch(`/api/requests/${splitItem.request.id}/split-shipment`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemId: splitItem.id, shipments }),
-    })
-    setSplitSaving(false)
-    if (res.ok) { setSplitItem(null); window.location.reload() }
-    else { const e = await res.json().catch(() => ({})); alert(e.error || "แยก shipment ไม่สำเร็จ") }
-  }
+  // Split by INV: how many INV / shipment lines each SO exports as (default 1). LG sets this per SO,
+  // then Export duplicates that SO into N blank lines to fill (INV / HAWB / qty ship) and re-import.
+  const [splitCount, setSplitCount] = useState<Record<string, number>>({})
+  const invCount = (it: any) => Math.max(1, Math.min(20, splitCount[it.id] || 1))
 
   // Forward
   const [fwOpen, setFwOpen] = useState(false)
@@ -117,10 +97,12 @@ export default function LgEntryPage() {
     setPrefilled(true)
   }, [allLgItems, prefilled])
 
+  // The "qty this lot ships" — a split shipment uses its own actual-ship qty (qtyActualShip); a normal
+  // SO uses the planned air qty. (Split copies carry qtyRequestAir = 0, so fall back to qtyActualShip.)
   const liveQty = (item: any): number => {
     const typed = soShipData[item.id]?.qty
     if (typed != null && String(typed).trim() !== "") { const n = Number(String(typed).replace(/,/g, "")); if (!isNaN(n)) return n }
-    return Number(item.qtyRequestAir) || 0
+    return Number(item.qtyActualShip ?? item.qtyRequestAir) || 0
   }
   const getHawbCalc = (group: { totalCost: string; invNos: string[] }) => {
     const items = allLgItems.filter((i: any) => group.invNos.includes(soInvMap[i.id]))
@@ -242,6 +224,8 @@ export default function LgEntryPage() {
     ws.views = [{ state: "frozen", ySplit: 1 }]
 
     allLgItems.forEach((item: any) => {
+      const n = invCount(item)
+      const split = n > 1
       const invNo = soInvMap[item.id] || ""
       const hawbGrp = hawbGroups.find(g => invNo && g.invNos.includes(invNo))
       const hawbNo = hawbGrp?.hawbNo || ""
@@ -253,15 +237,26 @@ export default function LgEntryPage() {
       // Delay reason = Delay Code + its Detail (both surfaced in the REASON column).
       const reason = (x: any) => [x?.reason, x?.reasonDetail].filter(Boolean).join(" - ")
       const isGW = (item.request.bu === "GW")
-      const baseRow = [
-        item.request.documentNo, item.request.brandName || "", isGW ? "GW" : (item.request.bu || "NYG"),
-        item.style || "", item.so || "", item.sub || "", item.customerPO || "", item.description || "", item.grossWeight ?? "",
-        fmtD(item.originalShipmentDate), fmtD(item.planShipmentDate), item.qtyOriginalShipment ?? item.qtyRequestAir ?? "", item.qtyRequestAir ?? "",
-        item.factory || "", item.country || "",
-      ]
-      ws.addRow(isGwExport
-        ? [...baseRow, invNo, total, hawbNo, dept(d[0]), d[0]?.pct ?? "", reason(d[0]), dept(d[1]), d[1]?.pct ?? "", reason(d[1]), dept(d[2]), d[2]?.pct ?? "", reason(d[2])]
-        : [...baseRow, invNo, hawbNo, total, dept(d[0]), d[0]?.pct ?? "", deptAmt(d[0]?.pct), reason(d[0]), dept(d[1]), d[1]?.pct ?? "", deptAmt(d[1]?.pct), reason(d[1]), dept(d[2]), d[2]?.pct ?? "", deptAmt(d[2]?.pct), reason(d[2])])
+      // Claim block is copied onto every split row (all shipments of an SO share the same claim).
+      const claimCols = isGwExport
+        ? [dept(d[0]), d[0]?.pct ?? "", reason(d[0]), dept(d[1]), d[1]?.pct ?? "", reason(d[1]), dept(d[2]), d[2]?.pct ?? "", reason(d[2])]
+        : [dept(d[0]), d[0]?.pct ?? "", deptAmt(d[0]?.pct), reason(d[0]), dept(d[1]), d[1]?.pct ?? "", deptAmt(d[1]?.pct), reason(d[1]), dept(d[2]), d[2]?.pct ?? "", deptAmt(d[2]?.pct), reason(d[2])]
+      for (let k = 0; k < n; k++) {
+        // Split (>1 INV): leave INV / HAWB / EXPENSE + "QTY Request ship Air" (= qty ship per INV) BLANK
+        // for LG to fill each line. "QTY Original Shipment" (= plan) is copied onto every row so the plan
+        // stays visible when filtering by any INV. Not split → keep the current INV/HAWB/qty.
+        const shipQty = split ? "" : (Number(liveQty(item)) || item.qtyRequestAir || "")
+        const rInv = split ? "" : invNo
+        const rHawb = split ? "" : hawbNo
+        const rTot = split ? "" : total
+        const baseRow = [
+          item.request.documentNo, item.request.brandName || "", isGW ? "GW" : (item.request.bu || "NYG"),
+          item.style || "", item.so || "", item.sub || "", item.customerPO || "", item.description || "", item.grossWeight ?? "",
+          fmtD(item.originalShipmentDate), fmtD(item.planShipmentDate), item.qtyOriginalShipment ?? item.qtyRequestAir ?? "", shipQty,
+          item.factory || "", item.country || "",
+        ]
+        ws.addRow(isGwExport ? [...baseRow, rInv, rTot, rHawb, ...claimCols] : [...baseRow, rInv, rHawb, rTot, ...claimCols])
+      }
     })
 
     const buf = await wb.xlsx.writeBuffer()
@@ -276,19 +271,51 @@ export default function LgEntryPage() {
     const XLSX = await import("xlsx")
     const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" }) as any[]
+    // Parse rows → group by (document, SO, SUB). A SO with >1 row = split into multiple INV/shipments.
+    const parsed = rows.map(row => ({
+      docNo: String(row["No_Document"] || "").trim(),
+      so: String(row["SO"] || row["SO No."] || "").trim(),
+      sub: String(row["SUB"] || "").trim(),
+      inv: String(row["INV NO."] || row["Invoice No"] || "").trim(),
+      hawb: String(row["HAWB#"] || "").trim(),
+      cost: String(row["EXPENSE/HAWB"] || row["Actual Airfreight"] || row["Total HAWB#"] || row["HAWB Total Cost (THB)"] || "").trim(),
+      qtyShip: String(row["QTY Request ship Air (pcs)"] || "").trim(),
+    })).filter(r => r.so)
+    const groups: Record<string, typeof parsed> = {}
+    for (const r of parsed) { const k = `${r.docNo}|${r.so}|${r.sub}`; (groups[k] ||= []).push(r) }
+    const splitGroups = Object.values(groups).filter(g => g.length > 1)
+
+    // Any split SO → reconcile ALL SO groups server-side (create/update shipment rows), then reload so
+    // the new shipments appear (INV/HAWB reconstruct in section ④; LG confirms HAWB cost → Save).
+    if (splitGroups.length > 0) {
+      setSaving(true)
+      let ok = 0, fail = 0
+      for (const g of Object.values(groups)) {
+        const soNo = g[0].so, subNo = g[0].sub, docNo = g[0].docNo
+        const item = allLgItems.find((i: any) => i.so === soNo && (i.sub || "") === subNo && (!docNo || i.request.documentNo === docNo))
+        if (!item) { fail++; continue }
+        const shipments = g.map(r => ({ invoiceNo: r.inv, hawbNo: r.hawb, qtyShip: Number(String(r.qtyShip).replace(/,/g, "")) || 0 }))
+        const res = await fetch(`/api/requests/${item.request.id}/split-shipment`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ so: soNo, sub: subNo, shipments }),
+        })
+        res.ok ? ok++ : fail++
+      }
+      setSaving(false)
+      alert(`Import (split): จัดการ ${ok} SO${fail ? ` · ล้มเหลว ${fail}` : ""} · กำลังโหลดใหม่…`)
+      window.location.reload()
+      return
+    }
+
+    // No split → original single-row behaviour (fill INV + rebuild HAWB groups in state).
     const updates: Record<string, string> = {}
     const hawbMap: Record<string, { hawbNo: string; invNos: Set<string>; totalCost: string }> = {}
-    rows.forEach(row => {
-      const soNo = String(row["SO"] || row["SO No."] || "").trim()
-      const subNo = String(row["SUB"] || "").trim()
-      const inv = String(row["INV NO."] || row["Invoice No"] || "").trim()
-      const hawbNo = String(row["HAWB#"] || "").trim()
-      const hawbCost = String(row["EXPENSE/HAWB"] || row["Actual Airfreight"] || row["Total HAWB#"] || row["HAWB Total Cost (THB)"] || "").trim()
-      if (!soNo || !inv) return
-      const found = allLgItems.find((i: any) => i.so === soNo && (i.sub || "") === subNo)
-      if (found) updates[found.id] = inv
-      if (hawbNo && inv) { if (!hawbMap[hawbNo]) hawbMap[hawbNo] = { hawbNo, invNos: new Set(), totalCost: hawbCost }; hawbMap[hawbNo].invNos.add(inv) }
-    })
+    for (const r of parsed) {
+      if (!r.inv) continue
+      const found = allLgItems.find((i: any) => i.so === r.so && (i.sub || "") === r.sub)
+      if (found) updates[found.id] = r.inv
+      if (r.hawb && r.inv) { if (!hawbMap[r.hawb]) hawbMap[r.hawb] = { hawbNo: r.hawb, invNos: new Set(), totalCost: r.cost }; hawbMap[r.hawb].invNos.add(r.inv) }
+    }
     if (Object.keys(updates).length > 0) setSoInvMap(p => ({ ...p, ...updates }))
     if (Object.keys(hawbMap).length > 0) setHawbGroups(Object.values(hawbMap).map(h => ({ id: Math.random().toString(36).slice(2), hawbNo: h.hawbNo, bookingDate: "", totalCost: h.totalCost, invNos: [...h.invNos] })))
     alert(`Import: updated INV for ${Object.keys(updates).length} SO · ${Object.keys(hawbMap).length} HAWB group(s)`)
@@ -402,7 +429,7 @@ export default function LgEntryPage() {
               <table className="w-full text-xs">
                 <thead className="bg-gray-50"><tr>
                   <th className="px-2 py-1 text-left">DOC</th><th className="px-2 py-1 text-left">SO</th><th className="px-2 py-1 text-left">SUB</th><th className="px-2 py-1 text-left">STYLE</th><th className="px-2 py-1 text-left">BRAND</th>
-                  <th className="px-2 py-1 text-right">QTY Air</th><th className="px-2 py-1 text-left">Plan Ship Date</th><th className="px-2 py-1 text-center">Split</th>
+                  <th className="px-2 py-1 text-right">QTY Air</th><th className="px-2 py-1 text-left">Plan Ship Date</th><th className="px-2 py-1 text-center"># INV</th>
                 </tr></thead>
                 <tbody>
                   {allLgItems.map((it: any) => {
@@ -430,8 +457,10 @@ export default function LgEntryPage() {
                           })()}
                         </td>
                         <td className="px-2 py-1 text-center">
-                          <button type="button" onClick={() => openSplit(it)} title="แยกเป็นหลาย shipment (คนละ INV/HAWB)"
-                            className="text-[11px] px-2 py-1 rounded border border-purple-300 text-purple-700 hover:bg-purple-50 whitespace-nowrap">✂ Split</button>
+                          <input type="number" min={1} max={20} value={splitCount[it.id] || 1}
+                            onChange={e => setSplitCount(p => ({ ...p, [it.id]: Math.max(1, Math.min(20, Number(e.target.value) || 1)) }))}
+                            title="จำนวน INV / เที่ยว ที่จะแตกตอน Export (1 = ไม่ split)"
+                            className={`w-14 border rounded px-1.5 py-1 text-center ${(splitCount[it.id] || 1) > 1 ? "border-purple-400 bg-purple-50 font-semibold text-purple-700" : "border-gray-300"}`} />
                         </td>
                       </tr>
                     )
@@ -440,39 +469,6 @@ export default function LgEntryPage() {
               </table>
             </div>
           </div>
-
-          {/* Split shipment modal */}
-          {splitItem && (
-            <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => !splitSaving && setSplitItem(null)}>
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-4 space-y-3" onClick={e => e.stopPropagation()}>
-                <div>
-                  <h2 className="font-bold text-gray-900">✂ Split shipment</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">SO {splitItem.so} · QTY Air เดิม {splitItem.qtyRequestAir?.toLocaleString?.() ?? splitItem.qtyRequestAir} · แยกเป็นหลายเที่ยว แต่ละเที่ยวคนละ INV + HAWB (claim สืบทอดอัตโนมัติ)</p>
-                </div>
-                <div className="space-y-2">
-                  <div className="grid grid-cols-[80px_1fr_1fr_28px] gap-2 text-[10px] font-semibold text-gray-500 px-1">
-                    <span>QTY</span><span>INV NO.</span><span>HAWB#</span><span></span>
-                  </div>
-                  {splitRows.map((r, i) => (
-                    <div key={i} className="grid grid-cols-[80px_1fr_1fr_28px] gap-2 items-center">
-                      <input type="number" min="0" value={r.qty} placeholder="qty" onChange={e => setSplitRows(p => p.map((x, k) => k === i ? { ...x, qty: e.target.value } : x))} className="border border-gray-300 rounded px-2 py-1 text-xs text-right" />
-                      <input value={r.inv} placeholder="INV" onChange={e => setSplitRows(p => p.map((x, k) => k === i ? { ...x, inv: e.target.value } : x))} className="border border-gray-300 rounded px-2 py-1 text-xs" />
-                      <input value={r.hawb} placeholder="HAWB#" onChange={e => setSplitRows(p => p.map((x, k) => k === i ? { ...x, hawb: e.target.value } : x))} className="border border-gray-300 rounded px-2 py-1 text-xs" />
-                      <button type="button" disabled={splitRows.length <= 2} onClick={() => setSplitRows(p => p.filter((_, k) => k !== i))} className="text-red-400 hover:text-red-600 disabled:opacity-30 text-sm">✕</button>
-                    </div>
-                  ))}
-                  <button type="button" onClick={() => setSplitRows(p => [...p, { qty: "", inv: "", hawb: "" }])} className="text-xs text-blue-600 hover:underline">＋ เพิ่ม shipment</button>
-                  {(() => { const sum = splitRows.reduce((a, r) => a + (Number(r.qty) || 0), 0); const orig = splitItem.qtyRequestAir || 0; return (
-                    <p className={`text-xs ${sum === orig ? "text-green-600" : "text-amber-600"}`}>รวม {sum.toLocaleString()} / เดิม {orig.toLocaleString()} {sum === orig ? "✓" : "⚠ ไม่เท่ากัน"}</p>
-                  ) })()}
-                </div>
-                <div className="flex justify-end gap-2 pt-1">
-                  <button type="button" onClick={() => setSplitItem(null)} disabled={splitSaving} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-sm">ยกเลิก</button>
-                  <button type="button" onClick={submitSplit} disabled={splitSaving} className="px-4 py-1.5 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-50">{splitSaving ? "กำลังแยก…" : "แยก shipment"}</button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ② Attach files — one attach, applied to every selected document (OPTIONAL) */}
           {(() => {

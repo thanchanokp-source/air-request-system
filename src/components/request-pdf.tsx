@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, Image, StyleSheet, Font } from "@react-pdf/renderer"
-import { getSplits, deptLabel, chainFor } from "@/lib/claim"
+import { getSplits, deptLabel, chainFor, sumPlanField } from "@/lib/claim"
 import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 
 // Thai-capable font (Sarabun) so Thai text (reasons, names, remarks) renders.
@@ -421,8 +421,9 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
     const sp = getSplits(item)
     return sp.length ? sp.map((x: any) => `${x.dept} ${x.pct}%`).join(", ") : ((isGW ? req.claimDepartment : item.claimDepartment) || "-")
   }
-  const totQty = rows.reduce((n, i) => n + (Number(i.qtyRequestAir) || 0), 0)
-  const totGross = rows.reduce((n, i) => n + (Number(i.grossWeight) || 0), 0)
+  // Plan totals count each split-shipment group once (split rows copy the plan → would double).
+  const totQty = sumPlanField(rows, i => i.qtyRequestAir)
+  const totGross = sumPlanField(rows, i => i.grossWeight)
   const anyActual = rows.some(i => i.actualAirFreight != null)
   // Claim split by department (across all SO): amount = (Actual, else Est) × claim %.
   // Sum the RAW (un-rounded) shares first, then round ONCE per dept — otherwise
