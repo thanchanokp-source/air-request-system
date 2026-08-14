@@ -504,10 +504,14 @@ function LogisticsCostBar({ rows, cur="THB" }: { rows:any[]; cur?:string }) {
   const data = useMemo(()=>{
     const m:Record<string,{cost:number;qty:number;soCount:number}>={}
     rows.forEach(r=>{
+      // Cost/Pcs must divide realized cost by the qty that actually shipped — so
+      // both numerator and denominator count ONLY shipped rows (actualAirFreight set).
+      // Projection rows (no actual yet) inflated the qty and understated Cost/Pcs.
+      if(r.actualAirFreight==null) return
       const k=soBrand(r)
       if(!m[k])m[k]={cost:0,qty:0,soCount:0}
       m[k].cost+=r.actualAirFreight||0
-      m[k].qty+=Number(r.qtyRequestAir)||0
+      m[k].qty+=Number(r.qtyActualShip??r.qtyRequestAir)||0
       m[k].soCount++
     })
     return Object.entries(m)
