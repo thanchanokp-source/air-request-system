@@ -1,5 +1,5 @@
 "use client"
-import { signIn } from "next-auth/react"
+import { signIn, getSession } from "next-auth/react"
 import { useState, Suspense, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
@@ -61,7 +61,14 @@ function LoginForm() {
     setError("")
     const res = await signIn("credentials", { email, password, redirect: false })
     setLoading(false)
-    if (res?.ok) { rememberEmail(email); router.push("/dashboard") }
+    if (res?.ok) {
+      rememberEmail(email)
+      // Logistics roles land straight on LG BOOKING; everyone else on the dashboard.
+      const s = await getSession()
+      const roles: string[] = [(s?.user as any)?.role, ...(((s?.user as any)?.roles) || [])].filter(Boolean)
+      const isLg = roles.some(r => ["LOGISTICS", "LOGISTICS_SUB", "LOGISTICS_GW", "LOGISTICS_TRM"].includes(r))
+      router.push(isLg ? "/logistics" : "/dashboard")
+    }
     else setError("Invalid email or password")
   }
 
