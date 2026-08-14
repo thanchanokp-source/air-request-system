@@ -194,17 +194,12 @@ export default function LgEntryPage() {
     // Port + CR NO removed. Header colours by role part: MER = blue, LG = orange, Claim/SCM = green.
     // GW's header differs when it reaches LG: LG column is "Actual Airfreight" (not EXPENSE/HAWB) and
     // its claim block has no per-dept ACTUAL AIRFREIGHTn. Pick the header set by the selection's BU.
-    const isGwExport = allLgItems.length > 0 && allLgItems.every((i: any) => i.request.bu === "GW")
-    const mixed = allLgItems.some((i: any) => i.request.bu === "GW") && allLgItems.some((i: any) => i.request.bu !== "GW")
-    if (mixed && !confirm("Selection mixes GW with another BU — will export with the NYG header (EXPENSE/HAWB). Continue?")) return
     const base = ["No_Document", "Brand name", "BU", "STYLE", "SO", "SUB", "CUSTOMER PO", "DESCRIPTION", "WEIGHT(KG)", "Original Shipment Date", "Plan Shipment Date", "QTY Original Shipment (pcs)", "QTY Request ship Air (pcs)", "Factory", "Country"]
     const baseW = [16, 16, 6, 14, 12, 8, 14, 24, 10, 20, 20, 20, 20, 14, 12]
-    const headers = isGwExport
-      ? [...base, "INV NO.", "Actual Airfreight", "HAWB#", "CLAIM DEPT 1", "%CLAIM1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "REASON 3"]
-      : [...base, "INV NO.", "HAWB#", "EXPENSE/HAWB", "CLAIM DEPT 1", "%CLAIM1", "ACTUAL AIRFREIGHT1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "ACTUAL AIRFREIGHT2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "ACTUAL AIRFREIGHT3", "REASON 3"]
-    const widths = isGwExport
-      ? [...baseW, 16, 18, 16, 14, 8, 16, 14, 8, 16, 14, 8, 16]
-      : [...baseW, 16, 16, 18, 14, 8, 16, 16, 14, 8, 16, 16, 14, 8, 16, 16]
+    // Unified LG export format for every BU (GW / NYG / SUB) — same layout LG SUB uses:
+    // INV NO. | HAWB# | EXPENSE/HAWB + per-dept ACTUAL AIRFREIGHTn. (Was branched by BU before.)
+    const headers = [...base, "INV NO.", "HAWB#", "EXPENSE/HAWB", "CLAIM DEPT 1", "%CLAIM1", "ACTUAL AIRFREIGHT1", "REASON 1", "CLAIM DEPT 2", "%CLAIM2", "ACTUAL AIRFREIGHT2", "REASON 2", "CLAIM DEPT 3", "%CLAIM3", "ACTUAL AIRFREIGHT3", "REASON 3"]
+    const widths = [...baseW, 16, 16, 18, 14, 8, 16, 16, 14, 8, 16, 16, 14, 8, 16, 16]
     const MER_C = "FFDDEBF7", LG_C = "FFFCE4D6", CLAIM_C = "FFE2EFDA" // blue / orange / green
     const lgStart = base.length, lgEnd = base.length + 2 // LG occupies 3 columns after the base block
     const colorOf = (i: number) => (i >= lgStart && i <= lgEnd) ? LG_C : (i > lgEnd ? CLAIM_C : MER_C)
@@ -238,9 +233,7 @@ export default function LgEntryPage() {
       const reason = (x: any) => [x?.reason, x?.reasonDetail].filter(Boolean).join(" - ")
       const isGW = (item.request.bu === "GW")
       // Claim block is copied onto every split row (all shipments of an SO share the same claim).
-      const claimCols = isGwExport
-        ? [dept(d[0]), d[0]?.pct ?? "", reason(d[0]), dept(d[1]), d[1]?.pct ?? "", reason(d[1]), dept(d[2]), d[2]?.pct ?? "", reason(d[2])]
-        : [dept(d[0]), d[0]?.pct ?? "", deptAmt(d[0]?.pct), reason(d[0]), dept(d[1]), d[1]?.pct ?? "", deptAmt(d[1]?.pct), reason(d[1]), dept(d[2]), d[2]?.pct ?? "", deptAmt(d[2]?.pct), reason(d[2])]
+      const claimCols = [dept(d[0]), d[0]?.pct ?? "", deptAmt(d[0]?.pct), reason(d[0]), dept(d[1]), d[1]?.pct ?? "", deptAmt(d[1]?.pct), reason(d[1]), dept(d[2]), d[2]?.pct ?? "", deptAmt(d[2]?.pct), reason(d[2])]
       for (let k = 0; k < n; k++) {
         // Split (>1 INV): leave INV / HAWB / EXPENSE + "QTY Request ship Air" (= qty ship per INV) BLANK
         // for LG to fill each line. "QTY Original Shipment" (= plan) is copied onto every row so the plan
@@ -255,7 +248,7 @@ export default function LgEntryPage() {
           fmtD(item.originalShipmentDate), fmtD(item.planShipmentDate), item.qtyOriginalShipment ?? item.qtyRequestAir ?? "", shipQty,
           item.factory || "", item.country || "",
         ]
-        ws.addRow(isGwExport ? [...baseRow, rInv, rTot, rHawb, ...claimCols] : [...baseRow, rInv, rHawb, rTot, ...claimCols])
+        ws.addRow([...baseRow, rInv, rHawb, rTot, ...claimCols])
       }
     })
 
