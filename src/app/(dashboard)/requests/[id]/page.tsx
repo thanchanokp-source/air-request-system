@@ -989,6 +989,12 @@ export default function RequestDetailPage() {
         const d = r.replace("VP_", "")
         if (items.some((i: any) => i.itemStatus === "CLAIM_PASSED" && deptListOf(i).includes(d) && deptSplitStatus(i, d) === "CLAIM_PASSED")) return r
       }
+      // GW parallel claim: SCM roles (SCM_NYG / SCM_NYK*) held as a secondary role.
+      // My dept split sits at PRES_PASSED/LOG_PASSED still awaiting my approval.
+      if (isGWRequest && (r === "SCM_NYG" || r === "SCM_NYK" || r === "SCM_NYK_APPROVER" || r === "SCM_NYK_EVP")) {
+        const scmDepts = r === "SCM_NYG" ? ["SCM NYG"] : ["SCM NYK"]
+        if (items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => scmDepts.includes(s.dept) && s.status !== "DEPT_APPROVED" && s.status !== "REJECTED"))) return r
+      }
     }
     return role
   })()
