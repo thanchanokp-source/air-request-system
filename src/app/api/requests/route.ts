@@ -274,11 +274,14 @@ export async function POST(req: NextRequest) {
             let claimDepts: any = null
             let claimDept: string | null = null
             let claimPct: number | null = null
-            if (isGW) {
-              // Template may show short labels (NYK / NYG); store the canonical GW dept
-              // values the app matches on (SCM NYK / SCM NYG). GW / SUPPLIER unchanged.
-              const normGwDept = (raw: string) => {
+            {
+              // Read up to 3 claim splits from Excel (CLAIM DEPT 1/2/3 + %CLAIM + REASON).
+              // GW normalizes short labels NYK / NYG → the canonical SCM NYK / SCM NYG the app
+              // matches on. NYG / EA keep the dept MER typed verbatim — it is only a reference
+              // shown to SCM, who still finalizes the claim dept (and routing) at its own stage.
+              const normDept = (raw: string) => {
                 const s = raw.trim()
+                if (!isGW) return s
                 const u = s.toUpperCase()
                 if (u === "NYK") return "SCM NYK"
                 if (u === "NYG") return "SCM NYG"
@@ -286,7 +289,7 @@ export async function POST(req: NextRequest) {
               }
               const splits = [1, 2, 3]
                 .map(n => {
-                  const dept = normGwDept(String(col(item, `CLAIM DEPT ${n}`) || ""))
+                  const dept = normDept(String(col(item, `CLAIM DEPT ${n}`) || ""))
                   const rawReason = String(col(item, `REASON ${n}`) || "").trim() || null
                   return {
                     dept,
@@ -297,6 +300,8 @@ export async function POST(req: NextRequest) {
                 })
                 .filter(s => s.dept)
               if (splits.length > 0) {
+                // MER gave a single dept with no % → treat it as 100%.
+                if (splits.length === 1 && !splits[0].pct) splits[0].pct = 100
                 claimDepts = splits
                 claimDept = splits[0].dept
                 claimPct = splits[0].pct || null
@@ -325,7 +330,10 @@ export async function POST(req: NextRequest) {
               // "Total HAWB#" column. (Normal uploads leave Actual for Logistics to fill.)
               ...(isHistorical && (() => { const a = numOf(colLike(item, "total", "hawb")); return a > 0 ? { actualAirFreight: a } : {} })()),
               ...(isHistorical && { itemStatus: "COMPLETED" }),
-              ...(isGW && { claimDepartment: claimDept, claimDepts, claimPercentage: claimPct }),
+              // Save MER-entered claim splits for every BU (null when the file has no CLAIM DEPT
+              // columns — fully backward-compatible). For NYG/EA this is a reference SCM sees +
+              // can edit; it does not drive routing (SCM re-assigns at PENDING_SCM).
+              ...(claimDepts ? { claimDepartment: claimDept, claimDepts, claimPercentage: claimPct } : {}),
             }
           })
         }
