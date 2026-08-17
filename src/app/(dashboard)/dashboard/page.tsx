@@ -630,7 +630,8 @@ export default function DashboardPage() {
   const [yearFilter,  setYearFilter]  = useState("")
   const [monthFilter, setMonthFilter] = useState<string[]>([])
   const [statusFilter,setStatusFilter]= useState("")
-  const [brandFilter, setBrandFilter] = useState("")
+  const [brandF, setBrandF] = useState<string[]>([])
+  const [docF,  setDocF]  = useState<string[]>([])
   const [soF,  setSoF]  = useState<string[]>([])
   const [cpF,  setCpF]  = useState<string[]>([])
   const [portFilter,    setPortFilter]    = useState("")
@@ -658,13 +659,14 @@ export default function DashboardPage() {
              statusFilter==="COMPLETED" ? (row.itemStatus === "COMPLETED" || row.itemStatus === "ACCOUNTING_PENDING") :
              statusFilter==="REJECTED"  ? row.itemStatus === "REJECTED" : true
            )) &&
-           (!brandFilter  || brandKey(row).includes(brandFilter)) &&
+           (!brandF.length|| brandF.includes(brandKey(row))) &&
+           (!docF.length  || docF.includes(row.request.documentNo)) &&
            (!soF.length   || soF.includes(row.so)) &&
            (!cpF.length   || cpF.includes(row.customerPO)) &&
            (!portFilter   || row.port===portFilter) &&
            (!countryFilter|| countryKey(row.country)===countryFilter) &&
            (!claimF.length|| claimF.includes(row.claimDepartment))
-  }), [allSOs,yearFilter,monthFilter,statusFilter,brandFilter,soF,cpF,portFilter,countryFilter,claimF])
+  }), [allSOs,yearFilter,monthFilter,statusFilter,brandF,docF,soF,cpF,portFilter,countryFilter,claimF])
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
@@ -808,12 +810,13 @@ export default function DashboardPage() {
   // Filter options
   const years    = useMemo(()=>[...new Set(allSOs.map(r=>r.planShipmentDate?String(new Date(r.planShipmentDate).getFullYear()):"").filter(Boolean))].sort().reverse(),[allSOs])
   const brands   = [...new Set(allSOs.map((r:any)=>brandKey(r)).filter((b:string)=>b&&b!=="N/A"))].sort()
+  const docNos   = [...new Set(allSOs.map((r:any)=>r.request.documentNo).filter(Boolean))].sort()
   const sos      = [...new Set(allSOs.map(r=>r.so).filter(Boolean))].sort()
   const cps      = [...new Set(allSOs.map(r=>r.customerPO).filter(Boolean))].sort()
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
   const countries= [...new Set(allSOs.map(r=>countryKey(r.country)).filter(Boolean))].sort()
-  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||brandFilter||soF.length||cpF.length||portFilter||countryFilter||claimF.length)
-  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setBrandFilter(""); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]) }
+  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||brandF.length||docF.length||soF.length||cpF.length||portFilter||countryFilter||claimF.length)
+  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setBrandF([]); setDocF([]); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]) }
 
   const H = 210
 
@@ -951,10 +954,8 @@ export default function DashboardPage() {
             <option value="COMPLETED">Completed</option>
             <option value="REJECTED">Rejected</option>
           </select>
-          <select value={brandFilter} onChange={e=>setBrandFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
-            <option value="">All Brand</option>
-            {brands.map((b:any)=><option key={b} value={b}>{b}</option>)}
-          </select>
+          <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF}/>
+          <MultiSelect label="Doc No..." options={docNos} value={docF} onChange={setDocF}/>
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF}/>
           <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF}/>
           <select value={countryFilter} onChange={e=>setCountryFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
