@@ -258,11 +258,11 @@ function SignatureRow({ signers, flow }: { signers: Signer[]; flow?: boolean }) 
     <View style={flow ? s.sigWrapFlow : s.sigWrap} wrap={false}>
       {signers.map((sg, i) => (
         <View key={i} style={s.sigCol}>
-          <Text style={s.sigName}>( {sg.name || "-"} )</Text>
           <View style={s.sigSpace}>
             {sg.sig ? <Image src={sg.sig} style={s.sigImg} /> : null}
             <View style={s.sigLine} />
           </View>
+          <Text style={s.sigName}>( {sg.name || "-"} )</Text>
           <Text style={s.sigTitle}>{cleanTitle(sg.title)}</Text>
           {sg.verb ? <Text style={s.sigDate}>{`${sg.verb} ${fmtDate(sg.date)}`}</Text> : null}
           {sg.crNo ? <Text style={s.sigDate}>CR: {sg.crNo}</Text> : null}
