@@ -47,6 +47,19 @@ const requesterName = (createdBy?: { name?: string | null; email?: string | null
 const isHistoryDoc = (req: any) => req?.status === "COMPLETED" && !((req?.approvalLogs?.length) || 0)
 const requestByFor = (req: any) => isHistoryDoc(req) ? "-" : requesterName(req?.createdBy)
 
+// Pending signature blocks pre-fill the EXPECTED approver name (before they sign).
+// VP Merchandise is split by brand: FANATICS / LULU* / JR* → Nuttareeporn, else Isawaruk.
+const vpMerByBrand = (brand?: string) => {
+  const b = String(brand || "").trim().toLowerCase()
+  return (b.startsWith("fanatics") || b.startsWith("lulu") || b.startsWith("jr")) ? "Nuttareeporn H" : "Isawaruk T"
+}
+const expectedApprover = (label: string, brand?: string) =>
+  label === "VP Merchandise" ? vpMerByBrand(brand)
+  : label === "VP SCM" ? "Saji T"
+  : label === "President" ? "Chotik C"
+  : label === "GM" ? "Poonyisa P"
+  : ""
+
 const fmtDate = (v: any) => {
   if (!v) return "-"
   const d = new Date(v)
@@ -233,7 +246,7 @@ function computeSigners(req: any): Signer[] {
       : [["PENDING_VP_MER", "VP Merchandise"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
     for (const [status, label] of chain) {
       const log = approveLogs.find((l: any) => l.fromStatus === status)
-      signers.push({ title: label, name: log?.user?.name || "", date: log?.createdAt, verb: log ? "Approved" : "" })
+      signers.push({ title: label, name: log?.user?.name || expectedApprover(label, req?.brandName), date: log?.createdAt, verb: log ? "Approved" : "" })
     }
   }
   return signers
