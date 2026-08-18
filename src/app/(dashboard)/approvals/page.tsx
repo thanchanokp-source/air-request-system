@@ -83,7 +83,10 @@ export default function ApprovalsPage() {
   // SCM_NYK_* are shared (BOTH) → pin no BU. Approvals stays a PERSONAL queue, so admins/
   // jariya are NOT auto-granted all BUs here — only people whose roles truly span >1 BU get
   // the filter toggle. Forward-ready for TRM/EA via the central role→BU map.
-  const myBuSet = new Set(myRoles.map(roleBu).filter(b => b && b !== "BOTH") as string[])
+  const myBuSet = new Set(myRoles.map(roleBu).filter(Boolean) as string[])
+  // A shared "BOTH" role (SCM NYK claim spans NYG + GW) contributes both those BUs so the
+  // NYK approver gets a NYG/GW toggle over their mixed queue instead of no toggle at all.
+  if (myBuSet.has("BOTH")) { myBuSet.delete("BOTH"); myBuSet.add("NYG"); myBuSet.add("GW") }
   const buTabs = (session?.user as any)?.bu === "ALL" ? [...BUS] : BUS.filter(b => myBuSet.has(b))
   const showBuToggle = buTabs.length > 1
   // Claim SO this person can act on via any held role (NYG only; GW has its own roles).
