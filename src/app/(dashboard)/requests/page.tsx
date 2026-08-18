@@ -336,7 +336,7 @@ export default function RequestsPage() {
   }
 
   const SO_COLS = [
-    ["SO",""],["SUB",""],["BU",""],["BRAND","min-w-[90px]"],["CUSTOMER PO",""],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
+    ["SO",""],["SUB",""],["BU",""],["BRAND","min-w-[90px]"],["CUSTOMER PO",""],["DESCRIPTION","min-w-[110px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
     ["EST. AIR FREIGHT","min-w-[120px]"],["ACTUAL AIR FREIGHT","min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],
@@ -638,6 +638,7 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-600">{row.request.bu || row.request.buName || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.brand || row.request.brandName || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.customerPO || "-"}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap text-gray-600">{row.description || "-"}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
                                     <td className="px-3 py-2">{row.qtyOriginalShipment}</td>
