@@ -72,6 +72,10 @@ function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string):
   // LOGISTICS across all BUs), THEN by priority. Without this, a bu="ALL" person with priority 1
   // (e.g. a claim approver who's also LG) wrongly shows as the Logistics person for every BU.
   cands.sort((a: any, b: any) => {
+    // Prefer a holder whose PRIMARY role is the requested role over one who only holds it as a
+    // secondary role (e.g. real LOGISTICS_GW Urairat over an ADMIN who carries every LG role).
+    const aP = roles.includes(a.role) ? 0 : 1, bP = roles.includes(b.role) ? 0 : 1
+    if (aP !== bP) return aP - bP
     const aX = bu && a.bu === bu ? 0 : 1, bX = bu && b.bu === bu ? 0 : 1
     if (aX !== bX) return aX - bX
     return (a.priority ?? 99) - (b.priority ?? 99)
@@ -341,7 +345,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   // entry, so surface LG here (until Save & Send sets logisticsSent). At PENDING_LOGISTICS_GW the
   // linear stageWho already names Logistics, so only add it for the parallel status to avoid a dup.
   const gwLgWho = (status === "PENDING_CLAIM_GW" && !lgDone && !completed && !rejected)
-    ? (() => { const n = resolveRoleEmail(approvers, ["LOGISTICS_GW"], "GW"); return [n ? `Logistics: ${n}` : "Logistics"] })()
+    ? (() => { const n = resolveRoleEmail(approvers, ["LOGISTICS_GW"], undefined); return [n ? `Logistics: ${n}` : "Logistics"] })()
     : []
   const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwLgWho, ...gwClaimWho, ...(gwNykWho ? [gwNykWho] : [])]
 

@@ -32,6 +32,21 @@ const COMPANIES: Record<string, { name: string; thai: string; address: string }>
 }
 const companyFor = (bu?: string) => COMPANIES[String(bu || "").toUpperCase()] || COMPANY
 
+// "Request By" name: prefer the user's real name; otherwise the email local part
+// (firstname.lastname) formatted as "Firstname Lastname" — never drop the surname.
+const requesterName = (createdBy?: { name?: string | null; email?: string | null }) => {
+  const nm = String(createdBy?.name || "").trim()
+  if (nm) return nm
+  const local = String(createdBy?.email || "").split("@")[0]
+  if (!local) return "-"
+  return local.split(/[._]/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+}
+
+// Historical backfill docs are created straight at COMPLETED with no approval activity —
+// they carry no real requester, so "Request By" is left blank for them.
+const isHistoryDoc = (req: any) => req?.status === "COMPLETED" && !((req?.approvalLogs?.length) || 0)
+const requestByFor = (req: any) => isHistoryDoc(req) ? "-" : requesterName(req?.createdBy)
+
 const fmtDate = (v: any) => {
   if (!v) return "-"
   const d = new Date(v)
@@ -230,13 +245,13 @@ function SignatureRow({ signers, flow }: { signers: Signer[]; flow?: boolean }) 
     <View style={flow ? s.sigWrapFlow : s.sigWrap} wrap={false}>
       {signers.map((sg, i) => (
         <View key={i} style={s.sigCol}>
+          <Text style={s.sigName}>( {sg.name || "-"} )</Text>
           <View style={s.sigSpace}>
             {sg.sig ? <Image src={sg.sig} style={s.sigImg} /> : null}
             <View style={s.sigLine} />
           </View>
-          <Text style={s.sigName}>( {sg.name || "-"} )</Text>
           <Text style={s.sigTitle}>{cleanTitle(sg.title)}</Text>
-          <Text style={s.sigDate}>{sg.verb ? `${sg.verb} ${fmtDate(sg.date)}` : "Pending"}</Text>
+          {sg.verb ? <Text style={s.sigDate}>{`${sg.verb} ${fmtDate(sg.date)}`}</Text> : null}
           {sg.crNo ? <Text style={s.sigDate}>CR: {sg.crNo}</Text> : null}
         </View>
       ))}
@@ -293,10 +308,7 @@ function ItemPage({ req, item }: { req: any; item: any }) {
           ["Date", fmtDate(req.createdAt)],
           ["Brand", req.brandName || "-"],
           ["BU", req.buName || dept],
-          ["Request By (Merchandise)", (() => {
-            const base = String(req.createdBy?.name || req.createdBy?.email || "").split("@")[0]
-            return base ? base.split(".")[0] : "-"
-          })()],
+          ["Request By (Merchandise)", requestByFor(req)],
           ["Factory", item.factory || "-"],
           ["Country", item.country || "-"],
         ] as [string, string][]).map(([l, v]) => (
@@ -411,7 +423,7 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
   const dept = isGW ? "GW" : "NYG"
   const rows = pages.map(p => p.item)
   const signers = computeSigners(req)
-  const requestBy = (() => { const b = String(req.createdBy?.name || req.createdBy?.email || "").split("@")[0]; return b ? b.split(".")[0] : "-" })()
+  const requestBy = requestByFor(req)
   // Unique descriptions → labelled A, B, C… and referenced by letter in the table.
   const descList: string[] = []
   for (const it of rows) { const d = (it.description || "").trim(); if (d && !descList.includes(d)) descList.push(d) }

@@ -140,6 +140,7 @@ export default function RequestsPage() {
   const [invoiceF, setInvoiceF] = useState<string[]>([])
   const [hawbF, setHawbF] = useState<string[]>([])
   const [stageF, setStageF] = useState<string[]>([])
+  const [createdByF, setCreatedByF] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [expandedStyles, setExpandedStyles] = useState<Set<string>>(new Set())
@@ -252,9 +253,11 @@ export default function RequestsPage() {
     return [...new Set(raw.map((d: string) => deptLabel(d)))]
   }
 
+  // Document creator shown as "Name (email)" (email alone when no name) — searchable by either.
+  const creatorLabel = (r: any) => { const c = r?.createdBy; if (!c) return ""; return c.name ? `${c.name} (${c.email})` : (c.email || "") }
   const applyFilters = (rows: any[], opts: {
     brand?: string[], style?: string[], so?: string[], cp?: string[],
-    port?: string[], country?: string[], claim?: string[], invoice?: string[], hawb?: string[], stage?: string[], docNo?: string[]
+    port?: string[], country?: string[], claim?: string[], invoice?: string[], hawb?: string[], stage?: string[], docNo?: string[], createdBy?: string[]
   }) => rows.filter(row => {
     const r = row.request
     const rowBkm = row.itemStatus === "CLAIM_REJECT_GW" || r?.status === "PENDING_MER" || r?.status === "PENDING_MER_GW"
@@ -284,7 +287,8 @@ export default function RequestsPage() {
       (!opts.claim?.length || getSplits(row).some((s: any) => opts.claim!.includes(s.dept)) || opts.claim.includes(row.claimDepartment)) &&
       (!opts.invoice?.length || opts.invoice.includes(row.invoiceNo)) &&
       (!opts.hawb?.length || opts.hawb.includes(row.hawbNo)) &&
-      (!opts.docNo?.length || opts.docNo.includes(row.request?.documentNo))
+      (!opts.docNo?.length || opts.docNo.includes(row.request?.documentNo)) &&
+      (!opts.createdBy?.length || opts.createdBy.includes(creatorLabel(row.request)))
   })
   const uniq = (arr: (string | null | undefined)[]) => [...new Set(arr.filter(Boolean) as string[])].sort()
 
@@ -298,8 +302,9 @@ export default function RequestsPage() {
   const invoices = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF }).map(r => r.invoiceNo))
   const hawbs    = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.hawbNo))
   const docNos   = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF }).map(r => r.request?.documentNo))
+  const creators = uniq(allRows.map(r => creatorLabel(r.request)))
 
-  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF, stage: stageF, docNo: docNoF })
+  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF, stage: stageF, docNo: docNoF, createdBy: createdByF })
   // Stage filter options: the pipeline stages + a "Claim: <dept>" sub-option per claim department.
   const claimDeptOpts = activeBu === "GW" ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
   const stageOptions = [...POSITIONS.map(p => p.label), ...claimDeptOpts.map(d => `Claim: ${d}`)]
@@ -513,8 +518,8 @@ export default function RequestsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {!!(stageF.length || statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length || docNoF.length) && (
-            <button onClick={() => { setStageF([]); setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]); setDocNoF([]) }}
+          {!!(stageF.length || statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length || docNoF.length || createdByF.length) && (
+            <button onClick={() => { setStageF([]); setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]); setDocNoF([]); setCreatedByF([]) }}
               className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
               Clear All
             </button>
@@ -532,6 +537,7 @@ export default function RequestsPage() {
           <MultiSelect label="Claim Dept" options={activeBu === "GW" ? ["SCM NYK","SCM NYG","GW","SUPPLIER"] : ["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"]} value={claimF} onChange={setClaimF} />
           <MultiSelect label="Invoice No..." options={invoices} value={invoiceF} onChange={setInvoiceF} />
           <MultiSelect label="HAWB#..." options={hawbs} value={hawbF} onChange={setHawbF} />
+          <MultiSelect label="Created by..." options={creators} value={createdByF} onChange={setCreatedByF} />
         </div>
       </div>
 
