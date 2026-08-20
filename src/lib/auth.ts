@@ -252,5 +252,22 @@ export const authOptions: NextAuthOptions = {
   },
   session: {
     strategy: "jwt"
+  },
+  // Unique cookie names so this app does not collide with other NextAuth apps on the
+  // same host (e.g. GM74 on :3002) — cookies are shared by domain, not port. secure:false
+  // because the server is served over http (not https).
+  cookies: {
+    sessionToken: {
+      name: "air-request.session-token",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: false },
+    },
+    callbackUrl: {
+      name: "air-request.callback-url",
+      options: { sameSite: "lax", path: "/", secure: false },
+    },
+    csrfToken: {
+      name: "air-request.csrf-token",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: false },
+    },
   }
 }
