@@ -20,13 +20,19 @@ const claimNav = [
   { href: "/settings", label: "SETTINGS", adminOnly: true },
 ]
 const pullNav = [
-  { href: "/pull-material", label: "REQUEST / ALL DOCUMENTS" },
+  { href: "/pull-material/dashboard", label: "DASHBOARD PULL RM" },
+  { href: "/pull-material/tracking", label: "TRACKING DOCUMENT" },
+  { href: "/pull-material/request", label: "SCM REQUEST" },
+  { href: "/pull-material/logistics", label: "LOGISTICS" },
+  { href: "/pull-material/purchase", label: "PURCHASE" },
+  { href: "/pull-material/approval", label: "APPROVAL" },
+  { href: "/pull-material/documents", label: "LOGISTICS DOCUMENT" },
 ]
 
 // Top-level family tabs.
 const FAMILIES = [
   { key: "claim", label: "Claim Air", icon: "✈", home: "/dashboard" },
-  { key: "pull", label: "Pull Material", icon: "📦", home: "/pull-material" },
+  { key: "pull", label: "Pull Material", icon: "📦", home: "/pull-material/request" },
 ]
 
 const ROLE_LABEL: Record<string, string> = {

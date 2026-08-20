@@ -10,30 +10,30 @@ datasource db {
 }
 
 model User {
-  id               String    @id @default(cuid())
-  name             String?
-  email            String    @unique
-  password         String?
-  role             String    @default("MER_USER")   // primary role (login/session) — drives permissions
-  title            String?                            // display-only position label (e.g. "DPM Merchandise"); overrides the role label in the UI, permissions still follow `role`
-  roles            String[]  @default([])            // all roles this person holds (incl. primary) — 1 person, many positions
-  claimDepartment  String?
-  isActive         Boolean   @default(true)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  priority         Int?
-  bu               String    @default("NYG")
-  procurementType  String?
-  resetToken       String?   @unique
-  resetTokenExpiry DateTime?
-  loginToken       String?   @unique
-  loginTokenExpiry DateTime?
-  signatureData    String?   // master signature (base64 PNG data URI) reused on approvals
+  id                 String              @id @default(cuid())
+  name               String?
+  email              String              @unique
+  password           String?
+  role               String              @default("MER_USER") // primary role (login/session) — drives permissions
+  title              String? // display-only position label (e.g. "DPM Merchandise"); overrides the role label in the UI, permissions still follow `role`
+  roles              String[]            @default([]) // all roles this person holds (incl. primary) — 1 person, many positions
+  claimDepartment    String?
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  priority           Int?
+  bu                 String              @default("NYG")
+  procurementType    String?
+  resetToken         String?             @unique
+  resetTokenExpiry   DateTime?
+  loginToken         String?             @unique
+  loginTokenExpiry   DateTime?
+  signatureData      String? // master signature (base64 PNG data URI) reused on approvals
   signatureUpdatedAt DateTime?
-  airRequests     AirRequest[]
-  approvals       ApprovalLog[]
-  claimApprovals  ClaimApproval[]
-  attachments     RequestAttachment[]
+  airRequests        AirRequest[]
+  approvals          ApprovalLog[]
+  claimApprovals     ClaimApproval[]
+  attachments        RequestAttachment[]
 }
 
 model MasterBrand {
@@ -59,11 +59,11 @@ model MasterDescription {
 // Used as the dropdown source for the SCM claim-assignment (web + Export/Import Excel).
 model MasterDelayCode {
   id          String   @id @default(cuid())
-  code        String   @unique                 // e.g. "2C_Buy Not Ready"
-  definitions String[] @default([])            // e.g. ["2.1 Fabric approval, trim approval", ...]
+  code        String   @unique // e.g. "2C_Buy Not Ready"
+  definitions String[] @default([]) // e.g. ["2.1 Fabric approval, trim approval", ...]
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
-  updatedAt   DateTime @updatedAt @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
 }
 
 // MasterGMTType + MasterPort removed — unused (Port kept only as a display field on items;
@@ -74,10 +74,10 @@ model MasterDelayCode {
 model MasterFreightRate {
   id        String   @id @default(cuid())
   country   String
-  bu        String   @default("ALL")   // "ALL" = shared across BUs (default); a BU-specific row overrides
-  currency  String   @default("THB")   // legacy — kept for back-compat; rates now use ratePerKg (THB) + rateUsd (USD)
-  ratePerKg Float    @default(0)        // THB per kg (NYG / GW / TRM)
-  rateUsd   Float    @default(0)        // USD per kg (EA) — separate field so a country can hold both
+  bu        String   @default("ALL") // "ALL" = shared across BUs (default); a BU-specific row overrides
+  currency  String   @default("THB") // legacy — kept for back-compat; rates now use ratePerKg (THB) + rateUsd (USD)
+  ratePerKg Float    @default(0) // THB per kg (NYG / GW / TRM)
+  rateUsd   Float    @default(0) // USD per kg (EA) — separate field so a country can hold both
   isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
 
@@ -86,61 +86,61 @@ model MasterFreightRate {
 }
 
 model AirRequest {
-  id               String              @id @default(cuid())
-  documentNo       String              @unique
-  brandName        String
-  buName           String
-  status           String              @default("DRAFT")
-  claimDepartment  String?
-  rejectionReason  String?
-  isTest           Boolean             @default(false)
-  createdById      String
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  invoiceNo        String?
-  actualAirFreight Float?
-  bookingDate      DateTime?
-  airline          String?
-  assignedVpMer    String?   // 2nd merch approver (VP MER / EA DVM) — chosen by the 1st approver
-  assignedDvmMer   String?   // 1st merch approver (DVM MER / EA ADVM) — chosen by MER at upload (NYG+EA)
-  vpMerToken       String?
-  gmToken          String?
-  presidentToken   String?
-  scmToken         String?
-  vpScmToken       String?
-  assignedVpScm    String?
-  logisticsToken   String?
-  accountingToken  String?
-  claimGwToken     String?
-  claimSupplierToken String?
-  scmNykToken      String?
+  id                  String              @id @default(cuid())
+  documentNo          String              @unique
+  brandName           String
+  buName              String
+  status              String              @default("DRAFT")
+  claimDepartment     String?
+  rejectionReason     String?
+  isTest              Boolean             @default(false)
+  createdById         String
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  invoiceNo           String?
+  actualAirFreight    Float?
+  bookingDate         DateTime?
+  airline             String?
+  assignedVpMer       String? // 2nd merch approver (VP MER / EA DVM) — chosen by the 1st approver
+  assignedDvmMer      String? // 1st merch approver (DVM MER / EA ADVM) — chosen by MER at upload (NYG+EA)
+  vpMerToken          String?
+  gmToken             String?
+  presidentToken      String?
+  scmToken            String?
+  vpScmToken          String?
+  assignedVpScm       String?
+  logisticsToken      String?
+  accountingToken     String?
+  claimGwToken        String?
+  claimSupplierToken  String?
+  scmNykToken         String?
   scmNykApproverToken String?
-  scmNykEvpToken   String?
-  scmNygToken      String?
-  crNo             String?
-  assignedScmNykEvp String?
-  assignedScmNykCr  String?
-  claimNextEmail   String?
-  claimNextToken   String?
-  claimNextName    String?
-  bu               String              @default("NYG")
-  logisticsSent    Boolean             @default(false)  // LG pressed "Save & Send" (not just Save Draft) → chip turns green
-  pendingRate      Boolean             @default(false)  // held: Country rate missing, not yet sent to first approver
-  pendingWeight    Boolean             @default(false)  // held: a DESCRIPTION has no WT Charge in Master, not yet sent
-  nykDirect        Boolean             @default(false)  // GW "NYK Direct" import: skips all approvers → lands at SCM NYK claim; after NYK done → Accounting (skip President)
-  revised          Boolean             @default(false)  // was sent back to Merchandise & re-submitted at least once → emails show a "REVISE" tag
-  lgForwardEmail   String?   // LG handoff: a senior LG forwarded this doc's data-entry to a subordinate
-  lgForwardName    String?
-  lgForwardBy      String?   // who forwarded (name)
-  lgForwardToken   String?   // magic-link so the subordinate can open & continue without a full account
-  vndRate          Float?    // EA only: VND-per-THB snapshot at creation → lets amounts display in VND (toggle) without changing later when the FX rate is edited
-  createdBy        User                @relation(fields: [createdById], references: [id])
-  items            AirRequestItem[]
-  approvalLogs     ApprovalLog[]
-  attachments      RequestAttachment[]
-  hawbGroups       HawbGroup[]
-  claimForwards    ClaimForward[]
-  approvalSignatures ApprovalSignature[]
+  scmNykEvpToken      String?
+  scmNygToken         String?
+  crNo                String?
+  assignedScmNykEvp   String?
+  assignedScmNykCr    String?
+  claimNextEmail      String?
+  claimNextToken      String?
+  claimNextName       String?
+  bu                  String              @default("NYG")
+  logisticsSent       Boolean             @default(false) // LG pressed "Save & Send" (not just Save Draft) → chip turns green
+  pendingRate         Boolean             @default(false) // held: Country rate missing, not yet sent to first approver
+  pendingWeight       Boolean             @default(false) // held: a DESCRIPTION has no WT Charge in Master, not yet sent
+  nykDirect           Boolean             @default(false) // GW "NYK Direct" import: skips all approvers → lands at SCM NYK claim; after NYK done → Accounting (skip President)
+  revised             Boolean             @default(false) // was sent back to Merchandise & re-submitted at least once → emails show a "REVISE" tag
+  lgForwardEmail      String? // LG handoff: a senior LG forwarded this doc's data-entry to a subordinate
+  lgForwardName       String?
+  lgForwardBy         String? // who forwarded (name)
+  lgForwardToken      String? // magic-link so the subordinate can open & continue without a full account
+  vndRate             Float? // EA only: VND-per-THB snapshot at creation → lets amounts display in VND (toggle) without changing later when the FX rate is edited
+  createdBy           User                @relation(fields: [createdById], references: [id])
+  items               AirRequestItem[]
+  approvalLogs        ApprovalLog[]
+  attachments         RequestAttachment[]
+  hawbGroups          HawbGroup[]
+  claimForwards       ClaimForward[]
+  approvalSignatures  ApprovalSignature[]
 }
 
 // A signature snapshot captured at the moment a person APPROVES (not data entry).
@@ -153,10 +153,10 @@ model ApprovalSignature {
   approverName  String
   approverEmail String?
   role          String?
-  positionLabel String?    // e.g. "VP MER", "President", "SCM NYK EVP", "Commercial"
-  signatureData String     // base64 PNG snapshot at approval time
-  crNo          String?    // for SCM NYK claim
-  branch        String?    // BU
+  positionLabel String? // e.g. "VP MER", "President", "SCM NYK EVP", "Commercial"
+  signatureData String // base64 PNG snapshot at approval time
+  crNo          String? // for SCM NYK claim
+  branch        String? // BU
   signedAt      DateTime   @default(now())
   request       AirRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
@@ -199,8 +199,8 @@ model ClaimForward {
   token     String     @unique
   position  Int        @default(0)
   branch    String?
-  itemIds   Json?      // SO ids this forward covers (null = whole dept, legacy). Enables
-                       // forwarding different SO subsets of one dept to different people.
+  itemIds   Json? // SO ids this forward covers (null = whole dept, legacy). Enables
+  // forwarding different SO subsets of one dept to different people.
   createdAt DateTime   @default(now())
   request   AirRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
@@ -262,7 +262,7 @@ model AirRequestItem {
   assignedDvm          String?
   claimPercentage      Float?
   qtyActualShip        Int?
-  shipmentGroupId      String?          // split shipments of one SO share this → plan totals count the group once
+  shipmentGroupId      String? // split shipments of one SO share this → plan totals count the group once
   request              AirRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
   hawbGroup            HawbGroup?      @relation(fields: [hawbGroupId], references: [id], onDelete: SetNull)
   claimApprovals       ClaimApproval[]
@@ -319,4 +319,60 @@ model RequestAttachment {
   createdAt    DateTime   @default(now())
   request      AirRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   uploadedBy   User       @relation(fields: [uploadedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+// ─── Pull Material ─────────────────────────────────────────────────────────
+// Cross-country material pull, seeded (snapshot) from the Bill of Material.
+// Separate module from the air-request/claim flow. BU-split (NYG/EA/TRM/GW).
+model PullMaterialRequest {
+  id             String             @id @default(cuid())
+  documentNo     String             @unique
+  bu             String
+  status         String             @default("PENDING_LOGISTICS")
+  requesterName  String
+  requesterEmail String?
+  createdById    String
+  items          PullMaterialItem[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model PullMaterialItem {
+  id              String              @id @default(cuid())
+  requestId       String
+  request         PullMaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  // Snapshot from BOM (per material line — locked at select time)
+  soNoDoc         String
+  customerName    String?
+  customerPo      String?
+  vendorName      String?
+  poNoDoc         String?
+  style           String?
+  brand           String?
+  gmtType         String?
+  itemCode        String?
+  itemName        String?
+  orderQty        Float?
+  bomQty          Float?
+  bomUom          String?
+  consumption     Float?
+  shipmentDate    DateTime?
+  // SCM input
+  pullGarment     Float?
+  pullMaterialQty Float?
+  airDecision     String?
+  // Logistics input
+  estAir          Float?
+  estSea          Float?
+  leadTimeAir     String?
+  leadTimeSea     String?
+  // Purchasing input
+  weight          Float?
+  // LG actual (close)
+  invoiceNo       String?
+  actualAir       Float?
+  createdAt       DateTime            @default(now())
+
+  @@index([requestId])
+  @@index([soNoDoc])
 }
