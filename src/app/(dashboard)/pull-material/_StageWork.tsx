@@ -17,6 +17,23 @@ export const STATUS_LABEL: Record<string, string> = {
 type Field = { key: string; label: string; type: "date" | "number" | "text" }
 type Action = { label: string; toStatus: string; color?: string }
 
+// Read-only BOM/snapshot context shown to LG / Purchase / Approval before their input fields.
+const CTX: { key: string; label: string; kind?: "date" | "num" }[] = [
+  { key: "customerName", label: "ลูกค้า" },
+  { key: "customerPo", label: "Customer PO" },
+  { key: "brand", label: "Brand" },
+  { key: "style", label: "Style" },
+  { key: "gmtType", label: "ประเภท" },
+  { key: "orderQty", label: "Order Qty", kind: "num" },
+  { key: "pullGarment", label: "Pull Garment", kind: "num" },
+  { key: "consumption", label: "Consumption", kind: "num" },
+  { key: "vendorName", label: "Vendor" },
+  { key: "poNoDoc", label: "PO No" },
+  { key: "shipmentDate", label: "Ship Date", kind: "date" },
+]
+const ctxVal = (it: any, c: { key: string; kind?: "date" | "num" }) =>
+  c.kind === "date" ? fmtDate(it[c.key]) : c.kind === "num" ? fmt(it[c.key]) : (it[c.key] || "-")
+
 export function StageWork({ title, subtitle, status, fields, primary, secondary }: {
   title: string; subtitle: string; status: string; fields: Field[]; primary: Action; secondary?: Action
 }) {
@@ -79,14 +96,16 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
                     {["SO", "วัตถุดิบ", "PULL"].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                    {CTX.map(c => <th key={c.key} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{c.label}</th>)}
                     {fields.map(f => <th key={f.key} className="px-3 py-2 text-left font-medium text-red-700 whitespace-nowrap">{f.label}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
                     {rq.items.map((it: any) => (
                       <tr key={it.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-1.5 font-semibold text-gray-800">{it.soNoDoc}</td>
-                        <td className="px-3 py-1.5">{it.itemName || it.itemCode}</td>
-                        <td className="px-3 py-1.5">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
+                        <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{it.soNoDoc}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{it.itemName || it.itemCode}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
+                        {CTX.map(c => <td key={c.key} className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{ctxVal(it, c)}</td>)}
                         {fields.map(f => (
                           <td key={f.key} className="px-3 py-1.5">
                             <input type={f.type} value={valOf(it, f.key)} onChange={e => setVal(it.id, f.key, e.target.value)}
