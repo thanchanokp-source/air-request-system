@@ -83,6 +83,7 @@ export default function ScmRequestPage() {
   const addToCart = () => {
     const g = Number(pullGarment)
     if (!g || g <= 0) return alert("ใส่จำนวน garment ที่จะ pull ก่อน")
+    if (!scm.reasonAirPick.trim()) return alert("ใส่ Reason for Air Pick ก่อน — จำเป็นสำหรับการขออนุมัติ")
     const picked = materials.filter(m => m.itemCode && ticked.has(m.itemCode))
     if (picked.length === 0) return alert("ติ๊กเลือก material อย่างน้อย 1 รายการ")
     const add = picked.map(m => ({
@@ -198,15 +199,13 @@ export default function ScmRequestPage() {
           {/* SCM keys request info (per SO — applied to all materials added) */}
           <div className="mt-3 grid sm:grid-cols-3 gap-2">
             {([
-              { k: "sewingStartDate", label: "Sewing Start Date", type: "date" },
-              { k: "grossWeightKg", label: "G.W. (kg)", type: "number" },
-              { k: "airFreightCost", label: "Air Freight cost material (THB)", type: "number" },
-              { k: "reasonAirPick", label: "Reason for Air Pick", type: "text" },
+              { k: "sewingStartDate", label: "Sewing Start Date", type: "date", req: false },
+              { k: "reasonAirPick", label: "Reason for Air Pick", type: "text", req: true },
             ] as const).map(f => (
               <div key={f.k}>
-                <label className="text-[11px] font-medium text-gray-500">{f.label}</label>
+                <label className="text-[11px] font-medium text-gray-500">{f.label}{f.req && <span className="text-red-500"> *</span>}</label>
                 <input type={f.type} value={(scm as any)[f.k]} onChange={e => setScm(s => ({ ...s, [f.k]: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs mt-0.5 focus:outline-none focus:ring-1 focus:ring-red-300" />
+                  className={`w-full rounded-lg px-2 py-1 text-xs mt-0.5 focus:outline-none focus:ring-1 border ${f.req && !String((scm as any)[f.k]).trim() ? "border-red-400 focus:ring-red-400 bg-red-50" : "border-gray-300 focus:ring-red-300"}`} />
               </div>
             ))}
           </div>

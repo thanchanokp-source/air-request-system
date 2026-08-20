@@ -1,9 +1,14 @@
+"use client"
+import { StageWork } from "../_StageWork"
 export default function Page() {
-  return (
-    <div className="p-10 max-w-lg mx-auto text-center">
-      <div className="text-4xl">🚧</div>
-      <h1 className="text-lg font-bold mt-3" style={{ color: "#6b1a1a" }}>PURCHASE (จัดซื้อ)</h1>
-      <p className="text-sm text-gray-500 mt-2">อยู่ระหว่างพัฒนา — เฟสถัดไป</p>
-    </div>
-  )
+  return <StageWork
+    title="Purchase (จัดซื้อ) — Pull Material"
+    subtitle="กรอก G.W. (น้ำหนัก) + Shipment date → ส่งให้ SCM ตัดสินใจ air"
+    status="PENDING_PURCHASING"
+    fields={[
+      { key: "grossWeightKg", label: "G.W. (kg)", type: "number" },
+      { key: "shipmentDate", label: "Shipment Date", type: "date" },
+    ]}
+    primary={{ label: "บันทึก → ส่ง SCM ตัดสินใจ", toStatus: "PENDING_SCM_DECISION" }}
+  />
 }

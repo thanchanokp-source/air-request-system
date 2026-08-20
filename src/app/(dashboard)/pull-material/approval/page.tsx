@@ -1,9 +1,12 @@
+"use client"
+import { StageWork } from "../_StageWork"
 export default function Page() {
-  return (
-    <div className="p-10 max-w-lg mx-auto text-center">
-      <div className="text-4xl">🚧</div>
-      <h1 className="text-lg font-bold mt-3" style={{ color: "#6b1a1a" }}>APPROVAL</h1>
-      <p className="text-sm text-gray-500 mt-2">อยู่ระหว่างพัฒนา — เฟสถัดไป</p>
-    </div>
-  )
+  return <StageWork
+    title="Approval — Pull Material"
+    subtitle="DVM → VP → EVP (เฟสนี้ placeholder: กดอนุมัติข้าม chain — master คนอนุมัติใส่ทีหลัง)"
+    status="PENDING_APPROVAL"
+    fields={[]}
+    primary={{ label: "อนุมัติ", toStatus: "APPROVED", color: "#16a34a" }}
+    secondary={{ label: "ตีกลับ SCM", toStatus: "PENDING_SCM_DECISION" }}
+  />
 }
