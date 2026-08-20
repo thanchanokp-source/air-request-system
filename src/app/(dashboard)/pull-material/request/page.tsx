@@ -12,7 +12,8 @@ type Bom = {
   shipmentDate?: string; orderQty?: number
   itemCode?: string; itemName?: string; bomQty?: number; bomUom?: string; consumption?: number
 }
-type CartItem = Bom & { key: string; pullGarment: number; pullMaterialQty: number }
+type ScmInfo = { inHouseAirDate: string; inHouseSeaDate: string; sewingStartDate: string; reasonAirPick: string; grossWeightKg: string; airFreightCost: string }
+type CartItem = Bom & ScmInfo & { key: string; pullGarment: number; pullMaterialQty: number }
 
 const fmt = (n: any) => (n == null || isNaN(Number(n)) ? "-" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }))
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toLocaleDateString("th-TH") }
@@ -31,15 +32,31 @@ export default function ScmRequestPage() {
   const [loadingMat, setLoadingMat] = useState(false)
   const [pullGarment, setPullGarment] = useState("")
   const [ticked, setTicked] = useState<Set<string>>(new Set())
+  const emptyScm = { inHouseAirDate: "", inHouseSeaDate: "", sewingStartDate: "", reasonAirPick: "", grossWeightKg: "", airFreightCost: "" }
+  const [scm, setScm] = useState({ ...emptyScm })
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [requester, setRequester] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [lastSync, setLastSync] = useState<string | null>(null)
 
   useEffect(() => {
     const n = (session?.user as any)?.name || (session?.user as any)?.email || ""
     if (n && !requester) setRequester(n)
   }, [session]) // eslint-disable-line
+
+  // BOM data freshness (from the daily refresh job → insert_date)
+  useEffect(() => {
+    fetch("/api/bom", { method: "POST" }).then(r => r.json()).then(d => setLastSync(d.lastSync || null)).catch(() => {})
+  }, [])
+
+  const sync = (() => {
+    if (!lastSync) return null
+    const d = new Date(lastSync)
+    if (isNaN(d.getTime())) return null
+    const stale = d.toDateString() !== new Date().toDateString()
+    return { txt: d.toLocaleString("th-TH", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }), stale }
+  })()
 
   const search = async () => {
     setSearching(true); setOpenSo(null); setMaterials([])
@@ -50,7 +67,7 @@ export default function ScmRequestPage() {
   }
 
   const pickSo = async (b: Bom) => {
-    setOpenSo(b); setMaterials([]); setPullGarment(""); setTicked(new Set()); setLoadingMat(true)
+    setOpenSo(b); setMaterials([]); setPullGarment(""); setTicked(new Set()); setScm({ ...emptyScm }); setLoadingMat(true)
     try {
       const r = await fetch(`/api/bom?bu=${bu}&so=${encodeURIComponent(b.soNoDoc)}`).then(r => r.json())
       setMaterials(Array.isArray(r.rows) ? r.rows : [])
@@ -70,10 +87,10 @@ export default function ScmRequestPage() {
     if (picked.length === 0) return alert("ติ๊กเลือก material อย่างน้อย 1 รายการ")
     const add = picked.map(m => ({
       ...m, key: `${m.soNoDoc}|${m.itemCode}`,
-      pullGarment: g, pullMaterialQty: calcQty(m, g),
+      pullGarment: g, pullMaterialQty: calcQty(m, g), ...scm,
     }))
     setCart(prev => [...prev.filter(c => !add.some(a => a.key === c.key)), ...add])
-    setOpenSo(null); setMaterials([]); setPullGarment(""); setTicked(new Set())
+    setOpenSo(null); setMaterials([]); setPullGarment(""); setTicked(new Set()); setScm({ ...emptyScm })
   }
   const removeCart = (key: string) => setCart(p => p.filter(c => c.key !== key))
 
@@ -120,6 +137,12 @@ export default function ScmRequestPage() {
 
       {/* Search */}
       <div className="bg-white rounded-xl border p-4">
+        {sync && (
+          <div className={`mb-3 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${sync.stale ? "bg-amber-50 border-amber-300 text-amber-800" : "bg-green-50 border-green-300 text-green-800"}`}>
+            {sync.stale ? "⚠ BOM อาจไม่สด" : "● BOM อัปเดตล่าสุด"}: {sync.txt}
+            {sync.stale && <span className="opacity-80">— job อาจยังไม่รันวันนี้</span>}
+          </div>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
           <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === "Enter" && search()}
             placeholder="พิมพ์ SO / ชื่อลูกค้า / Customer PO / Brand แล้ว Enter"
@@ -170,6 +193,22 @@ export default function ScmRequestPage() {
             <input value={pullGarment} onChange={e => setPullGarment(e.target.value)} type="number" placeholder="เช่น 30"
               className="w-32 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
             <span className="text-xs text-gray-400">จาก order {fmt(openSo.orderQty)} ตัว → วัตถุดิบคำนวณให้อัตโนมัติ</span>
+          </div>
+
+          {/* SCM keys request info (per SO — applied to all materials added) */}
+          <div className="mt-3 grid sm:grid-cols-3 gap-2">
+            {([
+              { k: "sewingStartDate", label: "Sewing Start Date", type: "date" },
+              { k: "grossWeightKg", label: "G.W. (kg)", type: "number" },
+              { k: "airFreightCost", label: "Air Freight cost material (THB)", type: "number" },
+              { k: "reasonAirPick", label: "Reason for Air Pick", type: "text" },
+            ] as const).map(f => (
+              <div key={f.k}>
+                <label className="text-[11px] font-medium text-gray-500">{f.label}</label>
+                <input type={f.type} value={(scm as any)[f.k]} onChange={e => setScm(s => ({ ...s, [f.k]: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs mt-0.5 focus:outline-none focus:ring-1 focus:ring-red-300" />
+              </div>
+            ))}
           </div>
 
           {loadingMat ? <p className="text-sm text-gray-400 mt-3">กำลังโหลด material…</p> : (
