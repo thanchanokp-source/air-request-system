@@ -61,7 +61,15 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
     return fields.find(f => f.key === key)?.type === "date" ? String(item[key]).slice(0, 10) : String(item[key])
   }
 
-  const act = async (rq: any, a: Action) => {
+  const act = async (rq: any, a: Action, validate = false) => {
+    if (validate) {
+      for (const it of rq.items) {
+        for (const f of fields) {
+          const v = valOf(it, f.key)
+          if (v === "" || v == null) { alert(`กรุณากรอก "${f.label}" ให้ครบทุกรายการก่อนส่งต่อ`); return }
+        }
+      }
+    }
     setBusy(rq.id)
     try {
       const itemUpdates = rq.items.map((it: any) => ({ id: it.id, ...Object.fromEntries(fields.map(f => [f.key, valOf(it, f.key)])) }))
@@ -89,7 +97,7 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
                   <span className="text-xs text-gray-500"> · {rq.requesterName} · {rq.items.length} รายการ</span></div>
                 <div className="flex gap-2">
                   {secondary && <button onClick={() => act(rq, secondary)} disabled={busy === rq.id} className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 disabled:opacity-50">{secondary.label}</button>}
-                  <button onClick={() => act(rq, primary)} disabled={busy === rq.id} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: primary.color || MAROON }}>{busy === rq.id ? "..." : primary.label}</button>
+                  <button onClick={() => act(rq, primary, true)} disabled={busy === rq.id} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: primary.color || MAROON }}>{busy === rq.id ? "..." : primary.label}</button>
                 </div>
               </div>
               <div className="mt-3 border rounded-xl overflow-auto">
