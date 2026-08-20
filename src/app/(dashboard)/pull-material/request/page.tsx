@@ -11,7 +11,23 @@ type Bom = {
   poNoDoc?: string; style?: string; brand?: string; gmtType?: string
   shipmentDate?: string; orderQty?: number
   itemCode?: string; itemName?: string; bomQty?: number; bomUom?: string; consumption?: number
+  bu?: string; soYear?: string; groupCode?: string; cpartNo?: string; partDesc?: string
+  itemNo?: string; poqtyBomdummy?: number; poDate?: string; updInhouse?: string
+  status?: string; poUsername?: string; mrdDate?: string; mrdNeedDate?: string; mrd2?: string
 }
+
+// Columns SCM sees when selecting material lines (per BOM spec)
+const MAT_COLS: { k: keyof Bom; label: string; kind?: "date" | "num" }[] = [
+  { k: "bu", label: "BU" }, { k: "soYear", label: "SO YEAR" }, { k: "soNoDoc", label: "SO NO" },
+  { k: "customerName", label: "CUST NAME" }, { k: "groupCode", label: "GROUP" }, { k: "cpartNo", label: "CPART" },
+  { k: "partDesc", label: "PART DESC" }, { k: "itemNo", label: "ITEM NO" }, { k: "itemCode", label: "ITEM CODE" },
+  { k: "itemName", label: "ITEM NAME" }, { k: "orderQty", label: "ORDER QTY", kind: "num" },
+  { k: "poqtyBomdummy", label: "POQTY BOMDUMMY", kind: "num" }, { k: "poNoDoc", label: "PO NO" },
+  { k: "poDate", label: "PO DATE", kind: "date" }, { k: "updInhouse", label: "UPD INHOUSE", kind: "date" },
+  { k: "vendorName", label: "VEND NAME" }, { k: "status", label: "STATUS" }, { k: "poUsername", label: "POUSERNAME" },
+  { k: "mrdDate", label: "MRD DATE", kind: "date" }, { k: "mrdNeedDate", label: "MRD NEED", kind: "date" },
+  { k: "mrd2", label: "MRD2", kind: "date" },
+]
 type ScmInfo = { inHouseAirDate: string; inHouseSeaDate: string; sewingStartDate: string; reasonAirPick: string; grossWeightKg: string; airFreightCost: string }
 type CartItem = Bom & ScmInfo & { key: string; pullGarment: number; pullMaterialQty: number }
 
@@ -211,11 +227,12 @@ export default function ScmRequestPage() {
           </div>
 
           {loadingMat ? <p className="text-sm text-gray-400 mt-3">กำลังโหลด material…</p> : (
-            <div className="mt-3 border rounded-xl overflow-auto max-h-[300px]">
+            <div className="mt-3 border rounded-xl overflow-auto max-h-[340px]">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 sticky top-0"><tr>
-                  {["ติ๊ก", "ITEM", "วัตถุดิบ", "ORDER QTY (ตัว)", "รวม BOM", "หน่วย", "PULL (คำนวณ)"].map(h =>
-                    <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                  <th className="px-3 py-2 text-left font-medium text-gray-500">ติ๊ก</th>
+                  {MAT_COLS.map(c => <th key={c.k} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{c.label}</th>)}
+                  <th className="px-3 py-2 text-left font-medium text-red-700 whitespace-nowrap">PULL (คำนวณ)</th>
                 </tr></thead>
                 <tbody className="divide-y divide-gray-50">
                   {materials.map((m, i) => {
@@ -225,18 +242,19 @@ export default function ScmRequestPage() {
                         <td className="px-3 py-1.5">
                           <input type="checkbox" checked={!!m.itemCode && ticked.has(m.itemCode)} onChange={() => m.itemCode && toggle(m.itemCode)} />
                         </td>
-                        <td className="px-3 py-1.5 font-mono text-gray-600">{m.itemCode || "-"}</td>
-                        <td className="px-3 py-1.5">{m.itemName || "-"}</td>
-                        <td className="px-3 py-1.5 text-right">{fmt(m.orderQty)}</td>
-                        <td className="px-3 py-1.5 text-right">{fmt(m.bomQty)}</td>
-                        <td className="px-3 py-1.5">{m.bomUom || "-"}</td>
-                        <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>
+                        {MAT_COLS.map(c => {
+                          const v = (m as any)[c.k]
+                          return <td key={c.k} className={`px-3 py-1.5 whitespace-nowrap ${c.kind === "num" ? "text-right" : ""}`}>
+                            {c.kind === "date" ? fmtDate(v) : c.kind === "num" ? fmt(v) : (v ?? "-")}
+                          </td>
+                        })}
+                        <td className="px-3 py-1.5 text-right font-semibold whitespace-nowrap" style={{ color: MAROON }}>
                           {g > 0 ? `${fmt(calcQty(m, g))} ${m.bomUom || ""}` : "-"}
                         </td>
                       </tr>
                     )
                   })}
-                  {materials.length === 0 && <tr><td colSpan={7} className="px-3 py-3 text-center text-gray-400">ไม่พบ material</td></tr>}
+                  {materials.length === 0 && <tr><td colSpan={MAT_COLS.length + 2} className="px-3 py-3 text-center text-gray-400">ไม่พบ material</td></tr>}
                 </tbody>
               </table>
             </div>

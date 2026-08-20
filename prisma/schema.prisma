@@ -357,6 +357,19 @@ model PullMaterialItem {
   bomUom          String?
   consumption     Float?
   shipmentDate    DateTime?
+  soYear          String?
+  groupCode       String?
+  cpartNo         String?
+  partDesc        String?
+  itemNo          String?
+  poqtyBomdummy   Float?
+  poDate          DateTime?
+  updInhouse      DateTime?
+  bomStatus       String?
+  poUsername      String?
+  mrdDate         DateTime?
+  mrdNeedDate     DateTime?
+  mrd2            DateTime?
   // SCM input
   pullGarment     Float?
   pullMaterialQty Float?
