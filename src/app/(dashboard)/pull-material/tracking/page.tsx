@@ -13,21 +13,9 @@ export default function Page() {
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [busy, setBusy] = useState<string | null>(null)
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
-
-  const decide = async (rq: any, air: boolean) => {
-    setBusy(rq.id)
-    try {
-      const r = await fetch(`/api/pull-material/${rq.id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: air ? "PENDING_APPROVAL" : "NO_AIR", itemUpdates: rq.items.map((i: any) => ({ id: i.id, airDecision: air ? "AIR" : "NO_AIR" })) }),
-      })
-      if (r.ok) await load()
-    } finally { setBusy(null) }
-  }
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">กำลังโหลด…</div>
   if (!isAdmin) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">อยู่ระหว่างทดสอบ (Admin)</p></div>
@@ -70,10 +58,8 @@ export default function Page() {
                 )}
 
                 {rq.status === "PENDING_SCM_DECISION" && (
-                  <div className="mt-3 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg p-2 flex-wrap">
-                    <span className="text-xs text-amber-800 font-medium">SCM ตัดสินใจ:</span>
-                    <button onClick={() => decide(rq, true)} disabled={busy === rq.id} className="px-3 py-1 rounded-lg text-white text-xs font-semibold disabled:opacity-50" style={{ background: MAROON }}>✈ AIR (ขออนุมัติ)</button>
-                    <button onClick={() => decide(rq, false)} disabled={busy === rq.id} className="px-3 py-1 rounded-lg text-xs font-medium border border-gray-300 text-gray-600 disabled:opacity-50">ไม่ air</button>
+                  <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                    รอ SCM ตัดสินใจที่หน้า <span className="font-semibold">SCM REQUEST → Send Approve</span>
                   </div>
                 )}
               </div>

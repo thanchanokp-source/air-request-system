@@ -43,6 +43,7 @@ export default function ScmRequestPage() {
   const [results, setResults] = useState<Bom[]>([])
   const [searching, setSearching] = useState(false)
   const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<"request" | "approve">("request")
 
   const [openSo, setOpenSo] = useState<Bom | null>(null)
   const [materials, setMaterials] = useState<Bom[]>([])
@@ -105,7 +106,6 @@ export default function ScmRequestPage() {
   const addToCart = () => {
     const g = Number(pullGarment)
     if (!g || g <= 0) return alert("ใส่จำนวน garment ที่จะ pull ก่อน")
-    if (!scm.reasonAirPick.trim()) return alert("ใส่ Reason for Air Pick ก่อน — จำเป็นสำหรับการขออนุมัติ")
     const picked = materials.filter(m => m.itemCode && ticked.has(m.itemCode))
     if (picked.length === 0) return alert("ติ๊กเลือก material อย่างน้อย 1 รายการ")
     const add = picked.map(m => ({
@@ -145,9 +145,20 @@ export default function ScmRequestPage() {
   return (
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">
       <div>
-        <h1 className="text-xl font-bold" style={{ color: MAROON }}>SCM Request — Pull Material</h1>
-        <p className="text-sm text-gray-500">เลือก SO จาก Bill of Material → ติ๊ก material → ใส่จำนวน garment ที่จะ pull (คำนวณวัตถุดิบให้อัตโนมัติ)</p>
+        <h1 className="text-xl font-bold" style={{ color: MAROON }}>SCM — Pull Material</h1>
+        <p className="text-sm text-gray-500">Request: เลือก SO/material + pull qty · Send Approve: ตัดสินใจ air หลัง LG+PC ใส่ข้อมูล</p>
       </div>
+
+      {/* Sub-tabs */}
+      <div className="flex gap-1 border-b border-gray-200">
+        {([["request", "1 · Request"], ["approve", "2 · Send Approve"]] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === k ? "border-current" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+            style={tab === k ? { color: MAROON, borderColor: MAROON } : undefined}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "approve" ? <SendApprove bu={bu} setBu={setBu} /> : <>
 
       {/* BU tabs */}
       <div className="flex gap-1.5">
@@ -206,7 +217,6 @@ export default function ScmRequestPage() {
           <div className="mt-3 grid sm:grid-cols-3 gap-2">
             {([
               { k: "sewingStartDate", label: "Sewing Start Date", type: "date", req: false },
-              { k: "reasonAirPick", label: "Reason for Air Pick", type: "text", req: true },
             ] as const).map(f => (
               <div key={f.k}>
                 <label className="text-[11px] font-medium text-gray-500">{f.label}{f.req && <span className="text-red-500"> *</span>}</label>
@@ -294,6 +304,87 @@ export default function ScmRequestPage() {
           </button>
         </div>
       </div>
+      </>}
     </div>
+  )
+}
+
+// ── SCM · Send Approve — decide AIR / reject after LG + PC filled their data ──
+function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) {
+  const [reqs, setReqs] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [reason, setReason] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs((d.requests || []).filter((r: any) => r.status === "PENDING_SCM_DECISION")) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [bu]) // eslint-disable-line
+
+  const decide = async (rq: any, air: boolean) => {
+    if (air && !(reason[rq.id] || "").trim()) return alert("ใส่ Reason for Air ก่อนขออนุมัติ")
+    setBusy(rq.id)
+    try {
+      const r = await fetch(`/api/pull-material/${rq.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: air ? "PENDING_APPROVAL" : "NO_AIR", itemUpdates: rq.items.map((i: any) => ({ id: i.id, airDecision: air ? "AIR" : "NO_AIR", reasonAirPick: air ? (reason[rq.id] || "") : null })) }),
+      })
+      if (r.ok) await load()
+    } finally { setBusy(null) }
+  }
+
+  return (
+    <>
+      <div className="flex gap-1.5">{BUS.map(b => (
+        <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: MAROON } : undefined}>{b}</button>
+      ))}</div>
+
+      {loading ? <p className="text-sm text-gray-400">กำลังโหลด…</p> :
+        reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">ไม่มีเอกสารรอตัดสินใจ — ต้องผ่าน LG + จัดซื้อ (PC) ก่อน</div> :
+          reqs.map(rq => (
+            <div key={rq.id} className="bg-white rounded-xl border p-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div><span className="font-bold text-blue-700">{rq.documentNo}</span>
+                  <span className="text-xs text-gray-500"> · {rq.requesterName} · {rq.items.length} รายการ</span></div>
+                <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">รอ SCM ตัดสินใจ air</span>
+              </div>
+              <div className="mt-3 border rounded-xl overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50"><tr>
+                    {["SO", "วัตถุดิบ", "PULL", "G.W.(kg)", "In-House Air", "In-House Sea", "Est Air", "Est Sea", "Lead Air", "Lead Sea", "Air Freight", "Ship Date"].map(h =>
+                      <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {rq.items.map((it: any) => (
+                      <tr key={it.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-1.5 font-semibold text-gray-800">{it.soNoDoc}</td>
+                        <td className="px-3 py-1.5">{it.itemName || it.itemCode}</td>
+                        <td className="px-3 py-1.5">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
+                        <td className="px-3 py-1.5">{fmt(it.grossWeightKg || it.weight)}</td>
+                        <td className="px-3 py-1.5">{fmtDate(it.inHouseAirDate)}</td>
+                        <td className="px-3 py-1.5">{fmtDate(it.inHouseSeaDate)}</td>
+                        <td className="px-3 py-1.5">{fmt(it.estAir)}</td>
+                        <td className="px-3 py-1.5">{fmt(it.estSea)}</td>
+                        <td className="px-3 py-1.5">{it.leadTimeAir || "-"}</td>
+                        <td className="px-3 py-1.5">{it.leadTimeSea || "-"}</td>
+                        <td className="px-3 py-1.5">{fmt(it.airFreightCost)}</td>
+                        <td className="px-3 py-1.5">{fmtDate(it.shipmentDate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <label className="text-xs font-semibold text-gray-600">Reason for Air <span className="text-red-500">*</span></label>
+                <input value={reason[rq.id] || ""} onChange={e => setReason(p => ({ ...p, [rq.id]: e.target.value }))} placeholder="เหตุผลที่ต้อง air"
+                  className="flex-1 min-w-[240px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
+                <button onClick={() => decide(rq, true)} disabled={busy === rq.id} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>✈ AIR (ขออนุมัติ)</button>
+                <button onClick={() => decide(rq, false)} disabled={busy === rq.id} className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 disabled:opacity-50">Reject (ไม่ air)</button>
+              </div>
+            </div>
+          ))}
+    </>
   )
 }

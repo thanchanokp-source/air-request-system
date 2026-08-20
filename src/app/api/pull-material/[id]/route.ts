@@ -40,6 +40,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     weight: num, grossWeightKg: num, shipmentDate: dt,
     // SCM decision
     airDecision: (v) => v || null,
+    reasonAirPick: (v) => v || null,
+    sewingStartDate: dt,
     // LG actual
     invoiceNo: (v) => v || null, actualAir: num,
   }
