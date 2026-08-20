@@ -42,6 +42,7 @@ export default function ScmRequestPage() {
   const [q, setQ] = useState("")
   const [results, setResults] = useState<Bom[]>([])
   const [searching, setSearching] = useState(false)
+  const [open, setOpen] = useState(false)
 
   const [openSo, setOpenSo] = useState<Bom | null>(null)
   const [materials, setMaterials] = useState<Bom[]>([])
@@ -74,13 +75,18 @@ export default function ScmRequestPage() {
     return { txt: d.toLocaleString("th-TH", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }), stale }
   })()
 
-  const search = async () => {
-    setSearching(true); setOpenSo(null); setMaterials([])
-    try {
-      const r = await fetch(`/api/bom?bu=${bu}&q=${encodeURIComponent(q)}&limit=100`).then(r => r.json())
-      setResults(Array.isArray(r.rows) ? r.rows : [])
-    } finally { setSearching(false) }
-  }
+  // Debounced search-as-you-type → dropdown of matching SOs
+  useEffect(() => {
+    if (!q.trim()) { setResults([]); setOpen(false); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const r = await fetch(`/api/bom?bu=${bu}&q=${encodeURIComponent(q)}&limit=30`).then(r => r.json())
+        setResults(Array.isArray(r.rows) ? r.rows : []); setOpen(true)
+      } finally { setSearching(false) }
+    }, 350)
+    return () => clearTimeout(t)
+  }, [q, bu])
 
   const pickSo = async (b: Bom) => {
     setOpenSo(b); setMaterials([]); setPullGarment(""); setTicked(new Set()); setScm({ ...emptyScm }); setLoadingMat(true)
@@ -160,43 +166,27 @@ export default function ScmRequestPage() {
             {sync.stale && <span className="opacity-80">— job อาจยังไม่รันวันนี้</span>}
           </div>
         )}
-        <div className="flex items-center gap-2 flex-wrap">
-          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === "Enter" && search()}
-            placeholder="พิมพ์ SO / ชื่อลูกค้า / Customer PO / Brand แล้ว Enter"
-            className="flex-1 min-w-[280px] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
-          <button onClick={search} disabled={searching}
-            className="px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>
-            {searching ? "กำลังค้นหา…" : "ค้นหา"}
-          </button>
+        <div className="relative">
+          <input value={q} onChange={e => setQ(e.target.value)} onFocus={() => results.length > 0 && setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder="พิมพ์ SO / ชื่อลูกค้า / Customer PO / Brand… แล้วเลือกจากรายการ"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+          {searching && <span className="absolute right-3 top-2.5 text-xs text-gray-400">กำลังค้นหา…</span>}
+          {open && results.length > 0 && (
+            <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg max-h-80 overflow-auto">
+              {results.map((b, i) => (
+                <button key={i} onMouseDown={() => { pickSo(b); setQ(b.soNoDoc); setOpen(false) }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 border-b border-gray-50 last:border-0">
+                  <span className="font-semibold text-gray-800">{b.soNoDoc}</span>
+                  <span className="text-gray-500"> · {b.customerName || "-"} · {b.brand || "-"}/{b.gmtType || "-"} · order {fmt(b.orderQty)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {open && q.trim() && !searching && results.length === 0 && (
+            <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg px-3 py-2 text-xs text-gray-400">ไม่พบ SO</div>
+          )}
         </div>
-
-        {results.length > 0 && (
-          <div className="mt-3 border rounded-xl overflow-auto max-h-[320px]">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 sticky top-0"><tr>
-                {["", "SO", "ลูกค้า", "CUST PO", "STYLE", "BRAND", "GMT", "ORDER QTY", "SHIP DATE"].map(h =>
-                  <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
-              </tr></thead>
-              <tbody className="divide-y divide-gray-50">
-                {results.map((b, i) => (
-                  <tr key={i} className={`hover:bg-red-50/40 ${openSo?.soNoDoc === b.soNoDoc ? "bg-red-50" : ""}`}>
-                    <td className="px-3 py-1.5">
-                      <button onClick={() => pickSo(b)} className="text-xs px-2 py-0.5 rounded-md font-medium bg-red-50 text-red-700 hover:bg-red-100">เลือก</button>
-                    </td>
-                    <td className="px-3 py-1.5 font-semibold text-gray-800">{b.soNoDoc}</td>
-                    <td className="px-3 py-1.5">{b.customerName || "-"}</td>
-                    <td className="px-3 py-1.5">{b.customerPo || "-"}</td>
-                    <td className="px-3 py-1.5">{b.style || "-"}</td>
-                    <td className="px-3 py-1.5">{b.brand || "-"}</td>
-                    <td className="px-3 py-1.5">{b.gmtType || "-"}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(b.orderQty)}</td>
-                    <td className="px-3 py-1.5">{fmtDate(b.shipmentDate)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
       {/* Material lines of the picked SO */}
