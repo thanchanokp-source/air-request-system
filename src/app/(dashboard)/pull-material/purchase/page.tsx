@@ -36,7 +36,7 @@ export default function PurchasePage() {
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
   const valOf = (it: any, k: string) => {
     if (edits[it.id]?.[k] !== undefined) return edits[it.id][k]
-    if (it[k] == null) return k === "weight" && it.weightGenerated != null ? String(it.weightGenerated) : ""
+    if (it[k] == null) return ""
     return (k === "shipmentDate") ? String(it[k]).slice(0, 10) : String(it[k])
   }
 
@@ -113,7 +113,7 @@ export default function PurchasePage() {
                           </select>
                         </td>
                         <td className="px-3 py-1.5">
-                          <input type="number" value={valOf(it, "weight")} onChange={e => setVal(it.id, "weight", e.target.value)}
+                          <input type="number" value={valOf(it, "weight")} onChange={e => setVal(it.id, "weight", e.target.value)} placeholder="0"
                             className="w-24 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-red-300" />
                         </td>
                         <td className="px-3 py-1.5">
