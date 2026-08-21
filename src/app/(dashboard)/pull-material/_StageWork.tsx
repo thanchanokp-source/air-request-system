@@ -27,6 +27,8 @@ const CTX: { key: string; label: string; kind?: "date" | "num" }[] = [
   { key: "orderQty", label: "Order Qty", kind: "num" },
   { key: "pullGarment", label: "Pull Garment", kind: "num" },
   { key: "consumption", label: "Consumption", kind: "num" },
+  { key: "country", label: "Country" },
+  { key: "incoterm", label: "Incoterm" },
   { key: "vendorName", label: "Vendor" },
   { key: "poNoDoc", label: "PO No" },
   { key: "shipmentDate", label: "Ship Date", kind: "date" },

@@ -385,8 +385,13 @@ model PullMaterialItem {
   estSea          Float?
   leadTimeAir     String?
   leadTimeSea     String?
+  seaFreightCost  Float?
+  incotermCost    Float?    // freight-side incoterm cost entered by LG (per the term PC picked)
   // Purchasing input
-  weight          Float?
+  weight          Float?    // confirmed / revised per-unit weight (kg)
+  weightGenerated Float?    // system-suggested weight (ref)
+  country         String?   // destination country (drives freight rate) — picked by PC
+  incoterm        String?   // FOB / CIF / EX-WORK — picked by PC
   // LG actual (close)
   invoiceNo       String?
   actualAir       Float?

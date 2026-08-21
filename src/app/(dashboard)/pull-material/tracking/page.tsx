@@ -4,8 +4,8 @@ import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, STATUS_LABEL } from "../_StageWork"
 
-const FLOW = ["PENDING_LOGISTICS", "PENDING_PURCHASING", "PENDING_SCM_DECISION", "PENDING_APPROVAL", "APPROVED"]
-const STEP_SHORT = ["LG", "Purchasing", "SCM", "Approve", "Done"]
+const FLOW = ["PENDING_PURCHASING", "PENDING_LOGISTICS", "PENDING_SCM_DECISION", "PENDING_APPROVAL", "APPROVED"]
+const STEP_SHORT = ["Purchasing", "LG", "SCM", "Approve", "Done"]
 
 export default function Page() {
   const { data: session, status: auth } = useSession()

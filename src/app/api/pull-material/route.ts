@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       documentNo, bu, requesterName,
       requesterEmail: body.requesterEmail || null,
       createdById: userId,
-      status: "PENDING_LOGISTICS",
+      status: "PENDING_PURCHASING",
       items: {
         create: items.map((i: any) => ({
           soNoDoc: String(i.soNoDoc || ""),
@@ -88,6 +88,8 @@ export async function POST(req: NextRequest) {
           reasonAirPick: i.reasonAirPick || null,
           grossWeightKg: num(i.grossWeightKg),
           airFreightCost: num(i.airFreightCost),
+          // System-suggested weight (ref for Purchasing) = pull qty × consumption per unit.
+          weightGenerated: (num(i.pullMaterialQty) && num(i.consumption)) ? Math.round(num(i.pullMaterialQty)! * num(i.consumption)! * 100) / 100 : null,
         })),
       },
     },

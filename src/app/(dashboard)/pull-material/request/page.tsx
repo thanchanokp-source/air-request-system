@@ -19,9 +19,11 @@ type Bom = {
 // Columns SCM sees when selecting material lines (per BOM spec)
 const MAT_COLS: { k: keyof Bom; label: string; kind?: "date" | "num" }[] = [
   { k: "bu", label: "BU" }, { k: "soYear", label: "SO YEAR" }, { k: "soNoDoc", label: "SO NO" },
-  { k: "customerName", label: "CUST NAME" }, { k: "groupCode", label: "GROUP" }, { k: "cpartNo", label: "CPART" },
-  { k: "partDesc", label: "PART DESC" }, { k: "itemNo", label: "ITEM NO" }, { k: "itemCode", label: "ITEM CODE" },
-  { k: "itemName", label: "ITEM NAME" }, { k: "orderQty", label: "ORDER QTY", kind: "num" },
+  { k: "customerName", label: "CUST NAME" }, { k: "groupCode", label: "GROUP" },
+  { k: "itemCode", label: "ITEM CODE" }, { k: "itemNo", label: "ITEM NO" },
+  { k: "itemName", label: "ITEM NAME" }, { k: "consumption", label: "CONSUMPTION", kind: "num" },
+  { k: "cpartNo", label: "CPART" }, { k: "partDesc", label: "PART DESC" },
+  { k: "orderQty", label: "ORDER QTY", kind: "num" },
   { k: "poqtyBomdummy", label: "POQTY BOMDUMMY", kind: "num" }, { k: "poNoDoc", label: "PO NO" },
   { k: "poDate", label: "PO DATE", kind: "date" }, { k: "updInhouse", label: "UPD INHOUSE", kind: "date" },
   { k: "vendorName", label: "VEND NAME" }, { k: "status", label: "STATUS" }, { k: "poUsername", label: "POUSERNAME" },
@@ -210,19 +212,6 @@ export default function ScmRequestPage() {
             <span className="text-xs text-gray-400">from order {fmt(openSo.orderQty)} pcs → material qty auto-calculated</span>
           </div>
 
-          {/* SCM keys request info (per SO — applied to all materials added) */}
-          <div className="mt-3 grid sm:grid-cols-3 gap-2">
-            {([
-              { k: "sewingStartDate", label: "Sewing Start Date", type: "date", req: false },
-            ] as const).map(f => (
-              <div key={f.k}>
-                <label className="text-[11px] font-medium text-gray-500">{f.label}{f.req && <span className="text-red-500"> *</span>}</label>
-                <input type={f.type} value={(scm as any)[f.k]} onChange={e => setScm(s => ({ ...s, [f.k]: e.target.value }))}
-                  className={`w-full rounded-lg px-2 py-1 text-xs mt-0.5 focus:outline-none focus:ring-1 border ${f.req && !String((scm as any)[f.k]).trim() ? "border-red-400 focus:ring-red-400 bg-red-50" : "border-gray-300 focus:ring-red-300"}`} />
-              </div>
-            ))}
-          </div>
-
           {loadingMat ? <p className="text-sm text-gray-400 mt-3">Loading materials…</p> : (
             <div className="mt-3 border rounded-xl overflow-auto max-h-[340px]">
               <table className="w-full text-xs">
@@ -272,14 +261,17 @@ export default function ScmRequestPage() {
           <div className="border rounded-xl overflow-auto mt-3">
             <table className="w-full text-xs">
               <thead className="bg-gray-50"><tr>
-                {["SO", "Material", "PULL garment", "PULL material", "Unit", ""].map(h =>
+                {["SO", "Item No", "Item Code", "Material", "Consumption", "PULL garment", "PULL material", "Unit", ""].map(h =>
                   <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-gray-50">
                 {cart.map(c => (
                   <tr key={c.key} className="hover:bg-gray-50">
                     <td className="px-3 py-1.5 font-semibold text-gray-800">{c.soNoDoc}</td>
+                    <td className="px-3 py-1.5">{c.itemNo || "-"}</td>
+                    <td className="px-3 py-1.5">{c.itemCode || "-"}</td>
                     <td className="px-3 py-1.5">{c.itemName || c.itemCode}</td>
+                    <td className="px-3 py-1.5 text-right">{fmt(c.consumption)}</td>
                     <td className="px-3 py-1.5 text-right">{fmt(c.pullGarment)}</td>
                     <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(c.pullMaterialQty)}</td>
                     <td className="px-3 py-1.5">{c.bomUom || "-"}</td>
@@ -302,27 +294,49 @@ export default function ScmRequestPage() {
   )
 }
 
-// ── SCM · Send Approve — decide AIR / reject after LG + PC filled their data ──
+// ── SCM · Send Approve — pick which lines go AIR + sew date per line, after PC+LG data ──
 function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) {
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [reason, setReason] = useState<Record<string, string>>({})
+  const [air, setAir] = useState<Record<string, boolean>>({})       // itemId → air?
+  const [sew, setSew] = useState<Record<string, string>>({})        // itemId → sew date
   const [busy, setBusy] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
-    try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs((d.requests || []).filter((r: any) => r.status === "PENDING_SCM_DECISION")) }
-    finally { setLoading(false) }
+    try {
+      const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json())
+      const rows = (d.requests || []).filter((r: any) => r.status === "PENDING_SCM_DECISION")
+      setReqs(rows)
+      // default: every line AIR; prefill sew date from snapshot
+      const a: Record<string, boolean> = {}, s: Record<string, string> = {}
+      rows.forEach((rq: any) => rq.items.forEach((it: any) => {
+        a[it.id] = it.airDecision ? it.airDecision === "AIR" : true
+        s[it.id] = it.sewingStartDate ? String(it.sewingStartDate).slice(0, 10) : ""
+      }))
+      setAir(a); setSew(s)
+    } finally { setLoading(false) }
   }
   useEffect(() => { load() }, [bu]) // eslint-disable-line
 
-  const decide = async (rq: any, air: boolean) => {
-    if (air && !(reason[rq.id] || "").trim()) return alert("Enter the Reason for Air before requesting approval.")
+  const submit = async (rq: any) => {
+    const anyAir = rq.items.some((it: any) => air[it.id])
+    if (anyAir && !(reason[rq.id] || "").trim()) return alert("Enter the Reason for Air before requesting approval.")
+    if (!confirm(anyAir ? "Send the AIR lines for approval?" : "Mark all lines as NO AIR?")) return
     setBusy(rq.id)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: air ? "PENDING_APPROVAL" : "NO_AIR", itemUpdates: rq.items.map((i: any) => ({ id: i.id, airDecision: air ? "AIR" : "NO_AIR", reasonAirPick: air ? (reason[rq.id] || "") : null })) }),
+        body: JSON.stringify({
+          status: anyAir ? "PENDING_APPROVAL" : "NO_AIR",
+          itemUpdates: rq.items.map((it: any) => ({
+            id: it.id,
+            airDecision: air[it.id] ? "AIR" : "NO_AIR",
+            sewingStartDate: sew[it.id] || null,
+            reasonAirPick: air[it.id] ? (reason[rq.id] || "") : null,
+          })),
+        }),
       })
       if (r.ok) await load()
     } finally { setBusy(null) }
@@ -335,7 +349,7 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
       ))}</div>
 
       {loading ? <p className="text-sm text-gray-400">Loading…</p> :
-        reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">No documents pending decision — must pass LG + Purchasing (PC) first</div> :
+        reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">No documents pending decision — must pass Purchasing (PC) + LG first</div> :
           reqs.map(rq => (
             <div key={rq.id} className="bg-white rounded-xl border p-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
@@ -346,24 +360,27 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
               <div className="mt-3 border rounded-xl overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
-                    {["SO", "Material", "PULL", "G.W.(kg)", "In-House Air", "In-House Sea", "Est Air", "Est Sea", "Lead Air", "Lead Sea", "Air Freight", "Ship Date"].map(h =>
+                    {["✈ AIR", "SO", "Material", "PULL", "Consumption", "Country", "Incoterm", "G.W.(kg)", "Air Freight", "Sea Freight", "Lead Air", "Lead Sea", "In-House Air", "In-House Sea", "Sew Date"].map(h =>
                       <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
                     {rq.items.map((it: any) => (
-                      <tr key={it.id} className="hover:bg-gray-50">
+                      <tr key={it.id} className={`hover:bg-gray-50 ${air[it.id] ? "" : "opacity-50"}`}>
+                        <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={!!air[it.id]} onChange={e => setAir(p => ({ ...p, [it.id]: e.target.checked }))} /></td>
                         <td className="px-3 py-1.5 font-semibold text-gray-800">{it.soNoDoc}</td>
-                        <td className="px-3 py-1.5">{it.itemName || it.itemCode}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{it.itemName || it.itemCode}</td>
                         <td className="px-3 py-1.5">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
-                        <td className="px-3 py-1.5">{fmt(it.grossWeightKg || it.weight)}</td>
-                        <td className="px-3 py-1.5">{fmtDate(it.inHouseAirDate)}</td>
-                        <td className="px-3 py-1.5">{fmtDate(it.inHouseSeaDate)}</td>
-                        <td className="px-3 py-1.5">{fmt(it.estAir)}</td>
-                        <td className="px-3 py-1.5">{fmt(it.estSea)}</td>
+                        <td className="px-3 py-1.5">{fmt(it.consumption)}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{it.country || "-"}</td>
+                        <td className="px-3 py-1.5">{it.incoterm || "-"}</td>
+                        <td className="px-3 py-1.5">{fmt(it.weight)}</td>
+                        <td className="px-3 py-1.5 font-semibold" style={{ color: MAROON }}>{fmt(it.airFreightCost)}</td>
+                        <td className="px-3 py-1.5">{fmt(it.seaFreightCost)}</td>
                         <td className="px-3 py-1.5">{it.leadTimeAir || "-"}</td>
                         <td className="px-3 py-1.5">{it.leadTimeSea || "-"}</td>
-                        <td className="px-3 py-1.5">{fmt(it.airFreightCost)}</td>
-                        <td className="px-3 py-1.5">{fmtDate(it.shipmentDate)}</td>
+                        <td className="px-3 py-1.5">{fmtDate(it.inHouseAirDate)}</td>
+                        <td className="px-3 py-1.5">{fmtDate(it.inHouseSeaDate)}</td>
+                        <td className="px-3 py-1.5"><input type="date" value={sew[it.id] || ""} onChange={e => setSew(p => ({ ...p, [it.id]: e.target.value }))} className="border border-gray-200 rounded px-2 py-1 text-xs" /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -371,11 +388,13 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
               </div>
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <label className="text-xs font-semibold text-gray-600">Reason for Air <span className="text-red-500">*</span></label>
-                <input value={reason[rq.id] || ""} onChange={e => setReason(p => ({ ...p, [rq.id]: e.target.value }))} placeholder="Why air is required"
+                <input value={reason[rq.id] || ""} onChange={e => setReason(p => ({ ...p, [rq.id]: e.target.value }))} placeholder="Why air is required (for the AIR lines)"
                   className="flex-1 min-w-[240px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
-                <button onClick={() => decide(rq, true)} disabled={busy === rq.id} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>✈ AIR (request approval)</button>
-                <button onClick={() => decide(rq, false)} disabled={busy === rq.id} className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 disabled:opacity-50">Reject (no air)</button>
+                <button onClick={() => submit(rq)} disabled={busy === rq.id} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>
+                  {busy === rq.id ? "..." : "Submit decision →"}
+                </button>
               </div>
+              <p className="mt-1.5 text-[11px] text-gray-400">Ticked lines = request AIR approval · unticked = NO AIR. If no line is ticked the whole doc is marked NO AIR.</p>
             </div>
           ))}
     </>

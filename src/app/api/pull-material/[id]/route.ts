@@ -4,9 +4,11 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
 // Valid lifecycle statuses (in order).
+// Flow: Purchase enters country/incoterm/weight FIRST, then Logistics computes freight,
+// then SCM decides air per-line, then Approval.
 export const PULL_FLOW = [
-  "PENDING_LOGISTICS",
   "PENDING_PURCHASING",
+  "PENDING_LOGISTICS",
   "PENDING_SCM_DECISION",
   "PENDING_APPROVAL",
   "APPROVED",
@@ -35,9 +37,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const FIELD: Record<string, (v: any) => any> = {
     // Logistics
     inHouseAirDate: dt, inHouseSeaDate: dt, estAir: num, estSea: num,
-    leadTimeAir: (v) => v || null, leadTimeSea: (v) => v || null, airFreightCost: num,
+    leadTimeAir: (v) => v || null, leadTimeSea: (v) => v || null,
+    airFreightCost: num, seaFreightCost: num, incotermCost: num,
     // Purchase
-    weight: num, grossWeightKg: num, shipmentDate: dt,
+    weight: num, weightGenerated: num, grossWeightKg: num, shipmentDate: dt,
+    country: (v) => v || null, incoterm: (v) => v || null,
     // SCM decision
     airDecision: (v) => v || null,
     reasonAirPick: (v) => v || null,
