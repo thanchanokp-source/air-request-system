@@ -640,7 +640,7 @@ export default function FilesPage() {
                                 <td className={`py-1.5 px-3 font-semibold text-gray-800 whitespace-nowrap ${!combineMode ? "pl-5" : ""}`}>{item.so}</td>
                                 <td className="py-1.5 px-3 whitespace-nowrap">{item.style}</td>
                                 <td className="py-1.5 px-3 text-blue-700 whitespace-nowrap">{req.documentNo}</td>
-                                <td className="py-1.5 px-3 text-gray-500 whitespace-nowrap">{req.brandName}</td>
+                                <td className="py-1.5 px-3 text-gray-500 whitespace-nowrap">{item.brand || req.brandName}</td>
                                 <td className="py-1.5 px-3"><span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${req.bu === "GW" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{req.bu}</span></td>
                                 <td className="py-1.5 px-3 whitespace-nowrap">{fmtDate(item.planShipmentDate)}</td>
                                 <td className="py-1.5 px-3 text-right tabular-nums font-semibold text-gray-700">{fmtNum(item.qtyRequestAir)}</td>
@@ -704,7 +704,7 @@ export default function FilesPage() {
                               className="w-full flex flex-wrap items-center gap-2 pl-16 pr-5 py-2.5 hover:bg-blue-50 text-left group">
                               <span className="text-gray-400 text-xs w-3">{expandedDocs.has(docKey) ? "▼" : "▶"}</span>
                               <span className="font-semibold text-blue-700 text-sm">{req.documentNo}</span>
-                              <span className="text-xs text-gray-400">{req.brandName}</span>
+                              <span className="text-xs text-gray-400">{[...new Set(items.map((i: any) => i.brand).filter(Boolean))].join(", ") || req.brandName}</span>
                               <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${req.bu === "GW" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{req.bu}</span>
                               {req.crNo && <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium whitespace-nowrap">CR: {req.crNo}</span>}
                               {(() => {
@@ -763,6 +763,7 @@ export default function FilesPage() {
                                         {combineMode && <th className="py-1 pr-2 w-6"></th>}
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">SO</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Style</th>
+                                        <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Brand</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Description</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">QTY Air</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Booking</th>
@@ -790,6 +791,7 @@ export default function FilesPage() {
                                             )}
                                             <td className="py-1.5 pr-3 font-medium text-gray-800">{item.so}</td>
                                             <td className="py-1.5 pr-3 text-gray-600">{item.style}</td>
+                                            <td className="py-1.5 pr-3 text-gray-500 whitespace-nowrap">{item.brand || req.brandName}</td>
                                             <td className="py-1.5 pr-3 text-gray-500 max-w-[140px] truncate">{item.description}</td>
                                             <td className="py-1.5 pr-3 text-gray-700 font-semibold">{item.qtyRequestAir}</td>
                                             <td className="py-1.5 pr-3">
