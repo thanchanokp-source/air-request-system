@@ -32,7 +32,7 @@ type ScmInfo = { inHouseAirDate: string; inHouseSeaDate: string; sewingStartDate
 type CartItem = Bom & ScmInfo & { key: string; pullGarment: number; pullMaterialQty: number }
 
 const fmt = (n: any) => (n == null || isNaN(Number(n)) ? "-" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }))
-const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toLocaleDateString("th-TH") }
+const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toLocaleDateString("en-GB") }
 
 export default function ScmRequestPage() {
   const { data: session, status } = useSession()
@@ -54,14 +54,11 @@ export default function ScmRequestPage() {
   const [scm, setScm] = useState({ ...emptyScm })
 
   const [cart, setCart] = useState<CartItem[]>([])
-  const [requester, setRequester] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
 
-  useEffect(() => {
-    const n = (session?.user as any)?.name || (session?.user as any)?.email || ""
-    if (n && !requester) setRequester(n)
-  }, [session]) // eslint-disable-line
+  // Requester is always the logged-in user (creator) — no manual field.
+  const requesterName = (session?.user as any)?.name || (session?.user as any)?.email || ""
 
   // BOM data freshness (from the daily refresh job → insert_date)
   useEffect(() => {
@@ -73,7 +70,7 @@ export default function ScmRequestPage() {
     const d = new Date(lastSync)
     if (isNaN(d.getTime())) return null
     const stale = d.toDateString() !== new Date().toDateString()
-    return { txt: d.toLocaleString("th-TH", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }), stale }
+    return { txt: d.toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }), stale }
   })()
 
   // Debounced search-as-you-type → dropdown of matching SOs
@@ -105,9 +102,9 @@ export default function ScmRequestPage() {
 
   const addToCart = () => {
     const g = Number(pullGarment)
-    if (!g || g <= 0) return alert("ใส่จำนวน garment ที่จะ pull ก่อน")
+    if (!g || g <= 0) return alert("Enter the number of garments to pull first.")
     const picked = materials.filter(m => m.itemCode && ticked.has(m.itemCode))
-    if (picked.length === 0) return alert("ติ๊กเลือก material อย่างน้อย 1 รายการ")
+    if (picked.length === 0) return alert("Tick at least one material line.")
     const add = picked.map(m => ({
       ...m, key: `${m.soNoDoc}|${m.itemCode}`,
       pullGarment: g, pullMaterialQty: calcQty(m, g), ...scm,
@@ -118,27 +115,27 @@ export default function ScmRequestPage() {
   const removeCart = (key: string) => setCart(p => p.filter(c => c.key !== key))
 
   const submit = async () => {
-    if (!requester.trim()) return alert("ใส่ชื่อผู้ขอก่อน")
-    if (cart.length === 0) return alert("ยังไม่มีรายการในคำขอ")
-    if (!confirm(`ส่งคำขอ Pull Material ${cart.length} รายการ?`)) return
+    if (!requesterName.trim()) return alert("No signed-in user found.")
+    if (cart.length === 0) return alert("No items in the request yet.")
+    if (!confirm(`Submit Pull Material request with ${cart.length} item(s)?`)) return
     setSubmitting(true)
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName: requester, requesterEmail: (session?.user as any)?.email, items: cart }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, items: cart }),
       })
       const d = await r.json()
-      if (r.ok) { alert(`ส่งคำขอสำเร็จ: ${d.request?.documentNo}`); setCart([]) }
-      else alert(`ผิดพลาด: ${d.error || "ส่งไม่สำเร็จ"}`)
+      if (r.ok) { alert(`Submitted: ${d.request?.documentNo}`); setCart([]) }
+      else alert(`Error: ${d.error || "submit failed"}`)
     } finally { setSubmitting(false) }
   }
 
-  if (status === "loading") return <div className="p-10 text-center text-gray-400 text-sm">กำลังโหลด…</div>
+  if (status === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
   if (!isAdmin) return (
     <div className="p-10 max-w-lg mx-auto text-center">
       <div className="text-5xl">🔒</div>
-      <h1 className="text-lg font-bold mt-3" style={{ color: MAROON }}>Pull Material — อยู่ระหว่างทดสอบ</h1>
-      <p className="text-sm text-gray-500 mt-2">เปิดให้ทุกคนเมื่อทดสอบเสร็จ</p>
+      <h1 className="text-lg font-bold mt-3" style={{ color: MAROON }}>Pull Material — under testing</h1>
+      <p className="text-sm text-gray-500 mt-2">Opens to everyone once testing is complete.</p>
     </div>
   )
 
@@ -146,7 +143,7 @@ export default function ScmRequestPage() {
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">
       <div>
         <h1 className="text-xl font-bold" style={{ color: MAROON }}>SCM — Pull Material</h1>
-        <p className="text-sm text-gray-500">Request: เลือก SO/material + pull qty · Send Approve: ตัดสินใจ air หลัง LG+PC ใส่ข้อมูล</p>
+        <p className="text-sm text-gray-500">Request: pick SO / material + pull qty · Send Approve: decide air after LG + PC fill their data</p>
       </div>
 
       {/* Sub-tabs */}
@@ -173,16 +170,16 @@ export default function ScmRequestPage() {
       <div className="bg-white rounded-xl border p-4">
         {sync && (
           <div className={`mb-3 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${sync.stale ? "bg-amber-50 border-amber-300 text-amber-800" : "bg-green-50 border-green-300 text-green-800"}`}>
-            {sync.stale ? "⚠ BOM อาจไม่สด" : "● BOM อัปเดตล่าสุด"}: {sync.txt}
-            {sync.stale && <span className="opacity-80">— job อาจยังไม่รันวันนี้</span>}
+            {sync.stale ? "⚠ BOM may be stale" : "● BOM last updated"}: {sync.txt}
+            {sync.stale && <span className="opacity-80">— job may not have run today</span>}
           </div>
         )}
         <div className="relative">
           <input value={q} onChange={e => setQ(e.target.value)} onFocus={() => results.length > 0 && setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
-            placeholder="พิมพ์ SO / ชื่อลูกค้า / Customer PO / Brand… แล้วเลือกจากรายการ"
+            placeholder="Type SO / Customer name / Customer PO / Brand… then pick from the list"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
-          {searching && <span className="absolute right-3 top-2.5 text-xs text-gray-400">กำลังค้นหา…</span>}
+          {searching && <span className="absolute right-3 top-2.5 text-xs text-gray-400">Searching…</span>}
           {open && results.length > 0 && (
             <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg max-h-80 overflow-auto">
               {results.map((b, i) => (
@@ -195,7 +192,7 @@ export default function ScmRequestPage() {
             </div>
           )}
           {open && q.trim() && !searching && results.length === 0 && (
-            <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg px-3 py-2 text-xs text-gray-400">ไม่พบ SO</div>
+            <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg px-3 py-2 text-xs text-gray-400">No SO found</div>
           )}
         </div>
       </div>
@@ -203,14 +200,14 @@ export default function ScmRequestPage() {
       {/* Material lines of the picked SO */}
       {openSo && (
         <div className="bg-white rounded-xl border p-4">
-          <h2 className="font-semibold text-gray-800">Material ของ SO {openSo.soNoDoc}
-            <span className="text-xs text-gray-400 font-normal"> · {openSo.customerName} · order {fmt(openSo.orderQty)} ตัว</span>
+          <h2 className="font-semibold text-gray-800">Materials of SO {openSo.soNoDoc}
+            <span className="text-xs text-gray-400 font-normal"> · {openSo.customerName} · order {fmt(openSo.orderQty)} pcs</span>
           </h2>
           <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <label className="text-sm font-semibold text-gray-600">Pull กี่ garment: *</label>
-            <input value={pullGarment} onChange={e => setPullGarment(e.target.value)} type="number" placeholder="เช่น 30"
+            <label className="text-sm font-semibold text-gray-600">Pull how many garments: *</label>
+            <input value={pullGarment} onChange={e => setPullGarment(e.target.value)} type="number" placeholder="e.g. 30"
               className="w-32 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
-            <span className="text-xs text-gray-400">จาก order {fmt(openSo.orderQty)} ตัว → วัตถุดิบคำนวณให้อัตโนมัติ</span>
+            <span className="text-xs text-gray-400">from order {fmt(openSo.orderQty)} pcs → material qty auto-calculated</span>
           </div>
 
           {/* SCM keys request info (per SO — applied to all materials added) */}
@@ -226,13 +223,13 @@ export default function ScmRequestPage() {
             ))}
           </div>
 
-          {loadingMat ? <p className="text-sm text-gray-400 mt-3">กำลังโหลด material…</p> : (
+          {loadingMat ? <p className="text-sm text-gray-400 mt-3">Loading materials…</p> : (
             <div className="mt-3 border rounded-xl overflow-auto max-h-[340px]">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 sticky top-0"><tr>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">ติ๊ก</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500">Pick</th>
                   {MAT_COLS.map(c => <th key={c.k} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{c.label}</th>)}
-                  <th className="px-3 py-2 text-left font-medium text-red-700 whitespace-nowrap">PULL (คำนวณ)</th>
+                  <th className="px-3 py-2 text-left font-medium text-red-700 whitespace-nowrap">PULL (calc)</th>
                 </tr></thead>
                 <tbody className="divide-y divide-gray-50">
                   {materials.map((m, i) => {
@@ -254,14 +251,14 @@ export default function ScmRequestPage() {
                       </tr>
                     )
                   })}
-                  {materials.length === 0 && <tr><td colSpan={MAT_COLS.length + 2} className="px-3 py-3 text-center text-gray-400">ไม่พบ material</td></tr>}
+                  {materials.length === 0 && <tr><td colSpan={MAT_COLS.length + 2} className="px-3 py-3 text-center text-gray-400">No materials found</td></tr>}
                 </tbody>
               </table>
             </div>
           )}
           <div className="mt-3 flex justify-end">
             <button onClick={addToCart} className="px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>
-              + เพิ่มเข้าคำขอ
+              + Add to request
             </button>
           </div>
         </div>
@@ -269,17 +266,13 @@ export default function ScmRequestPage() {
 
       {/* Cart */}
       <div className="bg-white rounded-xl border p-4">
-        <h2 className="font-semibold text-gray-800">รายการที่จะขอ Pull ({cart.length})</h2>
-        <div className="my-3">
-          <label className="text-xs font-semibold text-gray-600">ผู้ขอ (Requester) *</label>
-          <input value={requester} onChange={e => setRequester(e.target.value)} placeholder="ชื่อผู้ขอ / แผนก"
-            className="w-full max-w-sm mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-        </div>
-        {cart.length === 0 ? <p className="text-sm text-gray-400">ยังไม่มีรายการ — ค้นหา SO แล้วเลือก material</p> : (
-          <div className="border rounded-xl overflow-auto">
+        <h2 className="font-semibold text-gray-800">Items to pull ({cart.length})</h2>
+        <p className="text-xs text-gray-500 mt-1">Requester: <span className="font-medium text-gray-700">{requesterName || "-"}</span></p>
+        {cart.length === 0 ? <p className="text-sm text-gray-400 mt-3">No items yet — search an SO and pick materials.</p> : (
+          <div className="border rounded-xl overflow-auto mt-3">
             <table className="w-full text-xs">
               <thead className="bg-gray-50"><tr>
-                {["SO", "วัตถุดิบ", "PULL garment", "PULL วัตถุดิบ", "หน่วย", ""].map(h =>
+                {["SO", "Material", "PULL garment", "PULL material", "Unit", ""].map(h =>
                   <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
               </tr></thead>
               <tbody className="divide-y divide-gray-50">
@@ -300,7 +293,7 @@ export default function ScmRequestPage() {
         <div className="mt-3 flex justify-end">
           <button onClick={submit} disabled={submitting || cart.length === 0}
             className="px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: MAROON }}>
-            {submitting ? "กำลังส่ง…" : "ส่งคำขอ Pull Material →"}
+            {submitting ? "Submitting…" : "Submit Pull Material →"}
           </button>
         </div>
       </div>
@@ -324,7 +317,7 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
   useEffect(() => { load() }, [bu]) // eslint-disable-line
 
   const decide = async (rq: any, air: boolean) => {
-    if (air && !(reason[rq.id] || "").trim()) return alert("ใส่ Reason for Air ก่อนขออนุมัติ")
+    if (air && !(reason[rq.id] || "").trim()) return alert("Enter the Reason for Air before requesting approval.")
     setBusy(rq.id)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
@@ -341,19 +334,19 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
         <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: MAROON } : undefined}>{b}</button>
       ))}</div>
 
-      {loading ? <p className="text-sm text-gray-400">กำลังโหลด…</p> :
-        reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">ไม่มีเอกสารรอตัดสินใจ — ต้องผ่าน LG + จัดซื้อ (PC) ก่อน</div> :
+      {loading ? <p className="text-sm text-gray-400">Loading…</p> :
+        reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">No documents pending decision — must pass LG + Purchasing (PC) first</div> :
           reqs.map(rq => (
             <div key={rq.id} className="bg-white rounded-xl border p-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div><span className="font-bold text-blue-700">{rq.documentNo}</span>
-                  <span className="text-xs text-gray-500"> · {rq.requesterName} · {rq.items.length} รายการ</span></div>
-                <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">รอ SCM ตัดสินใจ air</span>
+                  <span className="text-xs text-gray-500"> · {rq.requesterName} · {rq.items.length} items</span></div>
+                <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">Pending SCM air decision</span>
               </div>
               <div className="mt-3 border rounded-xl overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
-                    {["SO", "วัตถุดิบ", "PULL", "G.W.(kg)", "In-House Air", "In-House Sea", "Est Air", "Est Sea", "Lead Air", "Lead Sea", "Air Freight", "Ship Date"].map(h =>
+                    {["SO", "Material", "PULL", "G.W.(kg)", "In-House Air", "In-House Sea", "Est Air", "Est Sea", "Lead Air", "Lead Sea", "Air Freight", "Ship Date"].map(h =>
                       <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
@@ -378,10 +371,10 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
               </div>
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <label className="text-xs font-semibold text-gray-600">Reason for Air <span className="text-red-500">*</span></label>
-                <input value={reason[rq.id] || ""} onChange={e => setReason(p => ({ ...p, [rq.id]: e.target.value }))} placeholder="เหตุผลที่ต้อง air"
+                <input value={reason[rq.id] || ""} onChange={e => setReason(p => ({ ...p, [rq.id]: e.target.value }))} placeholder="Why air is required"
                   className="flex-1 min-w-[240px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
-                <button onClick={() => decide(rq, true)} disabled={busy === rq.id} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>✈ AIR (ขออนุมัติ)</button>
-                <button onClick={() => decide(rq, false)} disabled={busy === rq.id} className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 disabled:opacity-50">Reject (ไม่ air)</button>
+                <button onClick={() => decide(rq, true)} disabled={busy === rq.id} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>✈ AIR (request approval)</button>
+                <button onClick={() => decide(rq, false)} disabled={busy === rq.id} className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 disabled:opacity-50">Reject (no air)</button>
               </div>
             </div>
           ))}

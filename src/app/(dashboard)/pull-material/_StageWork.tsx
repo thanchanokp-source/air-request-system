@@ -6,12 +6,12 @@ import { useSession } from "next-auth/react"
 export const MAROON = "#6b1a1a"
 export const BUS = ["NYG", "EA", "TRM", "GW"]
 export const fmt = (n: any) => (n == null || isNaN(Number(n)) ? "-" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }))
-export const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toLocaleDateString("th-TH") }
+export const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toLocaleDateString("en-GB") }
 
 export const STATUS_LABEL: Record<string, string> = {
-  PENDING_LOGISTICS: "รอ Logistics", PENDING_PURCHASING: "รอจัดซื้อ",
-  PENDING_SCM_DECISION: "รอ SCM ตัดสินใจ air", PENDING_APPROVAL: "รออนุมัติ",
-  APPROVED: "อนุมัติแล้ว", NO_AIR: "ไม่ air", COMPLETED: "เสร็จสิ้น",
+  PENDING_LOGISTICS: "Pending Logistics", PENDING_PURCHASING: "Pending Purchasing",
+  PENDING_SCM_DECISION: "Pending SCM Decision", PENDING_APPROVAL: "Pending Approval",
+  APPROVED: "Approved", NO_AIR: "No Air", COMPLETED: "Completed",
 }
 
 type Field = { key: string; label: string; type: "date" | "number" | "text" }
@@ -19,11 +19,11 @@ type Action = { label: string; toStatus: string; color?: string }
 
 // Read-only BOM/snapshot context shown to LG / Purchase / Approval before their input fields.
 const CTX: { key: string; label: string; kind?: "date" | "num" }[] = [
-  { key: "customerName", label: "ลูกค้า" },
+  { key: "customerName", label: "Customer" },
   { key: "customerPo", label: "Customer PO" },
   { key: "brand", label: "Brand" },
   { key: "style", label: "Style" },
-  { key: "gmtType", label: "ประเภท" },
+  { key: "gmtType", label: "Type" },
   { key: "orderQty", label: "Order Qty", kind: "num" },
   { key: "pullGarment", label: "Pull Garment", kind: "num" },
   { key: "consumption", label: "Consumption", kind: "num" },
@@ -66,7 +66,7 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
       for (const it of rq.items) {
         for (const f of fields) {
           const v = valOf(it, f.key)
-          if (v === "" || v == null) { alert(`กรุณากรอก "${f.label}" ให้ครบทุกรายการก่อนส่งต่อ`); return }
+          if (v === "" || v == null) { alert(`Please fill "${f.label}" for every row before forwarding.`); return }
         }
       }
     }
@@ -78,8 +78,8 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
     } finally { setBusy(null) }
   }
 
-  if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">กำลังโหลด…</div>
-  if (!isAdmin) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Pull Material — อยู่ระหว่างทดสอบ (Admin)</p></div>
+  if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
+  if (!isAdmin) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Pull Material — under testing (Admin only)</p></div>
 
   return (
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">
@@ -89,12 +89,12 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
       ))}</div>
 
       {loading ? <p className="text-sm text-gray-400">กำลังโหลด…</p> :
-        reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">ไม่มีเอกสารในขั้นนี้</div> :
+        reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">No documents at this stage</div> :
           reqs.map(rq => (
             <div key={rq.id} className="bg-white rounded-xl border p-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div><span className="font-bold text-blue-700">{rq.documentNo}</span>
-                  <span className="text-xs text-gray-500"> · {rq.requesterName} · {rq.items.length} รายการ</span></div>
+                  <span className="text-xs text-gray-500"> · {rq.requesterName} · {rq.items.length} items</span></div>
                 <div className="flex gap-2">
                   {secondary && <button onClick={() => act(rq, secondary)} disabled={busy === rq.id} className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 disabled:opacity-50">{secondary.label}</button>}
                   <button onClick={() => act(rq, primary, true)} disabled={busy === rq.id} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: primary.color || MAROON }}>{busy === rq.id ? "..." : primary.label}</button>
@@ -103,7 +103,7 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
               <div className="mt-3 border rounded-xl overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
-                    {["SO", "วัตถุดิบ", "PULL"].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                    {["SO", "Material", "PULL"].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                     {CTX.map(c => <th key={c.key} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{c.label}</th>)}
                     {fields.map(f => <th key={f.key} className="px-3 py-2 text-left font-medium text-red-700 whitespace-nowrap">{f.label}</th>)}
                   </tr></thead>

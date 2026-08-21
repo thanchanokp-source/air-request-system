@@ -61,3 +61,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const request = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, include: { items: true } })
   return NextResponse.json({ request })
 }
+
+// Delete a request — allowed only for the creator (or an admin). Items cascade.
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { id } = await params
+  const userId = (session.user as any).id
+  const isAdmin = (session.user as any).role === "ADMIN"
+  const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { createdById: true } })
+  if (!rq) return NextResponse.json({ error: "Not found" }, { status: 404 })
+  if (!isAdmin && rq.createdById !== userId) return NextResponse.json({ error: "Forbidden — creator only" }, { status: 403 })
+  await (prisma as any).pullMaterialRequest.delete({ where: { id } })
+  return NextResponse.json({ ok: true })
+}

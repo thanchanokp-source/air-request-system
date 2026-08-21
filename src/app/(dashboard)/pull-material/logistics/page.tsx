@@ -3,7 +3,7 @@ import { StageWork } from "../_StageWork"
 export default function Page() {
   return <StageWork
     title="Logistics — Pull Material"
-    subtitle="กรอก In-House Air/Sea + Est Air/Sea + Lead time + Air Freight cost → ส่งต่อจัดซื้อ"
+    subtitle="Fill In-House Air/Sea + Est Air/Sea + Lead time + Air Freight cost → forward to Purchasing"
     status="PENDING_LOGISTICS"
     fields={[
       { key: "inHouseAirDate", label: "In-House Air", type: "date" },
@@ -14,6 +14,6 @@ export default function Page() {
       { key: "leadTimeSea", label: "Lead Sea", type: "text" },
       { key: "airFreightCost", label: "Air Freight cost (THB)", type: "number" },
     ]}
-    primary={{ label: "บันทึก → ส่งจัดซื้อ", toStatus: "PENDING_PURCHASING" }}
+    primary={{ label: "Save → Send to Purchasing", toStatus: "PENDING_PURCHASING" }}
   />
 }
