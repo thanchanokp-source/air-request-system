@@ -23,8 +23,8 @@ const pullNav = [
   { href: "/pull-material/dashboard", label: "DASHBOARD PULL RM" },
   { href: "/pull-material/tracking", label: "TRACKING DOCUMENT" },
   { href: "/pull-material/request", label: "SCM REQUEST" },
-  { href: "/pull-material/logistics", label: "LOGISTICS" },
   { href: "/pull-material/purchase", label: "PURCHASE" },
+  { href: "/pull-material/logistics", label: "LOGISTICS" },
   { href: "/pull-material/approval", label: "APPROVAL" },
   { href: "/pull-material/documents", label: "LOGISTICS DOCUMENT" },
 ]
