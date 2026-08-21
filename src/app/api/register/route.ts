@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"
-import { emailExistsInDirectory } from "@/lib/people"
 import { sendVerificationEmail } from "@/lib/notify"
 
 // Self-register role depends on BOTH the position AND the BU: a Merchandise person in GW is
@@ -34,14 +33,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid position" }, { status: 400 })
   }
 
-  try {
-    const exists = await emailExistsInDirectory(email)
-    if (!exists) {
-      return NextResponse.json({ error: "This email was not found in the employee directory. Please contact Admin" }, { status: 403 })
-    }
-  } catch {
-    // People API unreachable (e.g. external deployment) — skip check, rely on email domain validation
-  }
+  // Self-registration is gated by the company-email domain + email verification (account is
+  // created isActive:false and only activates after the verification link). We do NOT require
+  // the LAN People directory here — EA / overseas staff are not in it, and the decision is to
+  // rely on the master + admin, not the People Finder.
 
   if (password.length < 6) {
     return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 })
