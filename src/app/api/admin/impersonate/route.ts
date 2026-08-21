@@ -13,8 +13,10 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   const impersonator = req.cookies.get("impersonator")?.value
   const isAdmin = (session?.user as any)?.role === "ADMIN"
+  // req.url host is localhost under `next start`; build redirects from APP_URL instead.
+  const BASE = process.env.APP_URL || req.nextUrl.origin
   if (!session || (!isAdmin && !impersonator)) {
-    return NextResponse.redirect(new URL("/login", req.url))
+    return NextResponse.redirect(new URL("/login", BASE))
   }
   const role = (req.nextUrl.searchParams.get("role") || "").trim()
   const bu = (req.nextUrl.searchParams.get("bu") || "").trim()
@@ -24,7 +26,7 @@ export async function GET(req: NextRequest) {
   if (userId) {
     // View as a SPECIFIC person → see exactly their pages/queue (their BU, claim dept, assignments).
     target = await (prisma.user as any).findFirst({ where: { id: userId, isActive: true } })
-    if (!target) return NextResponse.redirect(new URL(`/approvals?impersonate_error=${encodeURIComponent("User not found or inactive")}`, req.url))
+    if (!target) return NextResponse.redirect(new URL(`/approvals?impersonate_error=${encodeURIComponent("User not found or inactive")}`, BASE))
   } else {
     if (!role) return NextResponse.json({ error: "role or userId required" }, { status: 400 })
     // First active holder of the role (+ BU for BU-specific roles; SCM_NYK_* are cross-BU).
@@ -32,7 +34,7 @@ export async function GET(req: NextRequest) {
     if (bu && bu !== "ALL" && !role.startsWith("SCM_NYK")) where.bu = { in: [bu, "ALL"] }
     target = await (prisma.user as any).findFirst({ where, orderBy: [{ priority: "asc" }, { createdAt: "asc" }] })
     if (!target) {
-      return NextResponse.redirect(new URL(`/approvals?impersonate_error=${encodeURIComponent(`No user with role ${role}${bu ? " ("+bu+")" : ""}`)}`, req.url))
+      return NextResponse.redirect(new URL(`/approvals?impersonate_error=${encodeURIComponent(`No user with role ${role}${bu ? " ("+bu+")" : ""}`)}`, BASE))
     }
   }
 
@@ -41,7 +43,7 @@ export async function GET(req: NextRequest) {
   const loginToken = crypto.randomUUID()
   await prisma.user.update({ where: { id: target.id }, data: { loginToken, loginTokenExpiry: new Date(Date.now() + 4 * 60 * 60 * 1000) } as any })
 
-  const res = NextResponse.redirect(new URL(`/api/magic-login?token=${loginToken}&redirect=/approvals`, req.url))
+  const res = NextResponse.redirect(new URL(`/api/magic-login?token=${loginToken}&redirect=/approvals`, BASE))
   res.cookies.set("impersonator", adminId, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 4 * 60 * 60 })
   return res
 }

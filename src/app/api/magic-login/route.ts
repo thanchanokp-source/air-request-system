@@ -5,11 +5,15 @@ export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token")
   const redirectTo = req.nextUrl.searchParams.get("redirect") || "/dashboard"
 
+  // `next start` reports req.url host as localhost (bind address), not the real host,
+  // so redirects built from req.url break for external users. Always base them on APP_URL.
+  const BASE = process.env.APP_URL || req.nextUrl.origin
+
   console.log("[magic-login] token:", token?.slice(0, 8), "redirect:", redirectTo)
 
   if (!token) {
     console.log("[magic-login] no token")
-    return NextResponse.redirect(new URL("/login?error=missing-token", req.url))
+    return NextResponse.redirect(new URL("/login?error=missing-token", BASE))
   }
 
   // Validate token — check all token types in order
@@ -34,17 +38,17 @@ export async function GET(req: NextRequest) {
   // Passwordless account login link (User.loginToken)
   const byLoginToken = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext || byClaimFwd || byLgFwd ? null : await (prisma.user as any).findFirst({ where: { loginToken: token } })
 
-  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byGm ? "gm" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimGw ? "claimGw" : byClaimSup ? "claimSupplier" : byScmNykAppr ? "scmNykApprover" : byScmNykEvp ? "scmNykEvp" : byScmNyk ? "scmNyk" : byScmNyg ? "scmNyg" : byClaimNext ? "claimNext" : byClaimFwd ? "claimForward" : byLgFwd ? "lgForward" : "none")
+  console.log("[magic-login] matched:", byVpMer ? "vpMer" : byGm ? "gm" : byPresident ? "president" : byScm ? "scm" : byVpScm ? "vpScm" : byLogistics ? "logistics" : byAccounting ? "accounting" : byClaimGw ? "claimGw" : byClaimSup ? "claimSupplier" : byScmNykAppr ? "scmNykApprover" : byScmNykEvp ? "scmNykEvp" : byScmNyk ? "scmNyk" : byScmNyg ? "scmNyg" : byClaimNext ? "claimNext" : byClaimFwd ? "claimForward" : byLgFwd ? "lgForward" : byLoginToken ? "loginToken" : "none")
 
   if (!byVpMer && !byGm && !byPresident && !byScm && !byVpScm && !byLogistics && !byAccounting && !byClaimGw && !byClaimSup && !byScmNykAppr && !byScmNykEvp && !byScmNyk && !byScmNyg && !byClaimNext && !byClaimFwd && !byLgFwd && !byLoginToken) {
     console.log("[magic-login] token not found")
-    return NextResponse.redirect(new URL("/login?error=invalid-token", req.url))
+    return NextResponse.redirect(new URL("/login?error=invalid-token", BASE))
   }
 
   const finalRedirect = byLoginToken ? (redirectTo || "/dashboard") : byLgFwd ? `/requests/${byLgFwd.id}` : byLogistics ? "/logistics" : byClaimNext || byClaimFwd ? (byClaimFwd ? `/requests/${byClaimFwd.requestId}` : redirectTo) : "/approvals"
 
   // Hand off to client-side page which calls signIn() via NextAuth
-  const magicAuthUrl = new URL("/magic-auth", req.url)
+  const magicAuthUrl = new URL("/magic-auth", BASE)
   magicAuthUrl.searchParams.set("token", token)
   const asParam = req.nextUrl.searchParams.get("as")   // per-recipient identity
   if (asParam) magicAuthUrl.searchParams.set("as", asParam)
