@@ -478,7 +478,7 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
   // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
   // wrap, so a too-narrow column overflows and overlaps its neighbour. Fixed cols sum ≈ 482
   // → REASON (flex) gets the rest.
-  const C = { no: 14, so: 42, style: 52, sub: 20, desc: 24, fac: 38, ctry: 44, hawb: 42, inv: 46, qty: 26, gross: 30, est: 36, act: 36, claim: 44 }
+  const C = { no: 14, so: 40, style: 44, sub: 18, desc: 22, fac: 30, ctry: 34, hawb: 34, inv: 38, qty: 34, gross: 40, est: 56, act: 56, claim: 38 }
   const content = (
     <>
         {/* Letterhead */}
@@ -561,17 +561,17 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
               <Text style={[s.td, { width: C.inv }]}>{softWrap(item.invoiceNo)}</Text>
               <Text style={[s.td, { width: C.qty }]}>{fmtNum(item.qtyRequestAir)}</Text>
               <Text style={[s.td, { width: C.gross }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
-              <Text style={[s.tdR, { width: C.est }]}>{fmtNum(item.airFreight)} {soCur(item)}</Text>
-              <Text style={[s.tdR, { width: C.act }]}>{item.actualAirFreight != null ? `${fmtNum(item.actualAirFreight)} ${soCur(item)}` : "-"}</Text>
+              <Text style={[s.tdR, { width: C.est, fontSize: 6.8 }]}>{fmtNum(item.airFreight)}</Text>
+              <Text style={[s.tdR, { width: C.act, fontSize: 6.8 }]}>{item.actualAirFreight != null ? fmtNum(item.actualAirFreight) : "-"}</Text>
               <Text style={[s.tdL, { width: C.claim, borderRightWidth: 0 }]}>{claimOf(item)}</Text>
             </View>
           ))}
           <View style={s.totalRow}>
             <Text style={[s.tdR, { flex: 1, fontFamily: "SarabunB" }]}>TOTAL</Text>
-            <Text style={[s.td, { width: C.qty, fontFamily: "SarabunB" }]}>{fmtNum(totQty)}</Text>
-            <Text style={[s.td, { width: C.gross, fontFamily: "SarabunB" }]}>{fmtNum(totGross, 2)}</Text>
-            <Text style={[s.tdR, { width: C.est, fontFamily: "SarabunB" }]}>{splitLabel(it => it.airFreight)}</Text>
-            <Text style={[s.tdR, { width: C.act, fontFamily: "SarabunB", color: "#1E3A8A" }]}>{anyActual ? splitLabel(it => it.actualAirFreight) : "-"}</Text>
+            <Text style={[s.td, { width: C.qty, fontFamily: "SarabunB", fontSize: 6.8 }]}>{fmtNum(totQty)}</Text>
+            <Text style={[s.td, { width: C.gross, fontFamily: "SarabunB", fontSize: 6.8 }]}>{fmtNum(totGross, 2)}</Text>
+            <Text style={[s.tdR, { width: C.est, fontFamily: "SarabunB", fontSize: 6.5 }]}>{splitLabel(it => it.airFreight)}</Text>
+            <Text style={[s.tdR, { width: C.act, fontFamily: "SarabunB", color: "#1E3A8A", fontSize: 6.5 }]}>{anyActual ? splitLabel(it => it.actualAirFreight) : "-"}</Text>
             <Text style={[s.td, { width: C.claim, borderRightWidth: 0 }]}> </Text>
           </View>
         </View>
