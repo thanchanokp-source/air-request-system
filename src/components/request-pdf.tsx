@@ -49,9 +49,18 @@ const requestByFor = (req: any) => isHistoryDoc(req) ? "-" : requesterName(req?.
 
 // Pending signature blocks pre-fill the EXPECTED approver name (before they sign).
 // VP Merchandise is split by brand: FANATICS / LULU* / JR* → Nuttareeporn, else Isawaruk.
-const vpMerByBrand = (brand?: string) => {
+const isNuttBrand = (brand?: string) => {
   const b = String(brand || "").trim().toLowerCase()
-  return (b.startsWith("fanatics") || b.startsWith("lulu") || b.startsWith("jr")) ? "Nuttareeporn H" : "Isawaruk T"
+  return b.startsWith("fanatics") || b.startsWith("lulu") || b.startsWith("jr")
+}
+const vpMerByBrand = (brand?: string) => (isNuttBrand(brand) ? "Nuttareeporn H" : "Isawaruk T")
+// Brand-set rule: computed over the SOs actually being printed (the user's selection) — not
+// necessarily every SO of the request. Nuttareeporn signs ONLY if EVERY selected brand is hers;
+// any other/mixed brand → Isawaruk (the general VP Merchandise).
+const vpMerFor = (items: any[] | undefined, brandName?: string) => {
+  const brands = [...new Set((items || []).map((i: any) => i.brand).filter(Boolean))] as string[]
+  if (brands.length === 0 && brandName) brands.push(brandName)
+  return brands.length > 0 && brands.every(isNuttBrand) ? "Nuttareeporn H" : "Isawaruk T"
 }
 const expectedApprover = (label: string, brand?: string) =>
   label === "VP Merchandise" ? vpMerByBrand(brand)
@@ -173,7 +182,7 @@ type Signer = { title: string; name: string; date: any; verb: string; sig?: stri
 // Approval signers for a request: real e-sign snapshots (image + name + position +
 // datetime + CR), falling back to the expected approver chain (name only) for
 // documents signed before e-signatures existed. Same for every SO of one document.
-function computeSigners(req: any): Signer[] {
+function computeSigners(req: any, brandItems?: any[]): Signer[] {
   const isGW = req?.bu === "GW"
   const approveLogs = (req?.approvalLogs || []).filter((l: any) => l.action === "APPROVE")
   let sigList: any[] = ((req?.approvalSignatures || []) as any[])
@@ -246,7 +255,8 @@ function computeSigners(req: any): Signer[] {
       : [["PENDING_VP_MER", "VP Merchandise"], ["PENDING_VP_SCM", "VP SCM"], ["PENDING_PRESIDENT", "President"]]
     for (const [status, label] of chain) {
       const log = approveLogs.find((l: any) => l.fromStatus === status)
-      signers.push({ title: label, name: log?.user?.name || expectedApprover(label, req?.brandName), date: log?.createdAt, verb: log ? "Approved" : "" })
+      const fallbackName = label === "VP Merchandise" ? vpMerFor(brandItems || req?.items, req?.brandName) : expectedApprover(label, req?.brandName)
+      signers.push({ title: label, name: log?.user?.name || fallbackName, date: log?.createdAt, verb: log ? "Approved" : "" })
     }
   }
   return signers
@@ -274,7 +284,7 @@ function SignatureRow({ signers, flow }: { signers: Signer[]; flow?: boolean }) 
 
 function ItemPage({ req, item }: { req: any; item: any }) {
   const isGW = req.bu === "GW"
-  const signers = computeSigners(req)
+  const signers = computeSigners(req, item ? [item] : undefined)
 
   const splits = getSplits(item)
   const claimText = splits.length
@@ -435,7 +445,7 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
   const isGW = req.bu === "GW"
   const dept = isGW ? "GW" : "NYG"
   const rows = pages.map(p => p.item)
-  const signers = computeSigners(req)
+  const signers = computeSigners(req, rows)
   const requestBy = requestByFor(req)
   // Unique descriptions → labelled A, B, C… and referenced by letter in the table.
   const descList: string[] = []

@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 
 // LG BOOKING — Logistics landing. Familiar doc-card layout, but shows only the SOs still waiting on
 // Logistics (itemStatus PRES_PASSED, doc not yet sent) and GROUPS them BY BRAND across documents.
@@ -104,6 +103,13 @@ export default function LgBookingPage() {
     router.push("/logistics/entry")
   }
 
+  // Clicking a document number opens the LG booking entry (inside) for that whole document's SOs.
+  const openDoc = (ids: string[]) => {
+    if (ids.length === 0) return
+    sessionStorage.setItem("lg_entry_ids", JSON.stringify(ids))
+    router.push("/logistics/entry")
+  }
+
   if (!allowed) return <div className="text-center py-20 text-gray-400">Logistics / Admin only</div>
 
   return (
@@ -149,7 +155,7 @@ export default function LgBookingPage() {
                     <div key={req.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-4 py-3 bg-gray-50/70 border-b border-gray-100 flex flex-wrap items-center gap-2">
                         <input type="checkbox" checked={docAllOn} onChange={() => toggleMany(docIds, !docAllOn)} className="rounded" />
-                        <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm">{req.documentNo}</Link>
+                        <button onClick={() => openDoc(docIds)} className="font-semibold text-blue-600 hover:underline text-sm" title="Open in LG booking">{req.documentNo}</button>
                         {docDraft > 0 && <span role="button" tabIndex={0} title="กดเพื่อเลือก SO ที่มี draft ในเอกสารนี้"
                           onClick={e => { e.stopPropagation(); toggleMany(items.filter((i: any) => i.hawbNo || i.actualAirFreight != null).map((i: any) => i.id), true) }}
                           className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 font-medium whitespace-nowrap cursor-pointer hover:bg-amber-200">📝 draft {docDraft} SO ✓</span>}
