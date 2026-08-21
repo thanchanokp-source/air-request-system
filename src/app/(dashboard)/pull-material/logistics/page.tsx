@@ -102,7 +102,7 @@ export default function LogisticsPage() {
               <div className="mt-3 border rounded-xl overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
-                    {["SO", "Material", "PULL", "Country", "Incoterm", "Weight", "Air rate/kg", "Sea rate/kg", "Incoterm cost",
+                    {["SO", "PO No", "Item No", "Item Code", "Customer", "Cust PO", "Brand", "Style", "Consumption", "Material", "PULL", "Country", "Incoterm", "Weight", "Air rate/kg", "Sea rate/kg", "Incoterm cost",
                       "= Air Freight", "= Sea Freight", "Lead Air", "Lead Sea", "In-House Air *", "In-House Sea *"].map(h =>
                       <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                   </tr></thead>
@@ -110,6 +110,14 @@ export default function LogisticsPage() {
                     {rq.items.map((it: any) => (
                       <tr key={it.id} className="hover:bg-gray-50">
                         <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{it.soNoDoc}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{it.poNoDoc || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{it.itemNo || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{it.itemCode || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{it.customerName || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{it.customerPo || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{it.brand || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{it.style || "-"}</td>
+                        <td className="px-3 py-1.5 text-right text-gray-600">{fmt(it.consumption)}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{it.itemName || it.itemCode}</td>
                         <td className="px-3 py-1.5">{fmt(it.pullMaterialQty)}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{it.country || "-"}</td>
