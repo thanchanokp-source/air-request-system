@@ -639,9 +639,19 @@ export default function DashboardPage() {
   const [claimF, setClaimF] = useState<string[]>([])
   const [drillCountry, setDrillCountry]   = useState<string|null>(null)
 
+  const [poMap, setPoMap] = useState<Record<string,string>>({})
+
   useEffect(() => {
     fetch("/api/requests").then(r=>r.json()).then(d=>{ setRequests(d); setLoading(false) })
   }, [])
+
+  // SO → PO (po_no_doc) from the Bill of Material, for the dashboard PO column.
+  useEffect(() => {
+    const sos = Array.from(new Set(requests.flatMap((r:any)=>(r.items||[]).map((i:any)=>i.so).filter(Boolean))))
+    if (sos.length===0) return
+    fetch("/api/bom/po-map",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sos})})
+      .then(r=>r.json()).then(d=>setPoMap(d.map||{})).catch(()=>{})
+  }, [requests])
 
   // TEST documents never count in dashboard reporting.
   const buRequests = useMemo(()=>requests.filter(r=> requestInBu(r, activeBu) && !r.isTest), [requests, activeBu])
@@ -1041,12 +1051,12 @@ export default function DashboardPage() {
         <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
-              <tr style={{background:"#c87070"}}>{["DOC NO","SO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
+              <tr style={{background:"#c87070"}}>{["DOC NO","SO","PO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
                 <th key={h} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && <tr><td colSpan={24} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+              {loading && <tr><td colSpan={25} className="text-center py-10 text-gray-400">Loading...</td></tr>}
               {!loading && filtered.map((row,i)=>{
                 const ar = row.qtyOriginalShipment>0 ? row.qtyRequestAir/row.qtyOriginalShipment*100 : 0
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
@@ -1054,6 +1064,7 @@ export default function DashboardPage() {
                   <tr key={i} className="hover:bg-gray-50">
                     <td className="px-3 py-1.5 font-medium whitespace-nowrap">{row.request.documentNo}</td>
                     <td className="px-3 py-1.5 font-medium">{row.so}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{poMap[row.so] || "-"}</td>
                     <td className="px-3 py-1.5">{row.style}</td>
                     <td className="px-3 py-1.5">{row.sub || "-"}</td>
                     <td className="px-3 py-1.5 max-w-[200px]"><span className="truncate block" title={row.description || ""}>{row.description || "-"}</span></td>
@@ -1085,7 +1096,7 @@ export default function DashboardPage() {
                   </tr>
                 )
               })}
-              {!loading&&filtered.length===0&&<tr><td colSpan={24} className="text-center py-10 text-gray-400">No data</td></tr>}
+              {!loading&&filtered.length===0&&<tr><td colSpan={25} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
           </table>
         </div>

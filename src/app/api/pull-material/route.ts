@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     data: {
       documentNo, bu, requesterName,
       requesterEmail: body.requesterEmail || null,
+      remark: body.remark || null,
       createdById: userId,
       status: "PENDING_PURCHASING",
       items: {

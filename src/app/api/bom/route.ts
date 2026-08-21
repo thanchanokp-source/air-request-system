@@ -76,8 +76,8 @@ export async function GET(req: NextRequest) {
   const params: any[] = []
   if (q) {
     params.push(`%${q}%`)
-    const i = params.length
-    where.push(`(so_no_doc ILIKE $${i} OR cust_name ILIKE $${i} OR cust_po ILIKE $${i} OR style ILIKE $${i} OR brand_name ILIKE $${i})`)
+    // Search by SO number only.
+    where.push(`so_no_doc ILIKE $${params.length}`)
   }
   // One row per SO (DISTINCT ON) — the SO-level fields for the search list. Material-line
   // detail (consumption per item) can be fetched per SO later when needed.

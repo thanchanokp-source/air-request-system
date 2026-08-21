@@ -331,6 +331,7 @@ model PullMaterialRequest {
   status         String             @default("PENDING_LOGISTICS")
   requesterName  String
   requesterEmail String?
+  remark         String?
   createdById    String
   items          PullMaterialItem[]
   createdAt      DateTime           @default(now())

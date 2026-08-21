@@ -19,12 +19,13 @@ type Bom = {
 // Columns SCM sees when selecting material lines (per BOM spec)
 const MAT_COLS: { k: keyof Bom; label: string; kind?: "date" | "num" }[] = [
   { k: "bu", label: "BU" }, { k: "soYear", label: "SO YEAR" }, { k: "soNoDoc", label: "SO NO" },
+  { k: "poNoDoc", label: "PO NO" },
   { k: "customerName", label: "CUST NAME" }, { k: "groupCode", label: "GROUP" },
   { k: "itemCode", label: "ITEM CODE" }, { k: "itemNo", label: "ITEM NO" },
   { k: "itemName", label: "ITEM NAME" }, { k: "consumption", label: "CONSUMPTION", kind: "num" },
   { k: "cpartNo", label: "CPART" }, { k: "partDesc", label: "PART DESC" },
   { k: "orderQty", label: "ORDER QTY", kind: "num" },
-  { k: "poqtyBomdummy", label: "POQTY BOMDUMMY", kind: "num" }, { k: "poNoDoc", label: "PO NO" },
+  { k: "poqtyBomdummy", label: "POQTY BOMDUMMY", kind: "num" },
   { k: "poDate", label: "PO DATE", kind: "date" }, { k: "updInhouse", label: "UPD INHOUSE", kind: "date" },
   { k: "vendorName", label: "VEND NAME" }, { k: "status", label: "STATUS" }, { k: "poUsername", label: "POUSERNAME" },
   { k: "mrdDate", label: "MRD DATE", kind: "date" }, { k: "mrdNeedDate", label: "MRD NEED", kind: "date" },
@@ -56,6 +57,7 @@ export default function ScmRequestPage() {
   const [scm, setScm] = useState({ ...emptyScm })
 
   const [cart, setCart] = useState<CartItem[]>([])
+  const [remark, setRemark] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
 
@@ -124,10 +126,10 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, items: cart }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart }),
       })
       const d = await r.json()
-      if (r.ok) { alert(`Submitted: ${d.request?.documentNo}`); setCart([]) }
+      if (r.ok) { alert(`Submitted: ${d.request?.documentNo}`); setCart([]); setRemark("") }
       else alert(`Error: ${d.error || "submit failed"}`)
     } finally { setSubmitting(false) }
   }
@@ -179,7 +181,7 @@ export default function ScmRequestPage() {
         <div className="relative">
           <input value={q} onChange={e => setQ(e.target.value)} onFocus={() => results.length > 0 && setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
-            placeholder="Type SO / Customer name / Customer PO / Brand… then pick from the list"
+            placeholder="Type SO number… then pick from the list"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
           {searching && <span className="absolute right-3 top-2.5 text-xs text-gray-400">Searching…</span>}
           {open && results.length > 0 && (
@@ -188,6 +190,7 @@ export default function ScmRequestPage() {
                 <button key={i} onMouseDown={() => { pickSo(b); setQ(b.soNoDoc); setOpen(false) }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 border-b border-gray-50 last:border-0">
                   <span className="font-semibold text-gray-800">{b.soNoDoc}</span>
+                  <span className="text-gray-600"> · PO {b.poNoDoc || "-"}</span>
                   <span className="text-gray-500"> · {b.customerName || "-"} · {b.brand || "-"}/{b.gmtType || "-"} · order {fmt(b.orderQty)}</span>
                 </button>
               ))}
@@ -282,6 +285,11 @@ export default function ScmRequestPage() {
             </table>
           </div>
         )}
+        <div className="mt-3">
+          <label className="text-xs font-semibold text-gray-600">Remark</label>
+          <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="Note for this pull request (optional)"
+            className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+        </div>
         <div className="mt-3 flex justify-end">
           <button onClick={submit} disabled={submitting || cart.length === 0}
             className="px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: MAROON }}>

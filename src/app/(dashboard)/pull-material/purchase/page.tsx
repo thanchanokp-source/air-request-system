@@ -89,7 +89,7 @@ export default function PurchasePage() {
               <div className="mt-3 border rounded-xl overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
-                    {["SO", "Item Code", "Material", "PULL", "Consumption", "Gen. Weight", "Country *", "Incoterm *", "Weight (revise) *", "Ship Date"].map(h =>
+                    {["SO", "Item Code", "Material", "PULL", "Consumption", "Country *", "Incoterm *", "Weight (revise) *", "Ship Date"].map(h =>
                       <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
@@ -100,7 +100,6 @@ export default function PurchasePage() {
                         <td className="px-3 py-1.5 whitespace-nowrap">{it.itemName || "-"}</td>
                         <td className="px-3 py-1.5">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
                         <td className="px-3 py-1.5 text-right text-gray-500">{fmt(it.consumption)}</td>
-                        <td className="px-3 py-1.5 text-right text-gray-500">{fmt(it.weightGenerated)}</td>
                         <td className="px-3 py-1.5">
                           <input list="pm-countries" value={valOf(it, "country")} onChange={e => setVal(it.id, "country", e.target.value)}
                             placeholder="search…" className="w-32 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-red-300" />
