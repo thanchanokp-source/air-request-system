@@ -396,6 +396,7 @@ model PullMaterialItem {
   weight          Float?    // confirmed / revised per-unit weight (kg)
   weightGenerated Float?    // system-suggested weight (ref)
   country         String?   // destination country (drives freight rate) — picked by PC
+  port            String?   // origin AIR PORT CODE (Pull RM freight rate is by port) — picked by PC
   incoterm        String?   // FOB / CIF / EX-WORK — picked by PC
   // LG actual (close)
   invoiceNo       String?
@@ -404,4 +405,20 @@ model PullMaterialItem {
 
   @@index([requestId])
   @@index([soNoDoc])
+}
+
+// Pull RM AIR freight master (from Rate_LG.xlsx "AIR RATE", cols A-O). Separate from Air Request's
+// country-based MasterFreightRate — Pull RM matches by PORT (origin → BKK). Rates by weight break
+// stored as JSON { Q45, Q100, Q250, Q300, Q500, Q1000, Q2000, Q8000, M, N } (sparse, USD/kg).
+model PullFreightAir {
+  id          String   @id @default(cuid())
+  origin      String   // AIR PORT CODE (e.g. HKG, SHA)
+  destination String   @default("BKK")
+  fwd         String?  // forwarder
+  airline     String?  // A/L
+  tt          String?  // transit time
+  rates       Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([origin])
 }

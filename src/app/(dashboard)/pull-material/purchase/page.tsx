@@ -25,12 +25,16 @@ export default function PurchasePage() {
   }
   useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
 
+  const [ports, setPorts] = useState<string[]>([])
+
   // Country list from the freight-rate master (used later by LG for the rate).
   useEffect(() => {
     fetch("/api/master/port").then(r => r.json()).then((rows: any[]) => {
       const list = Array.from(new Set((rows || []).map(r => r.country).filter(Boolean))).sort()
       setCountries(list)
     }).catch(() => {})
+    // Origin PORT list from the Pull RM AIR freight master (Rate_LG).
+    fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setPorts(d.origins || [])).catch(() => {})
   }, [])
 
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
@@ -42,7 +46,7 @@ export default function PurchasePage() {
 
   const save = async (rq: any) => {
     for (const it of rq.items) {
-      if (!valOf(it, "country")) return alert("Select a Country for every line.")
+      if (!valOf(it, "port")) return alert("Select a Port for every line.")
       if (!valOf(it, "incoterm")) return alert("Select an Incoterm for every line.")
       if (!valOf(it, "weight")) return alert("Enter the Weight for every line.")
     }
@@ -51,6 +55,7 @@ export default function PurchasePage() {
       const itemUpdates = rq.items.map((it: any) => ({
         id: it.id,
         country: valOf(it, "country"),
+        port: valOf(it, "port"),
         incoterm: valOf(it, "incoterm"),
         weight: valOf(it, "weight"),
         shipmentDate: valOf(it, "shipmentDate"),
@@ -69,8 +74,9 @@ export default function PurchasePage() {
   return (
     <div className="p-5 max-w-[1500px] mx-auto space-y-4">
       <datalist id="pm-countries">{countries.map(c => <option key={c} value={c} />)}</datalist>
+      <datalist id="pm-ports">{ports.map(p => <option key={p} value={p} />)}</datalist>
       <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Purchase — Pull Material</h1>
-        <p className="text-sm text-gray-500">Pick Country + Incoterm, confirm/revise Weight (consumption shown as reference) → forward to Logistics</p></div>
+        <p className="text-sm text-gray-500">Pick Country + Port + Incoterm, confirm/revise Weight (consumption shown as reference) → forward to Logistics</p></div>
       <div className="flex gap-1.5">{BUS.map(b => (
         <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
@@ -89,7 +95,7 @@ export default function PurchasePage() {
               <div className="mt-3 border rounded-xl overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
-                    {["SO", "PO No", "Item No", "Customer", "Cust PO", "Brand", "Style", "Item Code", "Material", "PULL", "Consumption", "Country *", "Incoterm *", "Weight (revise) *", "Ship Date"].map(h =>
+                    {["SO", "PO No", "Item No", "Customer", "Cust PO", "Brand", "Style", "Item Code", "Material", "PULL", "Consumption", "Country", "Port *", "Incoterm *", "Weight (revise) *", "Ship Date"].map(h =>
                       <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
@@ -109,6 +115,10 @@ export default function PurchasePage() {
                         <td className="px-3 py-1.5">
                           <input list="pm-countries" value={valOf(it, "country")} onChange={e => setVal(it.id, "country", e.target.value)}
                             placeholder="search…" className="w-32 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-red-300" />
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <input list="pm-ports" value={valOf(it, "port")} onChange={e => setVal(it.id, "port", e.target.value)}
+                            placeholder="port…" className="w-24 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-red-300" />
                         </td>
                         <td className="px-3 py-1.5">
                           <select value={valOf(it, "incoterm")} onChange={e => setVal(it.id, "incoterm", e.target.value)}
