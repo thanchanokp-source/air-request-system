@@ -488,7 +488,7 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
   // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
   // wrap, so a too-narrow column overflows and overlaps its neighbour. Fixed cols sum ≈ 482
   // → REASON (flex) gets the rest.
-  const C = { no: 14, so: 40, style: 44, sub: 18, desc: 22, fac: 30, ctry: 34, hawb: 34, inv: 38, qty: 34, gross: 40, est: 56, act: 56, claim: 38 }
+  const C = { no: 14, so: 40, style: 40, sub: 16, desc: 20, fac: 28, ctry: 44, hawb: 34, inv: 38, qty: 32, gross: 38, est: 52, act: 52, claim: 46 }
   const content = (
     <>
         {/* Letterhead */}
