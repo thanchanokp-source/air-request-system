@@ -156,6 +156,12 @@ export default function LgBookingPage() {
                       <div className="px-4 py-3 bg-gray-50/70 border-b border-gray-100 flex flex-wrap items-center gap-2">
                         <input type="checkbox" checked={docAllOn} onChange={() => toggleMany(docIds, !docAllOn)} className="rounded" />
                         <button onClick={() => openDoc(docIds)} className="font-semibold text-blue-600 hover:underline text-sm" title="Open in LG booking">{req.documentNo}</button>
+                        {req.lgForwardEmail && (
+                          <span title={`Forwarded to ${req.lgForwardName || req.lgForwardEmail}${req.lgForwardBy ? " by " + req.lgForwardBy : ""}`}
+                            className="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-300 font-medium whitespace-nowrap">
+                            ↪ FW: {req.lgForwardName || req.lgForwardEmail}
+                          </span>
+                        )}
                         {docDraft > 0 && <span role="button" tabIndex={0} title="กดเพื่อเลือก SO ที่มี draft ในเอกสารนี้"
                           onClick={e => { e.stopPropagation(); toggleMany(items.filter((i: any) => i.hawbNo || i.actualAirFreight != null).map((i: any) => i.id), true) }}
                           className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 font-medium whitespace-nowrap cursor-pointer hover:bg-amber-200">📝 draft {docDraft} SO ✓</span>}
