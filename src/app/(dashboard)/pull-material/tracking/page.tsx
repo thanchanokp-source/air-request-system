@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { MAROON, BUS, STATUS_LABEL } from "../_StageWork"
+import { MAROON, BUS, STATUS_LABEL, buColor } from "../_StageWork"
 
 const FLOW = ["PENDING_PURCHASING", "PENDING_LOGISTICS", "PENDING_SCM_DECISION", "PENDING_APPROVAL", "APPROVED"]
 const STEP_SHORT = ["Purchasing", "LG", "SCM", "Approve", "Done"]
@@ -55,7 +55,7 @@ export default function Page() {
       <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Tracking Document — Pull Material</h1>
         <p className="text-sm text-gray-500">Track every document · SCM decides air / no-air at the &quot;Pending SCM Decision&quot; stage</p></div>
       <div className="flex gap-1.5">{BUS.map(b => (
-        <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: MAROON } : undefined}>{b}</button>
+        <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
 
       {/* Filters */}

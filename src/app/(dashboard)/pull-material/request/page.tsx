@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
+import { buColor } from "../_StageWork"
 
 const MAROON = "#6b1a1a"
 const BUS = ["NYG", "EA", "TRM", "GW"]
@@ -166,7 +167,7 @@ export default function ScmRequestPage() {
         {BUS.map(b => (
           <button key={b} onClick={() => { setBu(b); setResults([]); setOpenSo(null) }}
             className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
-            style={bu === b ? { background: MAROON } : undefined}>{b}</button>
+            style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
         ))}
       </div>
 
@@ -353,7 +354,7 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
   return (
     <>
       <div className="flex gap-1.5">{BUS.map(b => (
-        <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: MAROON } : undefined}>{b}</button>
+        <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
 
       {loading ? <p className="text-sm text-gray-400">Loading…</p> :

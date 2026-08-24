@@ -332,6 +332,9 @@ model PullMaterialRequest {
   requesterName  String
   requesterEmail String?
   remark         String?
+  recallReason   String?
+  recalledBy     String?
+  actors         String[]           @default([]) // emails of everyone who acted (PC/LG/SCM) — notified on recall
   createdById    String
   items          PullMaterialItem[]
   createdAt      DateTime           @default(now())

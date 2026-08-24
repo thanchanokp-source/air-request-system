@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { MAROON, BUS, fmt } from "../_StageWork"
+import { MAROON, BUS, fmt, buColor } from "../_StageWork"
 
 export default function LogisticsPage() {
   const { data: session, status: auth } = useSession()
@@ -85,7 +85,7 @@ export default function LogisticsPage() {
       <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Logistics — Pull Material</h1>
         <p className="text-sm text-gray-500">Freight = Weight × PULL qty × country rate + Incoterm cost. Enter rates, incoterm cost, lead time, in-house dates → send to SCM</p></div>
       <div className="flex gap-1.5">{BUS.map(b => (
-        <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: MAROON } : undefined}>{b}</button>
+        <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
 
       {loading ? <p className="text-sm text-gray-400">Loading…</p> :

@@ -5,6 +5,9 @@ import { useSession } from "next-auth/react"
 
 export const MAROON = "#6b1a1a"
 export const BUS = ["NYG", "EA", "TRM", "GW"]
+// Distinct color per BU (active tab) so it's obvious which BU you're in.
+export const BU_COLOR: Record<string, string> = { NYG: "#6b1a1a", EA: "#1e40af", TRM: "#0f766e", GW: "#7c3aed" }
+export const buColor = (b: string) => BU_COLOR[b] || MAROON
 export const fmt = (n: any) => (n == null || isNaN(Number(n)) ? "-" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }))
 export const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toLocaleDateString("en-GB") }
 
@@ -87,7 +90,7 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">
       <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>{title}</h1><p className="text-sm text-gray-500">{subtitle}</p></div>
       <div className="flex gap-1.5">{BUS.map(b => (
-        <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: MAROON } : undefined}>{b}</button>
+        <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
 
       {loading ? <p className="text-sm text-gray-400">กำลังโหลด…</p> :
