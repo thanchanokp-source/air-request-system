@@ -21,13 +21,18 @@ export default function Page() {
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
 
-  const del = async (rq: any) => {
-    if (!confirm(`Delete ${rq.documentNo}? This cannot be undone.`)) return
+  // Creator (or admin) can RECALL a document that hasn't been approved yet — withdraws it
+  // from the flow (soft, non-destructive) instead of deleting.
+  const recall = async (rq: any) => {
+    if (!confirm(`Recall ${rq.documentNo}? It will be withdrawn from the flow.`)) return
     setBusy(rq.id)
     try {
-      const r = await fetch(`/api/pull-material/${rq.id}`, { method: "DELETE" })
+      const r = await fetch(`/api/pull-material/${rq.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "RECALLED" }),
+      })
       if (r.ok) await load()
-      else { const d = await r.json().catch(() => ({})); alert(d.error || "Delete failed") }
+      else { const d = await r.json().catch(() => ({})); alert(d.error || "Recall failed") }
     } finally { setBusy(null) }
   }
 
@@ -72,8 +77,8 @@ export default function Page() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500">
                 <tr>
-                  {["Document", "SO", "Items", "Progress", "Status", ""].map(h =>
-                    <th key={h} className={`px-4 py-2.5 font-medium whitespace-nowrap ${h === "Items" ? "text-center" : "text-left"}`}>{h}</th>)}
+                  {["Document", "SO", "Items", "Progress", "Status", ""].map((h, i) =>
+                    <th key={i} className={`px-4 py-2.5 font-medium whitespace-nowrap ${h === "Items" ? "text-center" : "text-left"}`}>{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -105,10 +110,10 @@ export default function Page() {
                           {STATUS_LABEL[rq.status] || rq.status}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-right">
-                        {(isAdmin || rq.createdById === userId) && (
-                          <button onClick={() => del(rq)} disabled={busy === rq.id} title="Delete (creator only)"
-                            className="text-gray-300 hover:text-red-600 disabled:opacity-50">🗑</button>
+                      <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        {(isAdmin || rq.createdById === userId) && !["APPROVED", "COMPLETED", "RECALLED"].includes(rq.status) && (
+                          <button onClick={() => recall(rq)} disabled={busy === rq.id} title="Recall (creator only)"
+                            className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-amber-700 hover:border-amber-300 disabled:opacity-50">↩ Recall</button>
                         )}
                       </td>
                     </tr>

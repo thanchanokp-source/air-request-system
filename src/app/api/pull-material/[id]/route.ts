@@ -58,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (Object.keys(data).length) await (prisma as any).pullMaterialItem.update({ where: { id: u.id }, data })
   }
 
-  if (body.status && (PULL_FLOW as readonly string[]).concat(["NO_AIR"]).includes(body.status)) {
+  if (body.status && (PULL_FLOW as readonly string[]).concat(["NO_AIR", "RECALLED"]).includes(body.status)) {
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data: { status: body.status } })
   }
 

@@ -11,7 +11,7 @@ export const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); 
 export const STATUS_LABEL: Record<string, string> = {
   PENDING_LOGISTICS: "Pending Logistics", PENDING_PURCHASING: "Pending Purchasing",
   PENDING_SCM_DECISION: "Pending SCM Decision", PENDING_APPROVAL: "Pending Approval",
-  APPROVED: "Approved", NO_AIR: "No Air", COMPLETED: "Completed",
+  APPROVED: "Approved", NO_AIR: "No Air", COMPLETED: "Completed", RECALLED: "Recalled",
 }
 
 type Field = { key: string; label: string; type: "date" | "number" | "text" }
