@@ -73,10 +73,8 @@ export default function PullUsersPage() {
                   <td className="px-4 py-2.5 text-gray-600">{[...new Set([u.role, ...(u.roles || [])])].join(", ")}</td>
                   <td className="px-4 py-2.5 text-gray-500">{u.bu}</td>
                   <td className="px-4 py-2.5 text-center">
-                    <button onClick={() => toggle(u)} disabled={busy === u.id}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold border disabled:opacity-50 ${u.pullRm ? "bg-green-600 text-white border-transparent" : "bg-white text-gray-400 border-gray-300 hover:bg-gray-50"}`}>
-                      {u.pullRm ? "YES" : "NO"}
-                    </button>
+                    <input type="checkbox" checked={!!u.pullRm} disabled={busy === u.id} onChange={() => toggle(u)}
+                      className="w-4 h-4 rounded border-gray-300 accent-green-600 cursor-pointer disabled:opacity-50" />
                   </td>
                 </tr>
               ))}

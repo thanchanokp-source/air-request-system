@@ -32,8 +32,8 @@ const pullNav = [
 
 // Top-level family tabs.
 const FAMILIES = [
-  { key: "claim", label: "Claim Air", icon: "✈", home: "/dashboard" },
-  { key: "pull", label: "Pull Material", icon: "📦", home: "/pull-material/request" },
+  { key: "claim", label: "CLAIM AIR", icon: "✈", home: "/dashboard" },
+  { key: "pull", label: "PULL RM", icon: "📦", home: "/pull-material/request" },
 ]
 
 const ROLE_LABEL: Record<string, string> = {
