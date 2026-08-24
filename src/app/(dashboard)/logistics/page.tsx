@@ -22,6 +22,7 @@ export default function LgBookingPage() {
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState("")
+  const [buF, setBuF] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [openBrands, setOpenBrands] = useState<Set<string>>(new Set())
   const toggleBrand = (b: string) => setOpenBrands(p => { const n = new Set(p); n.has(b) ? n.delete(b) : n.add(b); return n })
@@ -82,7 +83,8 @@ export default function LgBookingPage() {
   // Group by BRAND → then by DOCUMENT (each doc rendered as a familiar card with its SO rows).
   const brands = useMemo(() => {
     const s = q.trim().toLowerCase()
-    const filtered = s ? rows.filter(r => `${r.brand} ${r.so} ${r.request.documentNo}`.toLowerCase().includes(s)) : rows
+    let filtered = buF ? rows.filter(r => (r.request.bu || "NYG") === buF) : rows
+    if (s) filtered = filtered.filter(r => `${r.brand} ${r.so} ${r.request.documentNo}`.toLowerCase().includes(s))
     const byBrand: Record<string, any[]> = {}
     for (const row of filtered) (byBrand[row.brand] ||= []).push(row)
     return Object.entries(byBrand).sort((a, b) => a[0].localeCompare(b[0])).map(([brand, brandRows]) => {
@@ -92,7 +94,7 @@ export default function LgBookingPage() {
       const draftIds = brandRows.filter((r: any) => r.hawbNo || r.actualAirFreight != null).map((r: any) => r.id)
       return { brand, docs, count: brandRows.length, ids: brandRows.map(r => r.id), draftCount: draftIds.length, draftIds }
     })
-  }, [rows, q])
+  }, [rows, q, buF])
 
   const toggle = (id: string) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleMany = (ids: string[], on: boolean) => setSelected(p => { const n = new Set(p); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n })
@@ -119,8 +121,18 @@ export default function LgBookingPage() {
         <p className="text-xs text-gray-400 mt-0.5">Select SOs to book (can span documents within a brand), then click "Open" → enter one HAWB across the selected SOs</p>
       </div>
 
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Search brand / SO / document no…"
-        className="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+      <div className="flex flex-wrap items-center gap-2">
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Search brand / SO / document no…"
+          className="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        <div className="flex gap-1.5">
+          {["", ...["NYG", "EA", "TRM", "GW"].filter(b => lgBus.has(b))].map(b => (
+            <button key={b || "ALL"} onClick={() => setBuF(b)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${buF === b ? "bg-blue-600 text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
+              {b || "All BU"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
       {!loading && brands.length === 0 && <div className="text-center py-20 text-gray-400">No SOs waiting on LG</div>}
