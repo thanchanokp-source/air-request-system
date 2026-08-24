@@ -422,3 +422,15 @@ model PullFreightAir {
 
   @@index([origin])
 }
+
+// Pull RM SEA freight master (from Rate_LG.xlsx "SEA RATE"). Keyed by origin sea port (grouped by
+// country). rates = { "40GP": USD/CTR, "20GP": USD/CTR, "LCL": USD/CBM } (sparse).
+model PullFreightSea {
+  id        String   @id @default(cuid())
+  country   String
+  port      String   // sea port (e.g. KEELUNG, HO CHI MINH)
+  rates     Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([port])
+}
