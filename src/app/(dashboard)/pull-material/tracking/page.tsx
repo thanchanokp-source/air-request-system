@@ -68,48 +68,55 @@ export default function Page() {
 
       {loading ? <p className="text-sm text-gray-400">Loading…</p> :
         shown.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">{reqs.length === 0 ? "No documents yet" : "No documents match the filter"}</div> :
-          shown.map(rq => {
-            const idx = stepIdx(rq.status)
-            const noAir = rq.status === "NO_AIR"
-            return (
-              <div key={rq.id} className="bg-white rounded-xl border p-4">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <div><span className="font-bold text-blue-700">{rq.documentNo}</span>
-                      <span className="text-xs text-gray-500"> · {rq.requesterName} · {rq.items.length} items</span></div>
-                    <div className="text-xs text-gray-500 mt-0.5">SO: <span className="text-gray-700">{[...new Set((rq.items || []).map((i: any) => i.soNoDoc).filter(Boolean))].join(", ") || "-"}</span></div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${noAir ? "bg-gray-100 text-gray-600" : rq.status === "APPROVED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-                      {STATUS_LABEL[rq.status] || rq.status}
-                    </span>
-                    {(isAdmin || rq.createdById === userId) && (
-                      <button onClick={() => del(rq)} disabled={busy === rq.id} title="Delete (creator only)"
-                        className="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-300 disabled:opacity-50">🗑 Delete</button>
-                    )}
-                  </div>
-                </div>
-
-                {!noAir && (
-                  <div className="mt-3 flex items-center gap-1">
-                    {FLOW.map((s, i) => (
-                      <div key={s} className="flex items-center flex-1">
-                        <div className={`flex-1 text-center text-[10px] py-1 rounded ${i < idx ? "bg-green-50 text-green-700" : i === idx ? "text-white" : "bg-gray-50 text-gray-400"}`}
-                          style={i === idx ? { background: MAROON } : undefined}>{STEP_SHORT[i]}{i < idx ? " ✓" : ""}</div>
-                        {i < FLOW.length - 1 && <span className="text-gray-300 px-0.5">›</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {rq.status === "PENDING_SCM_DECISION" && (
-                  <div className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                    Waiting for SCM decision at <span className="font-semibold">SCM REQUEST → Send Approve</span>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          <div className="bg-white rounded-xl border overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  {["Document", "SO", "Items", "Progress", "Status", ""].map(h =>
+                    <th key={h} className={`px-4 py-2.5 font-medium whitespace-nowrap ${h === "Items" ? "text-center" : "text-left"}`}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {shown.map(rq => {
+                  const idx = stepIdx(rq.status)
+                  const noAir = rq.status === "NO_AIR"
+                  const sos = [...new Set((rq.items || []).map((i: any) => i.soNoDoc).filter(Boolean))] as string[]
+                  return (
+                    <tr key={rq.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <div className="font-semibold text-blue-700">{rq.documentNo}</div>
+                        <div className="text-[11px] text-gray-400">{rq.requesterName}</div>
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-600 max-w-[220px] truncate" title={sos.join(", ")}>{sos.join(", ") || "-"}</td>
+                      <td className="px-4 py-2.5 text-center text-gray-500">{rq.items.length}</td>
+                      <td className="px-4 py-2.5">
+                        {noAir ? <span className="text-xs text-gray-400">—</span> : (
+                          <div className="flex items-center gap-1.5">
+                            {FLOW.map((s, i) => (
+                              <span key={s} title={STEP_SHORT[i]} className="w-2 h-2 rounded-full"
+                                style={{ background: i < idx ? "#16a34a" : i === idx ? MAROON : "#e5e7eb" }} />
+                            ))}
+                            <span className="text-[11px] text-gray-500 ml-1">{STEP_SHORT[Math.min(idx, FLOW.length - 1)]}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${noAir ? "bg-gray-100 text-gray-600" : rq.status === "APPROVED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                          {STATUS_LABEL[rq.status] || rq.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {(isAdmin || rq.createdById === userId) && (
+                          <button onClick={() => del(rq)} disabled={busy === rq.id} title="Delete (creator only)"
+                            className="text-gray-300 hover:text-red-600 disabled:opacity-50">🗑</button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>}
     </div>
   )
 }
