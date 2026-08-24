@@ -24,12 +24,14 @@ export default function Page() {
   // Creator (or admin) can RECALL a document that hasn't been approved yet — withdraws it
   // from the flow (soft, non-destructive) instead of deleting.
   const recall = async (rq: any) => {
-    if (!confirm(`Recall ${rq.documentNo}? It will be withdrawn from the flow.`)) return
+    const reason = prompt(`Recall ${rq.documentNo}\n\nEveryone who worked on it (Purchasing / LG / SCM) will be notified.\nEnter the reason for recall:`)
+    if (reason === null) return
+    if (!reason.trim()) { alert("A reason is required to recall."); return }
     setBusy(rq.id)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "RECALLED" }),
+        body: JSON.stringify({ status: "RECALLED", recallReason: reason.trim() }),
       })
       if (r.ok) await load()
       else { const d = await r.json().catch(() => ({})); alert(d.error || "Recall failed") }
@@ -106,7 +108,8 @@ export default function Page() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${noAir ? "bg-gray-100 text-gray-600" : rq.status === "APPROVED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                        <span title={rq.status === "RECALLED" ? `Recalled by ${rq.recalledBy || "-"}: ${rq.recallReason || ""}` : undefined}
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${rq.status === "RECALLED" ? "bg-orange-100 text-orange-700" : noAir ? "bg-gray-100 text-gray-600" : rq.status === "APPROVED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
                           {STATUS_LABEL[rq.status] || rq.status}
                         </span>
                       </td>

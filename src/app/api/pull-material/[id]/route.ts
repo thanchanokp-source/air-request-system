@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { sendMail } from "@/lib/email"
 
 // Valid lifecycle statuses (in order).
 // Flow: Purchase enters country/incoterm/weight FIRST, then Logistics computes freight,
@@ -58,8 +59,46 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (Object.keys(data).length) await (prisma as any).pullMaterialItem.update({ where: { id: u.id }, data })
   }
 
+  const actorEmail = (session.user as any).email as string | undefined
+
   if (body.status && (PULL_FLOW as readonly string[]).concat(["NO_AIR", "RECALLED"]).includes(body.status)) {
-    await (prisma as any).pullMaterialRequest.update({ where: { id }, data: { status: body.status } })
+    const data: any = { status: body.status }
+
+    if (body.status === "RECALLED") {
+      const reason = String(body.recallReason || "").trim()
+      if (!reason) return NextResponse.json({ error: "recallReason required" }, { status: 400 })
+      data.recallReason = reason
+      data.recalledBy = actorEmail || null
+    } else if (actorEmail) {
+      // Record everyone who acted on the doc (PC/LG/SCM) — they get notified on recall.
+      const cur = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { actors: true } })
+      const set = new Set<string>([...(cur?.actors || []), actorEmail])
+      data.actors = [...set]
+    }
+
+    await (prisma as any).pullMaterialRequest.update({ where: { id }, data })
+
+    if (body.status === "RECALLED") {
+      const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, include: { items: true } })
+      // Notify the whole chain (everyone who acted) + the requester.
+      const recipients = [...new Set([...(rq.actors || []), rq.requesterEmail].filter(Boolean))].filter((e) => e !== actorEmail)
+      if (recipients.length) {
+        const sos = [...new Set((rq.items || []).map((i: any) => i.soNoDoc).filter(Boolean))].join(", ")
+        const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
+          <h2 style="color:#b45309;margin:0 0 10px">Pull Material Recalled</h2>
+          <p><b>${rq.documentNo}</b> (${rq.bu}) has been <b>recalled</b> and withdrawn from the flow.</p>
+          <table style="border-collapse:collapse;font-size:13px">
+            <tr><td style="padding:2px 10px 2px 0;color:#666">Recalled by</td><td>${data.recalledBy || "-"}</td></tr>
+            <tr><td style="padding:2px 10px 2px 0;color:#666">Reason</td><td><b>${data.recallReason}</b></td></tr>
+            <tr><td style="padding:2px 10px 2px 0;color:#666">SO</td><td>${sos || "-"}</td></tr>
+            <tr><td style="padding:2px 10px 2px 0;color:#666">Requester</td><td>${rq.requesterName}</td></tr>
+          </table>
+          <p style="color:#888;font-size:12px;margin-top:12px">No further action is needed on this document.</p>
+        </div>`
+        sendMail(recipients as string[], `Pull Material Recalled — ${rq.documentNo}`, html).catch(() => {})
+      }
+      return NextResponse.json({ request: rq })
+    }
   }
 
   const request = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, include: { items: true } })
