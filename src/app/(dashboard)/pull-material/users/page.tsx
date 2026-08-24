@@ -12,6 +12,9 @@ export default function PullUsersPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const [onlyYes, setOnlyYes] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({ name: "", email: "", role: "LOGISTICS", bu: "NYG" })
+  const [saving, setSaving] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -19,6 +22,22 @@ export default function PullUsersPage() {
     finally { setLoading(false) }
   }
   useEffect(() => { if (isAdmin) load() }, [isAdmin]) // eslint-disable-line
+
+  const ROLES = ["LOGISTICS", "LOGISTICS_TRM", "LOGISTICS_GW", "LOGISTICS_SUB", "SCM_USER", "SCM_NYG", "SCM_NYK", "PURCHASING", "MER_USER", "MER_GW", "MER_EA", "MER_TRM", "DVM_MER", "ADMIN"]
+
+  const addUser = async () => {
+    if (!form.email.trim() || !form.role) return alert("Enter email and role.")
+    setSaving(true)
+    try {
+      const r = await fetch("/api/pull-material/users", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      const d = await r.json()
+      if (r.ok) { setForm({ name: "", email: "", role: "LOGISTICS", bu: "NYG" }); setAdding(false); await load() }
+      else alert(d.error || "Add failed")
+    } finally { setSaving(false) }
+  }
 
   const toggle = async (u: any) => {
     setBusy(u.id)
@@ -44,8 +63,30 @@ export default function PullUsersPage() {
 
   return (
     <div className="p-5 max-w-[1100px] mx-auto space-y-4">
-      <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>User Management — Pull Material</h1>
-        <p className="text-sm text-gray-500">Flag who takes part in the Pull Material flow (Pull RM = YES). They&apos;ll get stage alerts by their role.</p></div>
+      <div className="flex items-start justify-between gap-2 flex-wrap">
+        <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>User Management — Pull Material</h1>
+          <p className="text-sm text-gray-500">Flag who takes part in the Pull Material flow (Pull RM = YES). They&apos;ll get stage alerts by their role.</p></div>
+        <button onClick={() => setAdding(a => !a)} className="px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>+ Add user</button>
+      </div>
+
+      {adding && (
+        <div className="bg-white rounded-xl border p-4 flex flex-wrap items-end gap-3">
+          <div><label className="text-xs font-medium text-gray-500">Name</label>
+            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="block mt-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-40" /></div>
+          <div><label className="text-xs font-medium text-gray-500">Email *</label>
+            <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="name@nanyangtextile.com" className="block mt-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-64" /></div>
+          <div><label className="text-xs font-medium text-gray-500">Role *</label>
+            <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="block mt-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white">
+              {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select></div>
+          <div><label className="text-xs font-medium text-gray-500">BU</label>
+            <select value={form.bu} onChange={e => setForm(f => ({ ...f, bu: e.target.value }))} className="block mt-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white">
+              {["NYG", "EA", "TRM", "GW", "ALL"].map(b => <option key={b} value={b}>{b}</option>)}
+            </select></div>
+          <button onClick={addUser} disabled={saving} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>{saving ? "..." : "Add"}</button>
+          <p className="w-full text-[11px] text-gray-400">If the email already exists, this adds the role to that person and flags Pull RM. New users set their password via the login link / reset.</p>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 items-center">
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Search name / email / role…"

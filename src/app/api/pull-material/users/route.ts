@@ -16,6 +16,28 @@ export async function GET() {
   return NextResponse.json({ users })
 }
 
+// Add a user to the Pull RM list. If the email exists → append role + flag pullRm;
+// otherwise create a new user (no password — they set one via magic login / reset link).
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session || (session.user as any).role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const { name, email, role, bu } = await req.json()
+  const emailLc = String(email || "").toLowerCase().trim()
+  if (!emailLc || !role) return NextResponse.json({ error: "email and role are required" }, { status: 400 })
+  if (!emailLc.endsWith("@nanyangtextile.com")) return NextResponse.json({ error: "Use a company email (@nanyangtextile.com)" }, { status: 400 })
+
+  const existing = await (prisma.user as any).findUnique({ where: { email: emailLc } })
+  if (existing) {
+    const roles = [...new Set([...(existing.roles || []), existing.role, role].filter(Boolean))]
+    await (prisma.user as any).update({ where: { id: existing.id }, data: { pullRm: true, roles, name: name || existing.name } })
+    return NextResponse.json({ ok: true, updated: true })
+  }
+  const user = await (prisma.user as any).create({
+    data: { name: name || null, email: emailLc, role, roles: [role], bu: bu || "NYG", isActive: true, pullRm: true },
+  })
+  return NextResponse.json({ ok: true, user })
+}
+
 export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session || (session.user as any).role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
