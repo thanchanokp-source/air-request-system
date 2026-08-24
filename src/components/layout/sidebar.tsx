@@ -27,6 +27,7 @@ const pullNav = [
   { href: "/pull-material/logistics", label: "LOGISTICS" },
   { href: "/pull-material/approval", label: "APPROVAL" },
   { href: "/pull-material/documents", label: "LOGISTICS DOCUMENT" },
+  { href: "/pull-material/users", label: "USER MANAGEMENT", roles: ["ADMIN"] },
 ]
 
 // Top-level family tabs.

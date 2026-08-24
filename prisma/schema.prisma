@@ -19,6 +19,7 @@ model User {
   roles              String[]            @default([]) // all roles this person holds (incl. primary) — 1 person, many positions
   claimDepartment    String?
   isActive           Boolean             @default(true)
+  pullRm             Boolean             @default(false) // part of the Pull Material flow → gets stage alerts
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   priority           Int?
