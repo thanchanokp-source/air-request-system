@@ -23,6 +23,7 @@ export default function LgBookingPage() {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState("")
   const [buF, setBuF] = useState("")
+  const [fwOnly, setFwOnly] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [openBrands, setOpenBrands] = useState<Set<string>>(new Set())
   const toggleBrand = (b: string) => setOpenBrands(p => { const n = new Set(p); n.has(b) ? n.delete(b) : n.add(b); return n })
@@ -84,6 +85,7 @@ export default function LgBookingPage() {
   const brands = useMemo(() => {
     const s = q.trim().toLowerCase()
     let filtered = buF ? rows.filter(r => (r.request.bu || "NYG") === buF) : rows
+    if (fwOnly) filtered = filtered.filter(r => !!r.request.lgForwardEmail)
     if (s) filtered = filtered.filter(r => `${r.brand} ${r.so} ${r.request.documentNo}`.toLowerCase().includes(s))
     const byBrand: Record<string, any[]> = {}
     for (const row of filtered) (byBrand[row.brand] ||= []).push(row)
@@ -94,7 +96,7 @@ export default function LgBookingPage() {
       const draftIds = brandRows.filter((r: any) => r.hawbNo || r.actualAirFreight != null).map((r: any) => r.id)
       return { brand, docs, count: brandRows.length, ids: brandRows.map(r => r.id), draftCount: draftIds.length, draftIds }
     })
-  }, [rows, q, buF])
+  }, [rows, q, buF, fwOnly])
 
   const toggle = (id: string) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleMany = (ids: string[], on: boolean) => setSelected(p => { const n = new Set(p); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n })
@@ -132,6 +134,10 @@ export default function LgBookingPage() {
             </button>
           ))}
         </div>
+        <button onClick={() => setFwOnly(v => !v)}
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${fwOnly ? "bg-violet-600 text-white border-transparent" : "bg-white text-violet-600 border-violet-300 hover:bg-violet-50"}`}>
+          ↪ Forwarded only
+        </button>
       </div>
 
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
