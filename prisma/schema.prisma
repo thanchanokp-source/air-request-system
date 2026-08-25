@@ -395,8 +395,9 @@ model PullMaterialItem {
   // Purchasing input
   weight          Float?    // confirmed / revised per-unit weight (kg)
   weightGenerated Float?    // system-suggested weight (ref)
-  country         String?   // destination country (drives freight rate) — picked by PC
-  port            String?   // origin AIR PORT CODE (Pull RM freight rate is by port) — picked by PC
+  country         String?   // origin country — picked by PC (drives which ports show)
+  port            String?   // origin AIR PORT CODE — picked by PC (for air rate)
+  seaPort         String?   // origin SEA PORT — picked by PC (for sea rate)
   incoterm        String?   // FOB / CIF / EX-WORK — picked by PC
   // LG actual (close)
   invoiceNo       String?

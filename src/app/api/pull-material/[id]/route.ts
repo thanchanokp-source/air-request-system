@@ -42,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     airFreightCost: num, seaFreightCost: num, incotermCost: num,
     // Purchase
     weight: num, weightGenerated: num, grossWeightKg: num, shipmentDate: dt,
-    country: (v) => v || null, incoterm: (v) => v || null, port: (v) => v || null,
+    country: (v) => v || null, incoterm: (v) => v || null, port: (v) => v || null, seaPort: (v) => v || null,
     // SCM decision
     airDecision: (v) => v || null,
     reasonAirPick: (v) => v || null,
