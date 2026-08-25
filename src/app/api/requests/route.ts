@@ -259,16 +259,15 @@ export async function POST(req: NextRequest) {
             const qty = Number(col(item, "QTY Request ship Air (pcs)") || 0)
             const qtyOrig = Number(col(item, "QTY Original Shipment (pcs)") || 0)
             const rate = rateFor(country, itemBrand)
-            // Gross Weight & Est. Air Freight are computed from QTY ORIGINAL Shipment (always
-            // filled by MER) × WT Charge — NOT QTY Air (which MER may leave blank → would be 0).
-            // 0 only if the description has no WT Charge yet (held).
-            // Historical import already carries a real WEIGHT(KG) in the file → use it directly
-            // (old descriptions like "KNITTED SHIRT" aren't in Master, so recomputing = 0). Normal
-            // uploads still compute Gross = QTY Original × WT Charge from Master Description.
+            // Gross Weight & Est. Air Freight are computed from QTY AIR (what's actually flown) ×
+            // WT Charge, so EST is comparable to Actual (also qty-air based via HAWB). QTY Air may
+            // occasionally be blank → fall back to QTY Original (which MER normally fills).
+            // Historical import already carries a real WEIGHT(KG) in the file → use it directly.
             const fileWeight = Number(String(col(item, "WEIGHT(KG)") ?? col(item, "WEIGHT") ?? "").replace(/,/g, "")) || 0
+            const qtyForGross = qty || qtyOrig
             const gw = (isHistorical && fileWeight > 0)
               ? fileWeight
-              : qtyOrig * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
+              : qtyForGross * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
             // GW: read up to 3 claim splits from Excel (CLAIM DEPT 1/2/3 + %CLAIM + REASON)
             // airCost is computed at display time from actualAirFreight so it stays accurate.
             let claimDepts: any = null

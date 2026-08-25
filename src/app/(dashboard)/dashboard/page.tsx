@@ -1051,14 +1051,13 @@ export default function DashboardPage() {
         <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
-              <tr style={{background:"#c87070"}}>{["DOC NO","SO","PO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","AIR RATE%",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
+              <tr style={{background:"#c87070"}}>{["DOC NO","SO","PO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
                 <th key={h} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && <tr><td colSpan={25} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+              {loading && <tr><td colSpan={24} className="text-center py-10 text-gray-400">Loading...</td></tr>}
               {!loading && filtered.map((row,i)=>{
-                const ar = row.qtyOriginalShipment>0 ? row.qtyRequestAir/row.qtyOriginalShipment*100 : 0
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
                 return (
                   <tr key={i} className="hover:bg-gray-50">
@@ -1076,11 +1075,6 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
                     <td className="px-3 py-1.5">{row.qtyOriginalShipment}</td>
                     <td className="px-3 py-1.5 font-semibold">{row.qtyRequestAir}</td>
-                    <td className="px-3 py-1.5">
-                      <span className={`font-semibold ${ar>50?"text-red-600":ar>20?"text-amber-600":"text-green-600"}`}>
-                        {ar.toFixed(0)}%
-                      </span>
-                    </td>
                     <td className="px-3 py-1.5 text-blue-700">{fmtNum(row.airFreight)}</td>
                     <td className="px-3 py-1.5 text-green-700 font-medium">{fmtNum(row.actualAirFreight)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}</td>
@@ -1096,7 +1090,7 @@ export default function DashboardPage() {
                   </tr>
                 )
               })}
-              {!loading&&filtered.length===0&&<tr><td colSpan={25} className="text-center py-10 text-gray-400">No data</td></tr>}
+              {!loading&&filtered.length===0&&<tr><td colSpan={24} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
           </table>
         </div>

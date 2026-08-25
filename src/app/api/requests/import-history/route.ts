@@ -98,7 +98,8 @@ export async function POST(req: NextRequest) {
         // left it blank, compute Gross = QTY Original × WT Charge from Master Description.
         const fileWeight = num(colLike(item, "weight"))
         const qtyOrig = Math.round(num(col(item, "QTY Original Shipment (pcs)")))
-        const gw = fileWeight > 0 ? fileWeight : qtyOrig * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
+        const qtyAir = Math.round(num(col(item, "QTY Request ship Air (pcs)")))
+        const gw = fileWeight > 0 ? fileWeight : (qtyAir || qtyOrig) * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
         const rate = rates[rateKey(country)] || 0   // EST = Gross Weight × country rate (0 if no rate in Master)
         // Claim splits (+ per-dept ACTUAL AIRFREIGHT → summed to the SO's total actual)
         const splits = [1, 2, 3].map(n => {

@@ -46,11 +46,11 @@ export async function releaseHeldDocs() {
     const rateOk = items.filter(i => i.country).every(i => rateOf(i) > 0)
     const wtOk = items.filter(i => i.description).every(i => (wts[descKey(i.description)] || 0) > 0)
     // Recompute Gross + Est. for every item now that data may have been added.
-    // Gross uses QTY ORIGINAL Shipment (not QTY Air) — see recomputeRequestFreight note.
+    // Gross uses QTY Air (fall back to QTY Original if Air is blank) — see recomputeRequestFreight.
     for (const it of items) {
       const wt = wts[descKey(it.description)] || 0
       const rate = rateOf(it)
-      const gross = (it.qtyOriginalShipment || 0) * wt
+      const gross = (it.qtyRequestAir || it.qtyOriginalShipment || 0) * wt
       await prisma.airRequestItem.update({
         where: { id: it.id },
         data: { grossWeight: gross, airFreight: gross * rate, marketRatePerKg: rate > 0 ? rate : null },
@@ -65,9 +65,9 @@ export async function releaseHeldDocs() {
 // Back-compat alias (older call sites). Both rate and weight releases run the same pass.
 export const releasePendingRateDocs = releaseHeldDocs
 
-// Recompute Gross (= QTY ORIGINAL Shipment × WT Charge) + Est. Air Freight (= Gross × rate) for
-// EVERY item of a request. Gross/Est are based on QTY Original (always filled), NOT QTY Air
-// (which MER may leave blank). Call after Master data or an item's QTY Original changes.
+// Recompute Gross (= QTY Air × WT Charge) + Est. Air Freight (= Gross × rate) for EVERY item of a
+// request. Gross/Est are based on QTY Air (what's actually flown → comparable to Actual), falling
+// back to QTY Original when Air is blank. Call after Master data or an item's qty changes.
 export async function recomputeRequestFreight(requestId: string): Promise<void> {
   const items = await (prisma.airRequestItem as any).findMany({ where: { requestId } })
   if (!items.length) return
@@ -83,7 +83,7 @@ export async function recomputeRequestFreight(requestId: string): Promise<void> 
   for (const it of items) {
     const wt = wts[descKey(it.description)] || 0
     const rate = rateOf(it)
-    const gross = (it.qtyOriginalShipment || 0) * wt
+    const gross = (it.qtyRequestAir || it.qtyOriginalShipment || 0) * wt
     await prisma.airRequestItem.update({
       where: { id: it.id },
       data: { grossWeight: gross, airFreight: gross * rate, marketRatePerKg: rate > 0 ? rate : null },

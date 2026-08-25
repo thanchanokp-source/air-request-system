@@ -138,7 +138,8 @@ export async function buildRequestItems(
     const qtyOrig = Number(col(item, "QTY Original Shipment (pcs)") || 0)
     const rate = rateFor(country, itemBrand)
     const fileWeight = Number(String(col(item, "WEIGHT(KG)") ?? col(item, "WEIGHT") ?? "").replace(/,/g, "")) || 0
-    const gw = (isHistorical && fileWeight > 0) ? fileWeight : qtyOrig * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
+    // Gross = QTY Air × WT Charge (fall back to QTY Original if Air blank) → EST comparable to Actual.
+    const gw = (isHistorical && fileWeight > 0) ? fileWeight : (qty || qtyOrig) * wtChargeFor(String(col(item, "DESCRIPTION") || ""))
     let claimDepts: any = null, claimDept: string | null = null, claimPct: number | null = null
     if (isGW) {
       const splits = [1, 2, 3].map(n => {
