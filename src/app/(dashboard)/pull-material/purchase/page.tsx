@@ -74,6 +74,8 @@ export default function PurchasePage() {
 
   const sel = "w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 disabled:bg-gray-50 disabled:text-gray-400"
   const openReq = reqs.find(r => r.id === openId)
+  const itemReady = (it: any) => !!valOf(it, "country") && (!!valOf(it, "port") || !!valOf(it, "seaPort")) && !!valOf(it, "incoterm") && !!valOf(it, "weight")
+  const allReady = openReq ? openReq.items.every(itemReady) : false
 
   return (
     <div className="p-5 md:p-8 max-w-[1000px] mx-auto space-y-5">
@@ -93,10 +95,13 @@ export default function PurchasePage() {
                 <div className="font-bold text-lg text-gray-900">{openReq.documentNo}</div>
                 <div className="text-xs text-gray-400">{openReq.requesterName} · {openReq.items.length} items</div>
               </div>
-              <button onClick={() => save(openReq)} disabled={busy === openReq.id}
-                className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm hover:opacity-90 disabled:opacity-50 transition" style={{ background: MAROON }}>
-                {busy === openReq.id ? "Saving…" : "Save → Send to Logistics"}
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                <button onClick={() => save(openReq)} disabled={busy === openReq.id || !allReady}
+                  className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition" style={{ background: MAROON }}>
+                  {busy === openReq.id ? "Saving…" : "Save → Send to Logistics"}
+                </button>
+                {!allReady && <span className="text-[11px] text-amber-600">Fill Country, Port, Incoterm &amp; Weight for every item</span>}
+              </div>
             </div>
 
             {openReq.items.map((it: any) => {
