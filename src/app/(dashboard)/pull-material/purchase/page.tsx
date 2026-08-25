@@ -12,7 +12,6 @@ export default function PurchasePage() {
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
   const [countries, setCountries] = useState<string[]>([])
-  const [ports, setPorts] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -27,11 +26,16 @@ export default function PurchasePage() {
   }
   useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
 
+  // Countries that HAVE freight rates (air and/or sea) → PC picks one; LG pulls both by country.
   useEffect(() => {
-    fetch("/api/master/port").then(r => r.json()).then((rows: any[]) => {
-      setCountries(Array.from(new Set((rows || []).map(r => r.country).filter(Boolean))).sort())
-    }).catch(() => {})
-    fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setPorts(d.origins || [])).catch(() => {})
+    Promise.all([
+      fetch("/api/pull-material/air-rates").then(r => r.json()).catch(() => ({})),
+      fetch("/api/pull-material/sea-rates").then(r => r.json()).catch(() => ({})),
+    ]).then(([a, s]) => {
+      const airC = a.countries || []
+      const seaC = [...new Set((s.rows || []).map((r: any) => r.country).filter(Boolean))]
+      setCountries(Array.from(new Set([...airC, ...seaC])).sort())
+    })
   }, [])
 
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
@@ -43,7 +47,7 @@ export default function PurchasePage() {
 
   const save = async (rq: any) => {
     for (const it of rq.items) {
-      if (!valOf(it, "port")) return alert(`Select a Port for SO ${it.soNoDoc}.`)
+      if (!valOf(it, "country")) return alert(`Select a Country for SO ${it.soNoDoc}.`)
       if (!valOf(it, "incoterm")) return alert(`Select an Incoterm for SO ${it.soNoDoc}.`)
       if (!valOf(it, "weight")) return alert(`Enter the Weight for SO ${it.soNoDoc}.`)
     }
@@ -52,7 +56,6 @@ export default function PurchasePage() {
       const itemUpdates = rq.items.map((it: any) => ({
         id: it.id,
         country: valOf(it, "country"),
-        port: valOf(it, "port"),
         incoterm: valOf(it, "incoterm"),
         weight: valOf(it, "weight"),
         shipmentDate: valOf(it, "shipmentDate"),
@@ -74,10 +77,9 @@ export default function PurchasePage() {
   return (
     <div className="p-5 max-w-[1100px] mx-auto space-y-4">
       <datalist id="pm-countries">{countries.map(c => <option key={c} value={c} />)}</datalist>
-      <datalist id="pm-ports">{ports.map(p => <option key={p} value={p} />)}</datalist>
 
       <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Purchase — Pull Material</h1>
-        <p className="text-sm text-gray-500">Open a document → per item, pick Country + Port + Incoterm and confirm Weight → send to Logistics</p></div>
+        <p className="text-sm text-gray-500">Open a document → per item, pick Country + Incoterm and confirm Weight → send to Logistics (LG pulls air &amp; sea rates by country)</p></div>
       <div className="flex gap-1.5">{BUS.map(b => (
         <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
@@ -115,11 +117,8 @@ export default function PurchasePage() {
 
                 {/* PC inputs — vertical */}
                 <div className="grid sm:grid-cols-2 gap-4 pt-1">
-                  <Field label="Country">
-                    <input list="pm-countries" value={valOf(it, "country")} onChange={e => setVal(it.id, "country", e.target.value)} placeholder="search…" className={inp} />
-                  </Field>
-                  <Field label="Port (origin) *">
-                    <input list="pm-ports" value={valOf(it, "port")} onChange={e => setVal(it.id, "port", e.target.value)} placeholder="e.g. HKG" className={inp} />
+                  <Field label="Country *">
+                    <input list="pm-countries" value={valOf(it, "country")} onChange={e => setVal(it.id, "country", e.target.value)} placeholder="e.g. CHINA" className={inp} />
                   </Field>
                   <Field label="Incoterm *">
                     <select value={valOf(it, "incoterm")} onChange={e => setVal(it.id, "incoterm", e.target.value)} className={inp}>

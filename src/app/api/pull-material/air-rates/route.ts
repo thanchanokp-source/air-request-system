@@ -21,9 +21,10 @@ export async function PATCH(req: NextRequest) {
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const rows = await (prisma as any).pullFreightAir.findMany({ orderBy: [{ origin: "asc" }, { airline: "asc" }] })
+  const rows = await (prisma as any).pullFreightAir.findMany({ orderBy: [{ country: "asc" }, { origin: "asc" }, { airline: "asc" }] })
   const origins = [...new Set(rows.map((r: any) => r.origin))]
-  return NextResponse.json({ rows, origins })
+  const countries = [...new Set(rows.map((r: any) => r.country).filter(Boolean))]
+  return NextResponse.json({ rows, origins, countries })
 }
 
 export async function POST() {
@@ -31,7 +32,7 @@ export async function POST() {
   if (!session || (session.user as any).role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   await (prisma as any).pullFreightAir.deleteMany({})
   await (prisma as any).pullFreightAir.createMany({
-    data: (seed as any[]).map(s => ({ origin: s.origin, destination: s.destination || "BKK", fwd: s.fwd || null, airline: s.airline || null, tt: s.tt || null, rates: s.rates || {} })),
+    data: (seed as any[]).map(s => ({ origin: s.origin, country: s.country || null, destination: s.destination || "BKK", fwd: s.fwd || null, airline: s.airline || null, tt: s.tt || null, rates: s.rates || {} })),
   })
   const count = await (prisma as any).pullFreightAir.count()
   return NextResponse.json({ ok: true, count })

@@ -29,11 +29,11 @@ export default function LogisticsPage() {
   useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
   useEffect(() => { fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRates(d.rows || [])).catch(() => {}) }, [])
 
-  // Estimate Air = MAX rate among the port's routes at the weight's Q-break × weight.
+  // Estimate Air = MAX rate among the COUNTRY's air routes at the weight's Q-break × weight.
   const airEst = (it: any) => {
     const w = Number(it.weight) || 0
-    const routes = airRates.filter(r => r.origin === it.port)
-    if (!it.port || !w || !routes.length) return null
+    const routes = airRates.filter(r => (r.country || "") === (it.country || ""))
+    if (!it.country || !w || !routes.length) return null
     const bk = breakKey(w)
     const vals = routes.map(r => Number(r.rates?.[bk])).filter(v => v && !isNaN(v))
     if (!vals.length) return null
@@ -47,7 +47,7 @@ export default function LogisticsPage() {
 
   const save = async (rq: any) => {
     for (const it of rq.items) {
-      if (!airEst(it)) return alert(`No air rate for port "${it.port}" at this weight (SO ${it.soNoDoc}). Check the Port / weight.`)
+      if (!airEst(it)) return alert(`No air rate for country "${it.country}" at this weight (SO ${it.soNoDoc}). Check the Country / weight.`)
       if (!dateVal(it, "inHouseAirDate")) return alert("Enter In-House Air date for every line.")
     }
     setBusy(rq.id)
@@ -109,7 +109,6 @@ export default function LogisticsPage() {
 
                   {/* Read-only refs */}
                   <div className="grid sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
-                    <Ref label="Port (origin)" value={it.port || "-"} />
                     <Ref label="Country" value={it.country || "-"} />
                     <Ref label="Incoterm" value={it.incoterm || "-"} />
                     <Ref label="Weight (kg)" value={fmt(it.weight)} />
@@ -126,7 +125,7 @@ export default function LogisticsPage() {
                         <span className="text-xs text-gray-400">= max rate {e.rate} ({e.bk}) × {fmt(it.weight)} kg</span>
                       </div>
                     ) : (
-                      <span className="text-xs text-amber-700">⚠ No air rate for port &quot;{it.port || "-"}&quot; at this weight — check Port/weight or add the rate to the master.</span>
+                      <span className="text-xs text-amber-700">⚠ No air rate for country &quot;{it.country || "-"}&quot; at this weight — check Country/weight or add the rate to the master.</span>
                     )}
                   </div>
 

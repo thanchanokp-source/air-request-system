@@ -413,6 +413,7 @@ model PullMaterialItem {
 model PullFreightAir {
   id          String   @id @default(cuid())
   origin      String   // AIR PORT CODE (e.g. HKG, SHA)
+  country     String?  // origin country (maps port → country so PC can pick by country)
   destination String   @default("BKK")
   fwd         String?  // forwarder
   airline     String?  // A/L

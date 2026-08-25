@@ -95,12 +95,13 @@ export default function PullRatesPage() {
         {tab === "air" ? (
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500"><tr>
-              {["ORIGIN", "DEST", "FWD", "A/L", "TT", ...AIR_BREAKS].map(h =>
+              {["COUNTRY", "ORIGIN", "DEST", "FWD", "A/L", "TT", ...AIR_BREAKS].map(h =>
                 <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {airRows.map(r => (
                 <tr key={r.id} className={`hover:bg-gray-50 ${edits[r.id] ? "bg-green-50" : ""}`}>
+                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.country || "-"}</td>
                   <td className="px-3 py-1.5 font-semibold text-gray-800">{r.origin}</td>
                   <td className="px-3 py-1.5">{r.destination}</td>
                   <td className="px-3 py-1.5">{r.fwd || "-"}</td>
@@ -115,7 +116,7 @@ export default function PullRatesPage() {
                   ))}
                 </tr>
               ))}
-              {airRows.length === 0 && <tr><td colSpan={5 + AIR_BREAKS.length} className="px-3 py-10 text-center text-gray-400">No air rates {air.length === 0 && "— click Reload to load from file"}</td></tr>}
+              {airRows.length === 0 && <tr><td colSpan={6 + AIR_BREAKS.length} className="px-3 py-10 text-center text-gray-400">No air rates {air.length === 0 && "— click Reload to load from file"}</td></tr>}
             </tbody>
           </table>
         ) : (
