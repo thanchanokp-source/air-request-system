@@ -12,10 +12,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ att
   const att = await prisma.requestAttachment.findUnique({ where: { id: attachmentId } })
   if (!att) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(att.filePath, 3600)
-  if (error || !data) return NextResponse.json({ error: "Storage error" }, { status: 500 })
+  // Stream the bytes THROUGH the app server (same origin as the domain) instead of redirecting to a
+  // Supabase signed URL. Self-hosted Supabase generates signed URLs on its own (often internal) host,
+  // which the user's browser cannot reach after the domain migration → "can't open file". Proxying the
+  // download here keeps it on the app domain and preserves the auth check above.
+  const { data, error } = await supabase.storage.from(BUCKET).download(att.filePath)
+  if (error || !data) return NextResponse.json({ error: "Storage error", detail: error?.message || "download failed", path: att.filePath }, { status: 500 })
 
-  return NextResponse.redirect(data.signedUrl)
+  const buf = Buffer.from(await data.arrayBuffer())
+  const safeName = encodeURIComponent(att.fileName || "file")
+  return new NextResponse(buf, {
+    headers: {
+      "Content-Type": att.mimeType || "application/octet-stream",
+      "Content-Disposition": `inline; filename*=UTF-8''${safeName}`,
+      "Content-Length": String(buf.length),
+      "Cache-Control": "private, max-age=60",
+    },
+  })
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ attachmentId: string }> }) {
