@@ -18,7 +18,7 @@ const fmtNum = (v: any) => v != null ? Number(v).toLocaleString("en-US", { maxim
 //  - GW:  GM approved       → PENDING_LOGISTICS_GW / PENDING_CLAIM_GW and beyond
 // (President is now the FINAL approver, so these are all post-VP-SCM/GM.)
 const BOOK_READY_STATUSES = [
-  "PENDING_LOGISTICS", "PENDING_CLAIM", "PENDING_PRESIDENT",
+  "PENDING_LOGISTICS", "PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_VP_NYK", "PENDING_PRESIDENT",
   "PENDING_LOGISTICS_GW", "PENDING_CLAIM_GW", "PENDING_PRESIDENT_GW",
   "PENDING_ACCOUNTING", "COMPLETED",
 ]
