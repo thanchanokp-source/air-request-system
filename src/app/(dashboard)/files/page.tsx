@@ -120,6 +120,7 @@ export default function FilesPage() {
   const [showTest, setShowTest] = useState(false)
   const [selectedForCombine, setSelectedForCombine] = useState<Set<string>>(new Set())
   const [combineLoading, setCombineLoading] = useState(false)
+  const [docF, setDocF] = useState<string[]>([])
   const [brandF, setBrandF] = useState<string[]>([])
   const [styleF, setStyleF] = useState<string[]>([])
   const [soF, setSoF] = useState<string[]>([])
@@ -144,7 +145,8 @@ export default function FilesPage() {
     [requests, statusFilter, activeBU, showTest])
 
   const uniq = (arr: any[]) => [...new Set(arr.filter(Boolean))].sort()
-  const brandOpts = useMemo(() => uniq(folderFiltered.map(r => r.brandName)), [folderFiltered])
+  const docOpts = useMemo(() => uniq(folderFiltered.map(r => r.documentNo)), [folderFiltered])
+  const brandOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.brand || r.brandName))), [folderFiltered])
   const styleOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.style))), [folderFiltered])
   const soOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.so))), [folderFiltered])
   const cpOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.customerPO))), [folderFiltered])
@@ -153,7 +155,7 @@ export default function FilesPage() {
   const portOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.port))), [folderFiltered])
   const shipOpts = useMemo(() => uniq(folderFiltered.flatMap(r => (r.items || []).map((i: any) => i.planShipmentDate ? fmtDate(i.planShipmentDate) : null))), [folderFiltered])
 
-  const hasFilter = [brandF, styleF, soF, cpF, claimF, invoiceF, portF, shipF].some(f => f.length > 0) || hawbQuery.trim().length > 0
+  const hasFilter = [docF, brandF, styleF, soF, cpF, claimF, invoiceF, portF, shipF].some(f => f.length > 0) || hawbQuery.trim().length > 0
 
   // HAWB# box (also used for "Print by HAWB") doubles as a live filter — case-insensitive contains.
   const hawbNorm = hawbQuery.trim().toLowerCase()
@@ -162,6 +164,7 @@ export default function FilesPage() {
   // Item-level filter — used to filter the SO rows WITHIN a document ("By Document" view) so a
   // selected SO/Style/etc. actually narrows the rows shown, not just which documents appear.
   const itemMatchesFilters = (it: any) => {
+    if (brandF.length && !brandF.includes(it.brand)) return false
     if (styleF.length && !styleF.includes(it.style)) return false
     if (soF.length && !soF.includes(it.so)) return false
     if (cpF.length && !cpF.includes(it.customerPO)) return false
@@ -174,7 +177,8 @@ export default function FilesPage() {
 
   const filtered = useMemo(() => folderFiltered.filter(r => {
     const items = r.items || []
-    if (brandF.length && !brandF.includes(r.brandName)) return false
+    if (docF.length && !docF.includes(r.documentNo)) return false
+    if (brandF.length && !items.some((i: any) => brandF.includes(i.brand || r.brandName))) return false
     if (styleF.length && !items.some((i: any) => styleF.includes(i.style))) return false
     if (soF.length && !items.some((i: any) => soF.includes(i.so))) return false
     if (cpF.length && !items.some((i: any) => cpF.includes(i.customerPO))) return false
@@ -185,7 +189,7 @@ export default function FilesPage() {
     if (hawbNorm && !items.some((i: any) => hawbMatch(i.hawbNo))) return false
     if (unbookedOnly && unbookedCount(r) === 0) return false
     return true
-  }), [folderFiltered, brandF, styleF, soF, cpF, invoiceF, claimF, portF, shipF, hawbNorm, unbookedOnly])
+  }), [folderFiltered, docF, brandF, styleF, soF, cpF, invoiceF, claimF, portF, shipF, hawbNorm, unbookedOnly])
 
   // Flat SO rows for the LG "By SO" view — item-level filtering, then group by Port/Ship Date.
   const soRows = useMemo(() => {
@@ -555,6 +559,7 @@ export default function FilesPage() {
           <div className="px-5 py-3 border-b border-gray-100 flex items-start gap-2 flex-wrap">
             <span className="text-xs font-semibold text-gray-500 mt-2 shrink-0">FILTERS</span>
             <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 min-w-0">
+              <MultiSelect label="Doc No..." options={docOpts} value={docF} onChange={setDocF} />
               <MultiSelect label="Ship Date..." options={shipOpts} value={shipF} onChange={setShipF} />
               <MultiSelect label="All Brand" options={brandOpts} value={brandF} onChange={setBrandF} />
               <MultiSelect label="SO..." options={soOpts} value={soF} onChange={setSoF} />
@@ -564,7 +569,7 @@ export default function FilesPage() {
               <MultiSelect label="Invoice No..." options={invoiceOpts} value={invoiceF} onChange={setInvoiceF} />
             </div>
             {hasFilter && (
-              <button onClick={() => { setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setClaimF([]); setInvoiceF([]); setPortF([]); setShipF([]); setHawbQuery("") }}
+              <button onClick={() => { setDocF([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setClaimF([]); setInvoiceF([]); setPortF([]); setShipF([]); setHawbQuery("") }}
                 className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 font-medium shrink-0 mt-0.5">Clear</button>
             )}
           </div>
