@@ -18,11 +18,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const data: any = { country: String(body.country).trim(), ratePerKg: rateThb, rateUsd }
     if (body.bu != null) data.bu = String(body.bu).trim() || "ALL"
     const item = await (prisma as any).masterFreightRate.update({ where: { id }, data })
-    // Auto-recalc open docs of this COUNTRY: EA items use the USD rate (est in USD), others the THB rate.
+    // Auto-recalc EST only for docs NOT yet approved. Once a doc is approved (past VP SCM / GM →
+    // booking-ready) or terminal, its EST is FROZEN at the approved value and a later rate change
+    // must NOT alter it. EA items use USD rate, others THB.
+    const FROZEN = [
+      "COMPLETED", "REJECTED",
+      "PENDING_LOGISTICS", "PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_VP_NYK", "PENDING_PRESIDENT", "PENDING_ACCOUNTING",
+      "PENDING_LOGISTICS_GW", "PENDING_CLAIM_GW", "PENDING_PRESIDENT_GW",
+    ]
     const affected = await (prisma.airRequestItem as any).findMany({
       where: {
         country: { equals: item.country, mode: "insensitive" },
-        request: { status: { notIn: ["COMPLETED", "REJECTED"] }, ...(item.bu !== "ALL" ? { bu: item.bu } : {}) },
+        request: { status: { notIn: FROZEN }, ...(item.bu !== "ALL" ? { bu: item.bu } : {}) },
       },
       select: { id: true, grossWeight: true, brand: true, request: { select: { bu: true } } },
     })

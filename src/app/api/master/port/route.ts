@@ -62,11 +62,18 @@ export async function POST(req: NextRequest) {
 // Recompute Est. Air Freight (grossWeight × rate) for open items of this COUNTRY. EA items use the USD
 // rate (est stored in USD); every other BU uses the THB rate (est in THB). A bu-specific rate only
 // recalcs that BU's docs; a shared "ALL" rate recalcs docs of any BU (that has no BU-specific override).
+// EST is FROZEN once a doc is approved (past VP SCM / GM → booking-ready) or terminal — a later
+// rate change must not alter an already-approved estimate. Only pre-approval docs recompute.
+const FROZEN_STATUSES = [
+  "COMPLETED", "REJECTED",
+  "PENDING_LOGISTICS", "PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_VP_NYK", "PENDING_PRESIDENT", "PENDING_ACCOUNTING",
+  "PENDING_LOGISTICS_GW", "PENDING_CLAIM_GW", "PENDING_PRESIDENT_GW",
+]
 async function recalcOpenItems(country: string, rateThb: number, rateUsd: number, bu: string): Promise<number> {
   const affected = await (prisma.airRequestItem as any).findMany({
     where: {
       country: { equals: country, mode: "insensitive" },
-      request: { status: { notIn: ["COMPLETED", "REJECTED"] }, ...(bu !== "ALL" ? { bu } : {}) },
+      request: { status: { notIn: FROZEN_STATUSES }, ...(bu !== "ALL" ? { bu } : {}) },
     },
     select: { id: true, grossWeight: true, brand: true, request: { select: { bu: true } } },
   })
