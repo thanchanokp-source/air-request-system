@@ -83,6 +83,24 @@ function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string):
   return cands[0] ? nameOf(cands[0].email) || nameOf(cands[0].name) : ""
 }
 
+// ALL active holders of `roles` in this BU → email names, sorted by priority. Used where a whole
+// team is alerted and any of them may act / forward (e.g. Logistics gets emailed to every LG person).
+// Prefers real (primary-role) holders and BU-exact holders, so an ADMIN who merely carries the role
+// as a secondary/cross-BU ("ALL") capability is dropped when the BU's own team exists.
+function resolveRoleNames(dir: any[] | undefined, roles: string[], bu?: string): string[] {
+  if (!dir || !dir.length) return []
+  let cands = dir.filter((u: any) =>
+    (!bu || u.bu === bu || u.bu === "ALL") &&
+    (roles.includes(u.role) || (Array.isArray(u.roles) && u.roles.some((r: string) => roles.includes(r)))))
+  const primary = cands.filter((u: any) => roles.includes(u.role))
+  if (primary.length) cands = primary
+  if (bu) { const exact = cands.filter((u: any) => u.bu === bu); if (exact.length) cands = exact }
+  cands.sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
+  const seen = new Set<string>(); const names: string[] = []
+  for (const u of cands) { const n = nameOf(u.email) || nameOf(u.name); if (n && !seen.has(n)) { seen.add(n); names.push(n) } }
+  return names
+}
+
 // Current linear-stage → {label, roles, assigned-email getter}. Claim stages are handled
 // separately (per-department). assigned email (chosen at upload) wins over role lookup.
 const STAGE_INFO: Record<string, { label: string; roles: string[]; assigned?: (req: any, soItem: any) => string | null | undefined }> = {
@@ -106,7 +124,10 @@ const STAGE_INFO: Record<string, { label: string; roles: string[]; assigned?: (r
 function currentStageWho(status: string, bu: string, soItem: any, req: any, dir?: any[]): string {
   const info = STAGE_INFO[status]
   if (!info) return ""
-  const who = nameOf(info.assigned?.(req, soItem)) || resolveRoleEmail(dir, info.roles, bu)
+  // Logistics is a whole team (everyone alerted can act / FW) → list all names, not just the first.
+  const isLgStage = status === "PENDING_LOGISTICS" || status === "PENDING_LOGISTICS_GW"
+  const who = nameOf(info.assigned?.(req, soItem))
+    || (isLgStage ? resolveRoleNames(dir, info.roles, bu).join(", ") : resolveRoleEmail(dir, info.roles, bu))
   // Always surface the current stage even when the specific person can't be resolved (e.g. SCM /
   // President / Logistics — role-based, not per-doc assigned) so an in-flight doc always shows Waiting.
   return who ? `${info.label}: ${who}` : info.label
@@ -247,9 +268,10 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     // LG runs parallel with Claim → surface it as pending until Actual is entered.
     // TRM logistics = LOGISTICS_TRM (Urairat, whose bu=GW) → look up by that role with NO bu filter
     // (the role already encodes TRM). Other BUs use the shared LOGISTICS scoped by the doc's BU.
-    const lgName = bu === "TRM"
-      ? resolveRoleEmail(approvers, ["LOGISTICS_TRM"], undefined)
-      : resolveRoleEmail(approvers, ["LOGISTICS"], bu)
+    // Show the WHOLE LG team alerted for this BU (all can act / FW), not just the first person.
+    const lgName = (bu === "TRM"
+      ? resolveRoleNames(approvers, ["LOGISTICS_TRM"], undefined)
+      : resolveRoleNames(approvers, ["LOGISTICS"], bu)).join(", ")
     const lgFw = req?.lgForwardEmail ? ` → FW: ${req.lgForwardName || String(req.lgForwardEmail).split("@")[0]}` : ""
     const lgWho = !completed && !rejected && claimReached && !lgDone ? `Logistics${lgName ? `: ${lgName}` : ""}${lgFw}` : ""
     const pendingWho = [...(stageWho ? [stageWho] : []), ...(lgWho ? [lgWho] : []), ...claimWho, ...(nykWho ? [nykWho] : [])]
@@ -347,7 +369,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   // linear stageWho already names Logistics, so only add it for the parallel status to avoid a dup.
   const gwLgFw = req?.lgForwardEmail ? ` → FW: ${req.lgForwardName || String(req.lgForwardEmail).split("@")[0]}` : ""
   const gwLgWho = (status === "PENDING_CLAIM_GW" && !lgDone && !completed && !rejected)
-    ? (() => { const n = resolveRoleEmail(approvers, ["LOGISTICS_GW"], undefined); return [(n ? `Logistics: ${n}` : "Logistics") + gwLgFw] })()
+    ? (() => { const n = resolveRoleNames(approvers, ["LOGISTICS_GW"], undefined).join(", "); return [(n ? `Logistics: ${n}` : "Logistics") + gwLgFw] })()
     : []
   const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwLgWho, ...gwClaimWho, ...(gwNykWho ? [gwNykWho] : [])]
 
