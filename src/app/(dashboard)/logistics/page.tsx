@@ -98,6 +98,17 @@ export default function LgBookingPage() {
     })
   }, [rows, q, buF, fwOnly])
 
+  // Flat SO search results — type in the search box → tick SOs across documents/brands quickly.
+  const soMatches = useMemo(() => {
+    const s = q.trim().toLowerCase()
+    if (!s) return []
+    return rows.filter(r =>
+      (!buF || (r.request.bu || "NYG") === buF) &&
+      (!fwOnly || !!r.request.lgForwardEmail) &&
+      `${r.brand} ${r.so} ${r.request.documentNo} ${r.style || ""} ${r.customerPO || ""}`.toLowerCase().includes(s)
+    )
+  }, [rows, q, buF, fwOnly])
+
   const toggle = (id: string) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleMany = (ids: string[], on: boolean) => setSelected(p => { const n = new Set(p); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n })
 
@@ -141,9 +152,37 @@ export default function LgBookingPage() {
       </div>
 
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
-      {!loading && brands.length === 0 && <div className="text-center py-20 text-gray-400">No SOs waiting on LG</div>}
 
-      {brands.map(({ brand, docs, count, ids, draftCount, draftIds }) => {
+      {/* Search mode → flat SO list with tick (multi-select across docs/brands) */}
+      {!loading && q.trim() && (
+        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
+            <input type="checkbox" checked={soMatches.length > 0 && soMatches.every(r => selected.has(r.id))}
+              onChange={e => toggleMany(soMatches.map(r => r.id), e.target.checked)} className="rounded border-gray-300" />
+            <span className="text-sm font-semibold text-gray-700">Matching SOs</span>
+            <span className="text-xs text-gray-400">{soMatches.length} found · tick to select</span>
+          </div>
+          {soMatches.length === 0 ? <div className="px-4 py-8 text-center text-gray-400 text-sm">No SO matches</div> : (
+            <div className="max-h-[60vh] overflow-auto divide-y divide-gray-50">
+              {soMatches.map(r => (
+                <label key={r.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/50 ${selected.has(r.id) ? "bg-blue-50" : ""}`}>
+                  <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="rounded border-gray-300" />
+                  <span className="font-semibold text-gray-800 text-sm w-24 shrink-0">{r.so}</span>
+                  <span className="text-xs text-gray-500 w-28 shrink-0 truncate">{r.brand}</span>
+                  <span className="text-xs text-blue-700 w-40 shrink-0 truncate">{r.request.documentNo}</span>
+                  <span className="text-xs text-gray-500 flex-1 truncate">{r.style || ""}</span>
+                  <span className="text-xs text-gray-600 shrink-0">QTY {r.qtyRequestAir ?? "-"}</span>
+                  {(r.hawbNo || r.actualAirFreight != null) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0">✓ booked</span>}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!loading && !q.trim() && brands.length === 0 && <div className="text-center py-20 text-gray-400">No SOs waiting on LG</div>}
+
+      {!q.trim() && brands.map(({ brand, docs, count, ids, draftCount, draftIds }) => {
         const allOn = ids.every(id => selected.has(id))
         const open = openBrands.has(brand)
         return (
