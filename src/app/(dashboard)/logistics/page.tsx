@@ -105,7 +105,7 @@ export default function LgBookingPage() {
     return rows.filter(r =>
       (!buF || (r.request.bu || "NYG") === buF) &&
       (!fwOnly || !!r.request.lgForwardEmail) &&
-      `${r.brand} ${r.so} ${r.request.documentNo} ${r.style || ""} ${r.customerPO || ""}`.toLowerCase().includes(s)
+      `${r.brand} ${r.so} ${r.sub || ""} ${r.request.documentNo} ${r.style || ""} ${r.customerPO || ""}`.toLowerCase().includes(s)
     )
   }, [rows, q, buF, fwOnly])
 
@@ -168,8 +168,10 @@ export default function LgBookingPage() {
                 <label key={r.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-blue-50/50 ${selected.has(r.id) ? "bg-blue-50" : ""}`}>
                   <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="rounded border-gray-300" />
                   <span className="font-semibold text-gray-800 text-sm w-24 shrink-0">{r.so}</span>
+                  <span className="text-xs text-gray-500 w-10 shrink-0 text-center">{r.sub || "-"}</span>
                   <span className="text-xs text-gray-500 w-28 shrink-0 truncate">{r.brand}</span>
-                  <span className="text-xs text-blue-700 w-40 shrink-0 truncate">{r.request.documentNo}</span>
+                  <span className="text-xs text-blue-700 w-36 shrink-0 truncate">{r.request.documentNo}</span>
+                  <span className="text-xs text-gray-500 w-24 shrink-0 truncate" title={r.customerPO || ""}>{r.customerPO || "-"}</span>
                   <span className="text-xs text-gray-500 flex-1 truncate">{r.style || ""}</span>
                   <span className="text-xs text-gray-600 shrink-0">QTY {r.qtyRequestAir ?? "-"}</span>
                   {(r.hawbNo || r.actualAirFreight != null) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0">✓ booked</span>}
