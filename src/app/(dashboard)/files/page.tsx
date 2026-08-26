@@ -140,6 +140,20 @@ export default function FilesPage() {
     })
   }, [])
 
+  const [hawbUploading, setHawbUploading] = useState<string | null>(null)
+  // Attach a supporting file to a specific HAWB (retroactive, after LG already sent).
+  const attachHawb = async (reqId: string, hawbNo: string, file: File) => {
+    const key = `${reqId}:${hawbNo}`
+    setHawbUploading(key)
+    try {
+      const form = new FormData()
+      form.append("file", file); form.append("category", "AWB"); form.append("hawbNo", hawbNo)
+      const res = await fetch(`/api/requests/${reqId}/attachments`, { method: "POST", body: form })
+      if (!res.ok) { alert("Upload failed"); return }
+      const d = await fetch("/api/requests").then(r => r.json()); setRequests(Array.isArray(d) ? d : [])
+    } finally { setHawbUploading(null) }
+  }
+
   const folderFiltered = useMemo(() =>
     requests.filter(r => (showTest || !r.isTest) && requestInBu(r, activeBU) && qualifies(r) && matchesStatus(r, statusFilter)),
     [requests, statusFilter, activeBU, showTest])
@@ -750,10 +764,38 @@ export default function FilesPage() {
                             {/* Items under document */}
                             {(expandedDocs.has(docKey) || hasFilter) && (
                               <div className="pl-20 pr-5 pb-3 bg-blue-50 border-t border-blue-100">
-                                {(req.attachments || []).some((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)) && (
+                                {/* Attach supporting files BY HAWB (retroactive) */}
+                                {(() => {
+                                  const hawbs = [...new Set((req.items || []).map((i: any) => (i.hawbNo || "").trim()).filter(Boolean))] as string[]
+                                  if (!hawbs.length) return <p className="text-xs text-gray-400 mt-2">No HAWB yet — enter HAWB in LG Booking first, then attach files here.</p>
+                                  return (
+                                    <div className="mt-2 space-y-1.5">
+                                      {hawbs.map(h => {
+                                        const files = (req.attachments || []).filter((a: any) => (a.hawbNo || "") === h)
+                                        const key = `${req.id}:${h}`
+                                        return (
+                                          <div key={h} className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
+                                            <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">HAWB {h}</span>
+                                            {files.map((a: any) => (
+                                              <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer"
+                                                className="text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded hover:bg-orange-100 max-w-[180px] truncate">📎 {a.fileName}</a>
+                                            ))}
+                                            <label className={`text-xs px-2 py-0.5 rounded border font-medium cursor-pointer ml-auto ${hawbUploading === key ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "border-blue-300 text-blue-600 hover:bg-blue-50"}`}>
+                                              {hawbUploading === key ? "Uploading…" : "📎 Attach"}
+                                              <input type="file" className="hidden" onClick={e => e.stopPropagation()}
+                                                onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) attachHawb(req.id, h, f) }} />
+                                            </label>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  )
+                                })()}
+                                {/* Other logistics files not tied to a HAWB */}
+                                {(req.attachments || []).some((a: any) => ["INV","AWB","EXPENSE"].includes(a.category) && !a.hawbNo) && (
                                   <div className="flex flex-wrap gap-2 mt-2">
-                                    <span className="text-xs text-gray-500 font-medium py-1">Logistics files:</span>
-                                    {(req.attachments || []).filter((a: any) => ["INV","AWB","EXPENSE"].includes(a.category)).map((a: any) => (
+                                    <span className="text-xs text-gray-500 font-medium py-1">Other files:</span>
+                                    {(req.attachments || []).filter((a: any) => ["INV","AWB","EXPENSE"].includes(a.category) && !a.hawbNo).map((a: any) => (
                                       <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer"
                                         className="text-xs bg-white border border-orange-200 text-orange-700 px-2 py-1 rounded hover:bg-orange-50 font-medium">
                                         📎 {a.category}: {a.fileName}

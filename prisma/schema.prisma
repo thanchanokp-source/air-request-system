@@ -317,6 +317,7 @@ model RequestAttachment {
   mimeType     String
   claimDept    String?
   category     String?
+  hawbNo       String?    // LG supporting file attached to a specific HAWB
   createdAt    DateTime   @default(now())
   request      AirRequest @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   uploadedBy   User       @relation(fields: [uploadedById], references: [id], onDelete: NoAction, onUpdate: NoAction)

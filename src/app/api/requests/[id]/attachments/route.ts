@@ -50,6 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const itemId = form.get("itemId") as string | null
   const claimDept = form.get("claimDept") as string | null
   const category = form.get("category") as string | null
+  const hawbNo = form.get("hawbNo") as string | null
 
   if (!file) return NextResponse.json({ error: "No file" }, { status: 400 })
 
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       mimeType: file.type || "application/octet-stream",
       claimDept: claimDept || null,
       category: category || null,
+      hawbNo: hawbNo || null,
     },
     include: { uploadedBy: { select: { name: true, role: true } } }
   })
