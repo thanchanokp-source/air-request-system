@@ -22,6 +22,10 @@ export default function LgBookingPage() {
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState("")
+  const [fSo, setFSo] = useState("")
+  const [fSub, setFSub] = useState("")
+  const [fCpo, setFCpo] = useState("")
+  const [fStyle, setFStyle] = useState("")
   const [buF, setBuF] = useState("")
   const [fwOnly, setFwOnly] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -98,16 +102,19 @@ export default function LgBookingPage() {
     })
   }, [rows, q, buF, fwOnly])
 
-  // Flat SO search results — type in the search box → tick SOs across documents/brands quickly.
+  const searching = !!(q.trim() || fSo.trim() || fSub.trim() || fCpo.trim() || fStyle.trim())
+  const inc = (v: any, f: string) => !f.trim() || String(v || "").toLowerCase().includes(f.trim().toLowerCase())
+  // Flat SO results — per-field filters (SO / Sub / Customer PO / Style) + general search → tick to select.
   const soMatches = useMemo(() => {
+    if (!searching) return []
     const s = q.trim().toLowerCase()
-    if (!s) return []
     return rows.filter(r =>
       (!buF || (r.request.bu || "NYG") === buF) &&
       (!fwOnly || !!r.request.lgForwardEmail) &&
-      `${r.brand} ${r.so} ${r.sub || ""} ${r.request.documentNo} ${r.style || ""} ${r.customerPO || ""}`.toLowerCase().includes(s)
+      (!s || `${r.brand} ${r.so} ${r.sub || ""} ${r.request.documentNo} ${r.style || ""} ${r.customerPO || ""}`.toLowerCase().includes(s)) &&
+      inc(r.so, fSo) && inc(r.sub, fSub) && inc(r.customerPO, fCpo) && inc(r.style, fStyle)
     )
-  }, [rows, q, buF, fwOnly])
+  }, [rows, q, buF, fwOnly, fSo, fSub, fCpo, fStyle, searching])
 
   const toggle = (id: string) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleMany = (ids: string[], on: boolean) => setSelected(p => { const n = new Set(p); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n })
@@ -151,10 +158,20 @@ export default function LgBookingPage() {
         </button>
       </div>
 
+      {/* Per-field filters (type to narrow the SO list) */}
+      <div className="flex flex-wrap items-end gap-2">
+        <FField label="SO" value={fSo} onChange={setFSo} />
+        <FField label="SUB" value={fSub} onChange={setFSub} />
+        <FField label="Customer PO" value={fCpo} onChange={setFCpo} />
+        <FField label="Style" value={fStyle} onChange={setFStyle} />
+        {searching && <button onClick={() => { setQ(""); setFSo(""); setFSub(""); setFCpo(""); setFStyle("") }}
+          className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-2">Clear</button>}
+      </div>
+
       {loading && <div className="text-center py-10 text-gray-400">Loading...</div>}
 
       {/* Search mode → flat SO list with tick (multi-select across docs/brands) */}
-      {!loading && q.trim() && (
+      {!loading && searching && (
         <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
             <input type="checkbox" checked={soMatches.length > 0 && soMatches.every(r => selected.has(r.id))}
@@ -189,9 +206,9 @@ export default function LgBookingPage() {
         </div>
       )}
 
-      {!loading && !q.trim() && brands.length === 0 && <div className="text-center py-20 text-gray-400">No SOs waiting on LG</div>}
+      {!loading && !searching && brands.length === 0 && <div className="text-center py-20 text-gray-400">No SOs waiting on LG</div>}
 
-      {!q.trim() && brands.map(({ brand, docs, count, ids, draftCount, draftIds }) => {
+      {!searching && brands.map(({ brand, docs, count, ids, draftCount, draftIds }) => {
         const allOn = ids.every(id => selected.has(id))
         const open = openBrands.has(brand)
         return (
@@ -320,6 +337,16 @@ function Cell({ label, value }: { label: string; value: any }) {
     <div className="min-w-0">
       <div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div>
       <div className="text-xs text-gray-800 truncate" title={String(v)}>{v}</div>
+    </div>
+  )
+}
+
+function FField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-0.5">{label}</label>
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder={`filter ${label}…`}
+        className="w-40 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
     </div>
   )
 }
