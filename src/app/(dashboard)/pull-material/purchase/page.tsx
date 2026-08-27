@@ -223,8 +223,9 @@ function Picker({ value, list, onChange, disabled, placeholder, typePlaceholder,
       <select value={inList ? value : (isOther ? OTHER_VAL : "")} disabled={disabled}
         onChange={e => onChange(e.target.value)} className={sel}>
         <option value="">{placeholder}</option>
+        <option value={OTHER_VAL}>➕ Other (not in list) — type &amp; notify LG</option>
+        {list.length > 0 && <option value="" disabled>──────────</option>}
         {list.map(p => <option key={p} value={p}>{p}</option>)}
-        <option value={OTHER_VAL}>➕ Other (not in list)</option>
       </select>
       {isOther && (
         <div className="mt-2">
