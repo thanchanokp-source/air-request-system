@@ -101,6 +101,33 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
+  // Purchase flagged a port/country NOT in the freight master → email Logistics to add its rate.
+  if (Array.isArray(body.otherPorts) && body.otherPorts.length) {
+    const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { documentNo: true, bu: true } })
+    const bu = rq?.bu || "NYG"
+    const lgRoles = bu === "GW" ? ["LOGISTICS_GW"] : bu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS"]
+    const lgUsers = await (prisma.user as any).findMany({
+      where: { isActive: true, bu: { in: [bu, "ALL"] }, OR: [{ role: { in: lgRoles } }, { roles: { hasSome: lgRoles } }] },
+      select: { email: true },
+    })
+    const to = [...new Set(lgUsers.map((u: any) => u.email).filter(Boolean))]
+    if (to.length) {
+      const rows = body.otherPorts.map((p: any) =>
+        `<tr><td style="padding:3px 12px 3px 0;color:#666">SO ${p.so || "-"}</td><td style="padding:3px 12px 3px 0"><b>${p.country || "-"}</b>${p.newCountry ? ' <span style="color:#b45309">(new)</span>' : ""}</td><td>${[p.port ? "✈ " + p.port : "", p.seaPort ? "🚢 " + p.seaPort : ""].filter(Boolean).join(" · ") || "-"}</td></tr>`
+      ).join("")
+      const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
+        <h2 style="color:#b45309;margin:0 0 10px">Pull Material — new port needs a rate</h2>
+        <p>Purchase selected a port/country <b>not in the freight master</b> on <b>${rq?.documentNo}</b> (${bu}).<br/>Please add its rate in <b>MASTER RATE</b> so freight can be calculated.</p>
+        <table style="border-collapse:collapse;font-size:13px;margin-top:6px">
+          <tr><td style="color:#999;padding-right:12px">SO</td><td style="color:#999;padding-right:12px">Country</td><td style="color:#999">Port</td></tr>
+          ${rows}
+        </table>
+        <p style="color:#888;font-size:12px;margin-top:12px">The document has moved to Logistics for freight entry.</p>
+      </div>`
+      sendMail(to as string[], `Pull Material — add missing port rate (${rq?.documentNo})`, html).catch(() => {})
+    }
+  }
+
   const request = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, include: { items: true } })
   return NextResponse.json({ request })
 }

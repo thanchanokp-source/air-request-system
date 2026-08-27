@@ -47,23 +47,40 @@ export default function PurchasePage() {
     if (it[k] == null) return ""
     return (k === "shipmentDate") ? String(it[k]).slice(0, 10) : String(it[k])
   }
+  // "__OTHER__" = user picked "Other" but hasn't typed a name yet (not a real value).
+  const OTHER = "__OTHER__"
+  const filled = (v: string) => !!v && v !== OTHER
+  const clean = (v: string) => (v === OTHER ? "" : v)
 
   const save = async (rq: any) => {
     for (const it of rq.items) {
-      if (!valOf(it, "country")) return alert(`Select a Country for SO ${it.soNoDoc}.`)
-      if (!valOf(it, "port") && !valOf(it, "seaPort")) return alert(`Select an Air Port or Sea Port for SO ${it.soNoDoc}.`)
+      if (!filled(valOf(it, "country"))) return alert(`Select or type a Country for SO ${it.soNoDoc}.`)
+      if (!filled(valOf(it, "port")) && !filled(valOf(it, "seaPort"))) return alert(`Select or type an Air Port or Sea Port for SO ${it.soNoDoc}.`)
       if (!valOf(it, "incoterm")) return alert(`Select an Incoterm for SO ${it.soNoDoc}.`)
       if (!valOf(it, "weight")) return alert(`Enter the Weight for SO ${it.soNoDoc}.`)
     }
+    // Values PC typed as "Other" (not in the freight master) → LG must add their rate.
+    const otherPorts = rq.items.map((it: any) => {
+      const cc = valOf(it, "country"), pp = valOf(it, "port"), sp = valOf(it, "seaPort")
+      const oCountry = filled(cc) && !countries.includes(cc)
+      const oPort = filled(pp) && !(airByCountry[cc] || new Set()).has(pp)
+      const oSea = filled(sp) && !(seaByCountry[cc] || new Set()).has(sp)
+      return (oCountry || oPort || oSea)
+        ? { so: it.soNoDoc, country: cc, port: oPort ? pp : "", seaPort: oSea ? sp : "", newCountry: oCountry }
+        : null
+    }).filter(Boolean)
+
+    if (otherPorts.length && !confirm(`${otherPorts.length} item(s) use a port/country not in the master.\nLogistics will be emailed to add the rate.\n\nContinue and send to Logistics?`)) return
+
     setBusy(rq.id)
     try {
       const itemUpdates = rq.items.map((it: any) => ({
-        id: it.id, country: valOf(it, "country"), port: valOf(it, "port"), seaPort: valOf(it, "seaPort"),
+        id: it.id, country: clean(valOf(it, "country")), port: clean(valOf(it, "port")), seaPort: clean(valOf(it, "seaPort")),
         incoterm: valOf(it, "incoterm"), weight: valOf(it, "weight"), shipmentDate: valOf(it, "shipmentDate"),
       }))
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemUpdates, status: "PENDING_LOGISTICS" }),
+        body: JSON.stringify({ itemUpdates, status: "PENDING_LOGISTICS", otherPorts }),
       })
       if (r.ok) { setEdits({}); setOpenId(null); await load() } else alert("Error")
     } finally { setBusy(null) }
@@ -74,7 +91,7 @@ export default function PurchasePage() {
 
   const sel = "w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 disabled:bg-gray-50 disabled:text-gray-400"
   const openReq = reqs.find(r => r.id === openId)
-  const itemReady = (it: any) => !!valOf(it, "country") && (!!valOf(it, "port") || !!valOf(it, "seaPort")) && !!valOf(it, "incoterm") && !!valOf(it, "weight")
+  const itemReady = (it: any) => filled(valOf(it, "country")) && (filled(valOf(it, "port")) || filled(valOf(it, "seaPort"))) && !!valOf(it, "incoterm") && !!valOf(it, "weight")
   const allReady = openReq ? openReq.items.every(itemReady) : false
 
   return (
@@ -131,10 +148,9 @@ export default function PurchasePage() {
                     {/* Inputs */}
                     <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4">
                       <Field label="Country *">
-                        <select value={c} onChange={e => { setVal(it.id, "country", e.target.value); setVal(it.id, "port", ""); setVal(it.id, "seaPort", "") }} className={sel}>
-                          <option value="">— select country —</option>
-                          {countries.map(x => <option key={x} value={x}>{x}</option>)}
-                        </select>
+                        <Picker value={c} list={countries} sel={sel} placeholder="— select country —"
+                          onChange={v => { setVal(it.id, "country", v); setVal(it.id, "port", ""); setVal(it.id, "seaPort", "") }}
+                          typePlaceholder="Type country → LG will add the rate" />
                       </Field>
                       <Field label="Incoterm *">
                         <select value={valOf(it, "incoterm")} onChange={e => setVal(it.id, "incoterm", e.target.value)} className={sel}>
@@ -143,16 +159,14 @@ export default function PurchasePage() {
                         </select>
                       </Field>
                       <Field label={`Air Port ${airPorts.length ? `(${airPorts.length})` : ""}`}>
-                        <select value={valOf(it, "port")} onChange={e => setVal(it.id, "port", e.target.value)} disabled={!c} className={sel}>
-                          <option value="">{c ? (airPorts.length ? "— select air port —" : "no air port for country") : "select country first"}</option>
-                          {airPorts.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
+                        <Picker value={valOf(it, "port")} list={airPorts} sel={sel} disabled={!c}
+                          placeholder={c ? (airPorts.length ? "— select air port —" : "no air port for country") : "select country first"}
+                          onChange={v => setVal(it.id, "port", v)} typePlaceholder="Type air port → LG will add the rate" />
                       </Field>
                       <Field label={`Sea Port ${seaPorts.length ? `(${seaPorts.length})` : ""}`}>
-                        <select value={valOf(it, "seaPort")} onChange={e => setVal(it.id, "seaPort", e.target.value)} disabled={!c} className={sel}>
-                          <option value="">{c ? (seaPorts.length ? "— select sea port —" : "no sea port for country") : "select country first"}</option>
-                          {seaPorts.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
+                        <Picker value={valOf(it, "seaPort")} list={seaPorts} sel={sel} disabled={!c}
+                          placeholder={c ? (seaPorts.length ? "— select sea port —" : "no sea port for country") : "select country first"}
+                          onChange={v => setVal(it.id, "seaPort", v)} typePlaceholder="Type sea port → LG will add the rate" />
                       </Field>
                       <Field label="Weight (kg) *">
                         <input type="number" value={valOf(it, "weight")} onChange={e => setVal(it.id, "weight", e.target.value)} placeholder="0" className={sel} />
@@ -195,4 +209,32 @@ function Chip({ label, value }: { label: string; value: any }) {
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="text-xs font-semibold text-gray-500 block mb-1.5">{label}</label>{children}</div>
+}
+
+// Dropdown from the master list + an "Other" choice. Picking Other reveals an amber input to type a
+// value not in the master; that value is flagged on Save so Logistics is emailed to add its rate.
+const OTHER_VAL = "__OTHER__"
+function Picker({ value, list, onChange, disabled, placeholder, typePlaceholder, sel }:
+  { value: string; list: string[]; onChange: (v: string) => void; disabled?: boolean; placeholder: string; typePlaceholder: string; sel: string }) {
+  const inList = !!value && list.includes(value)
+  const isOther = !!value && !inList // custom typed value OR the "__OTHER__" sentinel
+  return (
+    <>
+      <select value={inList ? value : (isOther ? OTHER_VAL : "")} disabled={disabled}
+        onChange={e => onChange(e.target.value)} className={sel}>
+        <option value="">{placeholder}</option>
+        {list.map(p => <option key={p} value={p}>{p}</option>)}
+        <option value={OTHER_VAL}>➕ Other (not in list)</option>
+      </select>
+      {isOther && (
+        <div className="mt-2">
+          <input type="text" autoFocus value={value === OTHER_VAL ? "" : value}
+            onChange={e => onChange(e.target.value || OTHER_VAL)}
+            placeholder={typePlaceholder}
+            className={`${sel} border-amber-400 bg-amber-50 focus:ring-amber-200`} />
+          <p className="text-[11px] text-amber-700 mt-1">⚠ ไม่มีในระบบ — LG จะได้รับอีเมลให้เพิ่ม rate ตอนกด Save</p>
+        </div>
+      )}
+    </>
+  )
 }
