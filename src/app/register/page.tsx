@@ -11,6 +11,10 @@ const POSITIONS = [
   { value: "PURCHASING", label: "Purchase (Pull RM)" }, // Pull Material — Purchase stage
   { value: "SCM_PULL", label: "SCM (Pull RM)" }, // Pull Material — SCM request / decision stage
   { value: "LOGISTICS_IMPORT", label: "Logistics Import (Pull RM)" }, // Pull Material — Logistics stage
+  // SCM-branch approvers reuse EXISTING air accounts (VP SCM = Saji via role VP_SCM, Final = Khomkrit
+  // via role PRESIDENT) → no new Pull roles / no self-registration for them.
+  { value: "DVM_PUR", label: "DVM Purchasing (Pull RM)" }, // Pull Material — PC-branch approver
+  { value: "VP_PUR", label: "VP Purchasing (Pull RM)" }, // Pull Material — PC-branch final approver
   { value: "VISITOR", label: "Visitor (view only)" },
 ]
 

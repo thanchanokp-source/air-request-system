@@ -334,6 +334,7 @@ model PullMaterialRequest {
   documentNo     String             @unique
   bu             String
   status         String             @default("PENDING_LOGISTICS")
+  requestType    String             @default("SCM") // SCM (SCM-initiated → VP SCM → President) | PURCHASING (PC-initiated → DVM Pur → VP Pur)
   requesterName  String
   requesterEmail String?
   remark         String?

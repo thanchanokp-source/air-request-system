@@ -10,9 +10,8 @@ function resolveRole(position: string, bu: string): string | null {
   if (position === "ACCOUNTING") return "ACCOUNTING" // cross-BU (both NYG & GW)
   // "DPM Merchandise" behaves exactly like Merchandise → same BU-based MER role.
   if (position === "MER" || position === "DPM_MER") return bu === "GW" ? "MER_GW" : bu === "EA" ? "MER_EA" : bu === "TRM" ? "MER_TRM" : "MER_USER"
-  if (position === "PURCHASING") return "PURCHASING" // Pull Material — Purchase stage (BU chosen per doc)
-  if (position === "SCM_PULL") return "SCM_PULL" // Pull Material — SCM request / decision stage
-  if (position === "LOGISTICS_IMPORT") return "LOGISTICS_IMPORT" // Pull Material — Logistics (import) stage
+  // Pull Material roles are cross-BU (BU chosen per document, not per account).
+  if (["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR"].includes(position)) return position
   if (position === "VISITOR") return "VISITOR" // read-only viewer (all BU, no actions)
   return null
 }
@@ -66,7 +65,7 @@ export async function POST(req: NextRequest) {
       password: hashed,
       role, bu,
       // Pull Material roles → flag as a Pull RM user so they show in Pull RM user management.
-      ...(["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT"].includes(role) ? { pullRm: true } : {}),
+      ...(["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR"].includes(role) ? { pullRm: true } : {}),
       // "DPM Merchandise" behaves as MER but shows a distinct display label.
       ...(position === "DPM_MER" ? { title: "DPM Merchandise" } : {}),
       isActive: false,

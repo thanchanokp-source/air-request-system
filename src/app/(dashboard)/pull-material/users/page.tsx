@@ -23,7 +23,7 @@ export default function PullUsersPage() {
   }
   useEffect(() => { if (isAdmin) load() }, [isAdmin]) // eslint-disable-line
 
-  const ROLES = ["LOGISTICS", "LOGISTICS_TRM", "LOGISTICS_GW", "LOGISTICS_SUB", "LOGISTICS_IMPORT", "SCM_USER", "SCM_NYG", "SCM_NYK", "SCM_PULL", "PURCHASING", "MER_USER", "MER_GW", "MER_EA", "MER_TRM", "DVM_MER", "ADMIN"]
+  const ROLES = ["LOGISTICS", "LOGISTICS_TRM", "LOGISTICS_GW", "LOGISTICS_SUB", "LOGISTICS_IMPORT", "SCM_USER", "SCM_NYG", "SCM_NYK", "SCM_PULL", "VP_SCM", "PRESIDENT", "PURCHASING", "DVM_PUR", "VP_PUR", "MER_USER", "MER_GW", "MER_EA", "MER_TRM", "DVM_MER", "ADMIN"]
 
   const addUser = async () => {
     if (!form.email.trim() || !form.role) return alert("Enter email and role.")

@@ -7,10 +7,21 @@ import { sendMail } from "@/lib/email"
 // Valid lifecycle statuses (in order).
 // Flow: Purchase enters country/incoterm/weight FIRST, then Logistics computes freight,
 // then SCM decides air per-line, then Approval.
+// Two branches after Logistics, chosen by requestType:
+//  SCM  : … → PENDING_SCM_DECISION → PENDING_VP_SCM → PENDING_FINAL (K.Khomkrit) → APPROVED
+//  PC   : … → PENDING_PC_DECISION  → PENDING_DVM_PUR → PENDING_VP_PUR → APPROVED
 export const PULL_FLOW = [
   "PENDING_PURCHASING",
   "PENDING_LOGISTICS",
+  // SCM branch
   "PENDING_SCM_DECISION",
+  "PENDING_VP_SCM",
+  "PENDING_FINAL",
+  // PC branch
+  "PENDING_PC_DECISION",
+  "PENDING_DVM_PUR",
+  "PENDING_VP_PUR",
+  // legacy single approval step (older docs) + terminal
   "PENDING_APPROVAL",
   "APPROVED",
   "COMPLETED",
