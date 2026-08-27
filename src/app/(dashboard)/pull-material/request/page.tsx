@@ -40,7 +40,8 @@ const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return 
 
 export default function ScmRequestPage() {
   const { data: session, status } = useSession()
-  const isAdmin = (session?.user as any)?.role === "ADMIN"
+  const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const isAdmin = roles.includes("ADMIN") || roles.includes("SCM_PULL")
 
   const [bu, setBu] = useState("NYG")
   const [q, setQ] = useState("")

@@ -21,8 +21,8 @@ const claimNav = [
 ]
 const pullNav = [
   { href: "/pull-material/dashboard", label: "DASHBOARD PULL RM", roles: ["ADMIN"] },
-  { href: "/pull-material/tracking", label: "TRACKING DOCUMENT", roles: ["ADMIN", "PURCHASING", "LOGISTICS_IMPORT"] },
-  { href: "/pull-material/request", label: "SCM REQUEST", roles: ["ADMIN"] },
+  { href: "/pull-material/tracking", label: "TRACKING DOCUMENT", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT"] },
+  { href: "/pull-material/request", label: "SCM REQUEST", roles: ["ADMIN", "SCM_PULL"] },
   { href: "/pull-material/purchase", label: "PURCHASE", roles: ["ADMIN", "PURCHASING"] },
   { href: "/pull-material/logistics", label: "LOGISTICS", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/approval", label: "APPROVAL", roles: ["ADMIN"] },
@@ -54,7 +54,7 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
   const isAdmin = role === "ADMIN"
 
   const allRoles = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
-  const PULL_ROLES = ["PURCHASING", "LOGISTICS_IMPORT"]
+  const PULL_ROLES = ["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT"]
   const hasPull = isAdmin || allRoles.some((r: string) => PULL_ROLES.includes(r))
   // Pure Pull RM user (no air-side role) → hide the Claim Air family entirely.
   const isPurePull = !isAdmin && allRoles.length > 0 && allRoles.every((r: string) => PULL_ROLES.includes(r))

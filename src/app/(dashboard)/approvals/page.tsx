@@ -135,14 +135,15 @@ export default function ApprovalsPage() {
   // Filter documents by item-status (per-style forwarding — each role acts on specific itemStatus)
   const matchesPrimary = (r: any) => {
     const items = r.items || []
-    if (myRoles.includes("DVM_MER") && r.status === "PENDING_DVM_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
+    // DVM MER is PICKED per doc (assignedDvmMer) → only that person sees it, not every DVM_MER.
+    if (myRoles.includes("DVM_MER") && r.status === "PENDING_DVM_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedDvmMer || String(r.assignedDvmMer).toLowerCase() === String(userEmail || "").toLowerCase())) return true
     if (myRoles.includes("VP_MER") && r.status === "PENDING_VP_MER" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail)) return true
     // EA top-3 approvers (same as NYG DVM/VP MER, own statuses)
-    if (myRoles.includes("DVM_MER_EA") && r.status === "PENDING_DVM_MER_EA" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
-    if (myRoles.includes("VP_MER_EA") && r.status === "PENDING_VP_MER_EA" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
+    if (myRoles.includes("DVM_MER_EA") && r.status === "PENDING_DVM_MER_EA" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedDvmMer || String(r.assignedDvmMer).toLowerCase() === String(userEmail || "").toLowerCase())) return true
+    if (myRoles.includes("VP_MER_EA") && r.status === "PENDING_VP_MER_EA" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || String(r.assignedVpMer).toLowerCase() === String(userEmail || "").toLowerCase())) return true
     // TRM top-3 approvers (same as NYG DVM/VP MER, own statuses)
-    if (myRoles.includes("DVM_MER_TRM") && r.status === "PENDING_DVM_MER_TRM" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
-    if (myRoles.includes("VP_MER_TRM") && r.status === "PENDING_VP_MER_TRM" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING")) return true
+    if (myRoles.includes("DVM_MER_TRM") && r.status === "PENDING_DVM_MER_TRM" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedDvmMer || String(r.assignedDvmMer).toLowerCase() === String(userEmail || "").toLowerCase())) return true
+    if (myRoles.includes("VP_MER_TRM") && r.status === "PENDING_VP_MER_TRM" && !r.pendingRate && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || String(r.assignedVpMer).toLowerCase() === String(userEmail || "").toLowerCase())) return true
     // Match via held roles so one person can be SCM User in NYG AND another role in GW.
     if (myRoles.includes("SCM_USER")) {
       if ((r.status === "PENDING_VP_MER" && items.some((i: any) => i.itemStatus === "VP_MER_PASSED")) ||

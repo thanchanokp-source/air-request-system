@@ -9,6 +9,7 @@ const POSITIONS = [
   { value: "DPM_MER", label: "DPM Merchandise" }, // same role/behaviour as Merchandise (MER)
   { value: "ACCOUNTING", label: "ACCOUNTING" },
   { value: "PURCHASING", label: "Purchase (Pull RM)" }, // Pull Material — Purchase stage
+  { value: "SCM_PULL", label: "SCM (Pull RM)" }, // Pull Material — SCM request / decision stage
   { value: "LOGISTICS_IMPORT", label: "Logistics Import (Pull RM)" }, // Pull Material — Logistics stage
   { value: "VISITOR", label: "Visitor (view only)" },
 ]

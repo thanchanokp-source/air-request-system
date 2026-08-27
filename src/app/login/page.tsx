@@ -68,6 +68,7 @@ function LoginForm() {
       const roles: string[] = [(s?.user as any)?.role, ...(((s?.user as any)?.roles) || [])].filter(Boolean)
       // Pull RM roles land straight in Pull Material; air Logistics on LG Booking; everyone else dashboard.
       const pullHome = roles.includes("PURCHASING") ? "/pull-material/purchase"
+        : roles.includes("SCM_PULL") ? "/pull-material/request"
         : roles.includes("LOGISTICS_IMPORT") ? "/pull-material/logistics" : null
       const isLg = roles.some(r => ["LOGISTICS", "LOGISTICS_SUB", "LOGISTICS_GW", "LOGISTICS_TRM"].includes(r))
       router.push(pullHome || (isLg ? "/logistics" : "/dashboard"))
