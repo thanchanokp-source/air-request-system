@@ -72,12 +72,18 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const po = (sp.get("po") || "").trim()
   const where: string[] = []
   const params: any[] = []
   if (q) {
     params.push(`%${q}%`)
-    // Search by SO number only.
+    // Search by SO number.
     where.push(`so_no_doc ILIKE $${params.length}`)
+  }
+  if (po) {
+    params.push(`%${po}%`)
+    // Search by PO — match either the PO doc number or the customer PO.
+    where.push(`(po_no_doc ILIKE $${params.length} OR cust_po ILIKE $${params.length})`)
   }
   // One row per SO (DISTINCT ON) — the SO-level fields for the search list. Material-line
   // detail (consumption per item) can be fetched per SO later when needed.

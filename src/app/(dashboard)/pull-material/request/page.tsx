@@ -44,6 +44,7 @@ export default function ScmRequestPage() {
 
   const [bu, setBu] = useState("NYG")
   const [q, setQ] = useState("")
+  const [poQ, setPoQ] = useState("")
   const [results, setResults] = useState<Bom[]>([])
   const [searching, setSearching] = useState(false)
   const [open, setOpen] = useState(false)
@@ -78,18 +79,21 @@ export default function ScmRequestPage() {
     return { txt: d.toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }), stale }
   })()
 
-  // Debounced search-as-you-type → dropdown of matching SOs
+  // Debounced search-as-you-type → dropdown of matching SOs (by SO number and/or PO)
   useEffect(() => {
-    if (!q.trim()) { setResults([]); setOpen(false); return }
+    if (!q.trim() && !poQ.trim()) { setResults([]); setOpen(false); return }
     const t = setTimeout(async () => {
       setSearching(true)
       try {
-        const r = await fetch(`/api/bom?bu=${bu}&q=${encodeURIComponent(q)}&limit=30`).then(r => r.json())
+        const qs = new URLSearchParams({ bu, limit: "30" })
+        if (q.trim()) qs.set("q", q.trim())
+        if (poQ.trim()) qs.set("po", poQ.trim())
+        const r = await fetch(`/api/bom?${qs.toString()}`).then(r => r.json())
         setResults(Array.isArray(r.rows) ? r.rows : []); setOpen(true)
       } finally { setSearching(false) }
     }, 350)
     return () => clearTimeout(t)
-  }, [q, bu])
+  }, [q, poQ, bu])
 
   const pickSo = async (b: Bom) => {
     setOpenSo(b); setMaterials([]); setPullGarment(""); setTicked(new Set()); setScm({ ...emptyScm }); setLoadingMat(true)
@@ -180,15 +184,21 @@ export default function ScmRequestPage() {
           </div>
         )}
         <div className="relative">
-          <input value={q} onChange={e => setQ(e.target.value)} onFocus={() => results.length > 0 && setOpen(true)}
-            onBlur={() => setTimeout(() => setOpen(false), 150)}
-            placeholder="Type SO number… then pick from the list"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input value={q} onChange={e => setQ(e.target.value)} onFocus={() => results.length > 0 && setOpen(true)}
+              onBlur={() => setTimeout(() => setOpen(false), 150)}
+              placeholder="Type SO number…"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+            <input value={poQ} onChange={e => setPoQ(e.target.value)} onFocus={() => results.length > 0 && setOpen(true)}
+              onBlur={() => setTimeout(() => setOpen(false), 150)}
+              placeholder="…or PO number"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+          </div>
           {searching && <span className="absolute right-3 top-2.5 text-xs text-gray-400">Searching…</span>}
           {open && results.length > 0 && (
             <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg max-h-80 overflow-auto">
               {results.map((b, i) => (
-                <button key={i} onMouseDown={() => { pickSo(b); setQ(b.soNoDoc); setOpen(false) }}
+                <button key={i} onMouseDown={() => { pickSo(b); setQ(b.soNoDoc); setPoQ(""); setOpen(false) }}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 border-b border-gray-50 last:border-0">
                   <span className="font-semibold text-gray-800">{b.soNoDoc}</span>
                   <span className="text-gray-600"> · PO {b.poNoDoc || "-"}</span>
@@ -197,7 +207,7 @@ export default function ScmRequestPage() {
               ))}
             </div>
           )}
-          {open && q.trim() && !searching && results.length === 0 && (
+          {open && (q.trim() || poQ.trim()) && !searching && results.length === 0 && (
             <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg px-3 py-2 text-xs text-gray-400">No SO found</div>
           )}
         </div>
