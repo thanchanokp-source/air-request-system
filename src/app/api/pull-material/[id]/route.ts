@@ -3,6 +3,15 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
+import { runWithTestMail } from "@/lib/test-ctx"
+
+// TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
+async function pullTestRecipient(id: string): Promise<string | null> {
+  const r = await (prisma as any).pullMaterialRequest.findUnique({
+    where: { id }, select: { isTest: true, createdBy: { select: { email: true } } },
+  }).catch(() => null)
+  return r?.isTest ? (r.createdBy?.email ?? null) : null
+}
 
 // Valid lifecycle statuses (in order).
 // Flow: Purchase enters country/incoterm/weight FIRST, then Logistics computes freight,
@@ -106,7 +115,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           </table>
           <p style="color:#888;font-size:12px;margin-top:12px">No further action is needed on this document.</p>
         </div>`
-        sendMail(recipients as string[], `Pull Material Recalled — ${rq.documentNo}`, html).catch(() => {})
+        await runWithTestMail(await pullTestRecipient(id), () =>
+          sendMail(recipients as string[], `Pull Material Recalled — ${rq.documentNo}`, html)).catch(() => {})
       }
       return NextResponse.json({ request: rq })
     }
@@ -136,7 +146,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         </table>
         <p style="color:#888;font-size:12px;margin-top:12px">The document has moved to Logistics for freight entry.</p>
       </div>`
-      sendMail(to as string[], `Pull Material — add missing port rate (${rq?.documentNo})`, html).catch(() => {})
+      // TEST doc → reroute to creator (shows "meant for"); real doc → the LG Import team.
+      await runWithTestMail(await pullTestRecipient(id), () =>
+        sendMail(to as string[], `Pull Material — add missing port rate (${rq?.documentNo})`, html)).catch(() => {})
     }
   }
 

@@ -335,6 +335,7 @@ model PullMaterialRequest {
   bu             String
   status         String             @default("PENDING_LOGISTICS")
   requestType    String             @default("SCM") // SCM (SCM-initiated → VP SCM → President) | PURCHASING (PC-initiated → DVM Pur → VP Pur)
+  isTest         Boolean            @default(false) // admin TEST doc: every email reroutes to the creator (monitor-only), shows "meant for"
   requesterName  String
   requesterEmail String?
   remark         String?

@@ -61,6 +61,7 @@ export default function ScmRequestPage() {
 
   const [cart, setCart] = useState<CartItem[]>([])
   const [remark, setRemark] = useState("")
+  const [isTest, setIsTest] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
 
@@ -132,10 +133,10 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart, requestType: "SCM" }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart, requestType: "SCM", isTest }),
       })
       const d = await r.json()
-      if (r.ok) { alert(`Submitted: ${d.request?.documentNo}`); setCart([]); setRemark("") }
+      if (r.ok) { alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}`); setCart([]); setRemark(""); setIsTest(false) }
       else alert(`Error: ${d.error || "submit failed"}`)
     } finally { setSubmitting(false) }
   }
@@ -302,7 +303,13 @@ export default function ScmRequestPage() {
           <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="Note for this pull request (optional)"
             className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
         </div>
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+          {isAdmin ? (
+            <label className="flex items-center gap-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer">
+              <input type="checkbox" checked={isTest} onChange={e => setIsTest(e.target.checked)} />
+              🧪 Test document — emails reroute to you (not real recipients) &amp; show who they'd go to
+            </label>
+          ) : <span />}
           <button onClick={submit} disabled={submitting || cart.length === 0}
             className="px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: MAROON }}>
             {submitting ? "Submitting…" : "Submit Pull Material →"}
