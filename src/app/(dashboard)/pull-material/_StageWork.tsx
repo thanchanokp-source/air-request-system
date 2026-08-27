@@ -39,11 +39,14 @@ const CTX: { key: string; label: string; kind?: "date" | "num" }[] = [
 const ctxVal = (it: any, c: { key: string; kind?: "date" | "num" }) =>
   c.kind === "date" ? fmtDate(it[c.key]) : c.kind === "num" ? fmt(it[c.key]) : (it[c.key] || "-")
 
-export function StageWork({ title, subtitle, status, fields, primary, secondary }: {
-  title: string; subtitle: string; status: string; fields: Field[]; primary: Action; secondary?: Action
+export function StageWork({ title, subtitle, status, fields, primary, secondary, roles }: {
+  title: string; subtitle: string; status: string; fields: Field[]; primary: Action; secondary?: Action; roles?: string[]
 }) {
   const { data: session, status: auth } = useSession()
-  const isAdmin = (session?.user as any)?.role === "ADMIN"
+  const myRoles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const isAdmin = myRoles.includes("ADMIN")
+  // Access: admin always; else only if the user holds one of the allowed `roles` for this stage.
+  const canUse = isAdmin || (Array.isArray(roles) && roles.some(r => myRoles.includes(r)))
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -57,7 +60,7 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
       setReqs((d.requests || []).filter((r: any) => r.status === status))
     } finally { setLoading(false) }
   }
-  useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
+  useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
 
   const setVal = (itemId: string, key: string, v: string) => setEdits(p => ({ ...p, [itemId]: { ...(p[itemId] || {}), [key]: v } }))
   const valOf = (item: any, key: string) => {
@@ -84,7 +87,7 @@ export function StageWork({ title, subtitle, status, fields, primary, secondary 
   }
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
-  if (!isAdmin) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Pull Material — under testing (Admin only)</p></div>
+  if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">You don't have access to this stage</p></div>
 
   return (
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">

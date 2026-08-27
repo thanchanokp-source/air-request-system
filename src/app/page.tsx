@@ -9,7 +9,8 @@ export default async function Home() {
   // Pull RM roles land straight in Pull Material.
   const pullHome = roles.includes("PURCHASING") ? "/pull-material/purchase"
     : roles.includes("SCM_PULL") ? "/pull-material/request"
-    : roles.includes("LOGISTICS_IMPORT") ? "/pull-material/logistics" : null
+    : roles.includes("LOGISTICS_IMPORT") ? "/pull-material/logistics"
+    : (roles.includes("DVM_PUR") || roles.includes("VP_PUR")) ? "/pull-material/approval" : null
   const isLg = roles.some(r => ["LOGISTICS", "LOGISTICS_SUB", "LOGISTICS_GW", "LOGISTICS_TRM"].includes(r))
   redirect(pullHome || (isLg ? "/logistics" : "/dashboard"))
 }

@@ -132,7 +132,7 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart, requestType: "SCM" }),
       })
       const d = await r.json()
       if (r.ok) { alert(`Submitted: ${d.request?.documentNo}`); setCart([]); setRemark("") }
@@ -349,7 +349,7 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status: anyAir ? "PENDING_APPROVAL" : "NO_AIR",
+          status: anyAir ? "PENDING_VP_SCM" : "NO_AIR",
           itemUpdates: rq.items.map((it: any) => ({
             id: it.id,
             airDecision: air[it.id] ? "AIR" : "NO_AIR",

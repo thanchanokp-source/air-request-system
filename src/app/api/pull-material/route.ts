@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   const bu = String(body.bu || "NYG").toUpperCase()
+  const requestType = body.requestType === "PURCHASING" ? "PURCHASING" : "SCM"
   const requesterName = String(body.requesterName || "").trim()
   const items: any[] = Array.isArray(body.items) ? body.items : []
   if (!requesterName) return NextResponse.json({ error: "requesterName required" }, { status: 400 })
@@ -50,7 +51,9 @@ export async function POST(req: NextRequest) {
       requesterEmail: body.requesterEmail || null,
       remark: body.remark || null,
       createdById: userId,
-      status: "PENDING_PURCHASING",
+      requestType,
+      // SCM branch: SCM creates → Purchase fills first. PC branch: Purchase creates + fills at once → straight to Logistics.
+      status: requestType === "PURCHASING" ? "PENDING_LOGISTICS" : "PENDING_PURCHASING",
       items: {
         create: items.map((i: any) => ({
           soNoDoc: String(i.soNoDoc || ""),

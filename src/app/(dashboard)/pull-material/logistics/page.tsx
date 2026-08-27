@@ -64,9 +64,11 @@ export default function LogisticsPage() {
         inHouseAirDate: dateVal(it, "inHouseAirDate"),
         inHouseSeaDate: dateVal(it, "inHouseSeaDate"),
       }))
+      // Branch by origin: SCM request → SCM confirms air next; PC request → PC decides air next.
+      const nextStatus = rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION"
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemUpdates, status: "PENDING_SCM_DECISION" }),
+        body: JSON.stringify({ itemUpdates, status: nextStatus }),
       })
       if (r.ok) { setEdits({}); setOpenId(null); await load() } else alert("Error")
     } finally { setBusy(null) }
