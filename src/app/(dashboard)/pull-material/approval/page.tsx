@@ -10,7 +10,7 @@ import { StageWork } from "../_StageWork"
 // Admin sees every stage (incl. legacy PENDING_APPROVAL) so they can push any doc through.
 const STAGES = [
   { key: "PENDING_VP_SCM",   roles: ["VP_SCM"],    title: "Approval — VP SCM",         sub: "SCM branch · approve → President (K.Khomkrit)", next: "PENDING_FINAL",  back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
-  { key: "PENDING_FINAL",    roles: ["PRESIDENT"], title: "Approval — President",      sub: "SCM branch · final approval",                   next: "APPROVED",       back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
+  { key: "PENDING_FINAL",    roles: ["PULL_PRESIDENT"], title: "Approval — President (Pull)", sub: "SCM branch · final approval (K.Khomkrit)",  next: "APPROVED",       back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
   { key: "PENDING_DVM_PUR",  roles: ["DVM_PUR"],   title: "Approval — DVM Purchasing", sub: "PC branch · approve → VP Purchasing",           next: "PENDING_VP_PUR", back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
   { key: "PENDING_VP_PUR",   roles: ["VP_PUR"],    title: "Approval — VP Purchasing",  sub: "PC branch · final approval",                    next: "APPROVED",       back: "PENDING_DVM_PUR",      backLabel: "Send back to DVM Pur" },
   { key: "PENDING_APPROVAL", roles: [],            title: "Approval (legacy)",         sub: "Older documents pending a single approval",     next: "APPROVED",       back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },

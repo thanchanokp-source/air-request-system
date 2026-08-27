@@ -96,6 +96,93 @@ export default function PurchasePage() {
   const itemReady = (it: any) => filled(valOf(it, "country")) && (filled(valOf(it, "port")) || filled(valOf(it, "seaPort"))) && !!valOf(it, "incoterm") && !!valOf(it, "weight")
   const allReady = openReq ? openReq.items.every(itemReady) : false
 
+  // Export the open doc's items to a styled workbook. Sheet "Purchase" = fill-in; the Country cell is a
+  // dropdown validated against sheet "Countries" (master names) so imports always match the master.
+  const exportXlsx = async () => {
+    if (!openReq) return
+    const ExcelJS = (await import("exceljs")).default
+    const wb = new ExcelJS.Workbook()
+
+    // Sheet: master country list (dropdown source + reference)
+    const cs = wb.addWorksheet("Countries")
+    cs.addRow(["Country (from master)"]); cs.getCell("A1").font = { bold: true }
+    cs.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEBF7" } }
+    cs.getColumn(1).width = 26
+    countries.forEach(c => cs.addRow([c]))
+
+    // Sheet: ports reference (per master country)
+    const ps = wb.addWorksheet("Ports (ref)")
+    const ph = ps.addRow(["Country", "Air Ports", "Sea Ports"])
+    ph.eachCell(c => { c.font = { bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE4D6" } } })
+    ps.columns = [{ width: 22 }, { width: 34 }, { width: 34 }] as any
+    countries.forEach(c => ps.addRow([c, [...(airByCountry[c] || [])].sort().join(", "), [...(seaByCountry[c] || [])].sort().join(", ")]))
+
+    // Sheet: the fill-in form
+    const ws = wb.addWorksheet("Purchase")
+    const headers = ["SO", "PO No", "Customer", "Cust PO", "Style", "Material", "PULL", "Consumption", "Country *", "Air Port", "Sea Port", "Incoterm *", "Weight(kg) *", "Ship Date", "_ItemID"]
+    const widths = [12, 14, 18, 12, 14, 28, 10, 12, 20, 16, 20, 12, 13, 14, 26]
+    const REF_C = "FFEAECEE", FILL_C = "FFE2EFDA" // grey (read-only) / green (fill in)
+    const hr = ws.addRow(headers); hr.height = 26
+    headers.forEach((_, i) => {
+      const c = hr.getCell(i + 1)
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: (i >= 8 && i <= 13) ? FILL_C : REF_C } }
+      c.font = { bold: true, size: 10 }
+      c.alignment = { vertical: "middle", horizontal: "center", wrapText: true }
+      c.border = { top: { style: "thin", color: { argb: "FFBFBFBF" } }, bottom: { style: "thin", color: { argb: "FFBFBFBF" } }, left: { style: "thin", color: { argb: "FFBFBFBF" } }, right: { style: "thin", color: { argb: "FFBFBFBF" } } }
+    })
+    widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
+    ws.views = [{ state: "frozen", ySplit: 1 }]
+    const fmtD = (v: any) => { if (!v) return ""; const d = new Date(v); return isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` }
+    openReq.items.forEach((it: any) => {
+      ws.addRow([
+        it.soNoDoc, it.poNoDoc || "", it.customerName || "", it.customerPo || "", it.style || "",
+        it.itemName || it.itemCode || "", it.pullMaterialQty ?? "", it.consumption ?? "",
+        clean(valOf(it, "country")), clean(valOf(it, "port")), clean(valOf(it, "seaPort")),
+        valOf(it, "incoterm"), valOf(it, "weight"), fmtD(valOf(it, "shipmentDate") || it.shipmentDate), it.id,
+      ])
+    })
+    // Country cell (col I) = dropdown from the Countries sheet → always matches master.
+    for (let r = 2; r <= openReq.items.length + 1; r++) {
+      ws.getCell(`I${r}`).dataValidation = {
+        type: "list", allowBlank: true, formulae: [`Countries!$A$2:$A$${countries.length + 1}`],
+        showErrorMessage: true, errorTitle: "Invalid country", error: "Pick a country from the master (see Countries sheet)",
+      } as any
+    }
+    ws.getColumn(15).hidden = true // _ItemID (used to match on import)
+
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a"); a.href = url; a.download = `${openReq.documentNo}_purchase.xlsx`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+  }
+
+  // Import the filled workbook → populate the form (edits) by _ItemID; user reviews then Saves.
+  const importXlsx = async (file: File) => {
+    const XLSX = await import("xlsx")
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
+    const ws = wb.Sheets["Purchase"] || wb.Sheets[wb.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[]
+    const pick = (row: any, ...keys: string[]) => { for (const k of keys) if (row[k] !== undefined && row[k] !== "") return String(row[k]).trim(); return "" }
+    const next: Record<string, Record<string, string>> = {}
+    let applied = 0
+    for (const row of rows) {
+      const id = pick(row, "_ItemID")
+      if (!id) continue
+      next[id] = {
+        country: pick(row, "Country *", "Country"),
+        port: pick(row, "Air Port"),
+        seaPort: pick(row, "Sea Port"),
+        incoterm: pick(row, "Incoterm *", "Incoterm"),
+        weight: pick(row, "Weight(kg) *", "Weight(kg)", "Weight"),
+        shipmentDate: pick(row, "Ship Date").slice(0, 10),
+      }
+      applied++
+    }
+    setEdits(p => ({ ...p, ...next }))
+    alert(`Imported ${applied} row(s). Review the form, then click "Save → Send to Logistics".`)
+  }
+
   return (
     <div className="p-5 md:p-8 max-w-[1000px] mx-auto space-y-5">
       <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Purchase</h1>
@@ -115,10 +202,17 @@ export default function PurchasePage() {
                 <div className="text-xs text-gray-400">{openReq.requesterName} · {openReq.items.length} items</div>
               </div>
               <div className="flex flex-col items-end gap-1">
-                <button onClick={() => save(openReq)} disabled={busy === openReq.id || !allReady}
-                  className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition" style={{ background: MAROON }}>
-                  {busy === openReq.id ? "Saving…" : "Save → Send to Logistics"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={exportXlsx}
+                    className="px-3 py-2.5 rounded-xl text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50">⬇ Export Excel</button>
+                  <label className="px-3 py-2.5 rounded-xl text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">⬆ Import
+                    <input type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
+                  </label>
+                  <button onClick={() => save(openReq)} disabled={busy === openReq.id || !allReady}
+                    className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition" style={{ background: MAROON }}>
+                    {busy === openReq.id ? "Saving…" : "Save → Send to Logistics"}
+                  </button>
+                </div>
                 {!allReady && <span className="text-[11px] text-amber-600">Fill Country, Port, Incoterm &amp; Weight for every item</span>}
               </div>
             </div>
