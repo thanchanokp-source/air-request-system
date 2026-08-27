@@ -8,7 +8,9 @@ const INCOTERMS = ["FOB", "CIF", "EX-WORK"]
 
 export default function PurchasePage() {
   const { data: session, status: auth } = useSession()
-  const isAdmin = (session?.user as any)?.role === "ADMIN"
+  const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const isAdmin = roles.includes("ADMIN")
+  const canUse = isAdmin || roles.includes("PURCHASING")
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
   const [airRows, setAirRows] = useState<any[]>([])
@@ -25,7 +27,7 @@ export default function PurchasePage() {
       setReqs((d.requests || []).filter((r: any) => r.status === "PENDING_PURCHASING"))
     } finally { setLoading(false) }
   }
-  useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
+  useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
 
   useEffect(() => {
     fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRows(d.rows || [])).catch(() => {})
@@ -87,7 +89,7 @@ export default function PurchasePage() {
   }
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
-  if (!isAdmin) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Under testing (Admin only)</p></div>
+  if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Purchase / Admin only</p></div>
 
   const sel = "w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 disabled:bg-gray-50 disabled:text-gray-400"
   const openReq = reqs.find(r => r.id === openId)

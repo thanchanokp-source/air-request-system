@@ -8,6 +8,8 @@ const POSITIONS = [
   { value: "MER", label: "Merchandise" },
   { value: "DPM_MER", label: "DPM Merchandise" }, // same role/behaviour as Merchandise (MER)
   { value: "ACCOUNTING", label: "ACCOUNTING" },
+  { value: "PURCHASING", label: "Purchase (Pull RM)" }, // Pull Material — Purchase stage
+  { value: "LOGISTICS_IMPORT", label: "Logistics Import (Pull RM)" }, // Pull Material — Logistics stage
   { value: "VISITOR", label: "Visitor (view only)" },
 ]
 

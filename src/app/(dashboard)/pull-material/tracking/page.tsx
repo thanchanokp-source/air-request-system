@@ -9,7 +9,9 @@ const STEP_SHORT = ["Purchasing", "LG", "SCM", "Approve", "Done"]
 
 export default function Page() {
   const { data: session, status: auth } = useSession()
-  const isAdmin = (session?.user as any)?.role === "ADMIN"
+  const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const isAdmin = roles.includes("ADMIN")
+  const canUse = isAdmin || roles.includes("PURCHASING") || roles.includes("LOGISTICS_IMPORT")
   const userId = (session?.user as any)?.id
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
@@ -19,7 +21,7 @@ export default function Page() {
   const [statusF, setStatusF] = useState("")
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
-  useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
+  useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
 
   // Creator (or admin) can RECALL a document that hasn't been approved yet — withdraws it
   // from the flow (soft, non-destructive) instead of deleting.
@@ -39,7 +41,7 @@ export default function Page() {
   }
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
-  if (!isAdmin) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Under testing (Admin only)</p></div>
+  if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Pull RM / Admin only</p></div>
 
   const stepIdx = (s: string) => FLOW.indexOf(s === "COMPLETED" ? "APPROVED" : s)
 

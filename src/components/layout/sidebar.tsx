@@ -20,14 +20,14 @@ const claimNav = [
   { href: "/settings", label: "SETTINGS", adminOnly: true },
 ]
 const pullNav = [
-  { href: "/pull-material/dashboard", label: "DASHBOARD PULL RM" },
-  { href: "/pull-material/tracking", label: "TRACKING DOCUMENT" },
-  { href: "/pull-material/request", label: "SCM REQUEST" },
-  { href: "/pull-material/purchase", label: "PURCHASE" },
-  { href: "/pull-material/logistics", label: "LOGISTICS" },
-  { href: "/pull-material/approval", label: "APPROVAL" },
-  { href: "/pull-material/documents", label: "LOGISTICS DOCUMENT" },
-  { href: "/pull-material/rates", label: "MASTER RATE" },
+  { href: "/pull-material/dashboard", label: "DASHBOARD PULL RM", roles: ["ADMIN"] },
+  { href: "/pull-material/tracking", label: "TRACKING DOCUMENT", roles: ["ADMIN", "PURCHASING", "LOGISTICS_IMPORT"] },
+  { href: "/pull-material/request", label: "SCM REQUEST", roles: ["ADMIN"] },
+  { href: "/pull-material/purchase", label: "PURCHASE", roles: ["ADMIN", "PURCHASING"] },
+  { href: "/pull-material/logistics", label: "LOGISTICS", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
+  { href: "/pull-material/approval", label: "APPROVAL", roles: ["ADMIN"] },
+  { href: "/pull-material/documents", label: "LOGISTICS DOCUMENT", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
+  { href: "/pull-material/rates", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/users", label: "USER MANAGEMENT", roles: ["ADMIN"] },
 ]
 
@@ -53,10 +53,16 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
   const isMasterEditor = MASTER_EDITOR_EMAILS.includes(email)
   const isAdmin = role === "ADMIN"
 
+  const allRoles = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const PULL_ROLES = ["PURCHASING", "LOGISTICS_IMPORT"]
+  const hasPull = isAdmin || allRoles.some((r: string) => PULL_ROLES.includes(r))
+  // Pure Pull RM user (no air-side role) → hide the Claim Air family entirely.
+  const isPurePull = !isAdmin && allRoles.length > 0 && allRoles.every((r: string) => PULL_ROLES.includes(r))
+
   const family = path.startsWith("/pull-material") ? "pull" : "claim"
   const nav = family === "pull" ? pullNav : claimNav
   const visible = nav.filter((item: any) => {
-    if (item.roles) return item.roles.includes(role) || (item.masterEdit && isMasterEditor)
+    if (item.roles) return item.roles.some((r: string) => allRoles.includes(r)) || (item.masterEdit && isMasterEditor)
     return !item.adminOnly || isAdmin
   })
 
@@ -81,15 +87,18 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
       <div className="p-3 grid grid-cols-2 gap-2 border-b" style={{ borderColor: "#8b2a2a" }}>
         {FAMILIES.map(f => {
           const active = family === f.key
-          const locked = f.key === "pull" && !isAdmin
+          // Pull tab: open to Admin + Pull RM roles (still locked/"testing" for other air users).
+          // Claim tab: hidden for pure Pull RM users (they have no air-side pages).
+          const locked = f.key === "pull" ? !hasPull : f.key === "claim" ? isPurePull : false
           if (locked) {
+            const testing = f.key === "pull"
             return (
-              <div key={f.key} title="อยู่ระหว่างทดสอบ — เปิดเฉพาะ Admin"
+              <div key={f.key} title={testing ? "อยู่ระหว่างทดสอบ — เปิดเฉพาะ Admin / Pull RM" : "ไม่มีสิทธิ์เข้าถึง"}
                 className="rounded-lg px-2 py-2.5 text-center opacity-50 cursor-not-allowed"
                 style={{ background: "#7a2323", color: "#c79a9a" }}>
                 <div className="text-lg leading-none">{f.icon}</div>
                 <div className="text-[11px] font-bold mt-1">{f.label}</div>
-                <div className="text-[9px] mt-0.5">🔒 ทดสอบ</div>
+                {testing && <div className="text-[9px] mt-0.5">🔒 ทดสอบ</div>}
               </div>
             )
           }
@@ -101,7 +110,7 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
                 : { background: "#8b2a2a", color: "#f0d0d0" }}>
               <div className="text-lg leading-none">{f.icon}</div>
               <div className="text-[11px] font-bold mt-1">{f.label}</div>
-              {f.key === "pull" && <div className="text-[9px] mt-0.5 opacity-80">🧪 admin test</div>}
+              {f.key === "pull" && isAdmin && <div className="text-[9px] mt-0.5 opacity-80">🧪 admin test</div>}
             </Link>
           )
         })}

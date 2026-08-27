@@ -105,9 +105,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (Array.isArray(body.otherPorts) && body.otherPorts.length) {
     const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { documentNo: true, bu: true } })
     const bu = rq?.bu || "NYG"
-    const lgRoles = bu === "GW" ? ["LOGISTICS_GW"] : bu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS"]
+    // Pull RM logistics = LOGISTICS_IMPORT (its own import-logistics team, all BUs).
+    const lgRoles = ["LOGISTICS_IMPORT"]
     const lgUsers = await (prisma.user as any).findMany({
-      where: { isActive: true, bu: { in: [bu, "ALL"] }, OR: [{ role: { in: lgRoles } }, { roles: { hasSome: lgRoles } }] },
+      where: { isActive: true, OR: [{ role: { in: lgRoles } }, { roles: { hasSome: lgRoles } }] },
       select: { email: true },
     })
     const to = [...new Set(lgUsers.map((u: any) => u.email).filter(Boolean))]

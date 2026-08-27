@@ -10,7 +10,9 @@ const breakKey = (w: any) => { const W = Number(w) || 0; let b = 45; for (const 
 
 export default function LogisticsPage() {
   const { data: session, status: auth } = useSession()
-  const isAdmin = (session?.user as any)?.role === "ADMIN"
+  const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const isAdmin = roles.includes("ADMIN")
+  const canUse = isAdmin || roles.includes("LOGISTICS_IMPORT")
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
   const [airRates, setAirRates] = useState<any[]>([])
@@ -26,7 +28,7 @@ export default function LogisticsPage() {
       setReqs((d.requests || []).filter((r: any) => r.status === "PENDING_LOGISTICS"))
     } finally { setLoading(false) }
   }
-  useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
+  useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
   useEffect(() => { fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRates(d.rows || [])).catch(() => {}) }, [])
 
   // Estimate Air = MAX rate among the selected air PORT's routes at the weight's Q-break × weight.
@@ -71,7 +73,7 @@ export default function LogisticsPage() {
   }
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
-  if (!isAdmin) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Under testing (Admin only)</p></div>
+  if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Logistics Import / Admin only</p></div>
 
   const inp = "border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-red-200"
   const openReq = reqs.find(r => r.id === openId)

@@ -9,7 +9,9 @@ const SEA_CT = ["40GP", "20GP", "LCL"]
 
 export default function PullRatesPage() {
   const { data: session, status: auth } = useSession()
-  const isAdmin = (session?.user as any)?.role === "ADMIN"
+  // Admin + Logistics Import can edit rates (LOGISTICS_IMPORT adds new port rates flagged by Purchase).
+  const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  const isAdmin = roles.includes("ADMIN") || roles.includes("LOGISTICS_IMPORT")
   const [tab, setTab] = useState<"air" | "sea">("air")
   const [air, setAir] = useState<any[]>([])
   const [sea, setSea] = useState<any[]>([])
