@@ -732,7 +732,7 @@ export default function LgEntryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setFwOpen(false)}>
           <div className="bg-white rounded-xl w-full max-w-md p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div><h3 className="font-semibold text-gray-800">↪ Forward to a subordinate</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Save the entered data, then email the link for {involvedReqIds.length} document(s) · each BU's document goes to the recipient covering that BU</p></div>
+              <p className="text-xs text-gray-400 mt-0.5">Save the entered data, then email the link for {involvedReqIds.length} document(s) · every selected recipient (covering that BU) gets it</p></div>
             <div className="space-y-2">
               <label className="text-xs font-medium text-gray-500">Recipient (LG from master — grouped by BU)</label>
               {(() => {
@@ -741,6 +741,8 @@ export default function LgEntryPage() {
                 const groups = order.map(bu => ({ bu, users: fwTargets.filter(t => coveredBus(t).has(bu)) }))
                 const setAt = (i: number, v: string) => setFwList(p => p.map((x, idx) => idx === i ? { ...x, email: v } : x))
                 const removeAt = (i: number) => setFwList(p => p.filter((_, idx) => idx !== i))
+                // Emails already picked in OTHER rows → hide them from this row's dropdown (no dup recipients).
+                const chosen = new Set(fwList.map(x => x.email.trim()).filter(Boolean))
                 return fwList.map((row, i) => (
                   <div key={i} className="flex items-center gap-2">
                     {row.manual ? (
@@ -751,18 +753,25 @@ export default function LgEntryPage() {
                       <select value={row.email} onChange={e => setAt(i, e.target.value)}
                         className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">-- Select recipient --</option>
-                        {groups.map(g => (
-                          <optgroup key={g.bu} label={`LG (${g.bu})`}>
-                            {g.users.map(u => <option key={u.email} value={u.email}>{u.name} ({u.email})</option>)}
-                          </optgroup>
-                        ))}
+                        {groups.map(g => {
+                          const avail = g.users.filter(u => u.email === row.email || !chosen.has(u.email))
+                          return avail.length ? (
+                            <optgroup key={g.bu} label={`LG (${g.bu})`}>
+                              {avail.map(u => <option key={u.email} value={u.email}>{u.name} ({u.email})</option>)}
+                            </optgroup>
+                          ) : null
+                        })}
                       </select>
                     )}
                     {fwList.length > 1 && <button onClick={() => removeAt(i)} className="text-red-400 hover:text-red-600 px-1">✕</button>}
                   </div>
                 ))
               })()}
-              <button onClick={() => setFwList(p => [...p, { email: "", manual: true }])} className="text-xs text-blue-600 hover:underline font-medium">＋ Add more (type email)</button>
+              <div className="flex items-center gap-4 pt-0.5">
+                <button onClick={() => setFwList(p => [...p, { email: "", manual: false }])} className="text-xs text-blue-600 hover:underline font-medium">＋ Add recipient</button>
+                <button onClick={() => setFwList(p => [...p, { email: "", manual: true }])} className="text-xs text-gray-500 hover:underline font-medium">＋ Type email</button>
+              </div>
+              <p className="text-[11px] text-gray-400">เลือกได้มากกว่า 1 คน — ทุกคนจะได้เมลและลิงก์เข้ากรอกเอกสารนี้</p>
             </div>
             <div><label className="text-xs font-medium text-gray-500">Note (optional)</label>
               <textarea value={fwNote} onChange={e => setFwNote(e.target.value)} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-1" /></div>
