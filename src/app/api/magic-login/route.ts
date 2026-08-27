@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   // Per-department forward token (ClaimForward)
   const byClaimFwd   = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext ? null : await (prisma as any).claimForward.findFirst({ where: { token } })
   // Logistics handoff token (a senior LG forwarded data-entry to a subordinate)
-  const byLgFwd      = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext || byClaimFwd ? null : await (prisma.airRequest as any).findFirst({ where: { lgForwardToken: token } })
+  const byLgFwd      = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext || byClaimFwd ? null : await (prisma.airRequest as any).findFirst({ where: { OR: [{ lgForwardToken: token }, { lgForwardTokens: { has: token } }] } })
   // Passwordless account login link (User.loginToken)
   const byLoginToken = byVpMer || byPresident || byScm || byVpScm || byLogistics || byAccounting || byClaimGw || byScmNykAppr || byScmNykEvp || byScmNyk || byScmNyg || byClaimNext || byClaimFwd || byLgFwd ? null : await (prisma.user as any).findFirst({ where: { loginToken: token } })
 

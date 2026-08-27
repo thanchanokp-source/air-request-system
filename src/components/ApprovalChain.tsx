@@ -61,6 +61,14 @@ const Bar = ({ done }: { done: boolean }) => <span className={`w-4 h-px mx-0.5 s
 // Display name for an approver: prefer a real name, else the email's local part (before @).
 const nameOf = (s?: string | null) => (s ? (s.includes("@") ? s.split("@")[0] : s) : "")
 
+// All Sub-LG forward recipients of a doc → comma-joined display names (multi-forward aware).
+function fwNames(req: any): string {
+  const names: string[] = (req?.lgForwardNames && req.lgForwardNames.length ? req.lgForwardNames
+    : req?.lgForwardName ? [req.lgForwardName] : [])
+  const list = names.length ? names : (req?.lgForwardEmails || (req?.lgForwardEmail ? [req.lgForwardEmail] : []))
+  return list.map((n: string) => nameOf(n)).join(", ")
+}
+
 // Lowest-priority active person holding any of `roles` in this BU → email name.
 function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string): string {
   if (!dir || !dir.length) return ""
@@ -89,12 +97,13 @@ function resolveRoleEmail(dir: any[] | undefined, roles: string[], bu?: string):
 // as a secondary/cross-BU ("ALL") capability is dropped when the BU's own team exists.
 function resolveRoleNames(dir: any[] | undefined, roles: string[], bu?: string): string[] {
   if (!dir || !dir.length) return []
-  let cands = dir.filter((u: any) =>
+  // Match the EXACT set the alert email targets: anyone holding the role as PRIMARY *or* SECONDARY
+  // (roles[]), scoped to the doc's BU or a cross-BU ("ALL") holder. Do NOT drop secondary-role or
+  // bu="ALL" holders — a person tagged LOGISTICS in roles[] (e.g. an admin who is also on the LG team,
+  // bu="ALL") is a real alert recipient and must appear here too. Sorted by priority.
+  const cands = dir.filter((u: any) =>
     (!bu || u.bu === bu || u.bu === "ALL") &&
     (roles.includes(u.role) || (Array.isArray(u.roles) && u.roles.some((r: string) => roles.includes(r)))))
-  const primary = cands.filter((u: any) => roles.includes(u.role))
-  if (primary.length) cands = primary
-  if (bu) { const exact = cands.filter((u: any) => u.bu === bu); if (exact.length) cands = exact }
   cands.sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
   const seen = new Set<string>(); const names: string[] = []
   for (const u of cands) { const n = nameOf(u.email) || nameOf(u.name); if (n && !seen.has(n)) { seen.add(n); names.push(n) } }
@@ -272,7 +281,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     const lgName = (bu === "TRM"
       ? resolveRoleNames(approvers, ["LOGISTICS_TRM"], undefined)
       : resolveRoleNames(approvers, ["LOGISTICS"], bu)).join(", ")
-    const lgFw = req?.lgForwardEmail ? ` → FW: ${req.lgForwardName || String(req.lgForwardEmail).split("@")[0]}` : ""
+    const lgFw = req?.lgForwardEmail ? ` → FW: ${fwNames(req)}` : ""
     const lgWho = !completed && !rejected && claimReached && !lgDone ? `Logistics${lgName ? `: ${lgName}` : ""}${lgFw}` : ""
     const pendingWho = [...(stageWho ? [stageWho] : []), ...(lgWho ? [lgWho] : []), ...claimWho, ...(nykWho ? [nykWho] : [])]
     return (
@@ -367,7 +376,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   // Logistics runs in PARALLEL with Claim at PENDING_CLAIM_GW — that status has no linear STAGE_INFO
   // entry, so surface LG here (until Save & Send sets logisticsSent). At PENDING_LOGISTICS_GW the
   // linear stageWho already names Logistics, so only add it for the parallel status to avoid a dup.
-  const gwLgFw = req?.lgForwardEmail ? ` → FW: ${req.lgForwardName || String(req.lgForwardEmail).split("@")[0]}` : ""
+  const gwLgFw = req?.lgForwardEmail ? ` → FW: ${fwNames(req)}` : ""
   const gwLgWho = (status === "PENDING_CLAIM_GW" && !lgDone && !completed && !rejected)
     ? (() => { const n = resolveRoleNames(approvers, ["LOGISTICS_GW"], undefined).join(", "); return [(n ? `Logistics: ${n}` : "Logistics") + gwLgFw] })()
     : []

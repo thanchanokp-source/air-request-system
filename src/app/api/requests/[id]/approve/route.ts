@@ -92,7 +92,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const skipPres = !!(request as any).nykDirect
   // A subordinate this doc was forwarded to (LG handoff) may do the SAME Logistics data-entry
   // as an LG actor, but only for THIS doc (matched by email → request.lgForwardEmail).
-  const isFwdTarget = !!(request as any).lgForwardEmail && String((session.user as any).email || "").toLowerCase() === String((request as any).lgForwardEmail).toLowerCase()
+  const _fwdEmail = String((session.user as any).email || "").toLowerCase()
+  const isFwdTarget = [...(((request as any).lgForwardEmails) || []), ...((request as any).lgForwardEmail ? [(request as any).lgForwardEmail] : [])].some((e: string) => String(e).toLowerCase() === _fwdEmail)
 
   // Capture the approver's signature snapshot for any APPROVE-type action (not
   // data entry, and not Logistics — Logistics is not a signatory). Centralised so

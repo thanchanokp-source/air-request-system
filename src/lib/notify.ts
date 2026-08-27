@@ -939,7 +939,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
         // BU-scoped: NYG docs → NYG Logistics; EA docs → EA Logistics (quynh). Cross-BU LG (bu="ALL") sees both.
         const lgUsers = await prisma.user.findMany({ where: ((req as any).bu === "TRM"
           ? { isActive: true, OR: [{ role: "LOGISTICS_TRM" }, { roles: { has: "LOGISTICS_TRM" } }] }
-          : { isActive: true, role: "LOGISTICS", bu: { in: [(req as any).bu || "NYG", "ALL"] } }) as any, select: { id: true, email: true } })
+          : { isActive: true, bu: { in: [(req as any).bu || "NYG", "ALL"] }, OR: [{ role: "LOGISTICS" }, { roles: { has: "LOGISTICS" } }] }) as any, select: { id: true, email: true } })
         for (const u of lgUsers) {
           if (!u.email) continue
           const html = buildHtml(req, "PENDING_LOGISTICS", docLink, undefined, undefined, await magicLoginFor(u.id, "/logistics"))

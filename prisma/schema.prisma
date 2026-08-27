@@ -130,10 +130,13 @@ model AirRequest {
   pendingWeight       Boolean             @default(false) // held: a DESCRIPTION has no WT Charge in Master, not yet sent
   nykDirect           Boolean             @default(false) // GW "NYK Direct" import: skips all approvers → lands at SCM NYK claim; after NYK done → Accounting (skip President)
   revised             Boolean             @default(false) // was sent back to Merchandise & re-submitted at least once → emails show a "REVISE" tag
-  lgForwardEmail      String? // LG handoff: a senior LG forwarded this doc's data-entry to a subordinate
+  lgForwardEmail      String? // LG handoff: a senior LG forwarded this doc's data-entry to a subordinate. = PRIMARY recipient (arrays[0]) kept for existing single-field display/authz
   lgForwardName       String?
   lgForwardBy         String? // who forwarded (name)
-  lgForwardToken      String? // magic-link so the subordinate can open & continue without a full account
+  lgForwardToken      String? // magic-link for the PRIMARY recipient (= lgForwardTokens[0])
+  lgForwardEmails     String[] @default([]) // ALL Sub-LG recipients of the handoff (multi-forward)
+  lgForwardNames      String[] @default([]) // parallel to lgForwardEmails
+  lgForwardTokens     String[] @default([]) // parallel per-recipient magic-link tokens (distinct identity per person)
   vndRate             Float? // EA only: VND-per-THB snapshot at creation → lets amounts display in VND (toggle) without changing later when the FX rate is edited
   createdBy           User                @relation(fields: [createdById], references: [id])
   items               AirRequestItem[]

@@ -116,11 +116,16 @@ export const authOptions: NextAuthOptions = {
           // Logistics handoff token: a senior LG forwarded data-entry to a subordinate. Log them
           // in scoped to THIS doc — role LOGISTICS_SUB has no queue access; the request page grants
           // LG data-entry only because request.lgForwardEmail === their email (isForwardTarget).
-          const lgFwdReq = await (prisma.airRequest as any).findFirst({ where: { lgForwardToken: token } })
+          // Multi-forward: each recipient has their OWN token in lgForwardTokens[]. Match either the
+          // legacy single token or any element of the array, then resolve THIS person's identity by
+          // its index in the parallel emails/names arrays (so each acts as themselves, not the primary).
+          const lgFwdReq = await (prisma.airRequest as any).findFirst({ where: { OR: [{ lgForwardToken: token }, { lgForwardTokens: { has: token } }] } })
           if (lgFwdReq) {
-            const email = String(lgFwdReq.lgForwardEmail || "").toLowerCase()
+            const idx = Array.isArray(lgFwdReq.lgForwardTokens) ? lgFwdReq.lgForwardTokens.indexOf(token) : -1
+            const email = String((idx >= 0 ? lgFwdReq.lgForwardEmails?.[idx] : null) || lgFwdReq.lgForwardEmail || "").toLowerCase()
+            const name = (idx >= 0 ? lgFwdReq.lgForwardNames?.[idx] : null) || lgFwdReq.lgForwardName || email
             const u = email ? await (prisma.user as any).findUnique({ where: { email } }) : null
-            return { id: u?.id || `lg_fwd_${token.slice(0, 8)}`, email, name: lgFwdReq.lgForwardName || u?.name || email, role: "LOGISTICS_SUB", bu: lgFwdReq.bu || "NYG", claimDepartment: null, priority: null }
+            return { id: u?.id || `lg_fwd_${token.slice(0, 8)}`, email, name: u?.name || name, role: "LOGISTICS_SUB", bu: lgFwdReq.bu || "NYG", claimDepartment: null, priority: null }
           }
           // GW claim per-dept tokens. CLAIM_GW is split GW vs SUPPLIER by a
           // separate token so each logs in scoped to its own claimDepartment.

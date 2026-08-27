@@ -1286,7 +1286,7 @@ export default function RequestDetailPage() {
   // Uses myAllRoles so a multi-role holder (Urairat = LOGISTICS_GW + LOGISTICS_TRM) is recognised.
   // A subordinate this doc was forwarded to (LG handoff) can do the SAME data-entry as an LG
   // actor, but only for THIS doc (their role LOGISTICS_SUB grants no queue access anywhere else).
-  const isForwardTarget = !!req?.lgForwardEmail && userEmail === String(req.lgForwardEmail).toLowerCase()
+  const isForwardTarget = [...(req?.lgForwardEmails || []), ...(req?.lgForwardEmail ? [req.lgForwardEmail] : [])].some((e: string) => String(e).toLowerCase() === userEmail)
   const isLgActor = (req?.bu === "TRM" ? myAllRoles.includes("LOGISTICS_TRM") : myAllRoles.includes("LOGISTICS")) || (isForwardTarget && !isGWRequest)
   const isLogisticsRole = isLgActor && presPassedItems.length > 0 && !isGWRequest
   const isLgParallelAtScm = isLgActor && ["PENDING_SCM", "PENDING_PRESIDENT", "PENDING_CLAIM", "PENDING_VP_CLAIM"].includes(req?.status) && !isGWRequest

@@ -342,6 +342,7 @@ export default function ApprovalsPage() {
     // 1) People explicitly on the doc (creator / assigned approver / forward recipient).
     const fields = [r.createdBy?.email, r.createdBy?.name, r.assignedDvmMer, r.assignedVpMer, r.assignedVpScm,
       (r as any).assignedScmNykEvp, (r as any).assignedScmNykCr, (r as any).lgForwardEmail, (r as any).lgForwardName,
+      ...(((r as any).lgForwardEmails) || []), ...(((r as any).lgForwardNames) || []),
       ...((r.claimForwards || []) as any[]).flatMap(f => [f.nextEmail, f.nextName])]
     if (fields.some(x => String(x || "").toLowerCase().includes(pq))) return true
     // 2) Role-based CURRENT approvers (LG/SCM/President/claim depts) — resolve from the directory

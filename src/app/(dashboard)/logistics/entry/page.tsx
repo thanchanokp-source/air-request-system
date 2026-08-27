@@ -356,14 +356,15 @@ export default function LgEntryPage() {
     setSaving(true)
     await persist(new Set()) // save partial first
     let ok = 0
-    // Route each document to a selected recipient who covers that document's BU (fallback: first).
+    // Route each document to ALL selected recipients who cover that document's BU (fallback: all selected).
     for (const reqId of involvedReqIds) {
       const bu = docMap[reqId]?.bu || "NYG"
-      const email = emails.find(e => { const u = fwTargets.find(t => t.email === e); return u && coveredBus(u).has(bu) }) || emails[0]
-      const u = fwTargets.find(t => t.email === email)
+      let picked = emails.filter(e => { const u = fwTargets.find(t => t.email === e); return u && coveredBus(u).has(bu) })
+      if (picked.length === 0) picked = emails
+      const recipients = picked.map(e => { const u = fwTargets.find(t => t.email === e); return { email: e, name: u?.name || e } })
       const res = await fetch(`/api/requests/${reqId}/lg-forward`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toEmail: email, toName: u?.name || email, note: fwNote.trim() || undefined }),
+        body: JSON.stringify({ recipients, note: fwNote.trim() || undefined }),
       })
       if (res.ok) ok++
     }
