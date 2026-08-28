@@ -39,6 +39,8 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [showReject, setShowReject] = useState(false)
+  const [rejectReason, setRejectReason] = useState("")
   // role → approver names (for the stepper)
   const [roleNames, setRoleNames] = useState<Record<string, string[]>>({})
   useEffect(() => {
@@ -75,16 +77,15 @@ export default function Page() {
     } finally { setBusy(false) }
   }
 
-  const reject = async (rq: any) => {
-    const reason = prompt(`Reject ${rq.documentNo} — reason?`)
-    if (reason == null || !reason.trim()) return
+  const doReject = async (rq: any) => {
+    if (!rejectReason.trim()) return alert("Please enter a reason for rejection.")
     setBusy(true)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "REJECTED", rejectReason: reason.trim() }),
+        body: JSON.stringify({ status: "REJECTED", rejectReason: rejectReason.trim() }),
       })
-      if (r.ok) { setOpenId(null); await load() } else alert("Error")
+      if (r.ok) { setShowReject(false); setRejectReason(""); setOpenId(null); await load() } else alert("Error")
     } finally { setBusy(false) }
   }
 
@@ -143,7 +144,7 @@ export default function Page() {
                     className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 shadow-sm" style={{ background: "#16a34a" }}>
                     {busy ? "…" : cfg.next === "APPROVED" ? "✓ Approve (final)" : "✓ Approve"}
                   </button>
-                  <button onClick={() => reject(openReq)} disabled={busy}
+                  <button onClick={() => { setRejectReason(""); setShowReject(true) }} disabled={busy}
                     className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 bg-red-600 hover:bg-red-700 shadow-sm">
                     ✕ Reject
                   </button>
@@ -224,6 +225,28 @@ export default function Page() {
                 </div>
               </div>
             </div>
+
+            {/* Reject modal — reason required */}
+            {showReject && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !busy && setShowReject(false)}>
+                <div className="bg-white rounded-xl w-full max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
+                  <h3 className="font-semibold text-gray-800">✕ Reject {openReq.documentNo}</h3>
+                  <p className="text-xs text-gray-500">The document will be withdrawn from the flow and everyone who acted on it (+ requester) will be notified with this reason.</p>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600">Reason <span className="text-red-500">*</span></label>
+                    <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} rows={3} autoFocus
+                      placeholder="Why is this document rejected?"
+                      className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setShowReject(false)} disabled={busy} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 disabled:opacity-50">Cancel</button>
+                    <button onClick={() => doReject(openReq)} disabled={busy || !rejectReason.trim()} className="px-4 py-1.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-40">
+                      {busy ? "…" : "Confirm Reject"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )
       })()}
