@@ -65,6 +65,26 @@ export async function releaseHeldDocs() {
 // Back-compat alias (older call sites). Both rate and weight releases run the same pass.
 export const releasePendingRateDocs = releaseHeldDocs
 
+// Distribute a HAWB's ONE total actual cost across ALL its shipment lines GLOBALLY — every
+// airRequestItem carrying that hawbNo, across EVERY document — proportionally by air qty. A HAWB can
+// span multiple documents (same SO/SUB can split into different INV/HAWB), so its cost must be keyed
+// by the HAWB number and spread once. This makes the result idempotent: entering the same HAWB total
+// in two separate documents can no longer double the actual (sum over the HAWB always = totalCost).
+export async function redistributeHawbCost(hawbNo: string, totalCost: number): Promise<void> {
+  const h = String(hawbNo || "").trim()
+  if (!h || !(totalCost > 0)) return
+  const items = await (prisma.airRequestItem as any).findMany({
+    where: { hawbNo: h }, select: { id: true, qtyActualShip: true, qtyRequestAir: true },
+  })
+  const qtyOf = (it: any) => Number(it.qtyActualShip ?? it.qtyRequestAir) || 0
+  const totalQty = items.reduce((s: number, it: any) => s + qtyOf(it), 0)
+  if (totalQty <= 0) return
+  const avg = totalCost / totalQty
+  for (const it of items) {
+    await prisma.airRequestItem.update({ where: { id: it.id }, data: { actualAirFreight: Math.round(qtyOf(it) * avg * 100) / 100 } }).catch(() => {})
+  }
+}
+
 // Recompute Gross (= QTY Air × WT Charge) + Est. Air Freight (= Gross × rate) for EVERY item of a
 // request. Gross/Est are based on QTY Air (what's actually flown → comparable to Actual), falling
 // back to QTY Original when Air is blank. Call after Master data or an item's qty changes.

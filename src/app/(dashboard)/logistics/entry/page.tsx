@@ -142,9 +142,15 @@ export default function LgEntryPage() {
 
   const buildPayload = () => {
     const itemLog: Record<string, any> = {}, itemAct: Record<string, string> = {}
+    // Per-HAWB ONE total → server spreads it GLOBALLY across every line of that HAWB (across all docs),
+    // so a HAWB spanning several documents is costed once (no double). Skip groups with a manual
+    // per-SO override (LG set exact amounts) — those keep the itemActuals values as-is.
+    const hawbTotals: Record<string, number> = {}
     Object.entries(soInvMap).forEach(([id, inv]) => { itemLog[id] = { invoiceNo: inv || "", hawbNo: "", bookingDate: "" } })
     hawbGroups.forEach(group => {
-      const { items, avgPerUnit } = getHawbCalc(group)
+      const { items, avgPerUnit, totalCost, hasOverride } = getHawbCalc(group)
+      const h = String(group.hawbNo || "").trim()
+      if (h && !hasOverride && totalCost > 0) hawbTotals[h] = totalCost
       items.forEach((it: any) => {
         itemLog[it.id] = { invoiceNo: soInvMap[it.id] || "", hawbNo: group.hawbNo || "", bookingDate: group.bookingDate }
         const ov = soActualOverride[it.id]
@@ -152,21 +158,23 @@ export default function LgEntryPage() {
       })
     })
     const itemShip = Object.fromEntries(Object.entries(soShipData).map(([id, v]) => [id, { qtyRequestAir: v.qty, planShipmentDate: v.date }]))
-    return { itemLog, itemAct, itemShip }
+    return { itemLog, itemAct, itemShip, hawbTotals }
   }
 
   // Fan out the save per document. completeSet = docs to advance (lgComplete); others just draft.
   const persist = async (completeSet: Set<string>) => {
-    const { itemLog, itemAct, itemShip } = buildPayload()
+    const { itemLog, itemAct, itemShip, hawbTotals } = buildPayload()
     for (const reqId of involvedReqIds) {
       const docItemIds = allLgItems.filter(i => i.request.id === reqId).map(i => i.id)
       const pick = (obj: any) => Object.fromEntries(Object.entries(obj).filter(([id]) => docItemIds.includes(id)))
       const complete = completeSet.has(reqId)
       const isGw = (docMap[reqId]?.bu || "NYG") === "GW"
       const action = complete && isGw ? "approve" : "save_logistics_draft"
+      // Send the full hawbTotals (not just this doc's) so the server can cost each HAWB globally,
+      // including its lines that live in OTHER documents.
       await fetch(`/api/requests/${reqId}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, itemLogistics: pick(itemLog), itemActuals: pick(itemAct), itemShipData: pick(itemShip), lgComplete: complete }),
+        body: JSON.stringify({ action, itemLogistics: pick(itemLog), itemActuals: pick(itemAct), itemShipData: pick(itemShip), hawbTotals, lgComplete: complete }),
       })
     }
   }

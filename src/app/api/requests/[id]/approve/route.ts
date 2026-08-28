@@ -6,7 +6,7 @@ import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi, notifyRecall, notifyGwClaimNyk, notifyReviseToLg } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
-import { recomputeRequestFreight } from "@/lib/freight"
+import { recomputeRequestFreight, redistributeHawbCost } from "@/lib/freight"
 import { buildRequestItems } from "@/lib/build-items"
 
 const getClaimDept = (role: string) => {
@@ -325,6 +325,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       if (qtyChanged) await recomputeRequestFreight(id).catch(() => {})
     }
+    // Distribute each HAWB's ONE total across ALL its lines GLOBALLY (across every doc) by qty → a
+    // HAWB spanning multiple documents is costed exactly once (no more double when entered per-doc).
+    if (body.hawbTotals && typeof body.hawbTotals === "object") {
+      for (const [h, t] of Object.entries(body.hawbTotals)) await redistributeHawbCost(h, Number(t)).catch(() => {})
+    }
     // Save DRAFT = save data ONLY. No status change, no advancement, no email — nothing goes
     // out. Everything below runs ONLY on "Save & Send" (body.lgComplete).
     if (body.lgComplete) {
@@ -383,6 +388,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       if (qtyChanged) await recomputeRequestFreight(id).catch(() => {})
     }
+    // GW: distribute each HAWB's total GLOBALLY across all its lines (across every doc) by qty.
+    if (body.hawbTotals && typeof body.hawbTotals === "object") {
+      for (const [h, t] of Object.entries(body.hawbTotals)) await redistributeHawbCost(h, Number(t)).catch(() => {})
+    }
     return NextResponse.json(await getUpdated())
   }
 
@@ -401,7 +410,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           where: { id: itemId },
           data: { invoiceNo: d.invoiceNo || null, bookingDate: d.bookingDate ? new Date(d.bookingDate) : null }
         })
+        if (d.hawbNo !== undefined) {
+          try { await prisma.airRequestItem.update({ where: { id: itemId }, data: { hawbNo: d.hawbNo || null } as any }) } catch { /* hawbNo not in client */ }
+        }
       }
+    }
+    if (body.hawbTotals && typeof body.hawbTotals === "object") {
+      for (const [h, t] of Object.entries(body.hawbTotals)) await redistributeHawbCost(h, Number(t)).catch(() => {})
     }
     return NextResponse.json(await getUpdated())
   }
@@ -1018,6 +1033,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         if (Object.keys(upd).length) await prisma.airRequestItem.update({ where: { id: iid }, data: upd })
       }
       if (qtyChanged) await recomputeRequestFreight(id).catch(() => {})
+    }
+    // GW send: distribute each HAWB's total GLOBALLY across all its lines (across every doc) by qty.
+    if (body.hawbTotals && typeof body.hawbTotals === "object") {
+      for (const [h, t] of Object.entries(body.hawbTotals)) await redistributeHawbCost(h, Number(t)).catch(() => {})
     }
     // Parallel-stage items (PRES_PASSED). Ready = has actual air freight.
     const freshItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: { in: ["PRES_PASSED", "LOG_PASSED"] } } })
