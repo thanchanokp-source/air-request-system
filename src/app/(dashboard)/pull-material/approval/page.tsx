@@ -114,7 +114,7 @@ export default function Page() {
                       </div>
                       <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items?.length || 0} items · {[...new Set((rq.items || []).map((i: any) => i.soNoDoc))].join(", ")}</div>
                     </div>
-                    <span className="text-gray-300 text-lg">›</span>
+                    <span className="shrink-0 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>Open →</span>
                   </button>
                 ))}
               </div>}
