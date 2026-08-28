@@ -49,13 +49,35 @@ export default function PullRatesPage() {
   useEffect(() => { load() }, []) // eslint-disable-line
 
   const reload = async (which: "air" | "sea") => {
-    if (!confirm(`Reload ${which.toUpperCase()} rates from the bundled Rate_LG data? This replaces the current ${which} master.`)) return
+    if (!confirm(`⚠ Reload ${which.toUpperCase()} rates from the bundled Rate_LG data?\nThis REPLACES the current ${which} master — any rows/rates added by LG will be LOST.\nClick "⬇ Backup (Excel)" first if you want to keep them. Continue?`)) return
     setBusy(true)
     try {
       const r = await fetch(`/api/pull-material/${which}-rates`, { method: "POST" }).then(r => r.json())
       alert(r.ok ? `Loaded ${r.count} ${which} rows` : (r.error || "Failed"))
       await load()
     } finally { setBusy(false) }
+  }
+
+  // Backup: download the CURRENT air + sea master (incl. rows LG added) as one Excel — so edits are
+  // never lost if someone clicks "Reload from file" (which overwrites with the bundled seed).
+  const exportBackup = async () => {
+    const ExcelJS = (await import("exceljs")).default
+    const wb = new ExcelJS.Workbook()
+    const style = (ws: any) => { const h = ws.getRow(1); h.font = { bold: true }; h.eachCell((c: any) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEBF7" } } }) }
+    const aws = wb.addWorksheet("Air Rate")
+    aws.addRow(["COUNTRY", "ORIGIN", "DEST", "FWD", "A/L", "TT", ...AIR_BREAKS])
+    air.forEach((r: any) => aws.addRow([r.country || "", r.origin || "", r.destination || "", r.fwd || "", r.airline || "", r.tt || "", ...AIR_BREAKS.map(b => r.rates?.[b] ?? "")]))
+    style(aws)
+    const sws = wb.addWorksheet("Sea Rate")
+    sws.addRow(["COUNTRY", "PORT", ...SEA_CT])
+    sea.forEach((r: any) => sws.addRow([r.country || "", r.port || "", ...SEA_CT.map(c => r.rates?.[c] ?? "")]))
+    style(sws)
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    const url = URL.createObjectURL(blob)
+    const d = new Date()
+    const a = document.createElement("a"); a.href = url; a.download = `PullRM_MasterRate_backup_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}.xlsx`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
   const cellVal = (row: any, k: string) => edits[row.id]?.[k] ?? (row.rates?.[k] != null ? String(row.rates[k]) : "")
@@ -105,6 +127,7 @@ export default function PullRatesPage() {
         {isAdmin && (
           <div className="flex gap-2">
             {editCount > 0 && <button onClick={saveAll} disabled={busy} className="px-3 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 bg-green-600">💾 Save {editCount} row(s)</button>}
+            <button onClick={exportBackup} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white disabled:opacity-50">⬇ Backup (Excel)</button>
             <button onClick={() => reload(tab)} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 disabled:opacity-50">↻ Reload from file</button>
           </div>
         )}
