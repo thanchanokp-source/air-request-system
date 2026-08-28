@@ -31,16 +31,19 @@ export default function LogisticsPage() {
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
   useEffect(() => { fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRates(d.rows || [])).catch(() => {}) }, [])
 
-  // Estimate Air = MAX rate among the selected air PORT's routes at the weight's Q-break × weight.
+  // Estimate Air freight = weight × rate(port/country) × qty.
+  // gross = weight(per unit) × pull qty → used for the Q-break tier AND the amount.
   const airEst = (it: any) => {
     const w = Number(it.weight) || 0
+    const qty = Number(it.pullMaterialQty) || 0
+    const gross = w * qty
     const routes = airRates.filter(r => r.origin === it.port)
-    if (!it.port || !w || !routes.length) return null
-    const bk = breakKey(w)
+    if (!it.port || !gross || !routes.length) return null
+    const bk = breakKey(gross)
     const vals = routes.map(r => Number(r.rates?.[bk])).filter(v => v && !isNaN(v))
     if (!vals.length) return null
     const rate = Math.max(...vals)
-    return { bk, rate, est: Math.round(rate * w * 100) / 100 }
+    return { bk, rate, gross, est: Math.round(rate * gross * 100) / 100 }
   }
 
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
