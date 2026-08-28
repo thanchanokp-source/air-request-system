@@ -113,6 +113,8 @@ export default function FilesPage() {
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
+  const closePreview = () => setPreview(p => { if (p) URL.revokeObjectURL(p.url); return null })
   const [combineMode, setCombineMode] = useState(false)
   const [hawbLoading, setHawbLoading] = useState(false)
   const [hawbQuery, setHawbQuery] = useState("")
@@ -321,28 +323,37 @@ export default function FilesPage() {
   }
 
   // Download the whole document — one formal page per SO.
+  // Build the document PDF blob (SOs respecting active filters + unbooked toggle). Reused by
+  // download and preview so both show exactly the same output.
+  const buildDocBlob = async (req: any): Promise<{ blob: Blob; name: string } | null> => {
+    const fullReq = await fetch(`/api/requests/${req.id}`).then(r => r.json())
+    const items = (fullReq.items || []).filter((i: any) =>
+      i.itemStatus !== "REJECTED" && (!unbookedOnly || !itemBooked(i)) && itemMatchesFilters(i))
+    if (items.length === 0) { alert("ไม่มี SO ที่ตรงกับ filter"); return null }
+    const [{ pdf }, { CombinedPdfDocument }] = await Promise.all([
+      import("@react-pdf/renderer"),
+      import("@/components/request-pdf"),
+    ])
+    const pages = items.map((item: any) => ({ req: fullReq, item }))
+    const element = React.createElement(CombinedPdfDocument as any, { pages })
+    const blob = await (pdf(element as any) as any).toBlob()
+    return { blob, name: `${fullReq.documentNo}.pdf` }
+  }
   const downloadDocPdf = async (req: any) => {
-    const dkey = `doc-${req.id}`
-    setPdfLoading(dkey)
+    setPdfLoading(`doc-${req.id}`)
     try {
-      const fullReq = await fetch(`/api/requests/${req.id}`).then(r => r.json())
-      // Only the SOs currently shown (respect the active filters + unbooked toggle), not all SOs.
-      const items = (fullReq.items || []).filter((i: any) =>
-        i.itemStatus !== "REJECTED" && (!unbookedOnly || !itemBooked(i)) && itemMatchesFilters(i))
-      if (items.length === 0) { alert("ไม่มี SO ที่ตรงกับ filter"); return }
-      const [{ pdf }, { CombinedPdfDocument }] = await Promise.all([
-        import("@react-pdf/renderer"),
-        import("@/components/request-pdf"),
-      ])
-      const pages = items.map((item: any) => ({ req: fullReq, item }))
-      const element = React.createElement(CombinedPdfDocument as any, { pages })
-      const blob = await (pdf(element as any) as any).toBlob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${fullReq.documentNo}.pdf`
-      document.body.appendChild(a); a.click()
-      document.body.removeChild(a); URL.revokeObjectURL(url)
+      const r = await buildDocBlob(req); if (!r) return
+      const url = URL.createObjectURL(r.blob)
+      const a = document.createElement("a"); a.href = url; a.download = r.name
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch { alert("PDF generation failed") }
+    finally { setPdfLoading(null) }
+  }
+  const previewDocPdf = async (req: any) => {
+    setPdfLoading(`prev-${req.id}`)
+    try {
+      const r = await buildDocBlob(req); if (!r) return
+      setPreview({ url: URL.createObjectURL(r.blob), name: r.name })
     } catch { alert("PDF generation failed") }
     finally { setPdfLoading(null) }
   }
@@ -751,6 +762,11 @@ export default function FilesPage() {
                               })()}
                               <span className="text-xs text-gray-400 ml-auto">{items.length} SO(s) · {fmtDate(req.createdAt)}</span>
                               <span role="button" tabIndex={0}
+                                onClick={e => { e.stopPropagation(); previewDocPdf(req) }}
+                                className="text-xs bg-white border border-gray-300 text-gray-700 px-2.5 py-1 rounded hover:bg-gray-100 font-medium cursor-pointer whitespace-nowrap">
+                                {pdfLoading === `prev-${req.id}` ? "..." : "👁 Preview"}
+                              </span>
+                              <span role="button" tabIndex={0}
                                 onClick={e => { e.stopPropagation(); downloadDocPdf(req) }}
                                 className="text-xs bg-gray-700 text-white px-2.5 py-1 rounded hover:bg-gray-800 font-medium cursor-pointer whitespace-nowrap">
                                 {pdfLoading === `doc-${req.id}` ? "..." : (() => {
@@ -894,6 +910,23 @@ export default function FilesPage() {
             className="bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-white text-sm font-semibold px-5 py-1.5 rounded-xl transition-colors">
             {combineLoading ? "Generating..." : `⬇ Download Combined PDF`}
           </button>
+        </div>
+      )}
+
+      {/* PDF preview popup */}
+      {preview && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex flex-col p-4 sm:p-8" onClick={closePreview}>
+          <div className="bg-white rounded-xl w-full h-full max-w-5xl mx-auto flex flex-col overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 shrink-0">
+              <span className="text-sm font-semibold text-gray-700 truncate">👁 {preview.name}</span>
+              <div className="flex items-center gap-2">
+                <a href={preview.url} download={preview.name}
+                  className="text-xs bg-gray-700 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800 font-medium">⬇ Download</a>
+                <button onClick={closePreview} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-200 font-medium">✕ Close</button>
+              </div>
+            </div>
+            <iframe src={preview.url} title="PDF preview" className="flex-1 w-full" />
+          </div>
         </div>
       )}
     </div>
