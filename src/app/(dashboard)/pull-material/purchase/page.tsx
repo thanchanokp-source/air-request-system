@@ -117,6 +117,24 @@ export default function PurchasePage() {
     ps.columns = [{ width: 22 }, { width: 34 }, { width: 34 }] as any
     countries.forEach(c => ps.addRow([c, [...(airByCountry[c] || [])].sort().join(", "), [...(seaByCountry[c] || [])].sort().join(", ")]))
 
+    // Hidden per-country port lists → cascading dropdowns (Air/Sea Port options filter by the chosen
+    // Country) via named ranges + INDIRECT. One column per country; a named range AIR_<C> / SEA_<C>.
+    const airWs = wb.addWorksheet("_air"); (airWs as any).state = "veryHidden"
+    const seaWs = wb.addWorksheet("_sea"); (seaWs as any).state = "veryHidden"
+    const colLetter = (n: number) => { let s = ""; n++; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26) } return s }
+    const rangeName = (c: string) => c.trim().toUpperCase().replace(/\s+/g, "_") // matches SUBSTITUTE($I," ","_")
+    const okName = (nm: string) => /^[A-Za-z0-9_.]+$/.test(nm)
+    countries.forEach((c, i) => {
+      const col = colLetter(i), nm = rangeName(c)
+      const air = [...(airByCountry[c] || [])].sort(), sea = [...(seaByCountry[c] || [])].sort()
+      airWs.getCell(`${col}1`).value = nm; air.forEach((p, r) => { airWs.getCell(`${col}${r + 2}`).value = p })
+      seaWs.getCell(`${col}1`).value = nm; sea.forEach((p, r) => { seaWs.getCell(`${col}${r + 2}`).value = p })
+      if (okName(nm)) {
+        if (air.length) wb.definedNames.add(`_air!$${col}$2:$${col}$${air.length + 1}`, `AIR_${nm}`)
+        if (sea.length) wb.definedNames.add(`_sea!$${col}$2:$${col}$${sea.length + 1}`, `SEA_${nm}`)
+      }
+    })
+
     // Sheet: the fill-in form
     const ws = wb.addWorksheet("Purchase")
     const headers = ["SO", "PO No", "Customer", "Cust PO", "Style", "Material", "PULL", "Consumption", "Country *", "Air Port", "Sea Port", "Incoterm *", "Weight(kg) *", "Ship Date", "_ItemID"]
@@ -141,11 +159,18 @@ export default function PurchasePage() {
         valOf(it, "incoterm"), valOf(it, "weight"), fmtD(valOf(it, "shipmentDate") || it.shipmentDate), it.id,
       ])
     })
-    // Country cell (col I) = dropdown from the Countries sheet → always matches master.
+    // Country (I) = dropdown from Countries sheet. Air Port (J) / Sea Port (K) = CASCADING dropdowns
+    // that show only the ports of the chosen Country (via INDIRECT on the AIR_/SEA_ named ranges).
     for (let r = 2; r <= openReq.items.length + 1; r++) {
       ws.getCell(`I${r}`).dataValidation = {
         type: "list", allowBlank: true, formulae: [`Countries!$A$2:$A$${countries.length + 1}`],
         showErrorMessage: true, errorTitle: "Invalid country", error: "Pick a country from the master (see Countries sheet)",
+      } as any
+      ws.getCell(`J${r}`).dataValidation = {
+        type: "list", allowBlank: true, formulae: [`INDIRECT("AIR_"&SUBSTITUTE($I${r}," ","_"))`],
+      } as any
+      ws.getCell(`K${r}`).dataValidation = {
+        type: "list", allowBlank: true, formulae: [`INDIRECT("SEA_"&SUBSTITUTE($I${r}," ","_"))`],
       } as any
     }
     ws.getColumn(15).hidden = true // _ItemID (used to match on import)
