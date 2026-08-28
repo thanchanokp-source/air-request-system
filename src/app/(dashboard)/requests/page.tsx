@@ -132,6 +132,7 @@ export default function RequestsPage() {
   const [brandF, setBrandF] = useState<string[]>([])
   const [styleF, setStyleF] = useState<string[]>([])
   const [soF, setSoF] = useState<string[]>([])
+  const [subF, setSubF] = useState<string[]>([])
   const [docNoF, setDocNoF] = useState<string[]>([])
   const [cpF, setCpF] = useState<string[]>([])
   const [portF, setPortF] = useState<string[]>([])
@@ -257,7 +258,7 @@ export default function RequestsPage() {
   // Document creator shown as "Name (email)" (email alone when no name) — searchable by either.
   const creatorLabel = (r: any) => { const c = r?.createdBy; if (!c) return ""; return c.name ? `${c.name} (${c.email})` : (c.email || "") }
   const applyFilters = (rows: any[], opts: {
-    brand?: string[], style?: string[], so?: string[], cp?: string[],
+    brand?: string[], style?: string[], so?: string[], sub?: string[], cp?: string[],
     port?: string[], country?: string[], claim?: string[], invoice?: string[], hawb?: string[], stage?: string[], docNo?: string[], createdBy?: string[], desc?: string[]
   }) => rows.filter(row => {
     const r = row.request
@@ -282,6 +283,7 @@ export default function RequestsPage() {
       (!opts.brand?.length || opts.brand.includes(r.brandName)) &&
       (!opts.style?.length || opts.style.includes(row.style)) &&
       (!opts.so?.length || opts.so.includes(row.so)) &&
+      (!opts.sub?.length || opts.sub.includes(row.sub)) &&
       (!opts.cp?.length || opts.cp.includes(row.customerPO)) &&
       (!opts.port?.length || opts.port.includes(row.port)) &&
       (!opts.country?.length || opts.country.includes(row.country)) &&
@@ -297,8 +299,9 @@ export default function RequestsPage() {
   // Cascading options: each dropdown shows options available given all OTHER active filters
   const brands   = uniq(allRows.map(r => r.request.brandName))
   const styles   = uniq(applyFilters(allRows, { brand: brandF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.style))
-  const sos      = uniq(applyFilters(allRows, { brand: brandF, style: styleF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.so))
-  const cps      = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.customerPO))
+  const sos      = uniq(applyFilters(allRows, { brand: brandF, style: styleF, sub: subF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.so))
+  const subs     = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.sub))
+  const cps      = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, sub: subF, port: portF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.customerPO))
   const ports    = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, country: countryF, claim: claimF, invoice: invoiceF }).map(r => r.port))
   const countries = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, claim: claimF, invoice: invoiceF }).map(r => r.country))
   const invoices = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF }).map(r => r.invoiceNo))
@@ -307,7 +310,7 @@ export default function RequestsPage() {
   const creators = uniq(allRows.map(r => creatorLabel(r.request)))
   const descs    = uniq(applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF }).map(r => r.description))
 
-  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF, stage: stageF, docNo: docNoF, createdBy: createdByF, desc: descF })
+  const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, sub: subF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF, stage: stageF, docNo: docNoF, createdBy: createdByF, desc: descF })
   // Stage filter options: the pipeline stages + a "Claim: <dept>" sub-option per claim department.
   const claimDeptOpts = activeBu === "GW" ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
   const stageOptions = [...POSITIONS.map(p => p.label), ...claimDeptOpts.map(d => `Claim: ${d}`)]
@@ -521,8 +524,8 @@ export default function RequestsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {!!(stageF.length || statusFilter.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length || docNoF.length || createdByF.length || descF.length) && (
-            <button onClick={() => { setStageF([]); setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]); setDocNoF([]); setCreatedByF([]); setDescF([]) }}
+          {!!(stageF.length || statusFilter.length || brandF.length || styleF.length || soF.length || subF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length || docNoF.length || createdByF.length || descF.length) && (
+            <button onClick={() => { setStageF([]); setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setSubF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]); setDocNoF([]); setCreatedByF([]); setDescF([]) }}
               className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
               Clear All
             </button>
@@ -535,6 +538,7 @@ export default function RequestsPage() {
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF} />
+          <MultiSelect label="SUB..." options={subs} value={subF} onChange={setSubF} />
           <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF} />
           <MultiSelect label="All Country" options={countries} value={countryF} onChange={setCountryF} />
           <MultiSelect label="Claim Dept" options={activeBu === "GW" ? ["SCM NYK","SCM NYG","GW","SUPPLIER"] : ["COMMERCIAL","PROCUREMENT","NYK","PRODUCTION"]} value={claimF} onChange={setClaimF} />
