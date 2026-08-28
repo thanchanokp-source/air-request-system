@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
+import { magicLoginFor } from "@/lib/notify"
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
@@ -112,26 +113,35 @@ export async function POST(req: NextRequest) {
   if (created.status === "PENDING_PURCHASING") {
     const purUsers = await (prisma.user as any).findMany({
       where: { isActive: true, OR: [{ role: "PURCHASING" }, { roles: { has: "PURCHASING" } }] },
-      select: { email: true },
+      select: { id: true, email: true },
     })
-    const to = [...new Set(purUsers.map((u: any) => u.email).filter(Boolean))]
-    if (to.length) {
+    // De-dupe by email; keep one id per email.
+    const seen = new Set<string>()
+    const recips = purUsers.filter((u: any) => u.email && !seen.has(u.email.toLowerCase()) && seen.add(u.email.toLowerCase()))
+    if (recips.length) {
       const sos = [...new Set((created.items || []).map((i: any) => i.soNoDoc).filter(Boolean))].join(", ")
-      const link = `${APP_URL}/pull-material/purchase`
-      const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
-        <h2 style="color:#6b1a1a;margin:0 0 10px">Pull Material — new request for Purchasing</h2>
-        <p><b>${created.documentNo}</b> (${bu}) needs Purchase to fill Country / Port / Incoterm / Weight.</p>
-        <table style="border-collapse:collapse;font-size:13px;margin:6px 0">
-          <tr><td style="color:#888;padding-right:12px">Requester</td><td>${requesterName}</td></tr>
-          <tr><td style="color:#888;padding-right:12px">SO</td><td>${sos || "-"}</td></tr>
-          <tr><td style="color:#888;padding-right:12px">Items</td><td>${(created.items || []).length}</td></tr>
-        </table>
-        <p style="margin-top:14px"><a href="${link}" style="background:#6b1a1a;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;display:inline-block">Open Purchase queue →</a></p>
-        <p style="color:#9ca3af;font-size:12px;margin-top:12px">Anyone in Purchasing can take it — once someone submits it to Logistics it leaves the queue for everyone.</p>
-      </div>`
-      // TEST doc → reroute to the creator (shows "meant for"); real doc → the 4 Purchasing users.
-      await runWithTestMail(isTest ? (String(session.user?.email || "") || null) : null, () =>
-        sendMail(to as string[], `[Purchasing] New Pull Material — ${created.documentNo}`, html)).catch(() => {})
+      const subject = `[Purchasing] New Pull Material — ${created.documentNo}`
+      // Send EACH purchasing user their OWN magic link → clicking auto-logs them in as THEIR account
+      // (no password) and opens the Purchase queue. Whoever fills it first advances the doc → it drops
+      // off everyone else's queue.
+      const testTo = isTest ? (String(session.user?.email || "") || null) : null
+      await runWithTestMail(testTo, async () => {
+        for (const u of recips) {
+          const link = await magicLoginFor(u.id, "/pull-material/purchase")
+          const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
+            <h2 style="color:#6b1a1a;margin:0 0 10px">Pull Material — new request for Purchasing</h2>
+            <p><b>${created.documentNo}</b> (${bu}) needs Purchase to fill Country / Port / Incoterm / Weight.</p>
+            <table style="border-collapse:collapse;font-size:13px;margin:6px 0">
+              <tr><td style="color:#888;padding-right:12px">Requester</td><td>${requesterName}</td></tr>
+              <tr><td style="color:#888;padding-right:12px">SO</td><td>${sos || "-"}</td></tr>
+              <tr><td style="color:#888;padding-right:12px">Items</td><td>${(created.items || []).length}</td></tr>
+            </table>
+            <p style="margin-top:14px"><a href="${link}" style="background:#6b1a1a;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;display:inline-block">Open Purchase queue →</a></p>
+            <p style="color:#9ca3af;font-size:12px;margin-top:12px">This link logs you in automatically (no password). Anyone in Purchasing can take it — once someone submits it to Logistics it leaves the queue for everyone.</p>
+          </div>`
+          await sendMail([u.email], subject, html).catch(() => {})
+        }
+      }).catch(() => {})
     }
   }
 

@@ -31,7 +31,7 @@ async function getLoginToken(uid: string): Promise<string | null> {
     return token
   } catch { return null }
 }
-async function magicLoginFor(uid: string, redirect = "/approvals"): Promise<string> {
+export async function magicLoginFor(uid: string, redirect = "/approvals"): Promise<string> {
   const token = await getLoginToken(uid)
   return `${APP_URL}/api/magic-login?token=${token}&redirect=${encodeURIComponent(redirect)}`
 }
