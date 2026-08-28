@@ -13,17 +13,18 @@ const APPROVER: Record<string, { role: string; label: string; next: string; back
   PENDING_APPROVAL: { role: "ADMIN",          label: "Approval (legacy)", next: "APPROVED",     back: "PENDING_SCM_DECISION", backLabel: "Send back" },
 }
 
-// Full stage chain per branch — for the right-side stepper.
+// Full stage chain per branch — for the stepper. `role` resolves the actual approver NAME per stage.
 const SCM_CHAIN = [
-  { s: "PENDING_PURCHASING", l: "Purchasing" }, { s: "PENDING_LOGISTICS", l: "Logistics" },
-  { s: "PENDING_SCM_DECISION", l: "SCM decision" }, { s: "PENDING_VP_SCM", l: "VP SCM" },
-  { s: "PENDING_FINAL", l: "President (K.Khomkrit)" }, { s: "APPROVED", l: "Approved" },
+  { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" }, { s: "PENDING_LOGISTICS", l: "Logistics", role: "LOGISTICS_IMPORT" },
+  { s: "PENDING_SCM_DECISION", l: "SCM", role: "SCM_PULL" }, { s: "PENDING_VP_SCM", l: "VP SCM", role: "VP_SCM" },
+  { s: "PENDING_FINAL", l: "Final approval", role: "PULL_PRESIDENT" }, { s: "APPROVED", l: "Approved", role: "" },
 ]
 const PC_CHAIN = [
-  { s: "PENDING_PURCHASING", l: "Purchasing" }, { s: "PENDING_LOGISTICS", l: "Logistics" },
-  { s: "PENDING_PC_DECISION", l: "PC decision" }, { s: "PENDING_DVM_PUR", l: "DVM Purchasing" },
-  { s: "PENDING_VP_PUR", l: "VP Purchasing" }, { s: "APPROVED", l: "Approved" },
+  { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" }, { s: "PENDING_LOGISTICS", l: "Logistics", role: "LOGISTICS_IMPORT" },
+  { s: "PENDING_PC_DECISION", l: "PC decision", role: "PURCHASING" }, { s: "PENDING_DVM_PUR", l: "DVM Purchasing", role: "DVM_PUR" },
+  { s: "PENDING_VP_PUR", l: "VP Purchasing", role: "VP_PUR" }, { s: "APPROVED", l: "Approved", role: "" },
 ]
+const nameOf = (u: any) => u?.name || (u?.email ? String(u.email).split("@")[0] : "")
 
 export default function Page() {
   const { data: session } = useSession()
@@ -38,6 +39,18 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // role → approver names (for the stepper)
+  const [roleNames, setRoleNames] = useState<Record<string, string[]>>({})
+  useEffect(() => {
+    fetch("/api/pull-material/approvers").then(r => r.json()).then(d => {
+      const map: Record<string, string[]> = {}
+      for (const u of (d.users || [])) {
+        const held = [u.role, ...(u.roles || [])].filter(Boolean)
+        for (const rl of new Set(held)) { (map[rl as string] ||= []).push(nameOf(u)) }
+      }
+      setRoleNames(map)
+    }).catch(() => {})
+  }, [])
 
   const load = async () => {
     setLoading(true)
@@ -115,14 +128,27 @@ export default function Page() {
         const total = (openReq.items || []).reduce((s: number, it: any) => s + (Number(it.airFreightCost) || 0), 0)
         return (
           <div className="space-y-5">
+            <button onClick={() => setOpenId(null)} className="text-sm text-gray-400 hover:text-gray-700 flex items-center gap-1">← Back</button>
+            {/* Header: doc info left · action buttons top-right (GM74 style) */}
             <div className="flex items-start justify-between gap-3 flex-wrap">
-              <button onClick={() => setOpenId(null)} className="text-sm text-gray-400 hover:text-gray-700 flex items-center gap-1">← Back</button>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold text-gray-900">{openReq.documentNo}</h1>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{cfg?.label || openReq.status}</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">{openReq.requestType === "PURCHASING" ? "PC branch" : "SCM branch"}</span>
-              <span className="text-xs text-gray-400">by {openReq.requesterName} · {fmtDate(openReq.createdAt)}</span>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-2xl font-bold text-gray-900">{openReq.documentNo}</h1>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{cfg?.label || openReq.status}</span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">{openReq.requestType === "PURCHASING" ? "PC branch" : "SCM branch"}</span>
+                <span className="text-xs text-gray-400">by {openReq.requesterName} · {fmtDate(openReq.createdAt)}</span>
+              </div>
+              {cfg && canApprove(openReq.status) && (
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => act(openReq, cfg.next)} disabled={busy}
+                    className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 shadow-sm" style={{ background: "#16a34a" }}>
+                    {busy ? "…" : cfg.next === "APPROVED" ? "✓ Approve (final)" : "✓ Approve"}
+                  </button>
+                  <button onClick={() => reject(openReq)} disabled={busy}
+                    className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 bg-red-600 hover:bg-red-700 shadow-sm">
+                    ✕ Reject
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="grid lg:grid-cols-3 gap-5">
@@ -170,23 +196,25 @@ export default function Page() {
                 </div>
               </div>
 
-              {/* Right: approval stepper + actions */}
+              {/* Right: approval stepper (shows the actual approver name per stage) */}
               <div className="space-y-4">
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                   <div className="text-sm font-bold text-gray-800 mb-4">Approval steps</div>
                   <div className="space-y-0">
                     {chain.map((step, i) => {
                       const done = i < curIdx, current = i === curIdx
+                      const who = step.role ? (roleNames[step.role] || []).join(", ") : ""
                       return (
                         <div key={step.s} className="flex gap-3">
                           <div className="flex flex-col items-center">
                             <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${done ? "bg-green-500 text-white" : current ? "bg-amber-400 text-white" : "bg-gray-200 text-gray-400"}`}>
                               {done ? "✓" : current ? "●" : "○"}
                             </div>
-                            {i < chain.length - 1 && <div className={`w-0.5 flex-1 min-h-[24px] ${done ? "bg-green-400" : "bg-gray-200"}`} />}
+                            {i < chain.length - 1 && <div className={`w-0.5 flex-1 min-h-[26px] ${done ? "bg-green-400" : "bg-gray-200"}`} />}
                           </div>
-                          <div className={`pb-4 ${current ? "" : "opacity-70"}`}>
+                          <div className={`pb-4 ${current ? "" : "opacity-80"}`}>
                             <div className={`text-sm font-semibold ${current ? "text-amber-700" : done ? "text-gray-700" : "text-gray-400"}`}>{step.l}</div>
+                            {who && <div className="text-[11px] text-gray-500">{who}</div>}
                             {current && <div className="text-[11px] text-amber-600">รออนุมัติ</div>}
                           </div>
                         </div>
@@ -194,23 +222,6 @@ export default function Page() {
                     })}
                   </div>
                 </div>
-
-                {cfg && canApprove(openReq.status) && (
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-2">
-                    <button onClick={() => act(openReq, cfg.next)} disabled={busy}
-                      className="w-full px-4 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#16a34a" }}>
-                      {busy ? "…" : cfg.next === "APPROVED" ? "✓ Approve (final)" : "✓ Approve"}
-                    </button>
-                    <button onClick={() => reject(openReq)} disabled={busy}
-                      className="w-full px-4 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 bg-red-600 hover:bg-red-700">
-                      ✕ Reject
-                    </button>
-                    <button onClick={() => act(openReq, cfg.back)} disabled={busy}
-                      className="w-full px-4 py-2 rounded-xl text-sm font-medium border border-gray-300 text-gray-600 disabled:opacity-50">
-                      ↩ {cfg.backLabel}
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
