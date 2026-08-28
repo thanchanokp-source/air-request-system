@@ -4,15 +4,25 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import seed from "./rates.json"
 
-// Inline-edit one route's rates (admin).
+// Inline-edit one route's rates, OR create a NEW port row (Admin + Logistics Import).
 export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session || (session.user as any).role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  const { id, rates } = await req.json()
-  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
+  const u: any = session?.user
+  const canEdit = !!u && (u.role === "ADMIN" || (Array.isArray(u.roles) && u.roles.includes("LOGISTICS_IMPORT")))
+  if (!canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const body = await req.json()
   const clean: Record<string, number> = {}
-  for (const [k, v] of Object.entries(rates || {})) { const n = Number(v); if (v !== "" && v != null && !isNaN(n)) clean[k] = n }
-  const row = await (prisma as any).pullFreightAir.update({ where: { id }, data: { rates: clean } })
+  for (const [k, v] of Object.entries(body.rates || {})) { const n = Number(v); if (v !== "" && v != null && !isNaN(n)) clean[k] = n }
+  // Create a new AIR port row (Purchase flagged it as "Other" — not in master).
+  if (body.create) {
+    if (!body.origin) return NextResponse.json({ error: "origin (air port) required" }, { status: 400 })
+    const row = await (prisma as any).pullFreightAir.create({
+      data: { origin: String(body.origin).trim(), country: body.country || null, destination: body.destination || "BKK", fwd: body.fwd || null, airline: body.airline || null, tt: body.tt || null, rates: clean },
+    })
+    return NextResponse.json({ ok: true, row })
+  }
+  if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 })
+  const row = await (prisma as any).pullFreightAir.update({ where: { id: body.id }, data: { rates: clean } })
   return NextResponse.json({ ok: true, row })
 }
 

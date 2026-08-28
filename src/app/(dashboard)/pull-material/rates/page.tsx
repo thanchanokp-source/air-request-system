@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useSession } from "next-auth/react"
+import { useSearchParams } from "next/navigation"
 import { MAROON, fmt } from "../_StageWork"
 
 const AIR_BREAKS = ["M", "N", "Q45", "Q100", "Q250", "Q300", "Q500", "Q1000", "Q2000", "Q8000"]
@@ -19,14 +20,33 @@ export default function PullRatesPage() {
   const [busy, setBusy] = useState(false)
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
 
+  // ?prefill=<JSON [{type:'air'|'sea', country, port}]> → pre-create draft rows for ports Purchase
+  // flagged as "Other" (from the "add missing port rate" email link). LG just fills the numbers.
+  const params = useSearchParams()
+  const prefilled = useRef(false)
   const load = async () => {
     const [a, s] = await Promise.all([
       fetch("/api/pull-material/air-rates").then(r => r.json()).catch(() => ({})),
       fetch("/api/pull-material/sea-rates").then(r => r.json()).catch(() => ({})),
     ])
-    setAir(a.rows || []); setSea(s.rows || []); setEdits({})
+    let airRows = a.rows || [], seaRows = s.rows || []
+    if (!prefilled.current) {
+      const raw = params.get("prefill")
+      if (raw) {
+        try {
+          const list = JSON.parse(raw) as any[]
+          const airNew = list.filter(x => x.type === "air" && x.port).map((x, i) => ({ id: `new_air_${i}`, _new: true, origin: x.port, country: x.country || null, destination: "BKK", fwd: null, airline: null, tt: null, rates: {} }))
+          const seaNew = list.filter(x => x.type === "sea" && x.port).map((x, i) => ({ id: `new_sea_${i}`, _new: true, country: x.country || null, port: x.port, rates: {} }))
+          if (airNew.length) airRows = [...airNew, ...airRows]
+          if (seaNew.length) seaRows = [...seaNew, ...seaRows]
+          if (seaNew.length && !airNew.length) setTab("sea"); else if (airNew.length) setTab("air")
+        } catch { /* bad prefill → ignore */ }
+      }
+      prefilled.current = true
+    }
+    setAir(airRows); setSea(seaRows); setEdits({})
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, []) // eslint-disable-line
 
   const reload = async (which: "air" | "sea") => {
     if (!confirm(`Reload ${which.toUpperCase()} rates from the bundled Rate_LG data? This replaces the current ${which} master.`)) return
@@ -42,20 +62,27 @@ export default function PullRatesPage() {
   const setCell = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
 
   const saveAll = async () => {
-    const ids = Object.keys(edits)
-    if (!ids.length) return
+    const which = tab
+    const src = which === "air" ? air : sea
+    const newRows = src.filter((r: any) => r._new)
+    const editedIds = Object.keys(edits).filter(id => !String(id).startsWith("new_"))
+    if (!newRows.length && !editedIds.length) return
     setBusy(true)
     try {
-      const which = tab
-      const src = which === "air" ? air : sea
-      await Promise.all(ids.map(id => {
+      // Create the new port rows (from the "Other" flag) with whatever rate cells LG filled.
+      for (const nr of newRows) {
+        const rates = { ...(edits[nr.id] || {}) }
+        const payload: any = which === "air"
+          ? { create: true, origin: nr.origin, country: nr.country, destination: nr.destination || "BKK", fwd: nr.fwd, airline: nr.airline, tt: nr.tt, rates }
+          : { create: true, country: nr.country, port: nr.port, rates }
+        await fetch(`/api/pull-material/${which}-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      }
+      // Update the edited existing rows.
+      await Promise.all(editedIds.map(id => {
         const row = src.find((r: any) => r.id === id)
         if (!row) return null
-        const rates = { ...(row.rates || {}), ...edits[id] } // merged (empty strings dropped server-side)
-        return fetch(`/api/pull-material/${which}-rates`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, rates }),
-        })
+        const rates = { ...(row.rates || {}), ...edits[id] }
+        return fetch(`/api/pull-material/${which}-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, rates }) })
       }))
       await load()
     } finally { setBusy(false) }
@@ -66,7 +93,8 @@ export default function PullRatesPage() {
   const qq = q.trim().toLowerCase()
   const airRows = air.filter(r => !qq || `${r.origin} ${r.destination} ${r.fwd} ${r.airline}`.toLowerCase().includes(qq))
   const seaRows = sea.filter(r => !qq || `${r.country} ${r.port}`.toLowerCase().includes(qq))
-  const editCount = Object.keys(edits).length
+  const newCount = (tab === "air" ? air : sea).filter((r: any) => r._new).length
+  const editCount = Object.keys(edits).filter(id => !String(id).startsWith("new_")).length + newCount
   const cellInp = "w-16 border border-gray-200 rounded px-1.5 py-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-red-300"
 
   return (
@@ -102,8 +130,8 @@ export default function PullRatesPage() {
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {airRows.map(r => (
-                <tr key={r.id} className={`hover:bg-gray-50 ${edits[r.id] ? "bg-green-50" : ""}`}>
-                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.country || "-"}</td>
+                <tr key={r.id} className={`hover:bg-gray-50 ${r._new ? "bg-amber-50" : edits[r.id] ? "bg-green-50" : ""}`}>
+                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.country || "-"}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
                   <td className="px-3 py-1.5 font-semibold text-gray-800">{r.origin}</td>
                   <td className="px-3 py-1.5">{r.destination}</td>
                   <td className="px-3 py-1.5">{r.fwd || "-"}</td>
@@ -129,8 +157,8 @@ export default function PullRatesPage() {
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {seaRows.map(r => (
-                <tr key={r.id} className={`hover:bg-gray-50 ${edits[r.id] ? "bg-green-50" : ""}`}>
-                  <td className="px-3 py-1.5 text-gray-600">{r.country}</td>
+                <tr key={r.id} className={`hover:bg-gray-50 ${r._new ? "bg-amber-50" : edits[r.id] ? "bg-green-50" : ""}`}>
+                  <td className="px-3 py-1.5 text-gray-600">{r.country}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
                   <td className="px-3 py-1.5 font-semibold text-gray-800">{r.port}</td>
                   {SEA_CT.map(c => (
                     <td key={c} className="px-2 py-1 text-right">

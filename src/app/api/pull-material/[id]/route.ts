@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
 import { notifyPullLogistics } from "@/lib/pull-notify"
+import { magicLoginFor } from "@/lib/notify"
 
 // TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
 async function pullTestRecipient(id: string): Promise<string | null> {
@@ -126,33 +127,45 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
-  // Purchase flagged a port/country NOT in the freight master → email Logistics to add its rate.
+  // Purchase flagged a port/country NOT in the freight master → email Logistics Import a magic link
+  // straight to MASTER RATE with the missing port(s) pre-created as draft rows → LG just fills numbers.
   if (Array.isArray(body.otherPorts) && body.otherPorts.length) {
     const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { documentNo: true, bu: true } })
     const bu = rq?.bu || "NYG"
-    // Pull RM logistics = LOGISTICS_IMPORT (its own import-logistics team, all BUs).
-    const lgRoles = ["LOGISTICS_IMPORT"]
     const lgUsers = await (prisma.user as any).findMany({
-      where: { isActive: true, OR: [{ role: { in: lgRoles } }, { roles: { hasSome: lgRoles } }] },
-      select: { email: true },
+      where: { isActive: true, OR: [{ role: "LOGISTICS_IMPORT" }, { roles: { has: "LOGISTICS_IMPORT" } }] },
+      select: { id: true, email: true },
     })
-    const to = [...new Set(lgUsers.map((u: any) => u.email).filter(Boolean))]
-    if (to.length) {
+    const seenU = new Set<string>()
+    const recips = lgUsers.filter((u: any) => u.email && !seenU.has(u.email.toLowerCase()) && seenU.add(u.email.toLowerCase()))
+    if (recips.length) {
+      // Prefill entries for the rates page (dedup): one per air port + one per sea port.
+      const pf: { type: string; country: string; port: string }[] = []
+      const seenPf = new Set<string>()
+      for (const p of body.otherPorts) {
+        if (p.port) { const k = `air|${p.country}|${p.port}`; if (!seenPf.has(k)) { seenPf.add(k); pf.push({ type: "air", country: p.country || "", port: p.port }) } }
+        if (p.seaPort) { const k = `sea|${p.country}|${p.seaPort}`; if (!seenPf.has(k)) { seenPf.add(k); pf.push({ type: "sea", country: p.country || "", port: p.seaPort }) } }
+      }
       const rows = body.otherPorts.map((p: any) =>
         `<tr><td style="padding:3px 12px 3px 0;color:#666">SO ${p.so || "-"}</td><td style="padding:3px 12px 3px 0"><b>${p.country || "-"}</b>${p.newCountry ? ' <span style="color:#b45309">(new)</span>' : ""}</td><td>${[p.port ? "✈ " + p.port : "", p.seaPort ? "🚢 " + p.seaPort : ""].filter(Boolean).join(" · ") || "-"}</td></tr>`
       ).join("")
-      const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
-        <h2 style="color:#b45309;margin:0 0 10px">Pull Material — new port needs a rate</h2>
-        <p>Purchase selected a port/country <b>not in the freight master</b> on <b>${rq?.documentNo}</b> (${bu}).<br/>Please add its rate in <b>MASTER RATE</b> so freight can be calculated.</p>
-        <table style="border-collapse:collapse;font-size:13px;margin-top:6px">
-          <tr><td style="color:#999;padding-right:12px">SO</td><td style="color:#999;padding-right:12px">Country</td><td style="color:#999">Port</td></tr>
-          ${rows}
-        </table>
-        <p style="color:#888;font-size:12px;margin-top:12px">The document has moved to Logistics for freight entry.</p>
-      </div>`
-      // TEST doc → reroute to creator (shows "meant for"); real doc → the LG Import team.
-      await runWithTestMail(await pullTestRecipient(id), () =>
-        sendMail(to as string[], `Pull Material — add missing port rate (${rq?.documentNo})`, html)).catch(() => {})
+      const redirect = `/pull-material/rates?prefill=${encodeURIComponent(JSON.stringify(pf))}`
+      await runWithTestMail(await pullTestRecipient(id), async () => {
+        for (const u of recips) {
+          const link = await magicLoginFor(u.id, redirect)
+          const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
+            <h2 style="color:#b45309;margin:0 0 10px">Pull Material — new port needs a rate</h2>
+            <p>Purchase selected a port/country <b>not in the freight master</b> on <b>${rq?.documentNo}</b> (${bu}).<br/>Click below → the port is pre-created in <b>MASTER RATE</b>; just fill the rate numbers and Save.</p>
+            <table style="border-collapse:collapse;font-size:13px;margin-top:6px">
+              <tr><td style="color:#999;padding-right:12px">SO</td><td style="color:#999;padding-right:12px">Country</td><td style="color:#999">Port</td></tr>
+              ${rows}
+            </table>
+            <p style="margin-top:14px"><a href="${link}" style="background:#b45309;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;display:inline-block">Add rate in Master Rate →</a></p>
+            <p style="color:#9ca3af;font-size:12px;margin-top:12px">This link logs you in automatically and opens the port ready to fill.</p>
+          </div>`
+          await sendMail([u.email], `Pull Material — add missing port rate (${rq?.documentNo})`, html).catch(() => {})
+        }
+      }).catch(() => {})
     }
   }
 
