@@ -1,19 +1,28 @@
 "use client"
-import { useSession } from "next-auth/react"
-import { StageWork } from "../_StageWork"
 
-// Role-adaptive approval. Each approver role sees ONLY the stage it owns and advances it:
-//   SCM branch:  VP_SCM (Saji)        PENDING_VP_SCM → PENDING_FINAL
-//                PRESIDENT (Khomkrit) PENDING_FINAL  → APPROVED
-//   PC branch:   DVM_PUR              PENDING_DVM_PUR → PENDING_VP_PUR
-//                VP_PUR               PENDING_VP_PUR  → APPROVED
-// Admin sees every stage (incl. legacy PENDING_APPROVAL) so they can push any doc through.
-const STAGES = [
-  { key: "PENDING_VP_SCM",   roles: ["VP_SCM"],    title: "Approval — VP SCM",         sub: "SCM branch · approve → President (K.Khomkrit)", next: "PENDING_FINAL",  back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
-  { key: "PENDING_FINAL",    roles: ["PULL_PRESIDENT"], title: "Approval — President (Pull)", sub: "SCM branch · final approval (K.Khomkrit)",  next: "APPROVED",       back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
-  { key: "PENDING_DVM_PUR",  roles: ["DVM_PUR"],   title: "Approval — DVM Purchasing", sub: "PC branch · approve → VP Purchasing",           next: "PENDING_VP_PUR", back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
-  { key: "PENDING_VP_PUR",   roles: ["VP_PUR"],    title: "Approval — VP Purchasing",  sub: "PC branch · final approval",                    next: "APPROVED",       back: "PENDING_DVM_PUR",      backLabel: "Send back to DVM Pur" },
-  { key: "PENDING_APPROVAL", roles: [],            title: "Approval (legacy)",         sub: "Older documents pending a single approval",     next: "APPROVED",       back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
+import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
+import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
+
+// Approver stages: which role owns each, and where Approve / Send-back go.
+const APPROVER: Record<string, { role: string; label: string; next: string; back: string; backLabel: string }> = {
+  PENDING_VP_SCM:   { role: "VP_SCM",         label: "VP SCM",         next: "PENDING_FINAL",   back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
+  PENDING_FINAL:    { role: "PULL_PRESIDENT", label: "President",      next: "APPROVED",        back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
+  PENDING_DVM_PUR:  { role: "DVM_PUR",        label: "DVM Purchasing", next: "PENDING_VP_PUR",  back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
+  PENDING_VP_PUR:   { role: "VP_PUR",         label: "VP Purchasing",  next: "APPROVED",        back: "PENDING_DVM_PUR",      backLabel: "Send back to DVM Pur" },
+  PENDING_APPROVAL: { role: "ADMIN",          label: "Approval (legacy)", next: "APPROVED",     back: "PENDING_SCM_DECISION", backLabel: "Send back" },
+}
+
+// Full stage chain per branch — for the right-side stepper.
+const SCM_CHAIN = [
+  { s: "PENDING_PURCHASING", l: "Purchasing" }, { s: "PENDING_LOGISTICS", l: "Logistics" },
+  { s: "PENDING_SCM_DECISION", l: "SCM decision" }, { s: "PENDING_VP_SCM", l: "VP SCM" },
+  { s: "PENDING_FINAL", l: "President (K.Khomkrit)" }, { s: "APPROVED", l: "Approved" },
+]
+const PC_CHAIN = [
+  { s: "PENDING_PURCHASING", l: "Purchasing" }, { s: "PENDING_LOGISTICS", l: "Logistics" },
+  { s: "PENDING_PC_DECISION", l: "PC decision" }, { s: "PENDING_DVM_PUR", l: "DVM Purchasing" },
+  { s: "PENDING_VP_PUR", l: "VP Purchasing" }, { s: "APPROVED", l: "Approved" },
 ]
 
 export default function Page() {
@@ -21,23 +30,196 @@ export default function Page() {
   const myRoles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const isAdmin = myRoles.includes("ADMIN")
 
-  // Stages this user owns. Admin → all; legacy PENDING_APPROVAL only for admin.
-  const mine = STAGES.filter(s => isAdmin || s.roles.some(r => myRoles.includes(r)))
+  // Statuses this user can approve (admin = all).
+  const canApprove = (st: string) => isAdmin || myRoles.includes(APPROVER[st]?.role)
 
-  if (mine.length === 0) {
-    return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">No approval stage for your role</p></div>
+  const [bu, setBu] = useState("NYG")
+  const [reqs, setReqs] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json())
+      const wanted = new Set(Object.keys(APPROVER).filter(st => canApprove(st)))
+      setReqs((d.requests || []).filter((r: any) => wanted.has(r.status)))
+    } finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [bu, isAdmin]) // eslint-disable-line
+
+  const act = async (rq: any, toStatus: string) => {
+    const label = toStatus === "APPROVED" ? "Approve" : "Send back"
+    if (!confirm(`${label} ${rq.documentNo}?`)) return
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/pull-material/${rq.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: toStatus }),
+      })
+      if (r.ok) { setOpenId(null); await load() } else alert("Error")
+    } finally { setBusy(false) }
   }
 
+  const reject = async (rq: any) => {
+    const reason = prompt(`Reject ${rq.documentNo} — reason?`)
+    if (reason == null || !reason.trim()) return
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/pull-material/${rq.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "REJECTED", rejectReason: reason.trim() }),
+      })
+      if (r.ok) { setOpenId(null); await load() } else alert("Error")
+    } finally { setBusy(false) }
+  }
+
+  const openReq = reqs.find(r => r.id === openId)
+
   return (
-    <div className="space-y-6">
-      {mine.map(s => (
-        <StageWork key={s.key}
-          title={s.title} subtitle={s.sub} status={s.key} fields={[]}
-          roles={s.roles.length ? s.roles : undefined}
-          primary={{ label: "Approve", toStatus: s.next, color: "#16a34a" }}
-          secondary={{ label: s.backLabel, toStatus: s.back }}
-        />
-      ))}
+    <div className="p-5 md:p-8 max-w-[1100px] mx-auto space-y-5">
+      {!openReq && (
+        <>
+          <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Approval — Pull Material</h1>
+            <p className="text-sm text-gray-400 mt-0.5">Documents pending your approval</p></div>
+          <div className="flex gap-1.5">{BUS.map(b => (
+            <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${bu === b ? "text-white border-transparent shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
+          ))}</div>
+
+          {loading ? <p className="text-sm text-gray-400">Loading…</p> :
+            reqs.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">No documents pending your approval</div> :
+              <div className="space-y-2.5">
+                {reqs.map(rq => (
+                  <button key={rq.id} onClick={() => setOpenId(rq.id)}
+                    className="w-full flex items-center justify-between gap-3 px-5 py-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition text-left">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-gray-900">{rq.documentNo}</span>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{APPROVER[rq.status]?.label || rq.status}</span>
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{rq.requestType === "PURCHASING" ? "PC branch" : "SCM branch"}</span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items?.length || 0} items · {[...new Set((rq.items || []).map((i: any) => i.soNoDoc))].join(", ")}</div>
+                    </div>
+                    <span className="text-gray-300 text-lg">›</span>
+                  </button>
+                ))}
+              </div>}
+        </>
+      )}
+
+      {openReq && (() => {
+        const chain = openReq.requestType === "PURCHASING" ? PC_CHAIN : SCM_CHAIN
+        const curIdx = chain.findIndex(s => s.s === openReq.status)
+        const cfg = APPROVER[openReq.status]
+        const total = (openReq.items || []).reduce((s: number, it: any) => s + (Number(it.airFreightCost) || 0), 0)
+        return (
+          <div className="space-y-5">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <button onClick={() => setOpenId(null)} className="text-sm text-gray-400 hover:text-gray-700 flex items-center gap-1">← Back</button>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl font-bold text-gray-900">{openReq.documentNo}</h1>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{cfg?.label || openReq.status}</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">{openReq.requestType === "PURCHASING" ? "PC branch" : "SCM branch"}</span>
+              <span className="text-xs text-gray-400">by {openReq.requesterName} · {fmtDate(openReq.createdAt)}</span>
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-5">
+              {/* Left: doc info + items */}
+              <div className="lg:col-span-2 space-y-5">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <div className="text-sm font-bold text-gray-800 mb-3">📄 Document</div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                    <Info label="BU" value={openReq.bu} />
+                    <Info label="Type" value={openReq.requestType === "PURCHASING" ? "PC request" : "SCM request"} />
+                    <Info label="Requester" value={openReq.requesterName} />
+                    <Info label="Items" value={String(openReq.items?.length || 0)} />
+                    {openReq.remark && <div className="col-span-2"><Info label="Remark" value={openReq.remark} /></div>}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="text-sm font-bold text-gray-800 px-5 pt-5 pb-2">Items</div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 text-gray-500"><tr>
+                        {["SO", "Material", "PULL", "Country", "Port", "Incoterm", "Wt(kg)", "Air Freight", "L/T Air", "Air?", "Reason"].map(h =>
+                          <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+                      </tr></thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {(openReq.items || []).map((it: any) => (
+                          <tr key={it.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{it.soNoDoc}</td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">{it.itemName || it.itemCode}</td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">{it.country || "-"}</td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">{it.port || it.seaPort || "-"}</td>
+                            <td className="px-3 py-1.5">{it.incoterm || "-"}</td>
+                            <td className="px-3 py-1.5 text-right">{fmt(it.weight)}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(it.airFreightCost)}</td>
+                            <td className="px-3 py-1.5">{it.leadTimeAir || "-"}</td>
+                            <td className="px-3 py-1.5 text-center">{it.airDecision === "AIR" ? "✈" : it.airDecision === "NO_AIR" ? "—" : ""}</td>
+                            <td className="px-3 py-1.5 text-gray-500 max-w-[160px] truncate" title={it.reasonAirPick || ""}>{it.reasonAirPick || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot><tr className="bg-gray-50 font-semibold"><td colSpan={7} className="px-3 py-2 text-right text-gray-600">Total Air Freight</td><td className="px-3 py-2 text-right" style={{ color: MAROON }}>{fmt(total)}</td><td colSpan={3}></td></tr></tfoot>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: approval stepper + actions */}
+              <div className="space-y-4">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <div className="text-sm font-bold text-gray-800 mb-4">Approval steps</div>
+                  <div className="space-y-0">
+                    {chain.map((step, i) => {
+                      const done = i < curIdx, current = i === curIdx
+                      return (
+                        <div key={step.s} className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${done ? "bg-green-500 text-white" : current ? "bg-amber-400 text-white" : "bg-gray-200 text-gray-400"}`}>
+                              {done ? "✓" : current ? "●" : "○"}
+                            </div>
+                            {i < chain.length - 1 && <div className={`w-0.5 flex-1 min-h-[24px] ${done ? "bg-green-400" : "bg-gray-200"}`} />}
+                          </div>
+                          <div className={`pb-4 ${current ? "" : "opacity-70"}`}>
+                            <div className={`text-sm font-semibold ${current ? "text-amber-700" : done ? "text-gray-700" : "text-gray-400"}`}>{step.l}</div>
+                            {current && <div className="text-[11px] text-amber-600">รออนุมัติ</div>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {cfg && canApprove(openReq.status) && (
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-2">
+                    <button onClick={() => act(openReq, cfg.next)} disabled={busy}
+                      className="w-full px-4 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#16a34a" }}>
+                      {busy ? "…" : cfg.next === "APPROVED" ? "✓ Approve (final)" : "✓ Approve"}
+                    </button>
+                    <button onClick={() => reject(openReq)} disabled={busy}
+                      className="w-full px-4 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 bg-red-600 hover:bg-red-700">
+                      ✕ Reject
+                    </button>
+                    <button onClick={() => act(openReq, cfg.back)} disabled={busy}
+                      className="w-full px-4 py-2 rounded-xl text-sm font-medium border border-gray-300 text-gray-600 disabled:opacity-50">
+                      ↩ {cfg.backLabel}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
+}
+
+function Info({ label, value }: { label: string; value: any }) {
+  return <div><div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div><div className="text-gray-800">{value || "-"}</div></div>
 }

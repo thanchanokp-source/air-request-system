@@ -83,16 +83,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const actorEmail = (session.user as any).email as string | undefined
 
-  if (body.status && (PULL_FLOW as readonly string[]).concat(["NO_AIR", "RECALLED"]).includes(body.status)) {
+  if (body.status && (PULL_FLOW as readonly string[]).concat(["NO_AIR", "RECALLED", "REJECTED"]).includes(body.status)) {
     const data: any = { status: body.status }
+    const isStop = body.status === "RECALLED" || body.status === "REJECTED"
 
-    if (body.status === "RECALLED") {
-      const reason = String(body.recallReason || "").trim()
-      if (!reason) return NextResponse.json({ error: "recallReason required" }, { status: 400 })
+    if (isStop) {
+      const reason = String((body.status === "REJECTED" ? body.rejectReason : body.recallReason) || "").trim()
+      if (!reason) return NextResponse.json({ error: "reason required" }, { status: 400 })
       data.recallReason = reason
       data.recalledBy = actorEmail || null
     } else if (actorEmail) {
-      // Record everyone who acted on the doc (PC/LG/SCM) — they get notified on recall.
+      // Record everyone who acted on the doc (PC/LG/SCM) — they get notified on recall/reject.
       const cur = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { actors: true } })
       const set = new Set<string>([...(cur?.actors || []), actorEmail])
       data.actors = [...set]
@@ -100,21 +101,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data })
 
-    // Alert the owner(s) of the NEW stage (magic-link per person). Covers every transition:
+    // Alert the owner(s) of the NEW stage (magic-link per person). Covers every forward transition:
     // Logistics, SCM/PC decision, VP SCM, President, DVM/VP Purchasing, and APPROVED (→ requester).
-    if (body.status && body.status !== "RECALLED") await notifyPullStage(id, body.status).catch(() => {})
+    if (!isStop) await notifyPullStage(id, body.status).catch(() => {})
 
-    if (body.status === "RECALLED") {
+    if (isStop) {
+      const word = body.status === "REJECTED" ? "Rejected" : "Recalled"
       const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, include: { items: true } })
       // Notify the whole chain (everyone who acted) + the requester.
       const recipients = [...new Set([...(rq.actors || []), rq.requesterEmail].filter(Boolean))].filter((e) => e !== actorEmail)
       if (recipients.length) {
         const sos = [...new Set((rq.items || []).map((i: any) => i.soNoDoc).filter(Boolean))].join(", ")
         const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
-          <h2 style="color:#b45309;margin:0 0 10px">Pull Material Recalled</h2>
-          <p><b>${rq.documentNo}</b> (${rq.bu}) has been <b>recalled</b> and withdrawn from the flow.</p>
+          <h2 style="color:#b45309;margin:0 0 10px">Pull Material ${word}</h2>
+          <p><b>${rq.documentNo}</b> (${rq.bu}) has been <b>${word.toLowerCase()}</b> and withdrawn from the flow.</p>
           <table style="border-collapse:collapse;font-size:13px">
-            <tr><td style="padding:2px 10px 2px 0;color:#666">Recalled by</td><td>${data.recalledBy || "-"}</td></tr>
+            <tr><td style="padding:2px 10px 2px 0;color:#666">${word} by</td><td>${data.recalledBy || "-"}</td></tr>
             <tr><td style="padding:2px 10px 2px 0;color:#666">Reason</td><td><b>${data.recallReason}</b></td></tr>
             <tr><td style="padding:2px 10px 2px 0;color:#666">SO</td><td>${sos || "-"}</td></tr>
             <tr><td style="padding:2px 10px 2px 0;color:#666">Requester</td><td>${rq.requesterName}</td></tr>
@@ -122,7 +124,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           <p style="color:#888;font-size:12px;margin-top:12px">No further action is needed on this document.</p>
         </div>`
         await runWithTestMail(await pullTestRecipient(id), () =>
-          sendMail(recipients as string[], `Pull Material Recalled — ${rq.documentNo}`, html)).catch(() => {})
+          sendMail(recipients as string[], `Pull Material ${word} — ${rq.documentNo}`, html)).catch(() => {})
       }
       return NextResponse.json({ request: rq })
     }
