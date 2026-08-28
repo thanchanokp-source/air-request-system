@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
 import { magicLoginFor } from "@/lib/notify"
+import { notifyPullLogistics } from "@/lib/pull-notify"
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000"
 
@@ -144,6 +145,9 @@ export async function POST(req: NextRequest) {
       }).catch(() => {})
     }
   }
+
+  // PC branch: created straight at Logistics (Purchase filled at creation) → alert LG Import.
+  if (created.status === "PENDING_LOGISTICS") await notifyPullLogistics(created.id).catch(() => {})
 
   return NextResponse.json({ request: created })
 }

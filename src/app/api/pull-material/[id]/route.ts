@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
+import { notifyPullLogistics } from "@/lib/pull-notify"
 
 // TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
 async function pullTestRecipient(id: string): Promise<string | null> {
@@ -97,6 +98,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data })
+
+    // Reached Logistics (Purchase done) → alert the LG Import team (magic-link per person).
+    if (body.status === "PENDING_LOGISTICS") await notifyPullLogistics(id).catch(() => {})
 
     if (body.status === "RECALLED") {
       const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, include: { items: true } })
