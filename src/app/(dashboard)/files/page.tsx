@@ -143,6 +143,8 @@ export default function FilesPage() {
   }, [])
 
   const [hawbUploading, setHawbUploading] = useState<string | null>(null)
+  const [hawbPanel, setHawbPanel] = useState<Set<string>>(new Set())
+  const toggleHawbPanel = (id: string) => setHawbPanel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   // Attach a supporting file to a specific HAWB (retroactive, after LG already sent).
   const attachHawb = async (reqId: string, hawbNo: string, file: File) => {
     const key = `${reqId}:${hawbNo}`
@@ -780,30 +782,47 @@ export default function FilesPage() {
                             {/* Items under document */}
                             {(expandedDocs.has(docKey) || hasFilter) && (
                               <div className="pl-20 pr-5 pb-3 bg-blue-50 border-t border-blue-100">
-                                {/* Attach supporting files BY HAWB (retroactive) */}
+                                {/* Attach supporting files BY HAWB (retroactive) — collapsible + compact grid */}
                                 {(() => {
                                   const hawbs = [...new Set((req.items || []).map((i: any) => (i.hawbNo || "").trim()).filter(Boolean))] as string[]
                                   if (!hawbs.length) return <p className="text-xs text-gray-400 mt-2">No HAWB yet — enter HAWB in LG Booking first, then attach files here.</p>
+                                  const open = hawbPanel.has(req.id)
+                                  const attached = hawbs.filter(h => (req.attachments || []).some((a: any) => (a.hawbNo || "") === h)).length
                                   return (
-                                    <div className="mt-2 space-y-1.5">
-                                      {hawbs.map(h => {
-                                        const files = (req.attachments || []).filter((a: any) => (a.hawbNo || "") === h)
-                                        const key = `${req.id}:${h}`
-                                        return (
-                                          <div key={h} className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
-                                            <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">HAWB {h}</span>
-                                            {files.map((a: any) => (
-                                              <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer"
-                                                className="text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded hover:bg-orange-100 max-w-[180px] truncate">📎 {a.fileName}</a>
-                                            ))}
-                                            <label className={`text-xs px-2 py-0.5 rounded border font-medium cursor-pointer ml-auto ${hawbUploading === key ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : "border-blue-300 text-blue-600 hover:bg-blue-50"}`}>
-                                              {hawbUploading === key ? "Uploading…" : "📎 Attach"}
-                                              <input type="file" className="hidden" onClick={e => e.stopPropagation()}
-                                                onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) attachHawb(req.id, h, f) }} />
-                                            </label>
-                                          </div>
-                                        )
-                                      })}
+                                    <div className="mt-2">
+                                      <button onClick={e => { e.stopPropagation(); toggleHawbPanel(req.id) }}
+                                        className="text-xs font-medium text-gray-600 hover:text-gray-900 flex items-center gap-1.5">
+                                        <span className="text-gray-400">{open ? "▾" : "▸"}</span>📎 Attach files by HAWB
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${attached === hawbs.length ? "bg-green-50 text-green-700 border border-green-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>{attached}/{hawbs.length} attached</span>
+                                      </button>
+                                      {open && (
+                                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                                          {hawbs.map(h => {
+                                            const files = (req.attachments || []).filter((a: any) => (a.hawbNo || "") === h)
+                                            const key = `${req.id}:${h}`
+                                            return (
+                                              <div key={h} className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-[11px] font-semibold text-gray-700 truncate flex-1" title={h}>{h}</span>
+                                                  <label className={`text-[11px] px-1.5 py-0.5 rounded border font-medium cursor-pointer shrink-0 ${hawbUploading === key ? "opacity-50 pointer-events-none bg-gray-50 border-gray-200 text-gray-400" : files.length ? "border-gray-300 text-gray-500 hover:bg-gray-50" : "border-blue-300 text-blue-600 hover:bg-blue-50"}`}>
+                                                    {hawbUploading === key ? "…" : "📎"}
+                                                    <input type="file" className="hidden" onClick={e => e.stopPropagation()}
+                                                      onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) attachHawb(req.id, h, f) }} />
+                                                  </label>
+                                                </div>
+                                                {files.length > 0 && (
+                                                  <div className="flex flex-wrap gap-1 mt-1">
+                                                    {files.map((a: any) => (
+                                                      <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer"
+                                                        className="text-[10px] bg-orange-50 border border-orange-200 text-orange-700 px-1.5 py-0.5 rounded hover:bg-orange-100 max-w-[140px] truncate">📎 {a.fileName}</a>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   )
                                 })()}
