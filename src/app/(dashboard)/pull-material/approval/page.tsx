@@ -7,7 +7,7 @@ import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
 // Approver stages: which role owns each, and where Approve / Send-back go.
 const APPROVER: Record<string, { role: string; label: string; next: string; back: string; backLabel: string }> = {
   PENDING_VP_SCM:   { role: "VP_SCM",         label: "VP SCM",         next: "PENDING_FINAL",   back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
-  PENDING_FINAL:    { role: "PULL_PRESIDENT", label: "President",      next: "APPROVED",        back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
+  PENDING_FINAL:    { role: "PULL_PRESIDENT", label: "Final approval", next: "APPROVED",        back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
   PENDING_DVM_PUR:  { role: "DVM_PUR",        label: "DVM Purchasing", next: "PENDING_VP_PUR",  back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
   PENDING_VP_PUR:   { role: "VP_PUR",         label: "VP Purchasing",  next: "APPROVED",        back: "PENDING_DVM_PUR",      backLabel: "Send back to DVM Pur" },
   PENDING_APPROVAL: { role: "ADMIN",          label: "Approval (legacy)", next: "APPROVED",     back: "PENDING_SCM_DECISION", backLabel: "Send back" },
