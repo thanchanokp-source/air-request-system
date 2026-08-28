@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
+import { useSearchParams } from "next/navigation"
 import { buColor } from "../_StageWork"
 
 const MAROON = "#6b1a1a"
@@ -53,7 +54,14 @@ export default function ScmRequestPage() {
   const [results, setResults] = useState<Bom[]>([])
   const [searching, setSearching] = useState(false)
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<"request" | "approve">("request")
+  const params = useSearchParams()
+  const [tab, setTab] = useState<"request" | "approve">(params.get("tab") === "approve" ? "approve" : "request")
+  // The air-decision tab adapts to the logged-in role: SCM_PULL → SCM decision (→ VP SCM);
+  // PURCHASING → PC decision (→ DVM Pur). Admin can toggle.
+  const [decType, setDecType] = useState<"SCM" | "PC">(roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PC" : "SCM")
+  const dec = decType === "PC"
+    ? { decisionStatus: "PENDING_PC_DECISION", nextStatus: "PENDING_DVM_PUR" }
+    : { decisionStatus: "PENDING_SCM_DECISION", nextStatus: "PENDING_VP_SCM" }
 
   const [openSo, setOpenSo] = useState<Bom | null>(null)
   const [materials, setMaterials] = useState<Bom[]>([])
@@ -170,7 +178,21 @@ export default function ScmRequestPage() {
         ))}
       </div>
 
-      {tab === "approve" ? <SendApprove bu={bu} setBu={setBu} /> : <>
+      {tab === "approve" ? (
+        <>
+          {canScm && canPc && (
+            <div className="flex items-center gap-2 text-sm mb-1">
+              <span className="text-gray-500 font-medium">Decision:</span>
+              {(["SCM", "PC"] as const).map(t => (
+                <button key={t} onClick={() => setDecType(t)}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold border ${decType === t ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                  style={decType === t ? { background: MAROON } : undefined}>{t === "SCM" ? "SCM decision" : "PC decision"}</button>
+              ))}
+            </div>
+          )}
+          <SendApprove bu={bu} setBu={setBu} decisionStatus={dec.decisionStatus} nextStatus={dec.nextStatus} />
+        </>
+      ) : <>
 
       {/* BU tabs */}
       <div className="flex gap-1.5">

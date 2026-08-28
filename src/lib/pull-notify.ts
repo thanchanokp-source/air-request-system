@@ -8,8 +8,8 @@ import { magicLoginFor } from "@/lib/notify"
 const STAGE: Record<string, { roles: string[]; redirect: string; title: string; cta: string }> = {
   PENDING_PURCHASING:   { roles: ["PURCHASING"],       redirect: "/pull-material/purchase",  title: "new request for Purchasing — fill Country / Port / Incoterm / Weight", cta: "Open Purchase queue" },
   PENDING_LOGISTICS:    { roles: ["LOGISTICS_IMPORT"], redirect: "/pull-material/logistics", title: "ready for Logistics — enter freight (Air rate / In-House date)", cta: "Open Logistics queue" },
-  PENDING_SCM_DECISION: { roles: ["SCM_PULL"],         redirect: "/pull-material/request",   title: "ready for SCM — confirm which lines go by AIR", cta: "Open SCM decision" },
-  PENDING_PC_DECISION:  { roles: ["PURCHASING"],       redirect: "/pull-material/purchase",  title: "ready for Purchase — decide which lines go by AIR", cta: "Open Purchase decision" },
+  PENDING_SCM_DECISION: { roles: ["SCM_PULL"],         redirect: "/pull-material/request?tab=approve", title: "ready for SCM — confirm which lines go by AIR", cta: "Open SCM decision" },
+  PENDING_PC_DECISION:  { roles: ["PURCHASING"],       redirect: "/pull-material/request?tab=approve", title: "ready for Purchase — decide which lines go by AIR", cta: "Open PC decision" },
   PENDING_VP_SCM:       { roles: ["VP_SCM"],           redirect: "/pull-material/approval",  title: "pending your approval — VP SCM", cta: "Open Approval" },
   PENDING_FINAL:        { roles: ["PULL_PRESIDENT"],   redirect: "/pull-material/approval",  title: "pending final approval (President)", cta: "Open Approval" },
   PENDING_DVM_PUR:      { roles: ["DVM_PUR"],          redirect: "/pull-material/approval",  title: "pending your approval — DVM Purchasing", cta: "Open Approval" },
