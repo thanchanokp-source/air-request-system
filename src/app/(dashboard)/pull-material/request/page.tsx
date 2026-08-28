@@ -41,7 +41,11 @@ const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return 
 export default function ScmRequestPage() {
   const { data: session, status } = useSession()
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
-  const isAdmin = roles.includes("ADMIN") || roles.includes("SCM_PULL")
+  const canScm = roles.includes("ADMIN") || roles.includes("SCM_PULL")
+  const canPc = roles.includes("ADMIN") || roles.includes("PURCHASING")
+  const isAdmin = canScm || canPc // gate: SCM_PULL / PURCHASING / ADMIN can create a request
+  // requestType decides the approval TAIL (SCM → VP SCM → President · PC → DVM Pur → VP Pur).
+  const [reqType, setReqType] = useState<"SCM" | "PURCHASING">(roles.includes("SCM_PULL") ? "SCM" : roles.includes("PURCHASING") ? "PURCHASING" : "SCM")
 
   const [bu, setBu] = useState("NYG")
   const [q, setQ] = useState("")
@@ -133,7 +137,7 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart, requestType: "SCM", isTest }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart, requestType: reqType, isTest }),
       })
       const d = await r.json()
       if (r.ok) { alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}`); setCart([]); setRemark(""); setIsTest(false) }
@@ -176,6 +180,19 @@ export default function ScmRequestPage() {
             style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
         ))}
       </div>
+
+      {/* Request type — decides the approval tail. Toggle only when the user can do both (or admin). */}
+      {canScm && canPc && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-500 font-medium">Request type:</span>
+          {(["SCM", "PURCHASING"] as const).map(t => (
+            <button key={t} onClick={() => setReqType(t)}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold border ${reqType === t ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+              style={reqType === t ? { background: MAROON } : undefined}>{t === "SCM" ? "SCM request" : "PC (Purchasing) request"}</button>
+          ))}
+          <span className="text-[11px] text-gray-400">{reqType === "SCM" ? "→ VP SCM → President" : "→ DVM Pur → VP Pur"}</span>
+        </div>
+      )}
 
       {/* Search */}
       <div className="bg-white rounded-xl border p-4">
@@ -321,8 +338,11 @@ export default function ScmRequestPage() {
   )
 }
 
-// ── SCM · Send Approve — pick which lines go AIR + sew date per line, after PC+LG data ──
-function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) {
+// ── Air Decision — pick which lines go AIR + sew date per line, after PC+LG data. Reused for BOTH
+// the SCM decision (PENDING_SCM_DECISION → PENDING_VP_SCM) and the PC decision (PENDING_PC_DECISION
+// → PENDING_DVM_PUR) via props. ──
+export function SendApprove({ bu, setBu, decisionStatus = "PENDING_SCM_DECISION", nextStatus = "PENDING_VP_SCM" }:
+  { bu: string; setBu: (b: string) => void; decisionStatus?: string; nextStatus?: string }) {
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [reason, setReason] = useState<Record<string, string>>({})
@@ -334,7 +354,7 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
     setLoading(true)
     try {
       const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json())
-      const rows = (d.requests || []).filter((r: any) => r.status === "PENDING_SCM_DECISION")
+      const rows = (d.requests || []).filter((r: any) => r.status === decisionStatus)
       setReqs(rows)
       // default: every line AIR; prefill sew date from snapshot
       const a: Record<string, boolean> = {}, s: Record<string, string> = {}
@@ -345,7 +365,7 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
       setAir(a); setSew(s)
     } finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [bu]) // eslint-disable-line
+  useEffect(() => { load() }, [bu, decisionStatus]) // eslint-disable-line
 
   const submit = async (rq: any) => {
     const anyAir = rq.items.some((it: any) => air[it.id])
@@ -356,7 +376,7 @@ function SendApprove({ bu, setBu }: { bu: string; setBu: (b: string) => void }) 
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status: anyAir ? "PENDING_VP_SCM" : "NO_AIR",
+          status: anyAir ? nextStatus : "NO_AIR",
           itemUpdates: rq.items.map((it: any) => ({
             id: it.id,
             airDecision: air[it.id] ? "AIR" : "NO_AIR",

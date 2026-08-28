@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
-import { notifyPullLogistics } from "@/lib/pull-notify"
+import { notifyPullStage } from "@/lib/pull-notify"
 import { magicLoginFor } from "@/lib/notify"
 
 // TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
@@ -100,8 +100,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data })
 
-    // Reached Logistics (Purchase done) → alert the LG Import team (magic-link per person).
-    if (body.status === "PENDING_LOGISTICS") await notifyPullLogistics(id).catch(() => {})
+    // Alert the owner(s) of the NEW stage (magic-link per person). Covers every transition:
+    // Logistics, SCM/PC decision, VP SCM, President, DVM/VP Purchasing, and APPROVED (→ requester).
+    if (body.status && body.status !== "RECALLED") await notifyPullStage(id, body.status).catch(() => {})
 
     if (body.status === "RECALLED") {
       const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, include: { items: true } })

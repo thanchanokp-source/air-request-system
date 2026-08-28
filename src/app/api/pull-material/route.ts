@@ -2,12 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { sendMail } from "@/lib/email"
-import { runWithTestMail } from "@/lib/test-ctx"
-import { magicLoginFor } from "@/lib/notify"
-import { notifyPullLogistics } from "@/lib/pull-notify"
-
-const APP_URL = process.env.APP_URL || "http://localhost:3000"
+import { notifyPullStage } from "@/lib/pull-notify"
 
 // List Pull Material requests (optionally by BU).
 export async function GET(req: NextRequest) {
@@ -61,8 +56,9 @@ export async function POST(req: NextRequest) {
       createdById: userId,
       requestType,
       isTest,
-      // SCM branch: SCM creates → Purchase fills first. PC branch: Purchase creates + fills at once → straight to Logistics.
-      status: requestType === "PURCHASING" ? "PENDING_LOGISTICS" : "PENDING_PURCHASING",
+      // Both branches start at Purchasing (fill Country/Port/Incoterm/Weight). requestType only
+      // decides the TAIL after Logistics: SCM → SCM decision → VP SCM → President; PC → PC decision → DVM Pur → VP Pur.
+      status: "PENDING_PURCHASING",
       items: {
         create: items.map((i: any) => ({
           soNoDoc: String(i.soNoDoc || ""),
@@ -109,45 +105,9 @@ export async function POST(req: NextRequest) {
     include: { items: true },
   })
 
-  // SCM request lands at Purchasing → alert the whole Purchasing pool (all see the same doc; whoever
-  // fills it first advances the status → it drops off everyone else's Purchase queue automatically).
-  if (created.status === "PENDING_PURCHASING") {
-    const purUsers = await (prisma.user as any).findMany({
-      where: { isActive: true, OR: [{ role: "PURCHASING" }, { roles: { has: "PURCHASING" } }] },
-      select: { id: true, email: true },
-    })
-    // De-dupe by email; keep one id per email.
-    const seen = new Set<string>()
-    const recips = purUsers.filter((u: any) => u.email && !seen.has(u.email.toLowerCase()) && seen.add(u.email.toLowerCase()))
-    if (recips.length) {
-      const sos = [...new Set((created.items || []).map((i: any) => i.soNoDoc).filter(Boolean))].join(", ")
-      const subject = `[Purchasing] New Pull Material — ${created.documentNo}`
-      // Send EACH purchasing user their OWN magic link → clicking auto-logs them in as THEIR account
-      // (no password) and opens the Purchase queue. Whoever fills it first advances the doc → it drops
-      // off everyone else's queue.
-      const testTo = isTest ? (String(session.user?.email || "") || null) : null
-      await runWithTestMail(testTo, async () => {
-        for (const u of recips) {
-          const link = await magicLoginFor(u.id, "/pull-material/purchase")
-          const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
-            <h2 style="color:#6b1a1a;margin:0 0 10px">Pull Material — new request for Purchasing</h2>
-            <p><b>${created.documentNo}</b> (${bu}) needs Purchase to fill Country / Port / Incoterm / Weight.</p>
-            <table style="border-collapse:collapse;font-size:13px;margin:6px 0">
-              <tr><td style="color:#888;padding-right:12px">Requester</td><td>${requesterName}</td></tr>
-              <tr><td style="color:#888;padding-right:12px">SO</td><td>${sos || "-"}</td></tr>
-              <tr><td style="color:#888;padding-right:12px">Items</td><td>${(created.items || []).length}</td></tr>
-            </table>
-            <p style="margin-top:14px"><a href="${link}" style="background:#6b1a1a;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;display:inline-block">Open Purchase queue →</a></p>
-            <p style="color:#9ca3af;font-size:12px;margin-top:12px">This link logs you in automatically (no password). Anyone in Purchasing can take it — once someone submits it to Logistics it leaves the queue for everyone.</p>
-          </div>`
-          await sendMail([u.email], subject, html).catch(() => {})
-        }
-      }).catch(() => {})
-    }
-  }
-
-  // PC branch: created straight at Logistics (Purchase filled at creation) → alert LG Import.
-  if (created.status === "PENDING_LOGISTICS") await notifyPullLogistics(created.id).catch(() => {})
+  // New doc lands at Purchasing → alert the whole Purchasing pool (each gets a magic link; whoever
+  // fills it first advances the status → it drops off everyone else's Purchase queue).
+  await notifyPullStage(created.id, "PENDING_PURCHASING").catch(() => {})
 
   return NextResponse.json({ request: created })
 }
