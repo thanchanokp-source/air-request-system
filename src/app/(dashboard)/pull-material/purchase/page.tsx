@@ -325,7 +325,7 @@ export default function PurchasePage() {
                     <th className="px-2 py-2 text-center font-semibold bg-emerald-50 border-b border-emerald-200" title="กว้าง × ยาว × สูง (cm) — ไม่บังคับ">Dim W×L×H (cm)</th>
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Ship Date</th>
                     <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700" title="คำนวณอัตโนมัติจาก Master Rate">🔒 Air L/T</th>
-                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700" title="คำนวณอัตโนมัติจาก Master Rate">🔒 Est Air (USD)</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700" title="คำนวณอัตโนมัติจาก Master Rate">🔒 Est Air</th>
                     <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Sea L/T</th>
                     <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Est Sea</th>
                     <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Est FedEx</th>
