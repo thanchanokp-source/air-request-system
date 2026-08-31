@@ -92,6 +92,7 @@ export default function PurchasePage() {
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Purchase / Admin only</p></div>
 
   const sel = "w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 disabled:bg-gray-50 disabled:text-gray-400"
+  const selc = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 disabled:bg-gray-50 disabled:text-gray-400"
   const openReq = reqs.find(r => r.id === openId)
   const itemReady = (it: any) => filled(valOf(it, "country")) && (filled(valOf(it, "port")) || filled(valOf(it, "seaPort"))) && !!valOf(it, "incoterm") && !!valOf(it, "weight")
   const allReady = openReq ? openReq.items.every(itemReady) : false
@@ -242,64 +243,78 @@ export default function PurchasePage() {
               </div>
             </div>
 
-            {openReq.items.map((it: any) => {
-              const c = valOf(it, "country")
-              const airPorts = [...(airByCountry[c] || [])].sort()
-              const seaPorts = [...(seaByCountry[c] || [])].sort()
-              return (
-                <div key={it.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                  {/* Header strip */}
-                  <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/60 flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="text-xs font-bold text-white px-2 py-0.5 rounded-md" style={{ background: MAROON }}>SO {it.soNoDoc}</span>
-                    <span className="text-sm font-medium text-gray-800">{it.itemName || it.itemCode}</span>
-                    <span className="text-xs text-gray-400">{it.brand || ""} · {it.itemCode || ""}</span>
-                  </div>
-
-                  <div className="p-5 space-y-5">
-                    {/* Reference chips */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                      <Chip label="PO No" value={it.poNoDoc} />
-                      <Chip label="Customer" value={it.customerName} />
-                      <Chip label="Cust PO" value={it.customerPo} />
-                      <Chip label="Style" value={it.style} />
-                      <Chip label="PULL" value={`${fmt(it.pullMaterialQty)} ${it.bomUom || ""}`} />
-                      <Chip label="Consumption" value={fmt(it.consumption)} />
-                    </div>
-
-                    {/* Inputs */}
-                    <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4">
-                      <Field label="Country *">
-                        <Picker value={c} list={countries} sel={sel} placeholder="— select country —"
-                          onChange={v => { setVal(it.id, "country", v); setVal(it.id, "port", ""); setVal(it.id, "seaPort", "") }}
-                          typePlaceholder="Type country → LG will add the rate" />
-                      </Field>
-                      <Field label="Incoterm *">
-                        <select value={valOf(it, "incoterm")} onChange={e => setVal(it.id, "incoterm", e.target.value)} className={sel}>
-                          <option value="">— select —</option>
-                          {INCOTERMS.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </Field>
-                      <Field label={`Air Port ${airPorts.length ? `(${airPorts.length})` : ""}`}>
-                        <Picker value={valOf(it, "port")} list={airPorts} sel={sel} disabled={!c}
-                          placeholder={c ? (airPorts.length ? "— select air port —" : "no air port for country") : "select country first"}
-                          onChange={v => setVal(it.id, "port", v)} typePlaceholder="Type air port → LG will add the rate" />
-                      </Field>
-                      <Field label={`Sea Port ${seaPorts.length ? `(${seaPorts.length})` : ""}`}>
-                        <Picker value={valOf(it, "seaPort")} list={seaPorts} sel={sel} disabled={!c}
-                          placeholder={c ? (seaPorts.length ? "— select sea port —" : "no sea port for country") : "select country first"}
-                          onChange={v => setVal(it.id, "seaPort", v)} typePlaceholder="Type sea port → LG will add the rate" />
-                      </Field>
-                      <Field label="Weight (kg) *">
-                        <input type="number" value={valOf(it, "weight")} onChange={e => setVal(it.id, "weight", e.target.value)} placeholder="0" className={sel} />
-                      </Field>
-                      <Field label="Ship Date">
-                        <input type="date" value={valOf(it, "shipmentDate")} onChange={e => setVal(it.id, "shipmentDate", e.target.value)} className={sel} />
-                      </Field>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+            {/* Excel-like horizontal rows: grey = reference (from BOM/PC), green = fields to fill in */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="text-sm border-collapse min-w-[1200px] w-full">
+                <thead>
+                  <tr className="text-[11px] text-gray-500 uppercase tracking-wide">
+                    <th className="px-2 py-2 text-left font-semibold sticky left-0 bg-gray-100 z-10 border-b border-gray-200">SO</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">PO No</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Customer</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Cust PO</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Style</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Material</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">PULL</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">Cons.</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Country *</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Air Port</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Sea Port</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Incoterm *</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Weight(kg) *</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Ship Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {openReq.items.map((it: any, idx: number) => {
+                    const c = valOf(it, "country")
+                    const airPorts = [...(airByCountry[c] || [])].sort()
+                    const seaPorts = [...(seaByCountry[c] || [])].sort()
+                    const rowBg = idx % 2 ? "bg-gray-50/40" : "bg-white"
+                    return (
+                      <tr key={it.id} className={`${rowBg} align-top border-b border-gray-100`}>
+                        <td className={`px-2 py-1.5 sticky left-0 z-10 ${rowBg}`}>
+                          <span className="text-[11px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: MAROON }}>{it.soNoDoc}</span>
+                        </td>
+                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.poNoDoc || "-"}</td>
+                        <td className="px-2 py-1.5 text-gray-600 max-w-[140px] truncate" title={it.customerName || ""}>{it.customerName || "-"}</td>
+                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.customerPo || "-"}</td>
+                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.style || "-"}</td>
+                        <td className="px-2 py-1.5 text-gray-700 max-w-[180px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || "-"}</td>
+                        <td className="px-2 py-1.5 text-right text-gray-700 whitespace-nowrap">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
+                        <td className="px-2 py-1.5 text-right text-gray-600 whitespace-nowrap">{fmt(it.consumption)}</td>
+                        <td className="px-2 py-1.5 min-w-[150px]">
+                          <Picker value={c} list={countries} sel={selc} placeholder="— country —"
+                            onChange={v => { setVal(it.id, "country", v); setVal(it.id, "port", ""); setVal(it.id, "seaPort", "") }}
+                            typePlaceholder="Type → notify LG" />
+                        </td>
+                        <td className="px-2 py-1.5 min-w-[140px]">
+                          <Picker value={valOf(it, "port")} list={airPorts} sel={selc} disabled={!c}
+                            placeholder={c ? (airPorts.length ? "— air —" : "no air port") : "country first"}
+                            onChange={v => setVal(it.id, "port", v)} typePlaceholder="Type → notify LG" />
+                        </td>
+                        <td className="px-2 py-1.5 min-w-[140px]">
+                          <Picker value={valOf(it, "seaPort")} list={seaPorts} sel={selc} disabled={!c}
+                            placeholder={c ? (seaPorts.length ? "— sea —" : "no sea port") : "country first"}
+                            onChange={v => setVal(it.id, "seaPort", v)} typePlaceholder="Type → notify LG" />
+                        </td>
+                        <td className="px-2 py-1.5 min-w-[110px]">
+                          <select value={valOf(it, "incoterm")} onChange={e => setVal(it.id, "incoterm", e.target.value)} className={selc}>
+                            <option value="">—</option>
+                            {INCOTERMS.map(t => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-2 py-1.5 min-w-[90px]">
+                          <input type="number" value={valOf(it, "weight")} onChange={e => setVal(it.id, "weight", e.target.value)} placeholder="0" className={selc} />
+                        </td>
+                        <td className="px-2 py-1.5 min-w-[130px]">
+                          <input type="date" value={valOf(it, "shipmentDate")} onChange={e => setVal(it.id, "shipmentDate", e.target.value)} className={selc} />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           reqs.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">No documents at this stage</div> :
