@@ -131,6 +131,8 @@ export default function PurchasePage() {
   const selc = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 disabled:bg-gray-50 disabled:text-gray-400"
   // Dimension inputs: fixed width, centered, spinner arrows hidden so the digits stay visible.
   const dimc = "w-14 border border-gray-200 rounded-lg px-1.5 py-1.5 text-sm text-center bg-white focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+  // Number inputs (weight / cartons): full width, spinner arrows hidden so long numbers stay visible.
+  const numc = selc + " [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
   const openReq = reqs.find(r => r.id === openId)
   const itemReady = (it: any) => filled(valOf(it, "country")) && (filled(valOf(it, "port")) || filled(valOf(it, "seaPort"))) && !!valOf(it, "incoterm") && !!valOf(it, "weight")
     && (!NEEDS_ADDRESS.includes(valOf(it, "incoterm")) || !!valOf(it, "pickupAddress").trim())
@@ -374,14 +376,14 @@ export default function PurchasePage() {
                             {INCOTERMS.map(t => <option key={t} value={t}>{t}</option>)}
                           </select>
                         </td>
-                        <td className="px-2 py-1.5 min-w-[90px]">
-                          <input type="number" value={valOf(it, "weight")} onChange={e => setVal(it.id, "weight", e.target.value)} placeholder="0" className={selc} />
+                        <td className="px-2 py-1.5 min-w-[100px]">
+                          <input type="number" value={valOf(it, "weight")} onChange={e => setVal(it.id, "weight", e.target.value)} placeholder="0" className={numc} />
                         </td>
                         <td className="px-2 py-1.5 min-w-[130px]">
                           <input type="date" value={valOf(it, "needDate")} onChange={e => setVal(it.id, "needDate", e.target.value)} className={selc} title="ต้องการของเมื่อไหร่" />
                         </td>
-                        <td className="px-2 py-1.5 min-w-[80px]">
-                          <input type="number" value={valOf(it, "cartons")} onChange={e => setVal(it.id, "cartons", e.target.value)} placeholder="0" className={selc} />
+                        <td className="px-2 py-1.5 min-w-[110px]">
+                          <input type="number" value={valOf(it, "cartons")} onChange={e => setVal(it.id, "cartons", e.target.value)} placeholder="0" className={numc} />
                         </td>
                         <td className="px-2 py-1.5 min-w-[200px]">
                           <div className="flex items-center gap-1">
