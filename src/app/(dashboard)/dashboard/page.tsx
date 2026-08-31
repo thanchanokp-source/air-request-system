@@ -500,23 +500,24 @@ function Paged({ data, size=5, fromEnd=false, children }: { data:any[]; size?:nu
   )
 }
 
-function LogisticsCostBar({ rows, cur="THB" }: { rows:any[]; cur?:string }) {
+function LogisticsCostBar({ rows }: { rows:any[] }) {
   const data = useMemo(()=>{
-    const m:Record<string,{cost:number;qty:number;soCount:number}>={}
+    const m:Record<string,{cost:number;qty:number;soCount:number;curs:Set<string>}>={}
     rows.forEach(r=>{
       // Cost/Pcs must divide realized cost by the qty that actually shipped — so
       // both numerator and denominator count ONLY shipped rows (actualAirFreight set).
       // Projection rows (no actual yet) inflated the qty and understated Cost/Pcs.
       if(r.actualAirFreight==null) return
       const k=soBrand(r)
-      if(!m[k])m[k]={cost:0,qty:0,soCount:0}
+      if(!m[k])m[k]={cost:0,qty:0,soCount:0,curs:new Set<string>()}
       m[k].cost+=r.actualAirFreight||0
       m[k].qty+=Number(r.qtyActualShip??r.qtyRequestAir)||0
       m[k].soCount++
+      m[k].curs.add(soCurrency(r.request?.bu ?? r.bu, r.brand ?? r.request?.brandName)) // EA → USD, else THB
     })
     return Object.entries(m)
       .filter(([,v])=>v.qty>0)
-      .map(([name,v])=>({name,costPerUnit:Math.round(v.cost/v.qty*100)/100,totalCost:Math.round(v.cost),totalQty:v.qty,soCount:v.soCount}))
+      .map(([name,v])=>({name,costPerUnit:Math.round(v.cost/v.qty*100)/100,totalCost:Math.round(v.cost),totalQty:v.qty,soCount:v.soCount,cur:v.curs.size>1?"mixed":([...v.curs][0]||"THB")}))
       .sort((a,b)=>b.totalCost-a.totalCost)
   },[rows])
 
@@ -534,8 +535,9 @@ function LogisticsCostBar({ rows, cur="THB" }: { rows:any[]; cur?:string }) {
               <tr className="border-b border-gray-200">
                 <th className="text-left py-1.5 px-2 text-gray-500 font-semibold text-[11px] w-1/2 bg-white">BRAND</th>
                 <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">QTY</th>
-                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">TOTAL ({cur})</th>
-                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">COST/PCS ({cur})</th>
+                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">TOTAL</th>
+                <th className="text-right py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">COST/PCS</th>
+                <th className="text-center py-1.5 px-2 text-gray-500 font-semibold text-[11px] bg-white">UOM</th>
               </tr>
             </thead>
             <tbody>
@@ -552,6 +554,9 @@ function LogisticsCostBar({ rows, cur="THB" }: { rows:any[]; cur?:string }) {
                     <td className="py-2 px-2 text-right text-gray-500">{fmtNum(d.totalQty)}</td>
                     <td className="py-2 px-2 text-right text-gray-600">{fmtNum(d.totalCost)}</td>
                     <td className="py-2 px-2 text-right font-bold" style={{color:"#a04020"}}>{fmtNum(d.costPerUnit,2)}</td>
+                    <td className="py-2 px-2 text-center">
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${d.cur==="USD"?"bg-emerald-50 text-emerald-700":d.cur==="mixed"?"bg-amber-50 text-amber-700":"bg-gray-100 text-gray-600"}`}>{d.cur}</span>
+                    </td>
                   </tr>
                 )
               })}
@@ -979,7 +984,7 @@ export default function DashboardPage() {
       {/* ── Delay Reason Overview (below filters) ───────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <ReasonPanel rows={filtered} height={180} cur={curLabel}/>
-        <LogisticsCostBar rows={filtered} cur={curLabel}/>
+        <LogisticsCostBar rows={filtered}/>
       </div>
 
       {/* ── Column Headers ───────────────────────────────────────────────── */}
