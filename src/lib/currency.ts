@@ -18,10 +18,11 @@ export function splitByCurrency(rows: { amount: number; bu?: string | null; bran
   return t
 }
 
-// Format the split as a compact string; hides a zero side (both zero → "0 THB").
-export function fmtSplit(t: { THB: number; USD: number }, fmt: (n: number) => string = n => n.toLocaleString("en-US", { maximumFractionDigits: 0 })): string {
+// Format the split as a compact string; hides a zero side. When both are zero the fallback shows
+// "0 <zeroUnit>" — pass the doc's currency (e.g. "USD" for EA) so an all-zero EA amount isn't mislabelled "0 THB".
+export function fmtSplit(t: { THB: number; USD: number }, fmt: (n: number) => string = n => n.toLocaleString("en-US", { maximumFractionDigits: 0 }), zeroUnit: "USD" | "THB" = "THB"): string {
   const parts: string[] = []
   if (t.THB) parts.push(`${fmt(t.THB)} THB`)
   if (t.USD) parts.push(`${fmt(t.USD)} USD`)
-  return parts.length ? parts.join(" · ") : "0 THB"
+  return parts.length ? parts.join(" · ") : `0 ${zeroUnit}`
 }

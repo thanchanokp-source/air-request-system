@@ -191,7 +191,11 @@ export default function RequestsPage() {
   // its own unit; a total over many SOs is split so THB and USD are never summed into one number.
   const soUnit = (row: any) => soCurrency(row.request?.bu, row.brand ?? row.request?.brandName)
   const groupSplit = (rows: any[], pick: (r: any) => number) =>
-    fmtSplit(splitByCurrency(rows.map(r => ({ amount: pick(r) || 0, bu: r.request?.bu, brand: r.brand ?? r.request?.brandName }))))
+    fmtSplit(
+      splitByCurrency(rows.map(r => ({ amount: pick(r) || 0, bu: r.request?.bu, brand: r.brand ?? r.request?.brandName }))),
+      undefined,
+      soCurrency(rows[0]?.request?.bu, rows[0]?.brand ?? rows[0]?.request?.brandName), // zero-fallback unit = the group's currency
+    )
 
   // ── Stage helpers — shared by the Pending-by-Stage tiles AND the Stage filter. President
   // moved to the END (final approver, after Logistics ∥ Claim). ──
