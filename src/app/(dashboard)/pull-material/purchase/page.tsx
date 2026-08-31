@@ -21,6 +21,7 @@ export default function PurchasePage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
+  const [soQ, setSoQ] = useState("") // filter list by SO / document no
 
   const load = async () => {
     setLoading(true)
@@ -362,21 +363,37 @@ export default function PurchasePage() {
               </table>
             </div>
           </div>
-        ) : (
-          reqs.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">No documents at this stage</div> :
-            <div className="space-y-2.5">
-              {reqs.map(rq => (
-                <button key={rq.id} onClick={() => setOpenId(rq.id)}
-                  className="w-full flex items-center justify-between gap-3 px-5 py-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition text-left">
-                  <div>
-                    <div className="font-semibold text-gray-900">{rq.documentNo}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items.length} items · {[...new Set(rq.items.map((i: any) => i.soNoDoc))].join(", ")}</div>
-                  </div>
-                  <span className="text-gray-300 text-lg">›</span>
-                </button>
-              ))}
+        ) : (() => {
+          const term = soQ.trim().toLowerCase()
+          const shown = term
+            ? reqs.filter(rq =>
+                String(rq.documentNo || "").toLowerCase().includes(term) ||
+                rq.items.some((i: any) => String(i.soNoDoc || "").toLowerCase().includes(term)))
+            : reqs
+          return (
+            <div className="space-y-3">
+              <div className="relative max-w-md">
+                <input value={soQ} onChange={e => setSoQ(e.target.value)} placeholder="🔎 ค้นหา SO / เลขเอกสาร…"
+                  className="w-full border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+                {soQ && <button onClick={() => setSoQ("")} className="absolute right-2.5 top-2 text-gray-300 hover:text-gray-500">✕</button>}
+              </div>
+              {reqs.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">No documents at this stage</div> :
+                shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400">ไม่พบเอกสารที่ตรงกับ “{soQ}”</div> :
+                <div className="space-y-2.5">
+                  {shown.map(rq => (
+                    <button key={rq.id} onClick={() => setOpenId(rq.id)}
+                      className="w-full flex items-center justify-between gap-3 px-5 py-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition text-left">
+                      <div>
+                        <div className="font-semibold text-gray-900">{rq.documentNo}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items.length} items · {[...new Set(rq.items.map((i: any) => i.soNoDoc))].join(", ")}</div>
+                      </div>
+                      <span className="text-gray-300 text-lg">›</span>
+                    </button>
+                  ))}
+                </div>}
             </div>
-        )}
+          )
+        })()}
     </div>
   )
 }
