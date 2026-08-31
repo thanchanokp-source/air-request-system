@@ -8,6 +8,11 @@ const INCOTERMS = ["FOB", "CIF", "EX-WORK", "FCA"]
 // Incoterms that require a pickup / supplier address (buyer arranges pickup at origin).
 const NEEDS_ADDRESS = ["EX-WORK", "FCA"]
 
+// Air weight breaks (kg) → the Q-column key used for the rate (mirror of the Logistics page so the
+// Est Air shown here matches what LG computes downstream).
+const BREAK_ORDER = [45, 100, 250, 300, 500, 1000, 2000, 8000]
+const breakKey = (w: number) => { let b = 45; for (const x of BREAK_ORDER) if (x <= w) b = x; return "Q" + b }
+
 export default function PurchasePage() {
   const { data: session, status: auth } = useSession()
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
@@ -56,6 +61,23 @@ export default function PurchasePage() {
   const OTHER = "__OTHER__"
   const filled = (v: string) => !!v && v !== OTHER
   const clean = (v: string) => (v === OTHER ? "" : v)
+
+  // AUTO from Master Rate — computed live once PC has entered Air Port + Weight (× pull qty).
+  // Air is real (rate × gross, lead time = tt). Sea is per-container / FedEx & DHL masters are not
+  // in the system yet → those stay "รอ master" until LG provides the data.
+  const airAuto = (it: any) => {
+    const w = Number(valOf(it, "weight")) || 0
+    const qty = Number(it.pullMaterialQty) || 0
+    const port = clean(valOf(it, "port"))
+    const gross = w * qty
+    const routes = airRows.filter(r => r.origin === port)
+    if (!port || !gross || !routes.length) return null
+    const bk = breakKey(gross)
+    const cand = routes.map(r => ({ rate: Number(r.rates?.[bk]), tt: r.tt })).filter(x => x.rate && !isNaN(x.rate))
+    if (!cand.length) return null
+    const best = cand.reduce((a, b) => (b.rate > a.rate ? b : a))
+    return { est: Math.round(best.rate * gross * 100) / 100, tt: best.tt || "-", bk }
+  }
 
   const save = async (rq: any) => {
     for (const it of rq.items) {
@@ -260,8 +282,12 @@ export default function PurchasePage() {
             </div>
 
             {/* Excel-like horizontal rows: grey = reference (from BOM/PC), green = fields to fill in */}
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-300" /> จัดซื้อกรอก</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-sky-100 border border-sky-300" /> 🔒 คำนวณอัตโนมัติจาก Master Rate (อ่านอย่างเดียว)</span>
+            </div>
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-              <table className="text-sm border-collapse min-w-[1200px] w-full">
+              <table className="text-sm border-collapse min-w-[1720px] w-full">
                 <thead>
                   <tr className="text-[11px] text-gray-500 uppercase tracking-wide">
                     <th className="px-2 py-2 text-left font-semibold sticky left-0 bg-gray-100 z-10 border-b border-gray-200">SO</th>
@@ -281,6 +307,12 @@ export default function PurchasePage() {
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Cartons</th>
                     <th className="px-2 py-2 text-center font-semibold bg-emerald-50 border-b border-emerald-200" title="กว้าง × ยาว × สูง (cm) — ไม่บังคับ">Dim W×L×H (cm)</th>
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Ship Date</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700" title="คำนวณอัตโนมัติจาก Master Rate">🔒 Air L/T</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700" title="คำนวณอัตโนมัติจาก Master Rate">🔒 Est Air (USD)</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Sea L/T</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Est Sea</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Est FedEx</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Est DHL</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -343,11 +375,23 @@ export default function PurchasePage() {
                         <td className="px-2 py-1.5 min-w-[130px]">
                           <input type="date" value={valOf(it, "shipmentDate")} onChange={e => setVal(it.id, "shipmentDate", e.target.value)} className={selc} />
                         </td>
+                        {(() => {
+                          const a = airAuto(it)
+                          const cell = "px-2 py-1.5 text-right bg-sky-50/50 whitespace-nowrap"
+                          return <>
+                            <td className={`${cell} text-sky-800`}>{a ? a.tt : <span className="text-gray-300">—</span>}</td>
+                            <td className={`${cell} font-semibold text-sky-800`}>{a ? fmt(a.est) : <span className="text-gray-300">รอกรอก</span>}</td>
+                            <td className={`${cell} text-gray-400`} title="Sea เป็นค่าต่อ container — รอสูตร/มาสเตอร์จาก LG">รอ master</td>
+                            <td className={`${cell} text-gray-400`}>รอ master</td>
+                            <td className={`${cell} text-gray-400`} title="ยังไม่มี master FedEx — รอ data จาก LG">รอ master</td>
+                            <td className={`${cell} text-gray-400`} title="ยังไม่มี master DHL — รอ data จาก LG">รอ master</td>
+                          </>
+                        })()}
                       </tr>,
                       NEEDS_ADDRESS.includes(valOf(it, "incoterm")) && (
                         <tr key={`${it.id}-addr`} className={rowBg}>
                           <td className={`px-2 pb-2 sticky left-0 z-10 ${rowBg}`} />
-                          <td colSpan={16} className="px-2 pb-2">
+                          <td colSpan={22} className="px-2 pb-2">
                             <div className="flex items-start gap-2">
                               <span className="text-[11px] font-semibold text-amber-700 whitespace-nowrap mt-1.5">📍 {valOf(it, "incoterm")} Pickup address *</span>
                               <textarea value={valOf(it, "pickupAddress")} onChange={e => setVal(it.id, "pickupAddress", e.target.value)} rows={2}
