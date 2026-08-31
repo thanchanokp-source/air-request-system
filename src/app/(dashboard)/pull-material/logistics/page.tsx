@@ -77,6 +77,76 @@ export default function LogisticsPage() {
     } finally { setBusy(null) }
   }
 
+  // Export the open doc → styled workbook. GREY columns = reference data Purchase already filled
+  // (Country/Port/Incoterm/Weight + auto Estimate Air); GREEN columns = the fields LG fills in.
+  const exportXlsx = async () => {
+    if (!openReq) return
+    const ExcelJS = (await import("exceljs")).default
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet("Logistics")
+    const headers = [
+      "SO", "PO No", "Customer", "Style", "Material", "PULL", "Country", "Air Port", "Sea Port",
+      "Incoterm", "Weight(kg)", "Est Air(USD)",
+      "In-House Air *", "In-House Sea", "Air L/T", "Sea L/T", "Incoterm Cost", "Sea Freight", "_ItemID",
+    ]
+    const widths = [12, 14, 18, 14, 26, 10, 18, 16, 18, 11, 11, 13, 15, 15, 12, 12, 13, 12, 26]
+    const REF_C = "FFEAECEE", FILL_C = "FFE2EFDA" // grey (from Purchase) / green (LG fills)
+    const FILL_FROM = 12 // 0-based index where the green (fill-in) block starts (In-House Air)
+    const FILL_TO = 17   // .. ends (Sea Freight)
+    const hr = ws.addRow(headers); hr.height = 26
+    headers.forEach((_, i) => {
+      const c = hr.getCell(i + 1)
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: (i >= FILL_FROM && i <= FILL_TO) ? FILL_C : REF_C } }
+      c.font = { bold: true, size: 10 }
+      c.alignment = { vertical: "middle", horizontal: "center", wrapText: true }
+      c.border = { top: { style: "thin", color: { argb: "FFBFBFBF" } }, bottom: { style: "thin", color: { argb: "FFBFBFBF" } }, left: { style: "thin", color: { argb: "FFBFBFBF" } }, right: { style: "thin", color: { argb: "FFBFBFBF" } } }
+    })
+    widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
+    ws.views = [{ state: "frozen", ySplit: 1 }]
+    openReq.items.forEach((it: any) => {
+      const e = airEst(it)
+      ws.addRow([
+        it.soNoDoc, it.poNoDoc || "", it.customerName || "", it.style || "", it.itemName || it.itemCode || "",
+        it.pullMaterialQty ?? "", it.country || "", it.port || "", it.seaPort || "",
+        it.incoterm || "", it.weight ?? "", e ? e.est : "",
+        dateVal(it, "inHouseAirDate"), dateVal(it, "inHouseSeaDate"),
+        raw(it, "leadTimeAir"), raw(it, "leadTimeSea"), raw(it, "incotermCost"), raw(it, "seaFreightCost"), it.id,
+      ])
+    })
+    ws.getColumn(headers.length).hidden = true // _ItemID
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a"); a.href = url; a.download = `${openReq.documentNo}_logistics.xlsx`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+  }
+
+  // Import the filled workbook → populate the LG fields (edits) by _ItemID; user reviews then Saves.
+  const importXlsx = async (file: File) => {
+    const XLSX = await import("xlsx")
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
+    const ws = wb.Sheets["Logistics"] || wb.Sheets[wb.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[]
+    const pick = (row: any, ...keys: string[]) => { for (const k of keys) if (row[k] !== undefined && row[k] !== "") return String(row[k]).trim(); return "" }
+    const next: Record<string, Record<string, string>> = {}
+    let applied = 0
+    for (const row of rows) {
+      const id = pick(row, "_ItemID")
+      if (!id) continue
+      next[id] = {
+        inHouseAirDate: pick(row, "In-House Air *", "In-House Air").slice(0, 10),
+        inHouseSeaDate: pick(row, "In-House Sea").slice(0, 10),
+        leadTimeAir: pick(row, "Air L/T"),
+        leadTimeSea: pick(row, "Sea L/T"),
+        incotermCost: pick(row, "Incoterm Cost"),
+        seaFreightCost: pick(row, "Sea Freight"),
+      }
+      applied++
+    }
+    setEdits(p => ({ ...p, ...next }))
+    alert(`Imported ${applied} row(s). Estimate Air stays auto-calculated. Review, then click "Save → Send to SCM".`)
+  }
+
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Logistics Import / Admin only</p></div>
 
@@ -99,9 +169,16 @@ export default function LogisticsPage() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div><span className="font-bold text-blue-700 text-lg">{openReq.documentNo}</span>
                 <span className="text-xs text-gray-500"> · {openReq.requesterName} · {openReq.items.length} items</span></div>
-              <button onClick={() => save(openReq)} disabled={busy === openReq.id} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>
-                {busy === openReq.id ? "..." : "Save → Send to SCM"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={exportXlsx}
+                  className="px-3 py-2 rounded-lg text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50">⬇ Export Excel</button>
+                <label className="px-3 py-2 rounded-lg text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">⬆ Import
+                  <input type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
+                </label>
+                <button onClick={() => save(openReq)} disabled={busy === openReq.id} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>
+                  {busy === openReq.id ? "..." : "Save → Send to SCM"}
+                </button>
+              </div>
             </div>
 
             {openReq.items.map((it: any) => {
