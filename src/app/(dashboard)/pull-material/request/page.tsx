@@ -75,6 +75,11 @@ export default function ScmRequestPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [remark, setRemark] = useState("")
   const [isTest, setIsTest] = useState(false)
+  // Regular (fast-track) vs Irregular (full approval), per doc. Auto-suggested from SO prefix "02";
+  // (the Hong-Kong-port / weight<45kg parts are only known after Purchase, so those refine later).
+  const [mode, setMode] = useState<"REGULAR" | "IRREGULAR">("IRREGULAR")
+  const [modeTouched, setModeTouched] = useState(false)
+  const suggestRegular = cart.length > 0 && cart.every(c => String(c.soNoDoc || "").startsWith("02"))
   const [submitting, setSubmitting] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
 
@@ -85,6 +90,9 @@ export default function ScmRequestPage() {
   useEffect(() => {
     fetch("/api/bom", { method: "POST" }).then(r => r.json()).then(d => setLastSync(d.lastSync || null)).catch(() => {})
   }, [])
+
+  // Keep the mode following the auto-suggestion until the user overrides it manually.
+  useEffect(() => { if (!modeTouched) setMode(suggestRegular ? "REGULAR" : "IRREGULAR") }, [suggestRegular, modeTouched])
 
   const sync = (() => {
     if (!lastSync) return null
@@ -146,10 +154,10 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart, requestType: reqType, isTest }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart, requestType: reqType, isTest, mode }),
       })
       const d = await r.json()
-      if (r.ok) { alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}`); setCart([]); setRemark(""); setIsTest(false) }
+      if (r.ok) { alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}`); setCart([]); setRemark(""); setIsTest(false); setModeTouched(false) }
       else alert(`Error: ${d.error || "submit failed"}`)
     } finally { setSubmitting(false) }
   }
@@ -331,6 +339,26 @@ export default function ScmRequestPage() {
           <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="Note for this pull request (optional)"
             className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
         </div>
+        {/* Regular / Irregular mode — per document. Regular = fast-track (no wait for approval). */}
+        <div className="mt-3 rounded-xl border border-gray-200 p-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-gray-600">Mode เอกสาร:</span>
+            {(["REGULAR", "IRREGULAR"] as const).map(m => (
+              <button key={m} onClick={() => { setMode(m); setModeTouched(true) }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${mode === m ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                style={mode === m ? { background: m === "REGULAR" ? "#15803d" : "#b45309" } : undefined}>
+                {m === "REGULAR" ? "🟢 Regular (ไม่ต้องรออนุมัติ)" : "🟠 Irregular (อนุมัติเต็ม)"}
+              </button>
+            ))}
+            {!modeTouched && cart.length > 0 && (
+              <span className="text-[11px] text-gray-400">· auto: {suggestRegular ? "Regular (SO ขึ้นต้น 02)" : "Irregular"}</span>
+            )}
+          </div>
+          <p className="mt-1.5 text-[11px] text-gray-400">
+            Regular = SO ขึ้นต้น <b>02</b> (ทุก port) · หรือ SO <b>01</b> จาก port <b>ฮ่องกง</b> · หรือ SO <b>01</b> น้ำหนัก <b>&lt; 45 kg</b> — ระบบแนะนำให้จาก SO แต่แก้เองได้
+          </p>
+        </div>
+
         <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
           {isAdmin ? (
             <label className="flex items-center gap-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer">

@@ -428,7 +428,11 @@ export default function PurchasePage() {
                     <button key={rq.id} onClick={() => setOpenId(rq.id)}
                       className="w-full flex items-center justify-between gap-3 px-5 py-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition text-left">
                       <div>
-                        <div className="font-semibold text-gray-900">{rq.documentNo}</div>
+                        <div className="font-semibold text-gray-900 flex items-center gap-2">{rq.documentNo}
+                          {rq.mode === "REGULAR"
+                            ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">🟢 REGULAR</span>
+                            : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">🟠 IRREGULAR</span>}
+                        </div>
                         <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items.length} items · {[...new Set(rq.items.map((i: any) => i.soNoDoc))].join(", ")}</div>
                       </div>
                       <span className="text-gray-300 text-lg">›</span>

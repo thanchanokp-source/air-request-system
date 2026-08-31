@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const bu = String(body.bu || "NYG").toUpperCase()
   const requestType = body.requestType === "PURCHASING" ? "PURCHASING" : "SCM"
+  const mode = body.mode === "REGULAR" ? "REGULAR" : "IRREGULAR"
   const isAdmin = (session.user as any).role === "ADMIN"
   const isTest = isAdmin && body.isTest === true // only admin can mark a doc as TEST
   const requesterName = String(body.requesterName || "").trim()
@@ -55,6 +56,7 @@ export async function POST(req: NextRequest) {
       remark: body.remark || null,
       createdById: userId,
       requestType,
+      mode,
       isTest,
       // Both branches start at Purchasing (fill Country/Port/Incoterm/Weight). requestType only
       // decides the TAIL after Logistics: SCM → SCM decision → VP SCM → President; PC → PC decision → DVM Pur → VP Pur.
