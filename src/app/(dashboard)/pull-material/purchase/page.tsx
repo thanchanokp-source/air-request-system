@@ -295,6 +295,7 @@ export default function PurchasePage() {
                     <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Customer</th>
                     <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Cust PO</th>
                     <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Style</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">OU</th>
                     <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Material</th>
                     <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">PULL</th>
                     <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">Cons.</th>
@@ -330,6 +331,7 @@ export default function PurchasePage() {
                         <td className="px-2 py-1.5 text-gray-600 max-w-[140px] truncate" title={it.customerName || ""}>{it.customerName || "-"}</td>
                         <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.customerPo || "-"}</td>
                         <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.style || "-"}</td>
+                        <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap font-medium">{it.ou || "-"}</td>
                         <td className="px-2 py-1.5 text-gray-700 max-w-[180px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || "-"}</td>
                         <td className="px-2 py-1.5 text-right text-gray-700 whitespace-nowrap">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
                         <td className="px-2 py-1.5 text-right text-gray-600 whitespace-nowrap">{fmt(it.consumption)}</td>
@@ -391,7 +393,7 @@ export default function PurchasePage() {
                       NEEDS_ADDRESS.includes(valOf(it, "incoterm")) && (
                         <tr key={`${it.id}-addr`} className={rowBg}>
                           <td className={`px-2 pb-2 sticky left-0 z-10 ${rowBg}`} />
-                          <td colSpan={22} className="px-2 pb-2">
+                          <td colSpan={23} className="px-2 pb-2">
                             <div className="flex items-start gap-2">
                               <span className="text-[11px] font-semibold text-amber-700 whitespace-nowrap mt-1.5">📍 {valOf(it, "incoterm")} Pickup address *</span>
                               <textarea value={valOf(it, "pickupAddress")} onChange={e => setVal(it.id, "pickupAddress", e.target.value)} rows={2}
