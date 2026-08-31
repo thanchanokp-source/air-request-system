@@ -51,6 +51,12 @@ export default function PurchasePage() {
     return { countries, airByCountry, seaByCountry }
   }, [airRows, seaRows])
 
+  // Toggle Regular / Irregular per doc (persists immediately; optimistic local update).
+  const setDocMode = async (rqId: string, m: "REGULAR" | "IRREGULAR") => {
+    setReqs(prev => prev.map(r => (r.id === rqId ? { ...r, mode: m } : r)))
+    await fetch(`/api/pull-material/${rqId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: m }) }).catch(() => {})
+  }
+
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
   const valOf = (it: any, k: string) => {
     if (edits[it.id]?.[k] !== undefined) return edits[it.id][k]
@@ -264,6 +270,16 @@ export default function PurchasePage() {
               <div>
                 <div className="font-bold text-lg text-gray-900">{openReq.documentNo}</div>
                 <div className="text-xs text-gray-400">{openReq.requesterName} · {openReq.items.length} items</div>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-500 font-medium">Mode:</span>
+                  {(["REGULAR", "IRREGULAR"] as const).map(m => (
+                    <button key={m} onClick={() => setDocMode(openReq.id, m)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${openReq.mode === m ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                      style={openReq.mode === m ? { background: m === "REGULAR" ? "#15803d" : "#b45309" } : undefined}>
+                      {m === "REGULAR" ? "🟢 Regular" : "🟠 Irregular"}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-2">

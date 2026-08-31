@@ -84,6 +84,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const actorEmail = (session.user as any).email as string | undefined
 
+  // Toggle Regular / Irregular mode per doc (no status change needed).
+  if (body.mode === "REGULAR" || body.mode === "IRREGULAR") {
+    await (prisma as any).pullMaterialRequest.update({ where: { id }, data: { mode: body.mode } })
+  }
+
   if (body.status && (PULL_FLOW as readonly string[]).concat(["NO_AIR", "RECALLED", "REJECTED"]).includes(body.status)) {
     const data: any = { status: body.status }
     const isStop = body.status === "RECALLED" || body.status === "REJECTED"
