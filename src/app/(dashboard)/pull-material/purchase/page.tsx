@@ -129,6 +129,8 @@ export default function PurchasePage() {
 
   const sel = "w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 disabled:bg-gray-50 disabled:text-gray-400"
   const selc = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 disabled:bg-gray-50 disabled:text-gray-400"
+  // Dimension inputs: fixed width, centered, spinner arrows hidden so the digits stay visible.
+  const dimc = "w-14 border border-gray-200 rounded-lg px-1.5 py-1.5 text-sm text-center bg-white focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
   const openReq = reqs.find(r => r.id === openId)
   const itemReady = (it: any) => filled(valOf(it, "country")) && (filled(valOf(it, "port")) || filled(valOf(it, "seaPort"))) && !!valOf(it, "incoterm") && !!valOf(it, "weight")
     && (!NEEDS_ADDRESS.includes(valOf(it, "incoterm")) || !!valOf(it, "pickupAddress").trim())
@@ -381,13 +383,13 @@ export default function PurchasePage() {
                         <td className="px-2 py-1.5 min-w-[80px]">
                           <input type="number" value={valOf(it, "cartons")} onChange={e => setVal(it.id, "cartons", e.target.value)} placeholder="0" className={selc} />
                         </td>
-                        <td className="px-2 py-1.5 min-w-[150px]">
+                        <td className="px-2 py-1.5 min-w-[200px]">
                           <div className="flex items-center gap-1">
-                            <input type="number" value={valOf(it, "boxW")} onChange={e => setVal(it.id, "boxW", e.target.value)} placeholder="ก" className={`${selc} px-1 text-center`} />
+                            <input type="number" value={valOf(it, "boxW")} onChange={e => setVal(it.id, "boxW", e.target.value)} placeholder="ก" className={`${dimc}`} />
                             <span className="text-gray-300">×</span>
-                            <input type="number" value={valOf(it, "boxL")} onChange={e => setVal(it.id, "boxL", e.target.value)} placeholder="ย" className={`${selc} px-1 text-center`} />
+                            <input type="number" value={valOf(it, "boxL")} onChange={e => setVal(it.id, "boxL", e.target.value)} placeholder="ย" className={`${dimc}`} />
                             <span className="text-gray-300">×</span>
-                            <input type="number" value={valOf(it, "boxH")} onChange={e => setVal(it.id, "boxH", e.target.value)} placeholder="ส" className={`${selc} px-1 text-center`} />
+                            <input type="number" value={valOf(it, "boxH")} onChange={e => setVal(it.id, "boxH", e.target.value)} placeholder="ส" className={`${dimc}`} />
                           </div>
                         </td>
                         <td className="px-2 py-1.5 min-w-[130px]">
