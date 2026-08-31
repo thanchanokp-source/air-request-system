@@ -48,12 +48,10 @@ export default function LogisticsPage() {
 
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
   const raw = (it: any, k: string, fb = "") => edits[it.id]?.[k] ?? (it[k] != null ? String(it[k]) : fb)
-  const dateVal = (it: any, k: string) => edits[it.id]?.[k] ?? (it[k] ? String(it[k]).slice(0, 10) : "")
 
   const save = async (rq: any) => {
     for (const it of rq.items) {
       if (!airEst(it)) return alert(`No air rate for air port "${it.port}" at this weight (SO ${it.soNoDoc}). Check the Air Port / weight.`)
-      if (!dateVal(it, "inHouseAirDate")) return alert("Enter In-House Air date for every line.")
     }
     setBusy(rq.id)
     try {
@@ -64,8 +62,6 @@ export default function LogisticsPage() {
         incotermCost: raw(it, "incotermCost") || null,
         leadTimeAir: raw(it, "leadTimeAir"),
         leadTimeSea: raw(it, "leadTimeSea"),
-        inHouseAirDate: dateVal(it, "inHouseAirDate"),
-        inHouseSeaDate: dateVal(it, "inHouseSeaDate"),
       }))
       // Branch by origin: SCM request → SCM confirms air next; PC request → PC decides air next.
       const nextStatus = rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION"
@@ -86,12 +82,12 @@ export default function LogisticsPage() {
     const ws = wb.addWorksheet("Logistics")
     const headers = [
       "SO", "PO No", "Customer", "Style", "Material", "PULL", "Country", "Air Port", "Sea Port",
-      "Incoterm", "Weight(kg)", "Est Air(USD)",
-      "In-House Air *", "In-House Sea", "Air L/T", "Sea L/T", "Incoterm Cost", "Sea Freight", "_ItemID",
+      "Incoterm", "Weight(kg)", "Need Date", "Cartons", "Est Air(USD)",
+      "Air L/T", "Sea L/T", "Incoterm Cost", "Sea Freight", "_ItemID",
     ]
-    const widths = [12, 14, 18, 14, 26, 10, 18, 16, 18, 11, 11, 13, 15, 15, 12, 12, 13, 12, 26]
+    const widths = [12, 14, 18, 14, 26, 10, 18, 16, 18, 11, 11, 13, 9, 13, 12, 12, 13, 12, 26]
     const REF_C = "FFEAECEE", FILL_C = "FFE2EFDA" // grey (from Purchase) / green (LG fills)
-    const FILL_FROM = 12 // 0-based index where the green (fill-in) block starts (In-House Air)
+    const FILL_FROM = 14 // 0-based index where the green (fill-in) block starts (Air L/T)
     const FILL_TO = 17   // .. ends (Sea Freight)
     const hr = ws.addRow(headers); hr.height = 26
     headers.forEach((_, i) => {
@@ -108,8 +104,7 @@ export default function LogisticsPage() {
       ws.addRow([
         it.soNoDoc, it.poNoDoc || "", it.customerName || "", it.style || "", it.itemName || it.itemCode || "",
         it.pullMaterialQty ?? "", it.country || "", it.port || "", it.seaPort || "",
-        it.incoterm || "", it.weight ?? "", e ? e.est : "",
-        dateVal(it, "inHouseAirDate"), dateVal(it, "inHouseSeaDate"),
+        it.incoterm || "", it.weight ?? "", it.needDate ? String(it.needDate).slice(0, 10) : "", it.cartons ?? "", e ? e.est : "",
         raw(it, "leadTimeAir"), raw(it, "leadTimeSea"), raw(it, "incotermCost"), raw(it, "seaFreightCost"), it.id,
       ])
     })
@@ -134,8 +129,6 @@ export default function LogisticsPage() {
       const id = pick(row, "_ItemID")
       if (!id) continue
       next[id] = {
-        inHouseAirDate: pick(row, "In-House Air *", "In-House Air").slice(0, 10),
-        inHouseSeaDate: pick(row, "In-House Sea").slice(0, 10),
         leadTimeAir: pick(row, "Air L/T"),
         leadTimeSea: pick(row, "Sea L/T"),
         incotermCost: pick(row, "Incoterm Cost"),
@@ -200,7 +193,15 @@ export default function LogisticsPage() {
                     <Ref label="Weight (kg)" value={fmt(it.weight)} />
                     <Ref label="Consumption" value={fmt(it.consumption)} />
                     <Ref label="Ship Date" value={fmtDate(it.shipmentDate)} />
+                    <Ref label="Need Date (PC ต้องการของ)" value={fmtDate(it.needDate)} />
+                    <Ref label="Cartons" value={fmt(it.cartons)} />
+                    {(it.boxW || it.boxL || it.boxH) && <Ref label="Box W×L×H (cm)" value={`${fmt(it.boxW)} × ${fmt(it.boxL)} × ${fmt(it.boxH)}`} />}
                   </div>
+                  {it.pickupAddress && (
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs">
+                      <span className="font-semibold text-amber-700">📍 {it.incoterm} Pickup address:</span> <span className="text-gray-700">{it.pickupAddress}</span>
+                    </div>
+                  )}
 
                   {/* Auto Estimate Air */}
                   <div className={`rounded-lg p-3 ${e ? "bg-red-50 border border-red-200" : "bg-amber-50 border border-amber-200"}`}>
@@ -215,10 +216,8 @@ export default function LogisticsPage() {
                     )}
                   </div>
 
-                  {/* LG inputs — vertical */}
+                  {/* LG inputs — vertical (In-House dates removed; PC now enters Need Date, LG auto-calcs) */}
                   <div className="grid sm:grid-cols-2 gap-4 pt-1">
-                    <Field label="In-House Air date *"><input type="date" value={dateVal(it, "inHouseAirDate")} onChange={ev => setVal(it.id, "inHouseAirDate", ev.target.value)} className={inp} /></Field>
-                    <Field label="In-House Sea date"><input type="date" value={dateVal(it, "inHouseSeaDate")} onChange={ev => setVal(it.id, "inHouseSeaDate", ev.target.value)} className={inp} /></Field>
                     <Field label="Air Lead Time"><input value={raw(it, "leadTimeAir")} onChange={ev => setVal(it.id, "leadTimeAir", ev.target.value)} placeholder="e.g. 3 days" className={inp} /></Field>
                     <Field label="Sea Lead Time"><input value={raw(it, "leadTimeSea")} onChange={ev => setVal(it.id, "leadTimeSea", ev.target.value)} placeholder="e.g. 30 days" className={inp} /></Field>
                     <Field label="Incoterm cost (optional)"><input type="number" value={raw(it, "incotermCost")} onChange={ev => setVal(it.id, "incotermCost", ev.target.value)} placeholder="0" className={inp} /></Field>

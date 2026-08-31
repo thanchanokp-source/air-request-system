@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
              so_no_doc      AS "soNoDoc",
              cust_name      AS "customerName",
              group_code     AS "groupCode",
+             ou             AS "ou",
              cpart_no       AS "cpartNo",
              part_desc      AS "partDesc",
              item_no        AS "itemNo",

@@ -370,6 +370,7 @@ model PullMaterialItem {
   shipmentDate    DateTime?
   soYear          String?
   groupCode       String?
+  ou              String?   // OU (report column) — G-group / factory code (G1..G4, S9 …)
   cpartNo         String?
   partDesc        String?
   itemNo          String?
@@ -404,7 +405,13 @@ model PullMaterialItem {
   country         String?   // origin country — picked by PC (drives which ports show)
   port            String?   // origin AIR PORT CODE — picked by PC (for air rate)
   seaPort         String?   // origin SEA PORT — picked by PC (for sea rate)
-  incoterm        String?   // FOB / CIF / EX-WORK — picked by PC
+  incoterm        String?   // FOB / CIF / EX-WORK / FCA — picked by PC
+  pickupAddress   String?   // pickup / supplier address — required only when incoterm = EX-WORK or FCA
+  needDate        DateTime? // when Purchasing needs the goods (moved from LG's in-house; LG now auto-calcs)
+  cartons         Float?    // number of cartons (PC)
+  boxW            Float?    // carton dimension width  (cm, optional)
+  boxL            Float?    // carton dimension length (cm, optional)
+  boxH            Float?    // carton dimension height (cm, optional)
   // LG actual (close)
   invoiceNo       String?
   actualAir       Float?

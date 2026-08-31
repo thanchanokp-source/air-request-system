@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
           shipmentDate: dt(i.shipmentDate),
           soYear: i.soYear || null,
           groupCode: i.groupCode || null,
+          ou: i.ou || null,
           cpartNo: i.cpartNo || null,
           partDesc: i.partDesc || null,
           itemNo: i.itemNo || null,

@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, buColor } from "../_StageWork"
 
-const INCOTERMS = ["FOB", "CIF", "EX-WORK"]
+const INCOTERMS = ["FOB", "CIF", "EX-WORK", "FCA"]
+// Incoterms that require a pickup / supplier address (buyer arranges pickup at origin).
+const NEEDS_ADDRESS = ["EX-WORK", "FCA"]
 
 export default function PurchasePage() {
   const { data: session, status: auth } = useSession()
@@ -47,7 +49,7 @@ export default function PurchasePage() {
   const valOf = (it: any, k: string) => {
     if (edits[it.id]?.[k] !== undefined) return edits[it.id][k]
     if (it[k] == null) return ""
-    return (k === "shipmentDate") ? String(it[k]).slice(0, 10) : String(it[k])
+    return (k === "shipmentDate" || k === "needDate") ? String(it[k]).slice(0, 10) : String(it[k])
   }
   // "__OTHER__" = user picked "Other" but hasn't typed a name yet (not a real value).
   const OTHER = "__OTHER__"
@@ -59,6 +61,8 @@ export default function PurchasePage() {
       if (!filled(valOf(it, "country"))) return alert(`Select or type a Country for SO ${it.soNoDoc}.`)
       if (!filled(valOf(it, "port")) && !filled(valOf(it, "seaPort"))) return alert(`Select or type an Air Port or Sea Port for SO ${it.soNoDoc}.`)
       if (!valOf(it, "incoterm")) return alert(`Select an Incoterm for SO ${it.soNoDoc}.`)
+      if (NEEDS_ADDRESS.includes(valOf(it, "incoterm")) && !valOf(it, "pickupAddress").trim())
+        return alert(`${valOf(it, "incoterm")} needs a Pickup address for SO ${it.soNoDoc}.`)
       if (!valOf(it, "weight")) return alert(`Enter the Weight for SO ${it.soNoDoc}.`)
     }
     // Values PC typed as "Other" (not in the freight master) → LG must add their rate.
@@ -79,6 +83,9 @@ export default function PurchasePage() {
       const itemUpdates = rq.items.map((it: any) => ({
         id: it.id, country: clean(valOf(it, "country")), port: clean(valOf(it, "port")), seaPort: clean(valOf(it, "seaPort")),
         incoterm: valOf(it, "incoterm"), weight: valOf(it, "weight"), shipmentDate: valOf(it, "shipmentDate"),
+        pickupAddress: NEEDS_ADDRESS.includes(valOf(it, "incoterm")) ? valOf(it, "pickupAddress") : "",
+        needDate: valOf(it, "needDate"), cartons: valOf(it, "cartons"),
+        boxW: valOf(it, "boxW"), boxL: valOf(it, "boxL"), boxH: valOf(it, "boxH"),
       }))
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -95,6 +102,7 @@ export default function PurchasePage() {
   const selc = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300 disabled:bg-gray-50 disabled:text-gray-400"
   const openReq = reqs.find(r => r.id === openId)
   const itemReady = (it: any) => filled(valOf(it, "country")) && (filled(valOf(it, "port")) || filled(valOf(it, "seaPort"))) && !!valOf(it, "incoterm") && !!valOf(it, "weight")
+    && (!NEEDS_ADDRESS.includes(valOf(it, "incoterm")) || !!valOf(it, "pickupAddress").trim())
   const allReady = openReq ? openReq.items.every(itemReady) : false
 
   // Export the open doc's items to a styled workbook. Sheet "Purchase" = fill-in; the Country cell is a
@@ -138,13 +146,14 @@ export default function PurchasePage() {
 
     // Sheet: the fill-in form
     const ws = wb.addWorksheet("Purchase")
-    const headers = ["SO", "PO No", "Customer", "Cust PO", "Style", "Material", "PULL", "Consumption", "Country *", "Air Port", "Sea Port", "Incoterm *", "Weight(kg) *", "Ship Date", "_ItemID"]
-    const widths = [12, 14, 18, 12, 14, 28, 10, 12, 20, 16, 20, 12, 13, 14, 26]
+    const headers = ["SO", "PO No", "Customer", "Cust PO", "Style", "Material", "PULL", "Consumption", "Country *", "Air Port", "Sea Port", "Incoterm *", "Weight(kg) *", "Need Date", "Cartons", "Box W", "Box L", "Box H", "Pickup Addr", "Ship Date", "_ItemID"]
+    const widths = [12, 14, 18, 12, 14, 28, 10, 12, 20, 16, 20, 12, 13, 13, 9, 8, 8, 8, 28, 14, 26]
     const REF_C = "FFEAECEE", FILL_C = "FFE2EFDA" // grey (read-only) / green (fill in)
+    const FILL_FROM = 8, FILL_TO = 19 // Country .. Ship Date = green (PC fills)
     const hr = ws.addRow(headers); hr.height = 26
     headers.forEach((_, i) => {
       const c = hr.getCell(i + 1)
-      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: (i >= 8 && i <= 13) ? FILL_C : REF_C } }
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: (i >= FILL_FROM && i <= FILL_TO) ? FILL_C : REF_C } }
       c.font = { bold: true, size: 10 }
       c.alignment = { vertical: "middle", horizontal: "center", wrapText: true }
       c.border = { top: { style: "thin", color: { argb: "FFBFBFBF" } }, bottom: { style: "thin", color: { argb: "FFBFBFBF" } }, left: { style: "thin", color: { argb: "FFBFBFBF" } }, right: { style: "thin", color: { argb: "FFBFBFBF" } } }
@@ -157,7 +166,9 @@ export default function PurchasePage() {
         it.soNoDoc, it.poNoDoc || "", it.customerName || "", it.customerPo || "", it.style || "",
         it.itemName || it.itemCode || "", it.pullMaterialQty ?? "", it.consumption ?? "",
         clean(valOf(it, "country")), clean(valOf(it, "port")), clean(valOf(it, "seaPort")),
-        valOf(it, "incoterm"), valOf(it, "weight"), fmtD(valOf(it, "shipmentDate") || it.shipmentDate), it.id,
+        valOf(it, "incoterm"), valOf(it, "weight"),
+        fmtD(valOf(it, "needDate")), valOf(it, "cartons"), valOf(it, "boxW"), valOf(it, "boxL"), valOf(it, "boxH"), valOf(it, "pickupAddress"),
+        fmtD(valOf(it, "shipmentDate") || it.shipmentDate), it.id,
       ])
     })
     // Country (I) = dropdown from Countries sheet. Air Port (J) / Sea Port (K) = CASCADING dropdowns
@@ -174,7 +185,7 @@ export default function PurchasePage() {
         type: "list", allowBlank: true, formulae: [`INDIRECT("SEA_"&SUBSTITUTE($I${r}," ","_"))`],
       } as any
     }
-    ws.getColumn(15).hidden = true // _ItemID (used to match on import)
+    ws.getColumn(headers.length).hidden = true // _ItemID (used to match on import)
 
     const buf = await wb.xlsx.writeBuffer()
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
@@ -201,6 +212,10 @@ export default function PurchasePage() {
         seaPort: pick(row, "Sea Port"),
         incoterm: pick(row, "Incoterm *", "Incoterm"),
         weight: pick(row, "Weight(kg) *", "Weight(kg)", "Weight"),
+        needDate: pick(row, "Need Date").slice(0, 10),
+        cartons: pick(row, "Cartons"),
+        boxW: pick(row, "Box W"), boxL: pick(row, "Box L"), boxH: pick(row, "Box H"),
+        pickupAddress: pick(row, "Pickup Addr", "Pickup Address"),
         shipmentDate: pick(row, "Ship Date").slice(0, 10),
       }
       applied++
@@ -261,6 +276,9 @@ export default function PurchasePage() {
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Sea Port</th>
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Incoterm *</th>
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Weight(kg) *</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Need Date</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Cartons</th>
+                    <th className="px-2 py-2 text-center font-semibold bg-emerald-50 border-b border-emerald-200" title="กว้าง × ยาว × สูง (cm) — ไม่บังคับ">Dim W×L×H (cm)</th>
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Ship Date</th>
                   </tr>
                 </thead>
@@ -270,7 +288,7 @@ export default function PurchasePage() {
                     const airPorts = [...(airByCountry[c] || [])].sort()
                     const seaPorts = [...(seaByCountry[c] || [])].sort()
                     const rowBg = idx % 2 ? "bg-gray-50/40" : "bg-white"
-                    return (
+                    return [
                       <tr key={it.id} className={`${rowBg} align-top border-b border-gray-100`}>
                         <td className={`px-2 py-1.5 sticky left-0 z-10 ${rowBg}`}>
                           <span className="text-[11px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: MAROON }}>{it.soNoDoc}</span>
@@ -307,11 +325,39 @@ export default function PurchasePage() {
                           <input type="number" value={valOf(it, "weight")} onChange={e => setVal(it.id, "weight", e.target.value)} placeholder="0" className={selc} />
                         </td>
                         <td className="px-2 py-1.5 min-w-[130px]">
+                          <input type="date" value={valOf(it, "needDate")} onChange={e => setVal(it.id, "needDate", e.target.value)} className={selc} title="ต้องการของเมื่อไหร่" />
+                        </td>
+                        <td className="px-2 py-1.5 min-w-[80px]">
+                          <input type="number" value={valOf(it, "cartons")} onChange={e => setVal(it.id, "cartons", e.target.value)} placeholder="0" className={selc} />
+                        </td>
+                        <td className="px-2 py-1.5 min-w-[150px]">
+                          <div className="flex items-center gap-1">
+                            <input type="number" value={valOf(it, "boxW")} onChange={e => setVal(it.id, "boxW", e.target.value)} placeholder="ก" className={`${selc} px-1 text-center`} />
+                            <span className="text-gray-300">×</span>
+                            <input type="number" value={valOf(it, "boxL")} onChange={e => setVal(it.id, "boxL", e.target.value)} placeholder="ย" className={`${selc} px-1 text-center`} />
+                            <span className="text-gray-300">×</span>
+                            <input type="number" value={valOf(it, "boxH")} onChange={e => setVal(it.id, "boxH", e.target.value)} placeholder="ส" className={`${selc} px-1 text-center`} />
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5 min-w-[130px]">
                           <input type="date" value={valOf(it, "shipmentDate")} onChange={e => setVal(it.id, "shipmentDate", e.target.value)} className={selc} />
                         </td>
-                      </tr>
-                    )
-                  })}
+                      </tr>,
+                      NEEDS_ADDRESS.includes(valOf(it, "incoterm")) && (
+                        <tr key={`${it.id}-addr`} className={rowBg}>
+                          <td className={`px-2 pb-2 sticky left-0 z-10 ${rowBg}`} />
+                          <td colSpan={16} className="px-2 pb-2">
+                            <div className="flex items-start gap-2">
+                              <span className="text-[11px] font-semibold text-amber-700 whitespace-nowrap mt-1.5">📍 {valOf(it, "incoterm")} Pickup address *</span>
+                              <textarea value={valOf(it, "pickupAddress")} onChange={e => setVal(it.id, "pickupAddress", e.target.value)} rows={2}
+                                placeholder="ที่อยู่รับสินค้า / supplier address (บังคับสำหรับ EX-WORK / FCA)"
+                                className="flex-1 border border-amber-300 bg-amber-50 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
+                            </div>
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  }).flat().filter(Boolean)}
                 </tbody>
               </table>
             </div>

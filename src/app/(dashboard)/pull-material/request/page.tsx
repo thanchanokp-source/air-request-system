@@ -13,7 +13,7 @@ type Bom = {
   poNoDoc?: string; style?: string; brand?: string; gmtType?: string
   shipmentDate?: string; orderQty?: number
   itemCode?: string; itemName?: string; bomQty?: number; bomUom?: string; consumption?: number
-  bu?: string; soYear?: string; groupCode?: string; cpartNo?: string; partDesc?: string
+  bu?: string; soYear?: string; groupCode?: string; ou?: string; cpartNo?: string; partDesc?: string
   itemNo?: string; poqtyBomdummy?: number; poDate?: string; updInhouse?: string
   status?: string; poUsername?: string; mrdDate?: string; mrdNeedDate?: string; mrd2?: string
 }
@@ -22,7 +22,7 @@ type Bom = {
 const MAT_COLS: { k: keyof Bom; label: string; kind?: "date" | "num" }[] = [
   { k: "bu", label: "BU" }, { k: "soYear", label: "SO YEAR" }, { k: "soNoDoc", label: "SO NO" },
   { k: "poNoDoc", label: "PO NO" },
-  { k: "customerName", label: "CUST NAME" }, { k: "groupCode", label: "GROUP" },
+  { k: "customerName", label: "CUST NAME" }, { k: "groupCode", label: "GROUP" }, { k: "ou", label: "OU" },
   { k: "itemCode", label: "ITEM CODE" }, { k: "itemNo", label: "ITEM NO" },
   { k: "itemName", label: "ITEM NAME" }, { k: "consumption", label: "CONSUMPTION", kind: "num" },
   { k: "cpartNo", label: "CPART" }, { k: "partDesc", label: "PART DESC" },
@@ -46,7 +46,8 @@ export default function ScmRequestPage() {
   const canPc = roles.includes("ADMIN") || roles.includes("PURCHASING")
   const isAdmin = canScm || canPc // gate: SCM_PULL / PURCHASING / ADMIN can create a request
   // requestType decides the approval TAIL (SCM → VP SCM → President · PC → DVM Pur → VP Pur).
-  const [reqType, setReqType] = useState<"SCM" | "PURCHASING">(roles.includes("SCM_PULL") ? "SCM" : roles.includes("PURCHASING") ? "PURCHASING" : "SCM")
+  // Derived from the signed-in role — no manual toggle. Admin defaults to SCM (tests PC via "View as").
+  const reqType: "SCM" | "PURCHASING" = roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PURCHASING" : "SCM"
 
   const [bu, setBu] = useState("NYG")
   const [q, setQ] = useState("")
@@ -57,8 +58,8 @@ export default function ScmRequestPage() {
   const params = useSearchParams()
   const [tab, setTab] = useState<"request" | "approve">(params.get("tab") === "approve" ? "approve" : "request")
   // The air-decision tab adapts to the logged-in role: SCM_PULL → SCM decision (→ VP SCM);
-  // PURCHASING → PC decision (→ DVM Pur). Admin can toggle.
-  const [decType, setDecType] = useState<"SCM" | "PC">(roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PC" : "SCM")
+  // PURCHASING → PC decision (→ DVM Pur). Derived from role — no manual toggle.
+  const decType: "SCM" | "PC" = roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PC" : "SCM"
   const dec = decType === "PC"
     ? { decisionStatus: "PENDING_PC_DECISION", nextStatus: "PENDING_DVM_PUR" }
     : { decisionStatus: "PENDING_SCM_DECISION", nextStatus: "PENDING_VP_SCM" }
@@ -180,16 +181,8 @@ export default function ScmRequestPage() {
 
       {tab === "approve" ? (
         <>
-          {canScm && canPc && (
-            <div className="flex items-center gap-2 text-sm mb-1">
-              <span className="text-gray-500 font-medium">Decision:</span>
-              {(["SCM", "PC"] as const).map(t => (
-                <button key={t} onClick={() => setDecType(t)}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold border ${decType === t ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
-                  style={decType === t ? { background: MAROON } : undefined}>{t === "SCM" ? "SCM decision" : "PC decision"}</button>
-              ))}
-            </div>
-          )}
+          {/* Decision branch is derived from the signed-in role (no manual toggle):
+              SCM_PULL → SCM decision · PURCHASING → PC decision. Admin tests via "View as". */}
           <SendApprove bu={bu} setBu={setBu} decisionStatus={dec.decisionStatus} nextStatus={dec.nextStatus} />
         </>
       ) : <>
@@ -203,18 +196,13 @@ export default function ScmRequestPage() {
         ))}
       </div>
 
-      {/* Request type — decides the approval tail. Toggle only when the user can do both (or admin). */}
-      {canScm && canPc && (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-gray-500 font-medium">Request type:</span>
-          {(["SCM", "PURCHASING"] as const).map(t => (
-            <button key={t} onClick={() => setReqType(t)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold border ${reqType === t ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
-              style={reqType === t ? { background: MAROON } : undefined}>{t === "SCM" ? "SCM request" : "PC (Purchasing) request"}</button>
-          ))}
-          <span className="text-[11px] text-gray-400">{reqType === "SCM" ? "→ VP SCM → President" : "→ DVM Pur → VP Pur"}</span>
-        </div>
-      )}
+      {/* Request type is derived from the signed-in role (no manual toggle):
+          SCM_PULL → SCM (→ VP SCM → President) · PURCHASING → PC (→ DVM Pur → VP Pur). */}
+      <div className="text-[11px] text-gray-400">
+        Request type: <span className="font-semibold text-gray-600">{reqType === "SCM" ? "SCM" : "Purchasing"}</span>
+        <span className="ml-1">{reqType === "SCM" ? "→ VP SCM → President" : "→ DVM Pur → VP Pur"}</span>
+        {isAdmin && <span className="ml-2 text-amber-600">· admin: switch branch via “View as”</span>}
+      </div>
 
       {/* Search */}
       <div className="bg-white rounded-xl border p-4">
@@ -260,11 +248,12 @@ export default function ScmRequestPage() {
           <h2 className="font-semibold text-gray-800">Materials of SO {openSo.soNoDoc}
             <span className="text-xs text-gray-400 font-normal"> · {openSo.customerName} · order {fmt(openSo.orderQty)} pcs</span>
           </h2>
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <label className="text-sm font-semibold text-gray-600">Pull how many garments: *</label>
-            <input value={pullGarment} onChange={e => setPullGarment(e.target.value)} type="number" placeholder="e.g. 30"
-              className="w-32 border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
-            <span className="text-xs text-gray-400">from order {fmt(openSo.orderQty)} pcs → material qty auto-calculated</span>
+          <div className="mt-3 flex items-center gap-3 flex-wrap rounded-xl border-2 border-red-200 bg-red-50/50 px-4 py-3">
+            <label className="text-sm font-bold" style={{ color: MAROON }}>ดึงกี่ตัว (Pull garments)<span className="text-red-500"> *</span></label>
+            <input value={pullGarment} onChange={e => setPullGarment(e.target.value)} type="number" placeholder="0" min={1}
+              className="w-40 border-2 border-red-300 rounded-xl px-4 py-2.5 text-xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" style={{ color: MAROON }} />
+            <span className="text-xs text-gray-500">จาก order <b>{fmt(openSo.orderQty)}</b> ตัว → คำนวณ material qty อัตโนมัติ</span>
+            {!pullGarment && <span className="text-xs font-semibold text-red-500">← กรอกจำนวนก่อนเลือกวัสดุ</span>}
           </div>
 
           {loadingMat ? <p className="text-sm text-gray-400 mt-3">Loading materials…</p> : (
@@ -429,7 +418,7 @@ export function SendApprove({ bu, setBu, decisionStatus = "PENDING_SCM_DECISION"
               <div className="mt-3 border rounded-xl overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
-                    {["✈ AIR", "SO", "Material", "PULL", "Consumption", "Country", "Incoterm", "G.W.(kg)", "Air Freight", "Sea Freight", "Lead Air", "Lead Sea", "In-House Air", "In-House Sea", "Sew Date"].map(h =>
+                    {["✈ AIR", "SO", "OU", "Material", "PULL", "Consumption", "Country", "Incoterm", "G.W.(kg)", "Air Freight", "Sea Freight", "Lead Air", "Lead Sea", "Need Date", "Sew Date"].map(h =>
                       <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
@@ -437,6 +426,7 @@ export function SendApprove({ bu, setBu, decisionStatus = "PENDING_SCM_DECISION"
                       <tr key={it.id} className={`hover:bg-gray-50 ${air[it.id] ? "" : "opacity-50"}`}>
                         <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={!!air[it.id]} onChange={e => setAir(p => ({ ...p, [it.id]: e.target.checked }))} /></td>
                         <td className="px-3 py-1.5 font-semibold text-gray-800">{it.soNoDoc}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{it.ou || "-"}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{it.itemName || it.itemCode}</td>
                         <td className="px-3 py-1.5">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
                         <td className="px-3 py-1.5">{fmt(it.consumption)}</td>
@@ -447,8 +437,7 @@ export function SendApprove({ bu, setBu, decisionStatus = "PENDING_SCM_DECISION"
                         <td className="px-3 py-1.5">{fmt(it.seaFreightCost)}</td>
                         <td className="px-3 py-1.5">{it.leadTimeAir || "-"}</td>
                         <td className="px-3 py-1.5">{it.leadTimeSea || "-"}</td>
-                        <td className="px-3 py-1.5">{fmtDate(it.inHouseAirDate)}</td>
-                        <td className="px-3 py-1.5">{fmtDate(it.inHouseSeaDate)}</td>
+                        <td className="px-3 py-1.5">{fmtDate(it.needDate)}</td>
                         <td className="px-3 py-1.5"><input type="date" value={sew[it.id] || ""} onChange={e => setSew(p => ({ ...p, [it.id]: e.target.value }))} className="border border-gray-200 rounded px-2 py-1 text-xs" /></td>
                       </tr>
                     ))}
