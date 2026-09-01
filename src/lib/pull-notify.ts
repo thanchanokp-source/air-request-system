@@ -15,7 +15,7 @@ const STAGE: Record<string, { roles: string[]; redirect: string; title: string; 
   PENDING_VP_SCM:       { roles: ["VP_SCM"],           redirect: "/pull-material/approval",  title: "pending your approval — VP SCM", cta: "Open Approval" },
   PENDING_FINAL:        { roles: ["PULL_PRESIDENT"],   redirect: "/pull-material/approval",  title: "pending final approval (President)", cta: "Open Approval" },
   PENDING_DVM_PUR:      { roles: ["DVM_PUR"],          redirect: "/pull-material/approval",  title: "pending your approval — DVM Purchasing", cta: "Open Approval" },
-  PENDING_VP_PUR:       { roles: ["VP_PUR"],           redirect: "/pull-material/approval",  title: "pending your approval — Purchase Approval", cta: "Open Approval" },
+  PENDING_VP_PUR:       { roles: ["VP_PUR"],           redirect: "/pull-material/approval",  title: "pending your approval — DPM", cta: "Open Approval" },
 }
 
 // Alert the owner(s) of a Pull Material stage when a doc reaches it. Per-recipient magic-login link

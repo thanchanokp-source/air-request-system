@@ -10,7 +10,7 @@ const APPROVER: Record<string, { role: string; label: string; next: string; back
   PENDING_DVM_SCM:  { role: "PULL_DVM_SCM",   label: "DVM SCM",        next: "PENDING_VP_SCM",  back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
   PENDING_VP_SCM:   { role: "VP_SCM",         label: "VP SCM",         next: "PENDING_FINAL",   back: "PENDING_DVM_SCM",      backLabel: "Send back to DVM SCM" },
   PENDING_FINAL:    { role: "PULL_PRESIDENT", label: "Final approval", next: "APPROVED",        back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
-  PENDING_VP_PUR:   { role: "VP_PUR",         label: "Purchase Approval", next: "APPROVED",     back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
+  PENDING_VP_PUR:   { role: "VP_PUR",         label: "DPM",            next: "APPROVED",        back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
   PENDING_APPROVAL: { role: "ADMIN",          label: "Approval (legacy)", next: "APPROVED",     back: "PENDING_SCM_DECISION", backLabel: "Send back" },
 }
 
@@ -25,7 +25,7 @@ const SCM_CHAIN = [
 const PC_CHAIN = [
   { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" },
   { s: "PENDING_PC_DECISION", l: "PC decision", role: "PURCHASING" },
-  { s: "PENDING_VP_PUR", l: "Purchase Approval", role: "VP_PUR" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
+  { s: "PENDING_VP_PUR", l: "DPM", role: "VP_PUR" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
 ]
 const nameOf = (u: any) => u?.name || (u?.email ? String(u.email).split("@")[0] : "")
 

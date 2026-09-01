@@ -15,7 +15,7 @@ const POSITIONS = [
   // via role PRESIDENT) → no new Pull roles / no self-registration for them.
   { value: "PULL_DVM_SCM", label: "DVM SCM (Pull RM)" }, // Pull Material — SCM-branch first approver
   { value: "DVM_PUR", label: "DVM Purchasing (Pull RM)" }, // Pull Material — PC-branch approver
-  { value: "VP_PUR", label: "VP Purchasing (Pull RM)" }, // Pull Material — PC-branch final approver
+  { value: "VP_PUR", label: "DPM (Pull RM)" }, // Pull Material — PC-branch approver (DPM), routed by BU
   { value: "VISITOR", label: "Visitor (view only)" },
 ]
 
