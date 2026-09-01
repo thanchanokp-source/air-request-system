@@ -19,6 +19,7 @@ export default function PullRatesPage() {
   const [q, setQ] = useState("")
   const [busy, setBusy] = useState(false)
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
+  const [sheetUrl, setSheetUrl] = useState("")
 
   // ?prefill=<JSON [{type:'air'|'sea', country, port}]> → pre-create draft rows for ports Purchase
   // flagged as "Other" (from the "add missing port rate" email link). LG just fills the numbers.
@@ -135,6 +136,20 @@ export default function PullRatesPage() {
     } finally { setBusy(false) }
   }
 
+  // Pull the master straight from a Google Sheet link: server downloads the workbook as .xlsx (proxy,
+  // avoids CORS), then it goes through the SAME AIR/SEA importer as an uploaded file.
+  const syncFromSheet = async () => {
+    if (!sheetUrl.trim()) return alert("วางลิงก์ Google Sheet ก่อน")
+    setBusy(true)
+    try {
+      const res = await fetch("/api/pull-material/sheet-proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: sheetUrl.trim() }) })
+      if (!res.ok) { const e = await res.json().catch(() => ({})); return alert(e.error || "ดึงจาก Google Sheet ไม่ได้") }
+      const blob = await res.blob()
+      await importXlsx(new File([blob], "google_sheet.xlsx"))
+    } catch (e: any) { alert(`ดึงไม่สำเร็จ: ${e?.message || e}`) }
+    finally { setBusy(false) }
+  }
+
   const cellVal = (row: any, k: string) => edits[row.id]?.[k] ?? (row.rates?.[k] != null ? String(row.rates[k]) : "")
   const setCell = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
   // Row-level fields (not inside the rates JSON): origin cost per incoterm.
@@ -211,6 +226,19 @@ export default function PullRatesPage() {
             style={tab === k ? { color: MAROON, borderColor: MAROON } : undefined}>{label}</button>
         ))}
       </div>
+
+      {isAdmin && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-blue-800">🔗 Sync จาก Google Sheet:</span>
+          <input value={sheetUrl} onChange={e => setSheetUrl(e.target.value)} placeholder="วางลิงก์ Google Sheet ที่นี่ (แชร์เป็น ‘ใครมีลิงก์ก็ดูได้’)"
+            className="flex-1 min-w-[240px] border border-blue-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200" />
+          <button onClick={syncFromSheet} disabled={busy || !sheetUrl.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 disabled:opacity-40">
+            {busy ? "กำลังดึง…" : "↻ ดึงเข้าระบบ"}
+          </button>
+          <span className="w-full text-[11px] text-blue-700/70">ระบบจะดาวน์โหลดทั้งไฟล์ (AIR RATE + SEA RATE รวม EXW/FCA) แล้วแทนที่ master ให้ · ต้องแชร์ Sheet เป็น Viewer แบบ “ใครมีลิงก์ก็ดูได้”</span>
+        </div>
+      )}
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder={tab === "air" ? "🔍 Search origin / airline / fwd…" : "🔍 Search country / port…"}
         className="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
