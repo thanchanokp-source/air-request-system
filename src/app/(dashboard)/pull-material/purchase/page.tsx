@@ -79,10 +79,13 @@ export default function PurchasePage() {
     const routes = airRows.filter(r => r.origin === port)
     if (!port || !gross || !routes.length) return null
     const bk = breakKey(gross)
-    const cand = routes.map(r => ({ rate: Number(r.rates?.[bk]), tt: r.tt })).filter(x => x.rate && !isNaN(x.rate))
+    const cand = routes.map(r => ({ rate: Number(r.rates?.[bk]), tt: r.tt, exw: Number(r.origCostExw) || 0, fca: Number(r.origCostFca) || 0 })).filter(x => x.rate && !isNaN(x.rate))
     if (!cand.length) return null
     const best = cand.reduce((a, b) => (b.rate > a.rate ? b : a))
-    return { est: Math.round(best.rate * gross * 100) / 100, tt: best.tt || "-", bk }
+    // EX-WORK / FCA add the origin cost from the master; other incoterms add nothing.
+    const inc = String(valOf(it, "incoterm") || "").toUpperCase()
+    const add = inc === "EX-WORK" ? best.exw : inc === "FCA" ? best.fca : 0
+    return { est: Math.round((best.rate * gross + add) * 100) / 100, tt: best.tt || "-", bk, add }
   }
 
   const save = async (rq: any) => {
@@ -402,7 +405,7 @@ export default function PurchasePage() {
                           const cell = "px-2 py-1.5 text-right bg-sky-50/50 whitespace-nowrap"
                           return <>
                             <td className={`${cell} text-sky-800`}>{a ? a.tt : <span className="text-gray-300">—</span>}</td>
-                            <td className={`${cell} font-semibold text-sky-800`}>{a ? fmt(a.est) : <span className="text-gray-300">รอกรอก</span>}</td>
+                            <td className={`${cell} font-semibold text-sky-800`} title={a?.add ? `รวม origin cost ${valOf(it, "incoterm")} +${fmt(a.add)}` : ""}>{a ? <>{fmt(a.est)}{a.add ? <span className="text-[9px] text-amber-600 ml-0.5">+{valOf(it, "incoterm") === "FCA" ? "FCA" : "EXW"}</span> : null}</> : <span className="text-gray-300">รอกรอก</span>}</td>
                             <td className={`${cell} text-gray-400`} title="Sea เป็นค่าต่อ container — รอสูตร/มาสเตอร์จาก LG">รอ master</td>
                             <td className={`${cell} text-gray-400`}>รอ master</td>
                             <td className={`${cell} text-gray-400`} title="ยังไม่มี master FedEx — รอ data จาก LG">รอ master</td>

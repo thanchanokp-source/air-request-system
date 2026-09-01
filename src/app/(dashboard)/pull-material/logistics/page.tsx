@@ -31,8 +31,9 @@ export default function LogisticsPage() {
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
   useEffect(() => { fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRates(d.rows || [])).catch(() => {}) }, [])
 
-  // Estimate Air freight = weight × rate(port/country) × qty.
-  // gross = weight(per unit) × pull qty → used for the Q-break tier AND the amount.
+  // Estimate Air freight = gross × rate(port) + origin cost by incoterm.
+  //   base = gross × rate  (gross = per-unit weight × pull qty, also picks the Q-break tier)
+  //   EX-WORK → + Orig Cost (EXW) · FCA → + Orig Cost (FCA) · other incoterms → + 0
   const airEst = (it: any) => {
     const w = Number(it.weight) || 0
     const qty = Number(it.pullMaterialQty) || 0
@@ -40,10 +41,12 @@ export default function LogisticsPage() {
     const routes = airRates.filter(r => r.origin === it.port)
     if (!it.port || !gross || !routes.length) return null
     const bk = breakKey(gross)
-    const vals = routes.map(r => Number(r.rates?.[bk])).filter(v => v && !isNaN(v))
-    if (!vals.length) return null
-    const rate = Math.max(...vals)
-    return { bk, rate, gross, est: Math.round(rate * gross * 100) / 100 }
+    const cand = routes.map(r => ({ rate: Number(r.rates?.[bk]), exw: Number(r.origCostExw) || 0, fca: Number(r.origCostFca) || 0 })).filter(x => x.rate && !isNaN(x.rate))
+    if (!cand.length) return null
+    const best = cand.reduce((a, b) => (b.rate > a.rate ? b : a))
+    const inc = String(it.incoterm || "").toUpperCase()
+    const add = inc === "EX-WORK" ? best.exw : inc === "FCA" ? best.fca : 0
+    return { bk, rate: best.rate, gross, add, est: Math.round((best.rate * gross + add) * 100) / 100 }
   }
 
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
@@ -224,7 +227,7 @@ export default function LogisticsPage() {
                         <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{fmtDate(it.needDate)}</td>
                         <td className="px-2 py-1.5 text-right text-gray-600 whitespace-nowrap">{fmt(it.cartons)}</td>
                         <td className="px-2 py-1.5 text-right bg-sky-50/40 whitespace-nowrap">
-                          {e ? <span className="font-bold text-sky-800" title={`max rate ${e.rate} (${e.bk}) × ${fmt(it.weight)} kg`}>{fmt(e.est)}</span>
+                          {e ? <span className="font-bold text-sky-800" title={`rate ${e.rate} (${e.bk}) × ${fmt(e.gross)} kg${e.add ? ` + ${String(it.incoterm).toUpperCase() === "FCA" ? "FCA" : "EXW"} ${fmt(e.add)}` : ""}`}>{fmt(e.est)}</span>
                             : <span className="text-[11px] text-amber-600" title={`No air rate for "${it.port || "-"}" at this weight`}>⚠ no rate</span>}
                         </td>
                         <td className="px-2 py-1.5 min-w-[110px]"><input value={raw(it, "leadTimeAir")} onChange={ev => setVal(it.id, "leadTimeAir", ev.target.value)} placeholder="3 days" className={cinp} /></td>
