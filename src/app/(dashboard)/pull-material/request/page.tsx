@@ -380,7 +380,7 @@ export default function ScmRequestPage() {
 // ── Air Decision — pick which lines go AIR + sew date per line, after PC+LG data. Reused for BOTH
 // the SCM decision (PENDING_SCM_DECISION → PENDING_VP_SCM) and the PC decision (PENDING_PC_DECISION
 // → PENDING_DVM_PUR) via props. ──
-export function SendApprove({ bu, setBu, decisionStatus = "PENDING_SCM_DECISION", nextStatus = "PENDING_VP_SCM" }:
+function SendApprove({ bu, setBu, decisionStatus = "PENDING_SCM_DECISION", nextStatus = "PENDING_VP_SCM" }:
   { bu: string; setBu: (b: string) => void; decisionStatus?: string; nextStatus?: string }) {
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
