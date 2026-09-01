@@ -143,13 +143,14 @@ export default function LogisticsPage() {
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Logistics Import / Admin only</p></div>
 
-  const inp = "border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full max-w-xs focus:outline-none focus:ring-2 focus:ring-red-200"
+  const cinp = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200"
+  const cinpN = cinp + " [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
   const openReq = reqs.find(r => r.id === openId)
 
   return (
-    <div className="p-5 max-w-[1100px] mx-auto space-y-4">
+    <div className="p-5 max-w-[1500px] mx-auto space-y-4">
       <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Logistics — Pull Material</h1>
-        <p className="text-sm text-gray-500">Estimate Air is auto-calculated from Port + weight (Rate_LG). Fill Air L/T + In-House → send to SCM</p></div>
+        <p className="text-sm text-gray-500">Est Air คำนวณอัตโนมัติจาก Port + weight (Rate_LG) · LG กรอก Air/Sea L/T + cost → ส่งต่อ SCM</p></div>
       <div className="flex gap-1.5">{BUS.map(b => (
         <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
@@ -174,58 +175,76 @@ export default function LogisticsPage() {
               </div>
             </div>
 
-            {openReq.items.map((it: any) => {
-              const e = airEst(it)
-              return (
-                <div key={it.id} className="bg-white rounded-xl border p-4 space-y-3">
-                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b pb-2">
-                    <span className="font-semibold text-gray-800">SO {it.soNoDoc}</span>
-                    <span className="text-sm text-gray-600">{it.itemName || it.itemCode}</span>
-                    <span className="text-xs text-gray-400">{it.brand || "-"} · PULL {fmt(it.pullMaterialQty)} {it.bomUom || ""}</span>
-                  </div>
+            <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 border border-gray-300" /> ข้อมูลจาก Purchase</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-sky-100 border border-sky-300" /> 🔒 Est Air (auto)</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-300" /> LG กรอก</span>
+            </div>
 
-                  {/* Read-only refs */}
-                  <div className="grid sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
-                    <Ref label="Country" value={it.country || "-"} />
-                    <Ref label="Air Port" value={it.port || "-"} />
-                    <Ref label="Sea Port" value={it.seaPort || "-"} />
-                    <Ref label="Incoterm" value={it.incoterm || "-"} />
-                    <Ref label="Weight (kg)" value={fmt(it.weight)} />
-                    <Ref label="Consumption" value={fmt(it.consumption)} />
-                    <Ref label="Ship Date" value={fmtDate(it.shipmentDate)} />
-                    <Ref label="Need Date (PC ต้องการของ)" value={fmtDate(it.needDate)} />
-                    <Ref label="Cartons" value={fmt(it.cartons)} />
-                    {(it.boxW || it.boxL || it.boxH) && <Ref label="Box W×L×H (cm)" value={`${fmt(it.boxW)} × ${fmt(it.boxL)} × ${fmt(it.boxH)}`} />}
-                  </div>
-                  {it.pickupAddress && (
-                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs">
-                      <span className="font-semibold text-amber-700">📍 {it.incoterm} Pickup address:</span> <span className="text-gray-700">{it.pickupAddress}</span>
-                    </div>
-                  )}
-
-                  {/* Auto Estimate Air */}
-                  <div className={`rounded-lg p-3 ${e ? "bg-red-50 border border-red-200" : "bg-amber-50 border border-amber-200"}`}>
-                    {e ? (
-                      <div className="flex flex-wrap items-baseline gap-x-3">
-                        <span className="text-xs text-gray-500">Estimate Air (auto)</span>
-                        <span className="text-lg font-bold" style={{ color: MAROON }}>{fmt(e.est)} USD</span>
-                        <span className="text-xs text-gray-400">= max rate {e.rate} ({e.bk}) × {fmt(it.weight)} kg</span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-amber-700">⚠ No air rate for air port &quot;{it.port || "-"}&quot; at this weight — check Air Port/weight or add the rate to the master.</span>
-                    )}
-                  </div>
-
-                  {/* LG inputs — vertical (In-House dates removed; PC now enters Need Date, LG auto-calcs) */}
-                  <div className="grid sm:grid-cols-2 gap-4 pt-1">
-                    <Field label="Air Lead Time"><input value={raw(it, "leadTimeAir")} onChange={ev => setVal(it.id, "leadTimeAir", ev.target.value)} placeholder="e.g. 3 days" className={inp} /></Field>
-                    <Field label="Sea Lead Time"><input value={raw(it, "leadTimeSea")} onChange={ev => setVal(it.id, "leadTimeSea", ev.target.value)} placeholder="e.g. 30 days" className={inp} /></Field>
-                    <Field label="Incoterm cost (optional)"><input type="number" value={raw(it, "incotermCost")} onChange={ev => setVal(it.id, "incotermCost", ev.target.value)} placeholder="0" className={inp} /></Field>
-                    <Field label="Sea Freight (optional)"><input type="number" value={raw(it, "seaFreightCost")} onChange={ev => setVal(it.id, "seaFreightCost", ev.target.value)} placeholder="0" className={inp} /></Field>
-                  </div>
-                </div>
-              )
-            })}
+            {/* Excel-like horizontal rows */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="text-sm border-collapse min-w-[1500px] w-full">
+                <thead>
+                  <tr className="text-[11px] text-gray-500 uppercase tracking-wide">
+                    <th className="px-2 py-2 text-left font-semibold sticky left-0 bg-gray-100 z-10 border-b border-gray-200">SO</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Material</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">PULL</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Country</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Air Port</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Sea Port</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Incoterm</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">Weight</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">Cons.</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Need Date</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">Cartons</th>
+                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Est Air</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Air L/T</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Sea L/T</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Incoterm Cost</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Sea Freight</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {openReq.items.map((it: any, idx: number) => {
+                    const e = airEst(it)
+                    const rowBg = idx % 2 ? "bg-gray-50/40" : "bg-white"
+                    return [
+                      <tr key={it.id} className={`${rowBg} align-top border-b border-gray-100`}>
+                        <td className={`px-2 py-1.5 sticky left-0 z-10 ${rowBg}`}>
+                          <span className="text-[11px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: MAROON }}>{it.soNoDoc}</span>
+                        </td>
+                        <td className="px-2 py-1.5 text-gray-700 max-w-[200px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || "-"}</td>
+                        <td className="px-2 py-1.5 text-right text-gray-700 whitespace-nowrap">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
+                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.country || "-"}</td>
+                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.port || "-"}</td>
+                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.seaPort || "-"}</td>
+                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.incoterm || "-"}</td>
+                        <td className="px-2 py-1.5 text-right text-gray-600 whitespace-nowrap">{fmt(it.weight)}</td>
+                        <td className="px-2 py-1.5 text-right text-gray-500 whitespace-nowrap">{fmt(it.consumption)}</td>
+                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{fmtDate(it.needDate)}</td>
+                        <td className="px-2 py-1.5 text-right text-gray-600 whitespace-nowrap">{fmt(it.cartons)}</td>
+                        <td className="px-2 py-1.5 text-right bg-sky-50/40 whitespace-nowrap">
+                          {e ? <span className="font-bold text-sky-800" title={`max rate ${e.rate} (${e.bk}) × ${fmt(it.weight)} kg`}>{fmt(e.est)}</span>
+                            : <span className="text-[11px] text-amber-600" title={`No air rate for "${it.port || "-"}" at this weight`}>⚠ no rate</span>}
+                        </td>
+                        <td className="px-2 py-1.5 min-w-[110px]"><input value={raw(it, "leadTimeAir")} onChange={ev => setVal(it.id, "leadTimeAir", ev.target.value)} placeholder="3 days" className={cinp} /></td>
+                        <td className="px-2 py-1.5 min-w-[110px]"><input value={raw(it, "leadTimeSea")} onChange={ev => setVal(it.id, "leadTimeSea", ev.target.value)} placeholder="30 days" className={cinp} /></td>
+                        <td className="px-2 py-1.5 min-w-[100px]"><input type="number" value={raw(it, "incotermCost")} onChange={ev => setVal(it.id, "incotermCost", ev.target.value)} placeholder="0" className={cinpN} /></td>
+                        <td className="px-2 py-1.5 min-w-[100px]"><input type="number" value={raw(it, "seaFreightCost")} onChange={ev => setVal(it.id, "seaFreightCost", ev.target.value)} placeholder="0" className={cinpN} /></td>
+                      </tr>,
+                      it.pickupAddress && (
+                        <tr key={`${it.id}-addr`} className={rowBg}>
+                          <td className={`px-2 pb-2 sticky left-0 z-10 ${rowBg}`} />
+                          <td colSpan={15} className="px-2 pb-2">
+                            <span className="text-[11px] font-semibold text-amber-700">📍 {it.incoterm} Pickup address:</span> <span className="text-xs text-gray-700">{it.pickupAddress}</span>
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  }).flat().filter(Boolean)}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           /* ── List of documents ── */
@@ -247,11 +266,4 @@ export default function LogisticsPage() {
         )}
     </div>
   )
-}
-
-function Ref({ label, value }: { label: string; value: any }) {
-  return <div><div className="text-[11px] text-gray-400">{label}</div><div className="text-gray-700">{value}</div></div>
-}
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="text-xs font-medium text-gray-500 block mb-1">{label}</label>{children}</div>
 }
