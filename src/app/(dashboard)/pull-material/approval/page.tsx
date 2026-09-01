@@ -9,7 +9,7 @@ import { pcApprover } from "@/lib/pull-approvers"
 const APPROVER: Record<string, { role: string; label: string; next: string; back: string; backLabel: string }> = {
   PENDING_DVM_SCM:  { role: "PULL_DVM_SCM",   label: "DVM SCM",        next: "PENDING_VP_SCM",  back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
   PENDING_VP_SCM:   { role: "VP_SCM",         label: "VP SCM",         next: "PENDING_FINAL",   back: "PENDING_DVM_SCM",      backLabel: "Send back to DVM SCM" },
-  PENDING_FINAL:    { role: "PULL_PRESIDENT", label: "Final approval", next: "APPROVED",        back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
+  PENDING_FINAL:    { role: "PULL_PRESIDENT", label: "VP Production",  next: "APPROVED",        back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
   PENDING_VP_PUR:   { role: "VP_PUR",         label: "DPM",            next: "APPROVED",        back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
   PENDING_APPROVAL: { role: "ADMIN",          label: "Approval (legacy)", next: "APPROVED",     back: "PENDING_SCM_DECISION", backLabel: "Send back" },
 }
@@ -20,7 +20,7 @@ const SCM_CHAIN = [
   { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" },
   { s: "PENDING_SCM_DECISION", l: "SCM", role: "SCM_PULL" }, { s: "PENDING_DVM_SCM", l: "DVM SCM", role: "PULL_DVM_SCM" },
   { s: "PENDING_VP_SCM", l: "VP SCM", role: "VP_SCM" },
-  { s: "PENDING_FINAL", l: "Final approval", role: "PULL_PRESIDENT" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
+  { s: "PENDING_FINAL", l: "VP Production", role: "PULL_PRESIDENT" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
 ]
 const PC_CHAIN = [
   { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" },
