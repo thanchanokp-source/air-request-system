@@ -1148,7 +1148,7 @@ export default function RequestDetailPage() {
   const claimSelIds = [...dvmSelected].filter((idv: string) => gwFwdItems.some((i: any) => i.id === idv))
   const claimActIds: string[] = claimSelIds.length ? claimSelIds : gwFwdItems.map((i: any) => i.id)
   const exportClaimExcel = async () => {
-    const CUR = req?.bu === "EA" ? "USD" : "THB"
+    const CUR = (req?.bu === "EA" || String(req?.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"
     // Same column ORDER as the on-screen claim table.
     const headers = ["SO", "SUB", "STYLE", "BRAND", "CUSTOMER PO", "DESCRIPTION", "ORIG. DATE", "PLAN DATE",
       "QTY ORIG", "QTY AIR", "GROSS (KG)", `EST. (${CUR})`, "FACTORY", "COUNTRY", "HAWB#", "INVOICE", "BOOKING DATE",
@@ -1191,7 +1191,7 @@ export default function RequestDetailPage() {
   // Generic Excel export of a claim-approver's SO list — works for ANY BU / approver screen
   // (SCM NYK, CLAIM_NEXT_APPROVER, etc.) so a reviewer can pull the data when there are many SOs.
   const exportItemsExcel = (items: any[], suffix: string) => {
-    const CUR = req?.bu === "EA" ? "USD" : "THB"
+    const CUR = (req?.bu === "EA" || String(req?.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"
     const rows = (items || []).map((it: any, i: number) => ({
       "No.": i + 1, "SO": it.so, "STYLE": it.style, "SUB": it.sub || "", "BRAND": it.brand || "",
       "CUSTOMER PO": it.customerPO || "", "DESCRIPTION": it.description || "",
@@ -2211,7 +2211,7 @@ export default function RequestDetailPage() {
   if (loading) return <div className="text-center py-20 text-gray-400">Loading...</div>
   if (!req) return <div className="text-center py-20 text-gray-400">Not found</div>
   // Currency label for money amounts: EA documents are stored/shown in USD, all others in THB.
-  const CUR = req?.bu === "EA" ? "USD" : "THB"
+  const CUR = (req?.bu === "EA" || String(req?.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"
   // Currency is per-SO (EA / GW-RHONE → USD, else THB); a GW doc can mix. One SO's amount is labelled
   // with its own unit; a total over several SOs is split so THB and USD are never summed into one.
   const soCur = (item: any) => soCurrency(req?.bu, item?.brand ?? req?.brandName)
@@ -4131,7 +4131,7 @@ export default function RequestDetailPage() {
             )}
 
             {claimTableView && (
-              <SoApprovalTable items={nextItems} selected={nextSelected} cur={req?.bu === "EA" ? "USD" : "THB"}
+              <SoApprovalTable items={nextItems} selected={nextSelected} cur={(req?.bu === "EA" || String(req?.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"}
                 onToggle={(id, checked) => setNextSelected(prev => { const s = new Set(prev); checked ? s.add(id) : s.delete(id); return s })}
                 canApprove={(i: any) => i.itemStatus === "LOG_PASSED"}
                 statusOf={(i: any) => i.itemStatus === "CLAIM_PASSED" ? { t: "Approved ✓", c: "bg-green-100 text-green-700" } : i.itemStatus === "LOG_PASSED" ? { t: "Your turn", c: "bg-yellow-100 text-yellow-700" } : { t: "Pending", c: "bg-gray-100 text-gray-500" }} />
@@ -5781,7 +5781,7 @@ export default function RequestDetailPage() {
           )}
           {claimTableView && (
             <SoApprovalTable items={(req.items||[]).filter((i:any) => ["LOG_PASSED","COMPLETED","REJECTED"].includes(i.itemStatus))}
-              cur={req?.bu === "EA" ? "USD" : "THB"}
+              cur={(req?.bu === "EA" || String(req?.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"}
               selected={claimGwSelected}
               onToggle={(id, checked) => setClaimGwSelected(prev => { const n = new Set(prev); checked ? n.add(id) : n.delete(id); return n })}
               canApprove={(i: any) => i.itemStatus === "LOG_PASSED"}
