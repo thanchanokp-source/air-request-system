@@ -61,7 +61,7 @@ export default function ScmRequestPage() {
   // PURCHASING → PC decision (→ DVM Pur). Derived from role — no manual toggle.
   const decType: "SCM" | "PC" = roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PC" : "SCM"
   const dec = decType === "PC"
-    ? { decisionStatus: "PENDING_PC_DECISION", nextStatus: "PENDING_DVM_PUR" }
+    ? { decisionStatus: "PENDING_PC_DECISION", nextStatus: "PENDING_VP_PUR" }   // PC decision → single PC approver (by BU)
     : { decisionStatus: "PENDING_SCM_DECISION", nextStatus: "PENDING_DVM_SCM" } // SCM decision → DVM SCM first
 
   const [openSo, setOpenSo] = useState<Bom | null>(null)

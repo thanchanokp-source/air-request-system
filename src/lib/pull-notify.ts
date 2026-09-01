@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
 import { magicLoginFor } from "@/lib/notify"
+import { pcApprover } from "@/lib/pull-approvers"
 
 // Per-stage recipient config for the Pull Material flow. Each entry = who to alert when a doc REACHES
 // that status, and where their magic link should land. Covers BOTH branches (SCM / PC).
@@ -14,7 +15,7 @@ const STAGE: Record<string, { roles: string[]; redirect: string; title: string; 
   PENDING_VP_SCM:       { roles: ["VP_SCM"],           redirect: "/pull-material/approval",  title: "pending your approval — VP SCM", cta: "Open Approval" },
   PENDING_FINAL:        { roles: ["PULL_PRESIDENT"],   redirect: "/pull-material/approval",  title: "pending final approval (President)", cta: "Open Approval" },
   PENDING_DVM_PUR:      { roles: ["DVM_PUR"],          redirect: "/pull-material/approval",  title: "pending your approval — DVM Purchasing", cta: "Open Approval" },
-  PENDING_VP_PUR:       { roles: ["VP_PUR"],           redirect: "/pull-material/approval",  title: "pending your approval — VP Purchasing", cta: "Open Approval" },
+  PENDING_VP_PUR:       { roles: ["VP_PUR"],           redirect: "/pull-material/approval",  title: "pending your approval — Purchase Approval", cta: "Open Approval" },
 }
 
 // Alert the owner(s) of a Pull Material stage when a doc reaches it. Per-recipient magic-login link
@@ -42,8 +43,12 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
   }
 
   if (!cfg) return
+  // PC approval (PENDING_VP_PUR) = a SINGLE approver routed by BU → email only that person.
+  const pcTo = status === "PENDING_VP_PUR" ? pcApprover(rq.bu) : null
   const users = await (prisma.user as any).findMany({
-    where: { isActive: true, OR: [{ role: { in: cfg.roles } }, { roles: { hasSome: cfg.roles } }] },
+    where: pcTo
+      ? { isActive: true, email: { equals: pcTo, mode: "insensitive" } }
+      : { isActive: true, OR: [{ role: { in: cfg.roles } }, { roles: { hasSome: cfg.roles } }] },
     select: { id: true, email: true },
   })
   const seen = new Set<string>()

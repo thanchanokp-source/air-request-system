@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
+import { pcApprover } from "@/lib/pull-approvers"
 
 // Approver stages: which role owns each, and where Approve / Send-back go.
 const APPROVER: Record<string, { role: string; label: string; next: string; back: string; backLabel: string }> = {
   PENDING_DVM_SCM:  { role: "PULL_DVM_SCM",   label: "DVM SCM",        next: "PENDING_VP_SCM",  back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
   PENDING_VP_SCM:   { role: "VP_SCM",         label: "VP SCM",         next: "PENDING_FINAL",   back: "PENDING_DVM_SCM",      backLabel: "Send back to DVM SCM" },
   PENDING_FINAL:    { role: "PULL_PRESIDENT", label: "Final approval", next: "APPROVED",        back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
-  PENDING_DVM_PUR:  { role: "DVM_PUR",        label: "DVM Purchasing", next: "PENDING_VP_PUR",  back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
-  PENDING_VP_PUR:   { role: "VP_PUR",         label: "VP Purchasing",  next: "APPROVED",        back: "PENDING_DVM_PUR",      backLabel: "Send back to DVM Pur" },
+  PENDING_VP_PUR:   { role: "VP_PUR",         label: "Purchase Approval", next: "APPROVED",     back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
   PENDING_APPROVAL: { role: "ADMIN",          label: "Approval (legacy)", next: "APPROVED",     back: "PENDING_SCM_DECISION", backLabel: "Send back" },
 }
 
@@ -24,8 +24,8 @@ const SCM_CHAIN = [
 ]
 const PC_CHAIN = [
   { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" },
-  { s: "PENDING_PC_DECISION", l: "PC decision", role: "PURCHASING" }, { s: "PENDING_DVM_PUR", l: "DVM Purchasing", role: "DVM_PUR" },
-  { s: "PENDING_VP_PUR", l: "VP Purchasing", role: "VP_PUR" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
+  { s: "PENDING_PC_DECISION", l: "PC decision", role: "PURCHASING" },
+  { s: "PENDING_VP_PUR", l: "Purchase Approval", role: "VP_PUR" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
 ]
 const nameOf = (u: any) => u?.name || (u?.email ? String(u.email).split("@")[0] : "")
 
@@ -33,9 +33,15 @@ export default function Page() {
   const { data: session } = useSession()
   const myRoles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const isAdmin = myRoles.includes("ADMIN")
+  const myEmail = String((session?.user as any)?.email || "").toLowerCase()
 
-  // Statuses this user can approve (admin = all).
-  const canApprove = (st: string) => isAdmin || myRoles.includes(APPROVER[st]?.role)
+  // Can this user approve a doc at this status? Admin = all. PC approval (PENDING_VP_PUR) is a SINGLE
+  // approver routed by BU — only that person (per the doc's BU) may approve.
+  const canApprove = (st: string, docBu?: string) => {
+    if (isAdmin) return true
+    if (st === "PENDING_VP_PUR") return !!docBu && pcApprover(docBu)?.toLowerCase() === myEmail
+    return myRoles.includes(APPROVER[st]?.role)
+  }
 
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
@@ -61,8 +67,8 @@ export default function Page() {
     setLoading(true)
     try {
       const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json())
-      const wanted = new Set(Object.keys(APPROVER).filter(st => canApprove(st)))
-      setReqs((d.requests || []).filter((r: any) => wanted.has(r.status)))
+      // Show docs at any approval status this user owns — evaluate per doc so PC approval respects BU.
+      setReqs((d.requests || []).filter((r: any) => APPROVER[r.status] && canApprove(r.status, r.bu)))
     } finally { setLoading(false) }
   }
   useEffect(() => { load() }, [bu, isAdmin]) // eslint-disable-line
@@ -141,7 +147,7 @@ export default function Page() {
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">{openReq.requestType === "PURCHASING" ? "PC branch" : "SCM branch"}</span>
                 <span className="text-xs text-gray-400">by {openReq.requesterName} · {fmtDate(openReq.createdAt)}</span>
               </div>
-              {cfg && canApprove(openReq.status) && (
+              {cfg && canApprove(openReq.status, openReq.bu) && (
                 <div className="flex gap-2 shrink-0">
                   <button onClick={() => act(openReq, cfg.next)} disabled={busy}
                     className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 shadow-sm" style={{ background: "#16a34a" }}>
@@ -207,7 +213,10 @@ export default function Page() {
                   <div className="space-y-0">
                     {chain.map((step, i) => {
                       const done = i < curIdx, current = i === curIdx
-                      const who = step.role ? (roleNames[step.role] || []).join(", ") : ""
+                      // PC approval shows the single BU-routed approver; other stages show role holders.
+                      const who = step.s === "PENDING_VP_PUR"
+                        ? nameOf({ email: pcApprover(openReq.bu) })
+                        : step.role ? (roleNames[step.role] || []).join(", ") : ""
                       return (
                         <div key={step.s} className="flex gap-3">
                           <div className="flex flex-col items-center">
