@@ -65,8 +65,8 @@ export default function PullRatesPage() {
     const wb = new ExcelJS.Workbook()
     const style = (ws: any) => { const h = ws.getRow(1); h.font = { bold: true }; h.eachCell((c: any) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEBF7" } } }) }
     const aws = wb.addWorksheet("Air Rate")
-    aws.addRow(["COUNTRY", "ORIGIN", "DEST", "FWD", "A/L", "TT", ...AIR_BREAKS])
-    air.forEach((r: any) => aws.addRow([r.country || "", r.origin || "", r.destination || "", r.fwd || "", r.airline || "", r.tt || "", ...AIR_BREAKS.map(b => r.rates?.[b] ?? "")]))
+    aws.addRow(["COUNTRY", "ORIGIN", "DEST", "FWD", "A/L", "TT", "Orig Cost (EXW)", "Orig Cost (FCA)", ...AIR_BREAKS])
+    air.forEach((r: any) => aws.addRow([r.country || "", r.origin || "", r.destination || "", r.fwd || "", r.airline || "", r.tt || "", r.origCostExw ?? "", r.origCostFca ?? "", ...AIR_BREAKS.map(b => r.rates?.[b] ?? "")]))
     style(aws)
     const sws = wb.addWorksheet("Sea Rate")
     sws.addRow(["COUNTRY", "PORT", ...SEA_CT])
@@ -80,8 +80,66 @@ export default function PullRatesPage() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
   }
 
+  // Import a Rate_LG workbook (upload) → REPLACE the air &/or sea master. Reads by HEADER NAME so the
+  // exact column order doesn't matter; picks up the new "Orig Cost (EXW)/(FCA)" columns for AIR.
+  const importXlsx = async (file: File) => {
+    const XLSX = await import("xlsx")
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
+    const norm = (s: any) => String(s ?? "").replace(/\s+/g, " ").trim().toUpperCase()
+    const sheetByName = (want: string) => wb.SheetNames.find(n => norm(n) === want) || wb.SheetNames.find(n => norm(n).includes(want))
+
+    // Find the header row (the one that contains an ORIGIN/PORT cell) and map column index → field.
+    const parse = (sheetName: string | undefined, isAir: boolean) => {
+      if (!sheetName) return null
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: "" }) as any[][]
+      const key = isAir ? "ORIGIN" : "PORT"
+      const hIdx = aoa.findIndex(row => row.some(c => norm(c).includes(key)))
+      if (hIdx < 0) return null
+      const H = aoa[hIdx].map(norm)
+      const col = (test: (h: string) => boolean) => H.findIndex(test)
+      const breaks = isAir ? AIR_BREAKS : SEA_CT
+      const breakCols: Record<string, number> = {}
+      breaks.forEach(b => { const i = H.findIndex(h => h === norm(b) || h === norm(b).replace("Q", "")); if (i >= 0) breakCols[b] = i })
+      const iOrigin = isAir ? col(h => h.includes("ORIGIN")) : col(h => h === "PORT" || h.includes("PORT"))
+      const iCountry = col(h => h.includes("COUNTRY"))
+      const iDest = col(h => h.includes("DESTINATION") || h === "DEST")
+      const iFwd = col(h => h === "FWD")
+      const iAl = col(h => h === "A/L" || h.includes("AIRLINE"))
+      const iTt = col(h => h === "TT")
+      const iExw = col(h => h.includes("EXW"))
+      const iFca = col(h => h.includes("FCA"))
+      const rows: any[] = []
+      for (let r = hIdx + 1; r < aoa.length; r++) {
+        const row = aoa[r]; if (!row) continue
+        const idv = iOrigin >= 0 ? String(row[iOrigin] ?? "").trim() : ""
+        if (!idv) continue
+        const rates: Record<string, any> = {}
+        for (const [b, ci] of Object.entries(breakCols)) rates[b] = row[ci]
+        if (isAir) rows.push({ origin: idv, country: iCountry >= 0 ? row[iCountry] : null, destination: iDest >= 0 ? row[iDest] : "BKK", fwd: iFwd >= 0 ? row[iFwd] : null, airline: iAl >= 0 ? row[iAl] : null, tt: iTt >= 0 ? row[iTt] : null, origCostExw: iExw >= 0 ? row[iExw] : null, origCostFca: iFca >= 0 ? row[iFca] : null, rates })
+        else rows.push({ country: iCountry >= 0 ? row[iCountry] : null, port: idv, rates })
+      }
+      return rows
+    }
+
+    const airRowsIn = parse(sheetByName("AIR RATE"), true)
+    const seaRowsIn = parse(sheetByName("SEA RATE"), false)
+    if (!airRowsIn && !seaRowsIn) return alert('ไม่พบชีท "AIR RATE" หรือ "SEA RATE" ในไฟล์')
+    const msg = [airRowsIn && `AIR ${airRowsIn.length} แถว`, seaRowsIn && `SEA ${seaRowsIn.length} แถว`].filter(Boolean).join(" · ")
+    if (!confirm(`จะแทนที่ master rate ทั้งหมดด้วยไฟล์นี้:\n${msg}\n\n(ค่าเดิมจะถูกเขียนทับ — กด Backup ไว้ก่อนถ้าต้องการ)\nดำเนินการต่อ?`)) return
+    setBusy(true)
+    try {
+      if (airRowsIn) await fetch("/api/pull-material/air-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: airRowsIn }) })
+      if (seaRowsIn) await fetch("/api/pull-material/sea-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: seaRowsIn }) })
+      alert(`นำเข้าเสร็จ: ${msg}`)
+      await load()
+    } finally { setBusy(false) }
+  }
+
   const cellVal = (row: any, k: string) => edits[row.id]?.[k] ?? (row.rates?.[k] != null ? String(row.rates[k]) : "")
   const setCell = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
+  // Row-level fields (not inside the rates JSON): origin cost per incoterm.
+  const FIELD_KEYS = ["origCostExw", "origCostFca"]
+  const fieldVal = (row: any, k: string) => edits[row.id]?.[k] ?? (row[k] != null ? String(row[k]) : "")
 
   const saveAll = async () => {
     const which = tab
@@ -91,11 +149,17 @@ export default function PullRatesPage() {
     if (!newRows.length && !editedIds.length) return
     setBusy(true)
     try {
-      // Create the new port rows (from the "Other" flag) with whatever rate cells LG filled.
+      // Split an edits[id] bag into rate-break edits vs row-level field edits (EXW/FCA cost).
+      const split = (e: Record<string, string> = {}) => {
+        const rates: Record<string, string> = {}, fields: Record<string, string> = {}
+        for (const [k, v] of Object.entries(e)) (FIELD_KEYS.includes(k) ? fields : rates)[k] = v
+        return { rates, fields }
+      }
+      // Create the new port rows (from the "Other" flag) with whatever cells LG filled.
       for (const nr of newRows) {
-        const rates = { ...(edits[nr.id] || {}) }
+        const { rates, fields } = split(edits[nr.id])
         const payload: any = which === "air"
-          ? { create: true, origin: nr.origin, country: nr.country, destination: nr.destination || "BKK", fwd: nr.fwd, airline: nr.airline, tt: nr.tt, rates }
+          ? { create: true, origin: nr.origin, country: nr.country, destination: nr.destination || "BKK", fwd: nr.fwd, airline: nr.airline, tt: nr.tt, rates, ...fields }
           : { create: true, country: nr.country, port: nr.port, rates }
         await fetch(`/api/pull-material/${which}-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       }
@@ -103,8 +167,10 @@ export default function PullRatesPage() {
       await Promise.all(editedIds.map(id => {
         const row = src.find((r: any) => r.id === id)
         if (!row) return null
-        const rates = { ...(row.rates || {}), ...edits[id] }
-        return fetch(`/api/pull-material/${which}-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, rates }) })
+        const { rates: rateEdits, fields } = split(edits[id])
+        const payload: any = { id, ...fields }
+        if (Object.keys(rateEdits).length) payload.rates = { ...(row.rates || {}), ...rateEdits }
+        return fetch(`/api/pull-material/${which}-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       }))
       await load()
     } finally { setBusy(false) }
@@ -129,8 +195,11 @@ export default function PullRatesPage() {
         {isAdmin && (
           <div className="flex gap-2">
             {editCount > 0 && <button onClick={saveAll} disabled={busy} className="px-3 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 bg-green-600">💾 Save {editCount} row(s)</button>}
+            <label className="px-3 py-2 rounded-lg text-sm font-semibold border border-blue-300 text-blue-700 bg-white cursor-pointer hover:bg-blue-50">⬆ Import Excel
+              <input type="file" accept=".xlsx,.xls" className="hidden" disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
+            </label>
             <button onClick={exportBackup} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white disabled:opacity-50">⬇ Backup (Excel)</button>
-            <button onClick={() => reload(tab)} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 disabled:opacity-50">↻ Reload from file</button>
+            <button onClick={() => reload(tab)} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 disabled:opacity-50">↻ Reload from seed</button>
           </div>
         )}
       </div>
@@ -150,8 +219,11 @@ export default function PullRatesPage() {
         {tab === "air" ? (
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500"><tr>
-              {["COUNTRY", "ORIGIN", "DEST", "FWD", "A/L", "TT", ...AIR_BREAKS].map(h =>
+              {["COUNTRY", "ORIGIN", "DEST", "FWD", "A/L", "TT"].map(h =>
                 <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+              <th className="px-3 py-2 text-right font-medium whitespace-nowrap text-amber-700">Orig Cost (EXW)</th>
+              <th className="px-3 py-2 text-right font-medium whitespace-nowrap text-amber-700">Orig Cost (FCA)</th>
+              {AIR_BREAKS.map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {airRows.map(r => (
@@ -162,6 +234,13 @@ export default function PullRatesPage() {
                   <td className="px-3 py-1.5">{r.fwd || "-"}</td>
                   <td className="px-3 py-1.5">{r.airline || "-"}</td>
                   <td className="px-3 py-1.5 whitespace-nowrap">{r.tt || "-"}</td>
+                  {FIELD_KEYS.map(fk => (
+                    <td key={fk} className="px-2 py-1 text-right bg-amber-50/40">
+                      {isAdmin
+                        ? <input type="number" value={fieldVal(r, fk)} onChange={e => setCell(r.id, fk, e.target.value)} className={cellInp} />
+                        : (r[fk] != null ? fmt(r[fk]) : "-")}
+                    </td>
+                  ))}
                   {AIR_BREAKS.map(b => (
                     <td key={b} className="px-2 py-1 text-right">
                       {isAdmin
@@ -171,7 +250,7 @@ export default function PullRatesPage() {
                   ))}
                 </tr>
               ))}
-              {airRows.length === 0 && <tr><td colSpan={6 + AIR_BREAKS.length} className="px-3 py-10 text-center text-gray-400">No air rates {air.length === 0 && "— click Reload to load from file"}</td></tr>}
+              {airRows.length === 0 && <tr><td colSpan={8 + AIR_BREAKS.length} className="px-3 py-10 text-center text-gray-400">No air rates {air.length === 0 && "— click Import / Reload to load"}</td></tr>}
             </tbody>
           </table>
         ) : (

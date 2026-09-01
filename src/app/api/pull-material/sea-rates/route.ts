@@ -26,6 +26,26 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ ok: true, row })
 }
 
+// Bulk REPLACE the whole SEA master from an uploaded Rate_LG "SEA RATE" sheet (Admin + Logistics Import).
+export async function PUT(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  const u: any = session?.user
+  const canEdit = !!u && (u.role === "ADMIN" || (Array.isArray(u.roles) && u.roles.includes("LOGISTICS_IMPORT")))
+  if (!canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const body = await req.json()
+  const rows: any[] = Array.isArray(body.rows) ? body.rows : []
+  if (!rows.length) return NextResponse.json({ error: "no rows" }, { status: 400 })
+  const data = rows.filter(r => r.port).map(r => {
+    const rates: Record<string, number> = {}
+    for (const [k, v] of Object.entries(r.rates || {})) { const n = Number(v); if (v !== "" && v != null && !isNaN(n)) rates[k] = n }
+    return { country: r.country || null, port: String(r.port).trim(), rates }
+  })
+  await (prisma as any).pullFreightSea.deleteMany({})
+  await (prisma as any).pullFreightSea.createMany({ data })
+  const count = await (prisma as any).pullFreightSea.count()
+  return NextResponse.json({ ok: true, count })
+}
+
 // Pull RM SEA freight master (by sea PORT). GET → rows + distinct ports. POST (admin) → reload
 // from the bundled Rate_LG "SEA RATE" seed.
 export async function GET() {

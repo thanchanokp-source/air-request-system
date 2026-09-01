@@ -433,6 +433,8 @@ model PullFreightAir {
   fwd         String?  // forwarder
   airline     String?  // A/L
   tt          String?  // transit time
+  origCostExw Float?   // origin cost when incoterm = EX-WORK (Orig Cost (EXW) col in Rate_LG)
+  origCostFca Float?   // origin cost when incoterm = FCA (Orig Cost (FCA) col in Rate_LG)
   rates       Json     @default("{}")
   createdAt   DateTime @default(now())
 
