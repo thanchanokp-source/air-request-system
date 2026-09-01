@@ -72,20 +72,19 @@ export default function PurchasePage() {
   // Air is real (rate × gross, lead time = tt). Sea is per-container / FedEx & DHL masters are not
   // in the system yet → those stay "รอ master" until LG provides the data.
   const airAuto = (it: any) => {
-    const w = Number(valOf(it, "weight")) || 0
-    const qty = Number(it.pullMaterialQty) || 0
+    const w = Number(valOf(it, "weight")) || 0         // weight PC enters = the chargeable weight (kg), used DIRECTLY
     const port = clean(valOf(it, "port"))
-    const gross = w * qty
     const routes = airRows.filter(r => r.origin === port)
-    if (!port || !gross || !routes.length) return null
-    const bk = breakKey(gross)
+    if (!port || !w || !routes.length) return null
+    const bk = breakKey(w)                              // 150kg → Q100
+    // same port → pick the MAXIMUM rate at that break.
     const cand = routes.map(r => ({ rate: Number(r.rates?.[bk]), tt: r.tt, exw: Number(r.origCostExw) || 0, fca: Number(r.origCostFca) || 0 })).filter(x => x.rate && !isNaN(x.rate))
     if (!cand.length) return null
     const best = cand.reduce((a, b) => (b.rate > a.rate ? b : a))
     // EX-WORK / FCA add the origin cost from the master; other incoterms add nothing.
     const inc = String(valOf(it, "incoterm") || "").toUpperCase()
     const add = inc === "EX-WORK" ? best.exw : inc === "FCA" ? best.fca : 0
-    return { est: Math.round((best.rate * gross + add) * 100) / 100, tt: best.tt || "-", bk, add }
+    return { est: Math.round((best.rate * w + add) * 100) / 100, tt: best.tt || "-", bk, add }
   }
 
   const save = async (rq: any) => {
@@ -119,9 +118,12 @@ export default function PurchasePage() {
         needDate: valOf(it, "needDate"), cartons: valOf(it, "cartons"),
         boxW: valOf(it, "boxW"), boxL: valOf(it, "boxL"), boxH: valOf(it, "boxH"),
       }))
+      // No manual Logistics step anymore: server auto-computes Est Air + Air L/T, then goes straight to
+      // the air decision (SCM or PC). LG only enters ACTUAL later, after approval.
+      const next = rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION"
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemUpdates, status: "PENDING_LOGISTICS", otherPorts }),
+        body: JSON.stringify({ itemUpdates, status: next, otherPorts }),
       })
       if (r.ok) { setEdits({}); setOpenId(null); await load() } else alert("Error")
     } finally { setBusy(null) }

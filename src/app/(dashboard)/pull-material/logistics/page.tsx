@@ -35,18 +35,16 @@ export default function LogisticsPage() {
   //   base = gross × rate  (gross = per-unit weight × pull qty, also picks the Q-break tier)
   //   EX-WORK → + Orig Cost (EXW) · FCA → + Orig Cost (FCA) · other incoterms → + 0
   const airEst = (it: any) => {
-    const w = Number(it.weight) || 0
-    const qty = Number(it.pullMaterialQty) || 0
-    const gross = w * qty
+    const w = Number(it.weight) || 0                    // chargeable weight (kg), used DIRECTLY (no ×qty)
     const routes = airRates.filter(r => r.origin === it.port)
-    if (!it.port || !gross || !routes.length) return null
-    const bk = breakKey(gross)
+    if (!it.port || !w || !routes.length) return null
+    const bk = breakKey(w)                              // 150kg → Q100
     const cand = routes.map(r => ({ rate: Number(r.rates?.[bk]), exw: Number(r.origCostExw) || 0, fca: Number(r.origCostFca) || 0 })).filter(x => x.rate && !isNaN(x.rate))
     if (!cand.length) return null
-    const best = cand.reduce((a, b) => (b.rate > a.rate ? b : a))
+    const best = cand.reduce((a, b) => (b.rate > a.rate ? b : a)) // same port → max rate
     const inc = String(it.incoterm || "").toUpperCase()
     const add = inc === "EX-WORK" ? best.exw : inc === "FCA" ? best.fca : 0
-    return { bk, rate: best.rate, gross, add, est: Math.round((best.rate * gross + add) * 100) / 100 }
+    return { bk, rate: best.rate, gross: w, add, est: Math.round((best.rate * w + add) * 100) / 100 }
   }
 
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))

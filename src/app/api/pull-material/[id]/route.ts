@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
 import { notifyPullStage } from "@/lib/pull-notify"
+import { recomputePullAir } from "@/lib/pull-freight"
 import { magicLoginFor } from "@/lib/notify"
 
 // TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
@@ -107,6 +108,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data })
+
+    // Purchasing → air decision: auto-compute Est Air + Air L/T from the master (no manual LG step).
+    if (body.status === "PENDING_SCM_DECISION" || body.status === "PENDING_PC_DECISION") {
+      await recomputePullAir(id).catch(() => {})
+    }
 
     // Alert the owner(s) of the NEW stage (magic-link per person). Covers every forward transition:
     // Logistics, SCM/PC decision, VP SCM, President, DVM/VP Purchasing, and APPROVED (→ requester).

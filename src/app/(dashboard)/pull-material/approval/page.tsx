@@ -15,16 +15,17 @@ const APPROVER: Record<string, { role: string; label: string; next: string; back
 }
 
 // Full stage chain per branch — for the stepper. `role` resolves the actual approver NAME per stage.
+// Est Air is auto-computed after Purchasing (no manual Logistics step); LG only enters ACTUAL after approval.
 const SCM_CHAIN = [
-  { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" }, { s: "PENDING_LOGISTICS", l: "Logistics", role: "LOGISTICS_IMPORT" },
+  { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" },
   { s: "PENDING_SCM_DECISION", l: "SCM", role: "SCM_PULL" }, { s: "PENDING_DVM_SCM", l: "DVM SCM", role: "PULL_DVM_SCM" },
   { s: "PENDING_VP_SCM", l: "VP SCM", role: "VP_SCM" },
-  { s: "PENDING_FINAL", l: "Final approval", role: "PULL_PRESIDENT" }, { s: "APPROVED", l: "Approved", role: "" },
+  { s: "PENDING_FINAL", l: "Final approval", role: "PULL_PRESIDENT" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
 ]
 const PC_CHAIN = [
-  { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" }, { s: "PENDING_LOGISTICS", l: "Logistics", role: "LOGISTICS_IMPORT" },
+  { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" },
   { s: "PENDING_PC_DECISION", l: "PC decision", role: "PURCHASING" }, { s: "PENDING_DVM_PUR", l: "DVM Purchasing", role: "DVM_PUR" },
-  { s: "PENDING_VP_PUR", l: "VP Purchasing", role: "VP_PUR" }, { s: "APPROVED", l: "Approved", role: "" },
+  { s: "PENDING_VP_PUR", l: "VP Purchasing", role: "VP_PUR" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
 ]
 const nameOf = (u: any) => u?.name || (u?.email ? String(u.email).split("@")[0] : "")
 
