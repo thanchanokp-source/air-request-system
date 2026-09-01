@@ -1,6 +1,13 @@
 "use client"
 import { useState, useEffect } from "react"
 
+// Pull RM roles are cross-BU (bu = ALL) → offered under every BU so admin can act as them.
+const PULL_ROLES = [
+  { role: "PURCHASING", label: "Purchasing (Pull RM)" },
+  { role: "LOGISTICS_IMPORT", label: "Logistics Import (Pull RM — edits Master Rate)" },
+  { role: "SCM_PULL", label: "SCM Pull (Pull RM)" },
+]
+
 // Roles selectable per BU for admin "View as". Value = role code, label = display.
 const ROLES_BY_BU: Record<string, { role: string; label: string }[]> = {
   NYG: [
@@ -74,7 +81,7 @@ export default function ImpersonateBar({ isAdmin, isImpersonating, actingLabel }
 
   const go = () => { if (role) window.location.href = `/api/admin/impersonate?role=${encodeURIComponent(role)}&bu=${encodeURIComponent(bu)}` }
   const goUser = (id: string) => { window.location.href = `/api/admin/impersonate?userId=${encodeURIComponent(id)}` }
-  const roles = ROLES_BY_BU[bu] || []
+  const roles = [...(ROLES_BY_BU[bu] || []), ...PULL_ROLES]
   const pqn = pq.trim().toLowerCase()
   const matchedPeople = pqn
     ? people.filter((u: any) => `${u.name || ""} ${u.email || ""} ${u.title || u.role || ""} ${u.bu || ""}`.toLowerCase().includes(pqn)).slice(0, 30)
