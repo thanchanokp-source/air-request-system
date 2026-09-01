@@ -6,6 +6,7 @@ const PULL_ROLES = [
   { role: "PURCHASING", label: "Purchasing (Pull RM)" },
   { role: "LOGISTICS_IMPORT", label: "Logistics Import (Pull RM — edits Master Rate)" },
   { role: "SCM_PULL", label: "SCM Pull (Pull RM)" },
+  { role: "PULL_DVM_SCM", label: "DVM SCM (Pull RM)" },
 ]
 
 // Roles selectable per BU for admin "View as". Value = role code, label = display.

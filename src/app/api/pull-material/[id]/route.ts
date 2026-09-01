@@ -19,13 +19,14 @@ async function pullTestRecipient(id: string): Promise<string | null> {
 // Flow: Purchase enters country/incoterm/weight FIRST, then Logistics computes freight,
 // then SCM decides air per-line, then Approval.
 // Two branches after Logistics, chosen by requestType:
-//  SCM  : … → PENDING_SCM_DECISION → PENDING_VP_SCM → PENDING_FINAL (K.Khomkrit) → APPROVED
+//  SCM  : … → PENDING_SCM_DECISION → PENDING_DVM_SCM → PENDING_VP_SCM → PENDING_FINAL (K.Khomkrit) → APPROVED
 //  PC   : … → PENDING_PC_DECISION  → PENDING_DVM_PUR → PENDING_VP_PUR → APPROVED
 export const PULL_FLOW = [
   "PENDING_PURCHASING",
   "PENDING_LOGISTICS",
   // SCM branch
   "PENDING_SCM_DECISION",
+  "PENDING_DVM_SCM",
   "PENDING_VP_SCM",
   "PENDING_FINAL",
   // PC branch

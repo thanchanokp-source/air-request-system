@@ -47,6 +47,25 @@ export default function Page() {
     } finally { setBusy(null) }
   }
 
+  // Save the actual figures AND close the document (APPROVED → COMPLETED).
+  const complete = async (rq: any) => {
+    if (!confirm(`ปิดงาน ${rq.documentNo}?\nActual ที่กรอกจะถูกบันทึกและเปลี่ยนสถานะเป็น COMPLETED`)) return
+    setBusy(rq.id)
+    try {
+      const itemUpdates = rq.items.map((it: any) => ({
+        id: it.id,
+        invoiceNo: raw(it, "invoiceNo") || null,
+        actualAir: raw(it, "actualAir") === "" ? null : raw(it, "actualAir"),
+      }))
+      const r = await fetch(`/api/pull-material/${rq.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemUpdates, status: "COMPLETED" }),
+      })
+      if (r.ok) { setEdits(p => { const n = { ...p }; rq.items.forEach((it: any) => delete n[it.id]); return n }); await load() }
+      else alert("Error completing")
+    } finally { setBusy(null) }
+  }
+
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Logistics Import / Admin only</p></div>
 
@@ -80,10 +99,18 @@ export default function Page() {
                         {diff > 0 ? "▲" : "▼"} {fmt(Math.abs(diff))}
                       </span>
                     )}
-                    <button onClick={() => save(rq)} disabled={busy === rq.id}
-                      className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>
-                      {busy === rq.id ? "..." : "Save Actual"}
-                    </button>
+                    {rq.status === "COMPLETED"
+                      ? <span className="text-xs px-2 py-1 rounded-full bg-gray-800 text-white font-medium">✓ COMPLETED</span>
+                      : <>
+                        <button onClick={() => save(rq)} disabled={busy === rq.id}
+                          className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>
+                          {busy === rq.id ? "..." : "Save Actual"}
+                        </button>
+                        <button onClick={() => complete(rq)} disabled={busy === rq.id}
+                          className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50 bg-gray-800">
+                          ✓ ปิดงาน
+                        </button>
+                      </>}
                   </div>
                 </div>
                 <div className="mt-3 border rounded-xl overflow-x-auto">

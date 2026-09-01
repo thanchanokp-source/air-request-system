@@ -6,7 +6,8 @@ import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
 
 // Approver stages: which role owns each, and where Approve / Send-back go.
 const APPROVER: Record<string, { role: string; label: string; next: string; back: string; backLabel: string }> = {
-  PENDING_VP_SCM:   { role: "VP_SCM",         label: "VP SCM",         next: "PENDING_FINAL",   back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
+  PENDING_DVM_SCM:  { role: "PULL_DVM_SCM",   label: "DVM SCM",        next: "PENDING_VP_SCM",  back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
+  PENDING_VP_SCM:   { role: "VP_SCM",         label: "VP SCM",         next: "PENDING_FINAL",   back: "PENDING_DVM_SCM",      backLabel: "Send back to DVM SCM" },
   PENDING_FINAL:    { role: "PULL_PRESIDENT", label: "Final approval", next: "APPROVED",        back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
   PENDING_DVM_PUR:  { role: "DVM_PUR",        label: "DVM Purchasing", next: "PENDING_VP_PUR",  back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
   PENDING_VP_PUR:   { role: "VP_PUR",         label: "VP Purchasing",  next: "APPROVED",        back: "PENDING_DVM_PUR",      backLabel: "Send back to DVM Pur" },
@@ -16,7 +17,8 @@ const APPROVER: Record<string, { role: string; label: string; next: string; back
 // Full stage chain per branch — for the stepper. `role` resolves the actual approver NAME per stage.
 const SCM_CHAIN = [
   { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" }, { s: "PENDING_LOGISTICS", l: "Logistics", role: "LOGISTICS_IMPORT" },
-  { s: "PENDING_SCM_DECISION", l: "SCM", role: "SCM_PULL" }, { s: "PENDING_VP_SCM", l: "VP SCM", role: "VP_SCM" },
+  { s: "PENDING_SCM_DECISION", l: "SCM", role: "SCM_PULL" }, { s: "PENDING_DVM_SCM", l: "DVM SCM", role: "PULL_DVM_SCM" },
+  { s: "PENDING_VP_SCM", l: "VP SCM", role: "VP_SCM" },
   { s: "PENDING_FINAL", l: "Final approval", role: "PULL_PRESIDENT" }, { s: "APPROVED", l: "Approved", role: "" },
 ]
 const PC_CHAIN = [

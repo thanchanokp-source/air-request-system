@@ -11,7 +11,7 @@ function resolveRole(position: string, bu: string): string | null {
   // "DPM Merchandise" behaves exactly like Merchandise → same BU-based MER role.
   if (position === "MER" || position === "DPM_MER") return bu === "GW" ? "MER_GW" : bu === "EA" ? "MER_EA" : bu === "TRM" ? "MER_TRM" : "MER_USER"
   // Pull Material roles are cross-BU (BU chosen per document, not per account).
-  if (["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR"].includes(position)) return position
+  if (["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM"].includes(position)) return position
   if (position === "VISITOR") return "VISITOR" // read-only viewer (all BU, no actions)
   return null
 }

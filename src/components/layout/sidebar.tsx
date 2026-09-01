@@ -25,7 +25,7 @@ const pullNav = [
   { href: "/pull-material/request", label: "NEW REQUEST", roles: ["ADMIN", "SCM_PULL", "PURCHASING"] },
   { href: "/pull-material/purchase", label: "PURCHASE", roles: ["ADMIN", "PURCHASING"] },
   { href: "/pull-material/logistics", label: "LOGISTICS", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
-  { href: "/pull-material/approval", label: "APPROVAL", roles: ["ADMIN", "VP_SCM", "PULL_PRESIDENT", "DVM_PUR", "VP_PUR"] },
+  { href: "/pull-material/approval", label: "APPROVAL", roles: ["ADMIN", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT", "DVM_PUR", "VP_PUR"] },
   { href: "/pull-material/documents", label: "LOGISTICS DOCUMENT", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/rates", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/users", label: "USER MANAGEMENT", roles: ["ADMIN"] },
@@ -54,7 +54,7 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
   const isAdmin = role === "ADMIN"
 
   const allRoles = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
-  const PULL_ROLES = ["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR"] // pure Pull RM roles
+  const PULL_ROLES = ["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM"] // pure Pull RM roles
   // + air approvers who ALSO act in Pull RM (they keep Claim Air too, so not "pure pull").
   const PULL_TAB_ROLES = [...PULL_ROLES, "VP_SCM", "PULL_PRESIDENT"]
   const hasPull = isAdmin || allRoles.some((r: string) => PULL_TAB_ROLES.includes(r))

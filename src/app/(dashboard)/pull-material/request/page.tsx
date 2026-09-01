@@ -62,7 +62,7 @@ export default function ScmRequestPage() {
   const decType: "SCM" | "PC" = roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PC" : "SCM"
   const dec = decType === "PC"
     ? { decisionStatus: "PENDING_PC_DECISION", nextStatus: "PENDING_DVM_PUR" }
-    : { decisionStatus: "PENDING_SCM_DECISION", nextStatus: "PENDING_VP_SCM" }
+    : { decisionStatus: "PENDING_SCM_DECISION", nextStatus: "PENDING_DVM_SCM" } // SCM decision → DVM SCM first
 
   const [openSo, setOpenSo] = useState<Bom | null>(null)
   const [materials, setMaterials] = useState<Bom[]>([])

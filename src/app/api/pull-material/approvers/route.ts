@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 
 // Active holders of each Pull Material stage role → used to show the actual approver NAME per stage
 // in the approval stepper (any logged-in user may read this; it is name/email only).
-const ROLES = ["PURCHASING", "LOGISTICS_IMPORT", "SCM_PULL", "VP_SCM", "PULL_PRESIDENT", "DVM_PUR", "VP_PUR"]
+const ROLES = ["PURCHASING", "LOGISTICS_IMPORT", "SCM_PULL", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT", "DVM_PUR", "VP_PUR"]
 
 export async function GET() {
   const session = await getServerSession(authOptions)
