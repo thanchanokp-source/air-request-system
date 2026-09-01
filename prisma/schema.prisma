@@ -447,6 +447,7 @@ model PullFreightSea {
   id        String   @id @default(cuid())
   country   String
   port      String   // sea port (e.g. KEELUNG, HO CHI MINH)
+  leadTime  String?  // sea lead time (L/T) — read from the Rate_LG "SEA RATE" sheet
   rates     Json     @default("{}")
   createdAt DateTime @default(now())
 

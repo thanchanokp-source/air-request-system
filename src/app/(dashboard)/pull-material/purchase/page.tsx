@@ -42,13 +42,14 @@ export default function PurchasePage() {
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRows(d.rows || [])).catch(() => {})
   }, [])
 
-  // country → air ports / sea ports (cascade)
-  const { countries, airByCountry, seaByCountry } = useMemo(() => {
+  // country → air ports / sea ports (cascade) + sea port → lead time (from the sheet)
+  const { countries, airByCountry, seaByCountry, seaLtByPort } = useMemo(() => {
     const airByCountry: Record<string, Set<string>> = {}, seaByCountry: Record<string, Set<string>> = {}
+    const seaLtByPort: Record<string, string> = {}
     airRows.forEach(r => { const c = r.country || ""; if (c && r.origin) (airByCountry[c] ??= new Set()).add(r.origin) })
-    seaRows.forEach(r => { const c = r.country || ""; if (c && r.port) (seaByCountry[c] ??= new Set()).add(r.port) })
+    seaRows.forEach(r => { const c = r.country || ""; if (c && r.port) (seaByCountry[c] ??= new Set()).add(r.port); if (r.port && r.leadTime) seaLtByPort[r.port] = r.leadTime })
     const countries = [...new Set([...Object.keys(airByCountry), ...Object.keys(seaByCountry)])].sort()
-    return { countries, airByCountry, seaByCountry }
+    return { countries, airByCountry, seaByCountry, seaLtByPort }
   }, [airRows, seaRows])
 
   // Toggle Regular / Irregular per doc (persists immediately; optimistic local update).
@@ -404,12 +405,14 @@ export default function PurchasePage() {
                         </td>
                         {(() => {
                           const a = airAuto(it)
+                          const airPort = clean(valOf(it, "port"))
+                          const seaLt = seaLtByPort[clean(valOf(it, "seaPort"))]
                           const cell = "px-2 py-1.5 text-right bg-sky-50/50 whitespace-nowrap"
                           return <>
-                            <td className={`${cell} text-sky-800`}>{a ? a.tt : <span className="text-gray-300">—</span>}</td>
+                            <td className={`${cell} text-sky-800`}>{airPort ? "3 days" : <span className="text-gray-300">—</span>}</td>
                             <td className={`${cell} font-semibold text-sky-800`} title={a?.add ? `รวม origin cost ${valOf(it, "incoterm")} +${fmt(a.add)}` : ""}>{a ? <>{fmt(a.est)}{a.add ? <span className="text-[9px] text-amber-600 ml-0.5">+{valOf(it, "incoterm") === "FCA" ? "FCA" : "EXW"}</span> : null}</> : <span className="text-gray-300">รอกรอก</span>}</td>
+                            <td className={`${cell} text-sky-800`}>{seaLt || <span className="text-gray-300">—</span>}</td>
                             <td className={`${cell} text-gray-400`} title="Sea เป็นค่าต่อ container — รอสูตร/มาสเตอร์จาก LG">รอ master</td>
-                            <td className={`${cell} text-gray-400`}>รอ master</td>
                             <td className={`${cell} text-gray-400`} title="ยังไม่มี master FedEx — รอ data จาก LG">รอ master</td>
                             <td className={`${cell} text-gray-400`} title="ยังไม่มี master DHL — รอ data จาก LG">รอ master</td>
                           </>

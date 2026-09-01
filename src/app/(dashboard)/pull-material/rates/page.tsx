@@ -70,8 +70,8 @@ export default function PullRatesPage() {
     air.forEach((r: any) => aws.addRow([r.country || "", r.origin || "", r.destination || "", r.fwd || "", r.airline || "", r.tt || "", r.origCostExw ?? "", r.origCostFca ?? "", ...AIR_BREAKS.map(b => r.rates?.[b] ?? "")]))
     style(aws)
     const sws = wb.addWorksheet("Sea Rate")
-    sws.addRow(["COUNTRY", "PORT", ...SEA_CT])
-    sea.forEach((r: any) => sws.addRow([r.country || "", r.port || "", ...SEA_CT.map(c => r.rates?.[c] ?? "")]))
+    sws.addRow(["COUNTRY", "PORT", "L/T", ...SEA_CT])
+    sea.forEach((r: any) => sws.addRow([r.country || "", r.port || "", r.leadTime || "", ...SEA_CT.map(c => r.rates?.[c] ?? "")]))
     style(sws)
     const buf = await wb.xlsx.writeBuffer()
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
@@ -111,7 +111,9 @@ export default function PullRatesPage() {
       const iTt = col(h => h === "TT")
       const iExw = col(h => h.includes("EXW"))
       const iFca = col(h => h.includes("FCA"))
-      const known = new Set([iOrigin, iCountry, iDest, iFwd, iAl, iTt, iExw, iFca, ...Object.values(breakCols)].filter(i => i >= 0))
+      // Sea lead time — a column named L/T, LEAD, TRANSIT, or (day/days).
+      const iLt = col(h => h.includes("L/T") || h.includes("LEAD") || h.includes("TRANSIT") || h.includes("DAY"))
+      const known = new Set([iOrigin, iCountry, iDest, iFwd, iAl, iTt, iExw, iFca, iLt, ...Object.values(breakCols)].filter(i => i >= 0))
       const extras = H.map((h, i) => (h && !known.has(i) ? h : "")).filter(Boolean) // header columns we ignored
       const rows: any[] = []
       for (let r = hIdx + 1; r < aoa.length; r++) {
@@ -121,7 +123,7 @@ export default function PullRatesPage() {
         const rates: Record<string, any> = {}
         for (const [b, ci] of Object.entries(breakCols)) rates[b] = row[ci]
         if (isAir) rows.push({ origin: idv, country: iCountry >= 0 ? row[iCountry] : null, destination: iDest >= 0 ? row[iDest] : "BKK", fwd: iFwd >= 0 ? row[iFwd] : null, airline: iAl >= 0 ? row[iAl] : null, tt: iTt >= 0 ? row[iTt] : null, origCostExw: iExw >= 0 ? row[iExw] : null, origCostFca: iFca >= 0 ? row[iFca] : null, rates })
-        else rows.push({ country: iCountry >= 0 ? row[iCountry] : null, port: idv, rates })
+        else rows.push({ country: iCountry >= 0 ? row[iCountry] : null, port: idv, leadTime: iLt >= 0 ? String(row[iLt] ?? "").trim() : null, rates })
       }
       return { rows, breaks: Object.keys(breakCols), extras, hasId: iOrigin >= 0 }
     }
@@ -302,7 +304,7 @@ export default function PullRatesPage() {
         ) : (
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500"><tr>
-              {["COUNTRY", "PORT", "40'GP (USD/CTR)", "20'GP (USD/CTR)", "LCL (USD/CBM)"].map(h =>
+              {["COUNTRY", "PORT", "L/T", "40'GP (USD/CTR)", "20'GP (USD/CTR)", "LCL (USD/CBM)"].map(h =>
                 <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
@@ -310,6 +312,7 @@ export default function PullRatesPage() {
                 <tr key={r.id} className={`hover:bg-gray-50 ${r._new ? "bg-amber-50" : edits[r.id] ? "bg-green-50" : ""}`}>
                   <td className="px-3 py-1.5 text-gray-600">{r.country}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
                   <td className="px-3 py-1.5 font-semibold text-gray-800">{r.port}</td>
+                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.leadTime || "-"}</td>
                   {SEA_CT.map(c => (
                     <td key={c} className="px-2 py-1 text-right">
                       {isAdmin
@@ -319,7 +322,7 @@ export default function PullRatesPage() {
                   ))}
                 </tr>
               ))}
-              {seaRows.length === 0 && <tr><td colSpan={2 + SEA_CT.length} className="px-3 py-10 text-center text-gray-400">No sea rates {sea.length === 0 && "— click Reload to load from file"}</td></tr>}
+              {seaRows.length === 0 && <tr><td colSpan={3 + SEA_CT.length} className="px-3 py-10 text-center text-gray-400">No sea rates {sea.length === 0 && "— click Reload to load from file"}</td></tr>}
             </tbody>
           </table>
         )}

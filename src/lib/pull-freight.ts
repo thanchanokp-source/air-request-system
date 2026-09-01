@@ -31,7 +31,7 @@ export async function recomputePullAir(reqId: string): Promise<void> {
     const est = Math.round((best.rate * w + add) * 100) / 100
     await prisma.pullMaterialItem.update({
       where: { id: it.id },
-      data: { airFreightCost: est, leadTimeAir: best.tt || null },
+      data: { airFreightCost: est, leadTimeAir: "3 days" }, // Air lead time = fixed default
     }).catch(() => {})
   }
 }

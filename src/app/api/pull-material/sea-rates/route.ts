@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest) {
   const data = rows.filter(r => r.port).map(r => {
     const rates: Record<string, number> = {}
     for (const [k, v] of Object.entries(r.rates || {})) { const n = Number(v); if (v !== "" && v != null && !isNaN(n)) rates[k] = n }
-    return { country: r.country || null, port: String(r.port).trim(), rates }
+    return { country: r.country || null, port: String(r.port).trim(), leadTime: r.leadTime ? String(r.leadTime).trim() : null, rates }
   })
   await (prisma as any).pullFreightSea.deleteMany({})
   await (prisma as any).pullFreightSea.createMany({ data })
