@@ -89,13 +89,15 @@ export default function PullRatesPage() {
     const norm = (s: any) => String(s ?? "").replace(/\s+/g, " ").trim().toUpperCase()
     const sheetByName = (want: string) => wb.SheetNames.find(n => norm(n) === want) || wb.SheetNames.find(n => norm(n).includes(want))
 
-    // Find the header row (the one that contains an ORIGIN/PORT cell) and map column index → field.
-    const parse = (sheetName: string | undefined, isAir: boolean) => {
+    // Find the header row (contains an ORIGIN/PORT cell) and map column index → field BY NAME. Column
+    // order & extra columns don't matter; only a RENAMED header can go unmatched → we report that below.
+    type Parsed = { rows: any[]; breaks: string[]; extras: string[]; hasId: boolean }
+    const parse = (sheetName: string | undefined, isAir: boolean): Parsed | null => {
       if (!sheetName) return null
       const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: "" }) as any[][]
       const key = isAir ? "ORIGIN" : "PORT"
       const hIdx = aoa.findIndex(row => row.some(c => norm(c).includes(key)))
-      if (hIdx < 0) return null
+      if (hIdx < 0) return { rows: [], breaks: [], extras: [], hasId: false }
       const H = aoa[hIdx].map(norm)
       const col = (test: (h: string) => boolean) => H.findIndex(test)
       const breaks = isAir ? AIR_BREAKS : SEA_CT
@@ -109,6 +111,8 @@ export default function PullRatesPage() {
       const iTt = col(h => h === "TT")
       const iExw = col(h => h.includes("EXW"))
       const iFca = col(h => h.includes("FCA"))
+      const known = new Set([iOrigin, iCountry, iDest, iFwd, iAl, iTt, iExw, iFca, ...Object.values(breakCols)].filter(i => i >= 0))
+      const extras = H.map((h, i) => (h && !known.has(i) ? h : "")).filter(Boolean) // header columns we ignored
       const rows: any[] = []
       for (let r = hIdx + 1; r < aoa.length; r++) {
         const row = aoa[r]; if (!row) continue
@@ -119,19 +123,33 @@ export default function PullRatesPage() {
         if (isAir) rows.push({ origin: idv, country: iCountry >= 0 ? row[iCountry] : null, destination: iDest >= 0 ? row[iDest] : "BKK", fwd: iFwd >= 0 ? row[iFwd] : null, airline: iAl >= 0 ? row[iAl] : null, tt: iTt >= 0 ? row[iTt] : null, origCostExw: iExw >= 0 ? row[iExw] : null, origCostFca: iFca >= 0 ? row[iFca] : null, rates })
         else rows.push({ country: iCountry >= 0 ? row[iCountry] : null, port: idv, rates })
       }
-      return rows
+      return { rows, breaks: Object.keys(breakCols), extras, hasId: iOrigin >= 0 }
     }
 
-    const airRowsIn = parse(sheetByName("AIR RATE"), true)
-    const seaRowsIn = parse(sheetByName("SEA RATE"), false)
-    if (!airRowsIn && !seaRowsIn) return alert('ไม่พบชีท "AIR RATE" หรือ "SEA RATE" ในไฟล์')
-    const msg = [airRowsIn && `AIR ${airRowsIn.length} แถว`, seaRowsIn && `SEA ${seaRowsIn.length} แถว`].filter(Boolean).join(" · ")
-    if (!confirm(`จะแทนที่ master rate ทั้งหมดด้วยไฟล์นี้:\n${msg}\n\n(ค่าเดิมจะถูกเขียนทับ — กด Backup ไว้ก่อนถ้าต้องการ)\nดำเนินการต่อ?`)) return
+    const air = parse(sheetByName("AIR RATE"), true)
+    const sea = parse(sheetByName("SEA RATE"), false)
+    if (!air && !sea) return alert('ไม่พบชีท "AIR RATE" หรือ "SEA RATE" ในไฟล์ (ใช้แค่ 2 ชีทนี้เท่านั้น ชีทอื่นถูกข้าม)')
+
+    // A side is SAFE to replace only if it found the ID column AND ≥1 rate column AND ≥1 data row.
+    // (Guards against a renamed header silently wiping the master with empty/garbage data.)
+    const ok = (p: Parsed | null) => !!p && p.hasId && p.breaks.length > 0 && p.rows.length > 0
+    const report = (name: string, p: Parsed | null) => {
+      if (!p) return `${name}: — ไม่มีชีทนี้ (ข้าม)`
+      if (!p.hasId) return `⚠ ${name}: ไม่เจอคอลัมน์ ${name === "AIR" ? "ORIGIN" : "PORT"} → ข้าม (เปลี่ยนชื่อหัวคอลัมน์?)`
+      if (!p.breaks.length) return `⚠ ${name}: ไม่เจอคอลัมน์ราคา → ข้าม (เปลี่ยนชื่อหัวคอลัมน์?)`
+      if (!p.rows.length) return `⚠ ${name}: 0 แถว → ข้าม (กันเขียนทับด้วยข้อมูลว่าง)`
+      return `✓ ${name}: ${p.rows.length} แถว · ราคา ${p.breaks.join(",")}${p.extras.length ? `\n   คอลัมน์ที่ไม่ได้ใช้ (ข้าม): ${p.extras.join(", ")}` : ""}`
+    }
+    const willAir = ok(air), willSea = ok(sea)
+    if (!willAir && !willSea) return alert(`ไม่ได้แทนที่อะไรเลย — ตรวจหัวคอลัมน์ในไฟล์:\n\n${report("AIR", air)}\n${report("SEA", sea)}`)
+
+    const summary = `${report("AIR", air)}\n${report("SEA", sea)}\n\nจะ “แทนที่” เฉพาะชีทที่ ✓ (ค่าเดิมของชีทนั้นถูกเขียนทับ)\nกด Backup ไว้ก่อนถ้าต้องการ · ดำเนินการต่อ?`
+    if (!confirm(summary)) return
     setBusy(true)
     try {
-      if (airRowsIn) await fetch("/api/pull-material/air-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: airRowsIn }) })
-      if (seaRowsIn) await fetch("/api/pull-material/sea-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: seaRowsIn }) })
-      alert(`นำเข้าเสร็จ: ${msg}`)
+      if (willAir) await fetch("/api/pull-material/air-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: air!.rows }) })
+      if (willSea) await fetch("/api/pull-material/sea-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: sea!.rows }) })
+      alert(`นำเข้าเสร็จ:\n${willAir ? report("AIR", air) : ""}${willAir && willSea ? "\n" : ""}${willSea ? report("SEA", sea) : ""}`)
       await load()
     } finally { setBusy(false) }
   }
