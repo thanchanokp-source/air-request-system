@@ -670,7 +670,9 @@ export default function LgEntryPage() {
                 const { items, totalQty, avgPerUnit, totalCost, hasOverride } = getHawbCalc(group)
                 const hasCost = totalCost > 0
                 // Currency of this HAWB = USD if every item is EA (EA prices in USD), else THB.
-                const gcur = items.length && items.every((i: any) => soCurrency(i.request?.bu, i.brand ?? i.request?.brandName) === "USD") ? "USD" : "THB"
+                // Robust: treat bu==="EA" OR a documentNo starting AIR_EA_ as USD (in case bu is off).
+                const isUsd = (i: any) => soCurrency(i.request?.bu, i.brand ?? i.request?.brandName) === "USD" || String(i.request?.documentNo || i.documentNo || "").startsWith("AIR_EA")
+                const gcur = items.length && items.every(isUsd) ? "USD" : "THB"
                 return (
                   <div key={group.id} className="bg-white rounded-xl border border-orange-200 overflow-hidden shadow-sm">
                     <div className="bg-orange-50 border-b border-orange-200 px-4 py-3">

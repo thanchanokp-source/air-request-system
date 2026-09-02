@@ -231,7 +231,7 @@ export default function LgBookingPage() {
                 {docs.map(({ request: req, items }) => {
                   const est = items.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
                   const act = items.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
-                  const cur = req.bu === "EA" ? "USD" : "THB" // EA prices in USD
+                  const cur = (req.bu === "EA" || String(req.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB" // EA prices in USD
                   const docIds = items.map((i: any) => i.id)
                   const docAllOn = docIds.every((id: string) => selected.has(id))
                   const docDraft = items.filter((i: any) => i.hawbNo || i.actualAirFreight != null).length
