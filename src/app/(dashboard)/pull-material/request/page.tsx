@@ -46,8 +46,11 @@ export default function ScmRequestPage() {
   const canPc = roles.includes("ADMIN") || roles.includes("PURCHASING")
   const isAdmin = canScm || canPc // gate: SCM_PULL / PURCHASING / ADMIN can create a request
   // requestType decides the approval TAIL (SCM → VP SCM → President · PC → DVM Pur → VP Pur).
-  // Derived from the signed-in role — no manual toggle. Admin defaults to SCM (tests PC via "View as").
-  const reqType: "SCM" | "PURCHASING" = roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PURCHASING" : "SCM"
+  // Real users: derived from role (no toggle). Admin: a toggle to preview BOTH request UIs.
+  const isRealAdmin = roles.includes("ADMIN")
+  const derivedReqType: "SCM" | "PURCHASING" = roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PURCHASING" : "SCM"
+  const [adminReqType, setAdminReqType] = useState<"SCM" | "PURCHASING">("SCM")
+  const reqType: "SCM" | "PURCHASING" = isRealAdmin ? adminReqType : derivedReqType
 
   const [bu, setBu] = useState("NYG")
   const [q, setQ] = useState("")
@@ -293,10 +296,23 @@ export default function ScmRequestPage() {
 
       {/* Request type is derived from the signed-in role (no manual toggle):
           SCM_PULL → SCM (→ VP SCM → President) · PURCHASING → PC (→ DVM Pur → VP Pur). */}
-      <div className="text-[11px] text-gray-400">
-        Request type: <span className="font-semibold text-gray-600">{reqType === "SCM" ? "SCM" : "Purchasing"}</span>
-        <span className="ml-1">{reqType === "SCM" ? "→ VP SCM → President" : "→ DVM Pur → VP Pur"}</span>
-        {isAdmin && <span className="ml-2 text-amber-600">· admin: switch branch via “View as”</span>}
+      <div className="flex items-center gap-2 flex-wrap text-[11px] text-gray-400">
+        Request type:
+        {isRealAdmin ? (
+          <span className="inline-flex gap-1">
+            {(["SCM", "PURCHASING"] as const).map(t => (
+              <button key={t} onClick={() => setAdminReqType(t)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${reqType === t ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                style={reqType === t ? { background: MAROON } : undefined}>{t === "SCM" ? "SCM request" : "Purchasing request"}</button>
+            ))}
+            <span className="ml-1 self-center text-amber-600">· admin preview both</span>
+          </span>
+        ) : (
+          <>
+            <span className="font-semibold text-gray-600">{reqType === "SCM" ? "SCM" : "Purchasing"}</span>
+            <span>{reqType === "SCM" ? "→ VP SCM → President" : "→ DVM Pur → VP Pur"}</span>
+          </>
+        )}
       </div>
 
       {reqType === "PURCHASING" ? (
