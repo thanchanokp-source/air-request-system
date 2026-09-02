@@ -20,7 +20,7 @@ const claimNav = [
   { href: "/settings", label: "SETTINGS", adminOnly: true },
 ]
 const pullNav = [
-  { href: "/pull-material/dashboard", label: "DASHBOARD PULL RM", roles: ["ADMIN"] },
+  { href: "/pull-material/dashboard", label: "DASHBOARD PULL RM", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT"] },
   { href: "/pull-material/tracking", label: "TRACKING DOCUMENT", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/request", label: "NEW REQUEST", roles: ["ADMIN", "SCM_PULL", "PURCHASING"] },
   { href: "/pull-material/purchase", label: "PURCHASE", roles: ["ADMIN", "PURCHASING"] },

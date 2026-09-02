@@ -6,16 +6,14 @@ import { MAROON, BUS, STATUS_LABEL, fmt, buColor } from "../_StageWork"
 
 export default function Page() {
   const { data: session, status: auth } = useSession()
-  const isAdmin = (session?.user as any)?.role === "ADMIN"
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
-  useEffect(() => { if (isAdmin) load() }, [bu, isAdmin]) // eslint-disable-line
+  useEffect(() => { load() }, [bu]) // eslint-disable-line
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
-  if (!isAdmin) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Admin only</p></div>
 
   const items = reqs.flatMap((r: any) => r.items || [])
   const totalDocs = reqs.length
