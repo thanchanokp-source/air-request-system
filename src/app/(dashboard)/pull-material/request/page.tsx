@@ -54,6 +54,7 @@ export default function ScmRequestPage() {
   const [poQ, setPoQ] = useState("")
   const [vendQ, setVendQ] = useState("")
   const [results, setResults] = useState<Bom[]>([])
+  const [searchErr, setSearchErr] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
   const [open, setOpen] = useState(false)
   const params = useSearchParams()
@@ -115,7 +116,7 @@ export default function ScmRequestPage() {
         if (poQ.trim()) qs.set("po", poQ.trim())
         if (vendQ.trim()) qs.set("vend", vendQ.trim())
         const r = await fetch(`/api/bom?${qs.toString()}`).then(r => r.json())
-        setResults(Array.isArray(r.rows) ? r.rows : []); setOpen(true)
+        setResults(Array.isArray(r.rows) ? r.rows : []); setSearchErr(r.error || null); setOpen(true)
       } finally { setSearching(false) }
     }, 350)
     return () => clearTimeout(t)
@@ -277,8 +278,13 @@ export default function ScmRequestPage() {
             </div>
           )}
           {open && (q.trim() || poQ.trim() || vendQ.trim()) && !searching && results.length === 0 && (
-            <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg px-3 py-2 text-xs text-gray-400">No SO found</div>
+            <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg px-3 py-2 text-xs">
+              {searchErr
+                ? <span className="text-red-600">⚠ อ่านตาราง BOM ({bu}) ไม่ได้: {searchErr}</span>
+                : <span className="text-gray-400">No SO found</span>}
+            </div>
           )}
+          {searchErr && !open && <p className="mt-2 text-[11px] text-red-600">⚠ BOM {bu}: {searchErr}</p>}
         </div>
       </div>
 
