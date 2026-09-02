@@ -9,7 +9,8 @@ import { prisma } from "@/lib/prisma"
 // ReportDB keeps a SEPARATE table per BU (not one table filtered by a bu column).
 const BOM_TABLE: Record<string, string> = {
   NYG: `"ReportDB"."NYG_BILL_OF_MATERIALS_EXPORT_CHECK"`,
-  GW: `"ReportDB"."GW_BILL_OF_MATERIALS_EXPORT_CHECK"`,
+  EA:  `"ReportDB"."NYV_BILL_OF_MATERIALS_EXPORT_CHECK"`, // EA (Pull RM) pulls from the NYV BOM
+  GW:  `"ReportDB"."GW_BILL_OF_MATERIALS_EXPORT_CHECK"`,
   TRM: `"ReportDB"."TRM_BILL_OF_MATERIALS_EXPORT_CHECK"`,
   NYV: `"ReportDB"."NYV_BILL_OF_MATERIALS_EXPORT_CHECK"`,
 }
