@@ -81,6 +81,15 @@ export default function ScmRequestPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [pcMissing, setPcMissing] = useState<{ po: string; vend: string; reason: string }[]>([])
   const [pcBusy, setPcBusy] = useState(false)
+  // PC interactive: pick vendor → select some POs → one total weight → pull all materials.
+  const [pcVendors, setPcVendors] = useState<string[]>([])
+  const [pcVend, setPcVend] = useState("")
+  const [pcVendQ, setPcVendQ] = useState("")
+  const [pcVendOpen, setPcVendOpen] = useState(false)
+  const [pcPos, setPcPos] = useState<any[]>([])
+  const [pcSelPos, setPcSelPos] = useState<Set<string>>(new Set())
+  const [pcWeight, setPcWeight] = useState("")
+  const [pcLoad, setPcLoad] = useState(false)
   const [remark, setRemark] = useState("")
   const [isTest, setIsTest] = useState(false)
   // Regular (fast-track) vs Irregular (full approval), per doc. Auto-suggested from SO prefix "02";
@@ -170,6 +179,42 @@ export default function ScmRequestPage() {
     clearPicked()
   }
   const removeCart = (key: string) => setCart(p => p.filter(c => c.key !== key))
+
+  // Load the vendor list for the PC picker whenever BU / branch changes.
+  useEffect(() => {
+    if (reqType !== "PURCHASING") return
+    setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcVendQ("")
+    fetch(`/api/bom?bu=${bu}&vendors=1`).then(r => r.json()).then(d => setPcVendors(d.vendors || [])).catch(() => {})
+  }, [bu, reqType])
+
+  const pickPcVend = async (v: string) => {
+    setPcVend(v); setPcVendQ(""); setPcVendOpen(false); setPcSelPos(new Set()); setPcLoad(true)
+    try { const d = await fetch(`/api/bom?bu=${bu}&vendorPos=${encodeURIComponent(v)}`).then(r => r.json()); setPcPos(Array.isArray(d.pos) ? d.pos : []) }
+    finally { setPcLoad(false) }
+  }
+  const togglePcPo = (po: string) => setPcSelPos(p => { const n = new Set(p); n.has(po) ? n.delete(po) : n.add(po); return n })
+  const allPosSel = pcPos.length > 0 && pcPos.every((p: any) => pcSelPos.has(p.po))
+
+  // Add: pull EVERY material under the selected POs; the ONE total weight is recorded once (first line).
+  const addPcToCart = async () => {
+    if (!pcVend) return alert("เลือก vendor ก่อน")
+    if (pcSelPos.size === 0) return alert("เลือก PO อย่างน้อย 1 รายการ")
+    const w = pcWeight === "" ? null : (Number(pcWeight) || null)
+    setPcLoad(true)
+    const addItems: any[] = []
+    try {
+      let first = true
+      for (const po of pcSelPos) {
+        const d = await fetch(`/api/bom?bu=${bu}&poFull=${encodeURIComponent(po)}&vend=${encodeURIComponent(pcVend)}`).then(r => r.json())
+        const mats: Bom[] = Array.isArray(d.rows) ? d.rows : []
+        mats.forEach(m => { addItems.push({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: first ? w : null, ...emptyScm }); first = false })
+      }
+      if (!addItems.length) return alert("ไม่พบ material ใต้ PO ที่เลือก")
+      setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
+      setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcWeight("")
+      alert(`เพิ่ม ${addItems.length} รายการ จาก ${pcSelPos.size} PO · น้ำหนักรวม ${w ?? "-"} kg`)
+    } finally { setPcLoad(false) }
+  }
 
   // ── PC (Purchasing) flow: Vendor + PO + Weight via Excel — pull EVERY material under the PO. ──
   // Export a BU-scoped template: VEND_NAME / PO_NO / WEIGHT to fill, + a "Vendors" reference sheet.
@@ -316,36 +361,103 @@ export default function ScmRequestPage() {
       </div>
 
       {reqType === "PURCHASING" ? (
-        /* ── PC (Purchasing) flow: Excel (Vendor + PO + Weight) → pull every material under the PO ── */
-        <div className="bg-white rounded-xl border p-4 space-y-3">
-          <div className="flex items-start justify-between flex-wrap gap-2">
-            <div>
-              <h2 className="font-semibold text-gray-800">Purchasing — เลือกด้วย Vendor + PO + น้ำหนัก</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Export เทมเพลต (มีรายชื่อ vendor ตาม BU) → กรอก Vendor / PO / น้ำหนัก → Import · ระบบดึง<b>ทุก material ภายใต้ PO</b>อัตโนมัติ</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={pcExport} disabled={pcBusy}
-                className="px-3 py-2 rounded-lg text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">⬇ Export ({bu})</button>
-              <label className={`px-3 py-2 rounded-lg text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer ${pcBusy ? "opacity-50" : ""}`}>⬆ Import
-                <input type="file" accept=".xlsx,.xls" className="hidden" disabled={pcBusy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pcImport(f) }} />
-              </label>
-            </div>
+        /* ── PC (Purchasing): pick vendor → select some POs → one total weight → pull every material ── */
+        <div className="bg-white rounded-xl border p-4 space-y-4">
+          <div>
+            <h2 className="font-semibold text-gray-800">Purchasing — เลือก Vendor → PO → ใส่น้ำหนักรวม</h2>
+            <p className="text-xs text-gray-500 mt-0.5">เลือก vendor แล้วติ๊ก PO ที่จะ pull (บางหรือทั้งหมด) · ใส่น้ำหนักรวมก้อนเดียว · ระบบดึง<b>ทุก material ใต้ PO</b>ให้</p>
           </div>
-          {pcBusy && <p className="text-xs text-gray-400">กำลังประมวลผล…</p>}
-          {pcMissing.length > 0 && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-              <p className="text-xs font-semibold text-amber-800 mb-1">⚠ ไม่พบข้อมูลในระบบ ({pcMissing.length}) — แก้ไฟล์แล้ว import ใหม่</p>
-              <div className="max-h-40 overflow-auto">
-                <table className="w-full text-xs">
-                  <thead><tr className="text-amber-700"><th className="text-left px-2 py-1">Vendor</th><th className="text-left px-2 py-1">PO</th><th className="text-left px-2 py-1">เหตุผล</th></tr></thead>
-                  <tbody>{pcMissing.map((m, i) => (
-                    <tr key={i} className="border-t border-amber-200"><td className="px-2 py-1">{m.vend || "-"}</td><td className="px-2 py-1 font-medium">{m.po || "-"}</td><td className="px-2 py-1 text-amber-700">{m.reason}</td></tr>
-                  ))}</tbody>
-                </table>
+
+          {/* 1 · Vendor picker (type-ahead from this BU's vendors) */}
+          <div className="relative max-w-lg">
+            <label className="text-xs font-semibold text-gray-600 block mb-1">1 · Vendor</label>
+            {pcVend ? (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 text-sm bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 font-medium">🏭 {pcVend}</span>
+                <button onClick={() => { setPcVend(""); setPcPos([]); setPcSelPos(new Set()) }} className="text-xs text-gray-400 hover:text-red-500">เปลี่ยน</button>
               </div>
+            ) : (
+              <>
+                <input value={pcVendQ} onChange={e => { setPcVendQ(e.target.value); setPcVendOpen(true) }} onFocus={() => setPcVendOpen(true)}
+                  onBlur={() => setTimeout(() => setPcVendOpen(false), 150)} placeholder="พิมพ์ชื่อ vendor…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+                {pcVendOpen && (
+                  <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg max-h-72 overflow-auto">
+                    {pcVendors.filter(v => !pcVendQ.trim() || v.toLowerCase().includes(pcVendQ.trim().toLowerCase())).slice(0, 50).map(v => (
+                      <button key={v} onMouseDown={() => pickPcVend(v)} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 border-b border-gray-50 last:border-0">{v}</button>
+                    ))}
+                    {pcVendors.length === 0 && <div className="px-3 py-2 text-xs text-gray-400">ไม่มี vendor ใน BU นี้</div>}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* 2 · PO selection */}
+          {pcVend && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-gray-600">2 · เลือก PO ({pcSelPos.size}/{pcPos.length})</label>
+                {pcPos.length > 0 && <button onClick={() => setPcSelPos(allPosSel ? new Set() : new Set(pcPos.map((p: any) => p.po)))} className="text-[11px] text-red-600 font-medium">{allPosSel ? "ยกเลิกทั้งหมด" : "เลือกทั้งหมด"}</button>}
+              </div>
+              {pcLoad && pcPos.length === 0 ? <p className="text-xs text-gray-400">กำลังโหลด PO…</p> :
+                pcPos.length === 0 ? <p className="text-xs text-gray-400">ไม่พบ PO ของ vendor นี้</p> : (
+                  <div className="border rounded-xl overflow-auto max-h-56">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 sticky top-0"><tr>
+                        {["", "PO NO", "BRAND", "STYLE", "CUSTOMER", "SHIP DATE"].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                      </tr></thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {pcPos.map((p: any) => (
+                          <tr key={p.po} className={`hover:bg-gray-50 ${pcSelPos.has(p.po) ? "bg-red-50/40" : ""}`}>
+                            <td className="px-3 py-1.5"><input type="checkbox" checked={pcSelPos.has(p.po)} onChange={() => togglePcPo(p.po)} /></td>
+                            <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{p.po}</td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">{p.brand || "-"}</td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">{p.style || "-"}</td>
+                            <td className="px-3 py-1.5 max-w-[160px] truncate" title={p.customerName || ""}>{p.customerName || "-"}</td>
+                            <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(p.shipmentDate)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
             </div>
           )}
-          <p className="text-[11px] text-gray-400">คอลัมน์ในไฟล์: <b>VEND_NAME · PO_NO · WEIGHT</b> · น้ำหนัก = นน. รวมของ lot ต่อ PO (ใช้คิด Est Air) · country/port/incoterm กรอกที่ขั้น Purchase</p>
+
+          {/* 3 · total weight + add */}
+          {pcVend && pcSelPos.size > 0 && (
+            <div className="flex items-end gap-3 flex-wrap rounded-xl border-2 border-red-200 bg-red-50/50 px-4 py-3">
+              <div>
+                <label className="text-sm font-bold block mb-1" style={{ color: MAROON }}>3 · น้ำหนักรวม (kg)<span className="text-red-500"> *</span></label>
+                <input value={pcWeight} onChange={e => setPcWeight(e.target.value)} type="number" placeholder="0" min={0}
+                  className="w-40 border-2 border-red-300 rounded-xl px-4 py-2 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" style={{ color: MAROON }} />
+              </div>
+              <span className="text-xs text-gray-500 self-center">รวมทุก PO ที่เลือก ({pcSelPos.size} PO) — ใช้คิด Est Air</span>
+              <button onClick={addPcToCart} disabled={pcLoad} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 ml-auto" style={{ background: MAROON }}>
+                {pcLoad ? "…" : "+ Add to request"}
+              </button>
+            </div>
+          )}
+
+          {/* Excel alternative */}
+          <div className="border-t pt-3 flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-gray-400">หรือทำเป็นชุดด้วย Excel:</span>
+            <button onClick={pcExport} disabled={pcBusy} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">⬇ Export ({bu})</button>
+            <label className={`px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer ${pcBusy ? "opacity-50" : ""}`}>⬆ Import
+              <input type="file" accept=".xlsx,.xls" className="hidden" disabled={pcBusy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pcImport(f) }} />
+            </label>
+            {pcBusy && <span className="text-xs text-gray-400">กำลังประมวลผล…</span>}
+          </div>
+          {pcMissing.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <p className="text-xs font-semibold text-amber-800 mb-1">⚠ ไม่พบข้อมูลในระบบ ({pcMissing.length})</p>
+              <div className="max-h-40 overflow-auto"><table className="w-full text-xs">
+                <thead><tr className="text-amber-700"><th className="text-left px-2 py-1">Vendor</th><th className="text-left px-2 py-1">PO</th><th className="text-left px-2 py-1">เหตุผล</th></tr></thead>
+                <tbody>{pcMissing.map((m, i) => <tr key={i} className="border-t border-amber-200"><td className="px-2 py-1">{m.vend || "-"}</td><td className="px-2 py-1 font-medium">{m.po || "-"}</td><td className="px-2 py-1 text-amber-700">{m.reason}</td></tr>)}</tbody>
+              </table></div>
+            </div>
+          )}
         </div>
       ) : (<>
 

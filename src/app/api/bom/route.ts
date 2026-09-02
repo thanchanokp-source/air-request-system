@@ -59,6 +59,18 @@ export async function GET(req: NextRequest) {
     } catch (e: any) { return NextResponse.json({ error: e?.message || "vendors failed", vendors: [] }, { status: 500 }) }
   }
 
+  // Vendor-POs mode: distinct POs (+ a little context) for one vendor — the PC "select some POs" list.
+  const vendorPos = (sp.get("vendorPos") || "").trim()
+  if (vendorPos) {
+    if (!has("vend_name") || !has("po_no_doc")) return NextResponse.json({ pos: [] })
+    const ctx = [sel("brand_name", "brand"), sel("style", "style"), sel("cust_name", "customerName"), sel("shipment_date", "shipmentDate"), sel("po_date", "poDate")].join(", ")
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT DISTINCT ON (po_no_doc) po_no_doc AS "po", ${ctx} FROM ${SRC} WHERE vend_name = $1 AND po_no_doc IS NOT NULL AND po_no_doc <> '' ORDER BY po_no_doc DESC LIMIT 500`, vendorPos)
+      return NextResponse.json({ pos: rows })
+    } catch (e: any) { return NextResponse.json({ error: e?.message || "vendor POs failed", pos: [] }, { status: 500 }) }
+  }
+
   // PO-detail mode: EVERY material line under one PO (matches PO doc no OR customer PO) in this BU.
   // Optionally scoped to a vendor. Used by the PC "pull whole PO" flow (no per-item pick).
   const poFull = (sp.get("poFull") || "").trim()
