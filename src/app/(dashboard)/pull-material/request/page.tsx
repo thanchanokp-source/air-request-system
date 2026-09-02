@@ -197,6 +197,14 @@ export default function ScmRequestPage() {
   }
   const togglePcPo = (po: string) => setPcSelPos(p => { const n = new Set(p); n.has(po) ? n.delete(po) : n.add(po); return n })
   const allPosSel = pcPos.length > 0 && pcPos.every((p: any) => pcSelPos.has(p.po))
+  const [pcPoQ, setPcPoQ] = useState("")
+  const pcFilteredPos = pcPos.filter((p: any) => !pcPoQ.trim() || String(p.po).toLowerCase().includes(pcPoQ.trim().toLowerCase()))
+  // Enter in the PO search box → tick every PO currently matching the search (then clear).
+  const selectFilteredPos = () => {
+    if (!pcFilteredPos.length) return
+    setPcSelPos(p => { const n = new Set(p); pcFilteredPos.forEach((x: any) => n.add(x.po)); return n })
+    setPcPoQ("")
+  }
 
   // Add: pull EVERY material under the selected POs; the ONE total weight is recorded once (first line).
   const addPcToCart = async () => {
@@ -412,6 +420,12 @@ export default function ScmRequestPage() {
                 <label className="text-xs font-semibold text-gray-600">2 · เลือก PO ({pcSelPos.size}/{pcPos.length})</label>
                 {pcPos.length > 0 && <button onClick={() => setPcSelPos(allPosSel ? new Set() : new Set(pcPos.map((p: any) => p.po)))} className="text-[11px] text-red-600 font-medium">{allPosSel ? "ยกเลิกทั้งหมด" : "เลือกทั้งหมด"}</button>}
               </div>
+              {pcPos.length > 0 && (
+                <input value={pcPoQ} onChange={e => setPcPoQ(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); selectFilteredPos() } }}
+                  placeholder="🔎 พิมพ์ PO แล้ว Enter เพื่อเลือก (พิมพ์บางส่วนได้ → เลือกทุกตัวที่ตรง)"
+                  className="w-full mb-2 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+              )}
               {pcLoad && pcPos.length === 0 ? <p className="text-xs text-gray-400">กำลังโหลด PO…</p> :
                 pcPos.length === 0 ? <p className="text-xs text-gray-400">ไม่พบ PO ของ vendor นี้</p> : (
                   <div className="border rounded-xl overflow-auto max-h-56">
@@ -420,7 +434,7 @@ export default function ScmRequestPage() {
                         {["", "PO NO", "BRAND", "STYLE", "CUSTOMER", "SHIP DATE"].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                       </tr></thead>
                       <tbody className="divide-y divide-gray-50">
-                        {pcPos.map((p: any) => (
+                        {pcFilteredPos.map((p: any) => (
                           <tr key={p.po} className={`hover:bg-gray-50 ${pcSelPos.has(p.po) ? "bg-red-50/40" : ""}`}>
                             <td className="px-3 py-1.5"><input type="checkbox" checked={pcSelPos.has(p.po)} onChange={() => togglePcPo(p.po)} /></td>
                             <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{p.po}</td>
