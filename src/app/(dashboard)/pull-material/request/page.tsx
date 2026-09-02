@@ -92,6 +92,7 @@ export default function ScmRequestPage() {
   const [pcManualOpen, setPcManualOpen] = useState(false)
   const [pcManualVend, setPcManualVend] = useState("")
   const [pcManualPo, setPcManualPo] = useState("")
+  const [pcPullQty, setPcPullQty] = useState<Record<string, string>>({}) // per-PO "Pull PO" qty (editable; default = sum)
   const [pcWeight, setPcWeight] = useState("")
   const [pcLoad, setPcLoad] = useState(false)
   // Excel import staging: found (VEND, PO) rows → fill ONE total weight on-screen, then Add.
@@ -252,13 +253,25 @@ export default function ScmRequestPage() {
   const removePcMat = (key: string) => setPcSelMats(prev => prev.filter(m => matK(m) !== key))
   const removePcPo = (po: string) => { setPcSelPos(p => { const n = new Set(p); n.delete(po); return n }); setPcSelMats(prev => prev.filter(m => m.poNoDoc !== po)) }
 
-  // Add the selected materials to the cart with the ONE total weight (recorded once, first line).
+  // Per-PO summary of the selected materials: count + SUM(poqtyBomdummy). "Pull PO" defaults to the sum.
+  const pcPoSum: Record<string, { count: number; sum: number; vend: string | null }> = {}
+  pcSelMats.forEach(m => { const po = m.poNoDoc || "-"; const g = (pcPoSum[po] ||= { count: 0, sum: 0, vend: (m as any).vendorName || null }); g.count++; g.sum += Number(m.poqtyBomdummy) || 0 })
+  const pcPullOf = (po: string) => pcPullQty[po] ?? String(pcPoSum[po]?.sum ?? 0)
+
+  // Add: the per-PO "Pull PO" qty is distributed across its materials (by poqtyBomdummy share).
   const addPcToCart = () => {
     if (!pcSelMats.length) return alert("เลือก PO / material ก่อน")
     const w = pcWeight === "" ? null : (Number(pcWeight) || null)
-    const addItems = pcSelMats.map((m, idx) => ({ ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: idx === 0 ? w : null, ...emptyScm }))
+    const addItems = pcSelMats.map((m, idx) => {
+      const po = m.poNoDoc || "-"
+      const g = pcPoSum[po]
+      const pullPO = Number(pcPullOf(po)) || 0
+      const share = g && g.sum > 0 ? (Number(m.poqtyBomdummy) || 0) / g.sum : (g && g.count ? 1 / g.count : 0)
+      const q = Math.round(pullPO * share * 100) / 100
+      return { ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: q, weight: idx === 0 ? w : null, ...emptyScm }
+    })
     setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
-    setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcSelMats([]); setPcWeight("")
+    setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcSelMats([]); setPcWeight(""); setPcPullQty({})
     alert(`เพิ่ม ${addItems.length} material · น้ำหนักรวม ${w ?? "-"} kg`)
   }
 
@@ -535,6 +548,34 @@ export default function ScmRequestPage() {
                     <button onClick={() => removePcPo(po)} className="text-gray-400 hover:text-red-600" title="ลบทั้ง PO">✕</button>
                   </span>
                 ))}
+              </div>
+
+              {/* Summary BY PO — sum of qty + editable "Pull PO" (default = sum) */}
+              <div className="mt-3">
+                <label className="text-xs font-semibold text-gray-600 block mb-1">สรุปตาม PO (แก้ Pull PO ได้)</label>
+                <div className="border rounded-xl overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50"><tr>
+                      {["PO NO", "VENDOR", "# ITEM", "SUM POQTY", "PULL PO", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                    </tr></thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {Object.keys(pcPoSum).map(po => (
+                        <tr key={po} className="hover:bg-gray-50">
+                          <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
+                          <td className="px-3 py-1.5 max-w-[200px] truncate" title={pcPoSum[po].vend || ""}>{pcPoSum[po].vend || "-"}</td>
+                          <td className="px-3 py-1.5 text-right">{pcPoSum[po].count}</td>
+                          <td className="px-3 py-1.5 text-right">{fmt(pcPoSum[po].sum)}</td>
+                          <td className="px-3 py-1.5">
+                            <input type="number" value={pcPullOf(po)} onChange={e => setPcPullQty(p => ({ ...p, [po]: e.target.value }))}
+                              className="w-28 border border-red-300 rounded-lg px-2 py-1 text-xs text-right font-semibold text-red-800 focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                          </td>
+                          <td className="px-3 py-1.5 text-center"><button onClick={() => removePcPo(po)} className="text-gray-300 hover:text-red-500" title="ลบทั้ง PO">✕</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">Pull PO = จำนวนที่จะ pull ต่อ PO (default = ยอดรวม, แก้ได้) · ระบบกระจายให้แต่ละ material ตามสัดส่วน</p>
               </div>
             </div>
           )}
