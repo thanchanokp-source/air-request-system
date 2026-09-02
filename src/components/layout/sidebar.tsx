@@ -93,14 +93,12 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
           // Claim tab: hidden for pure Pull RM users (they have no air-side pages).
           const locked = f.key === "pull" ? !hasPull : f.key === "claim" ? isPurePull : false
           if (locked) {
-            const testing = f.key === "pull"
             return (
-              <div key={f.key} title={testing ? "อยู่ระหว่างทดสอบ — เปิดเฉพาะ Admin / Pull RM" : "ไม่มีสิทธิ์เข้าถึง"}
+              <div key={f.key} title="ไม่มีสิทธิ์เข้าถึง"
                 className="rounded-lg px-2 py-2.5 text-center opacity-50 cursor-not-allowed"
                 style={{ background: "#7a2323", color: "#c79a9a" }}>
                 <div className="text-lg leading-none">{f.icon}</div>
                 <div className="text-[11px] font-bold mt-1">{f.label}</div>
-                {testing && <div className="text-[9px] mt-0.5">🔒 ทดสอบ</div>}
               </div>
             )
           }
@@ -112,7 +110,6 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
                 : { background: "#8b2a2a", color: "#f0d0d0" }}>
               <div className="text-lg leading-none">{f.icon}</div>
               <div className="text-[11px] font-bold mt-1">{f.label}</div>
-              {f.key === "pull" && isAdmin && <div className="text-[9px] mt-0.5 opacity-80">🧪 admin test</div>}
             </Link>
           )
         })}

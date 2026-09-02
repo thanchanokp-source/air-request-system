@@ -166,8 +166,8 @@ export default function ScmRequestPage() {
   if (!isAdmin) return (
     <div className="p-10 max-w-lg mx-auto text-center">
       <div className="text-5xl">🔒</div>
-      <h1 className="text-lg font-bold mt-3" style={{ color: MAROON }}>Pull Material — under testing</h1>
-      <p className="text-sm text-gray-500 mt-2">Opens to everyone once testing is complete.</p>
+      <h1 className="text-lg font-bold mt-3" style={{ color: MAROON }}>Pull Material</h1>
+      <p className="text-sm text-gray-500 mt-2">เฉพาะผู้ที่มีสิทธิ์ (SCM / Purchasing) — ติดต่อ Admin เพื่อขอสิทธิ์</p>
     </div>
   )
 
