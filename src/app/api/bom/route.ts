@@ -27,41 +27,32 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(Number(sp.get("limit")) || 50, 200)
   const SRC = tableFor(bu)
 
+  // BOM tables differ per BU (some lack columns like insert_date / ou / mrd2). Read the table's
+  // ACTUAL columns and select only those that exist (missing → NULL) so no BU errors out.
+  const bare = SRC.match(/\."([^"]+)"\s*$/)?.[1] || ""
+  let cols = new Set<string>()
+  try {
+    const cr = await prisma.$queryRawUnsafe<any[]>(`SELECT lower(column_name) AS c FROM information_schema.columns WHERE lower(table_name)=lower($1)`, bare)
+    cols = new Set(cr.map(r => r.c))
+  } catch { /* ignore — falls back to selecting nothing → empty */ }
+  const has = (c: string) => cols.has(c.toLowerCase())
+  const sel = (dbCol: string, alias: string) => (has(dbCol) ? `${dbCol} AS "${alias}"` : `NULL AS "${alias}"`)
+
   // Detail mode: all material lines (per item) for ONE SO — used after SCM picks an SO.
   // Each row = a material; SCM enters pull-garment per SO, material qty scales proportionally.
   if (so) {
+    const fields = [
+      sel("bu", "bu"), sel("so_year", "soYear"), sel("so_no_doc", "soNoDoc"), sel("cust_name", "customerName"),
+      sel("group_code", "groupCode"), sel("ou", "ou"), sel("cpart_no", "cpartNo"), sel("part_desc", "partDesc"),
+      sel("item_no", "itemNo"), sel("item_code", "itemCode"), sel("item_name", "itemName"), sel("orderqty", "orderQty"),
+      sel("poqty_bomdummy", "poqtyBomdummy"), sel("po_no_doc", "poNoDoc"), sel("po_date", "poDate"), sel("upd_inhouse", "updInhouse"),
+      sel("vend_name", "vendorName"), sel("status", "status"), sel("pousername", "poUsername"), sel("mrd_date", "mrdDate"),
+      sel("mrd_need_date", "mrdNeedDate"), sel("mrd2", "mrd2"), sel("cust_po", "customerPo"), sel("style", "style"),
+      sel("gmt_type", "gmtType"), sel("brand_name", "brand"), sel("shipment_date", "shipmentDate"), sel("bomqty", "bomQty"),
+      sel("bom_uom", "bomUom"), sel("consumption", "consumption"),
+    ].join(", ")
     const sql = `
-      SELECT DISTINCT ON (item_code)
-             bu             AS "bu",
-             so_year        AS "soYear",
-             so_no_doc      AS "soNoDoc",
-             cust_name      AS "customerName",
-             group_code     AS "groupCode",
-             ou             AS "ou",
-             cpart_no       AS "cpartNo",
-             part_desc      AS "partDesc",
-             item_no        AS "itemNo",
-             item_code      AS "itemCode",
-             item_name      AS "itemName",
-             orderqty       AS "orderQty",
-             poqty_bomdummy AS "poqtyBomdummy",
-             po_no_doc      AS "poNoDoc",
-             po_date        AS "poDate",
-             upd_inhouse    AS "updInhouse",
-             vend_name      AS "vendorName",
-             status         AS "status",
-             pousername     AS "poUsername",
-             mrd_date       AS "mrdDate",
-             mrd_need_date  AS "mrdNeedDate",
-             mrd2           AS "mrd2",
-             cust_po        AS "customerPo",
-             style,
-             gmt_type       AS "gmtType",
-             brand_name     AS "brand",
-             shipment_date  AS "shipmentDate",
-             bomqty         AS "bomQty",
-             bom_uom        AS "bomUom",
-             consumption    AS "consumption"
+      SELECT DISTINCT ON (item_code) ${fields}
       FROM ${SRC}
       WHERE so_no_doc = $1
       ORDER BY item_code
@@ -77,37 +68,32 @@ export async function GET(req: NextRequest) {
   const po = (sp.get("po") || "").trim()
   const where: string[] = []
   const params: any[] = []
-  if (q) {
+  if (q && has("so_no_doc")) {
     params.push(`%${q}%`)
     // Search by SO number.
     where.push(`so_no_doc ILIKE $${params.length}`)
   }
   if (po) {
     params.push(`%${po}%`)
-    // Search by PO — match either the PO doc number or the customer PO.
-    where.push(`(po_no_doc ILIKE $${params.length} OR cust_po ILIKE $${params.length})`)
+    // Search by PO — match either the PO doc number or the customer PO (whichever columns exist).
+    const parts = [has("po_no_doc") && `po_no_doc ILIKE $${params.length}`, has("cust_po") && `cust_po ILIKE $${params.length}`].filter(Boolean)
+    if (parts.length) where.push(`(${parts.join(" OR ")})`)
   }
   const vend = (sp.get("vend") || "").trim()
-  if (vend) {
+  if (vend && has("vend_name")) {
     params.push(`%${vend}%`)
     // Search by supplier / vendor name.
     where.push(`vend_name ILIKE $${params.length}`)
   }
   // One row per SO (DISTINCT ON) — the SO-level fields for the search list. Material-line
   // detail (consumption per item) can be fetched per SO later when needed.
+  const listFields = [
+    sel("so_no_doc", "soNoDoc"), sel("cust_name", "customerName"), sel("cust_po", "customerPo"),
+    sel("vend_name", "vendorName"), sel("po_no_doc", "poNoDoc"), sel("style", "style"),
+    sel("gmt_type", "gmtType"), sel("brand_name", "brand"), sel("orderqty", "orderQty"), sel("shipment_date", "shipmentDate"),
+  ].join(", ")
   const sql = `
-    SELECT DISTINCT ON (so_no_doc)
-           so_no_doc     AS "soNoDoc",
-           cust_name     AS "customerName",
-           cust_po       AS "customerPo",
-           vend_name     AS "vendorName",
-           po_no_doc     AS "poNoDoc",
-           style,
-           gmt_type      AS "gmtType",
-           brand_name    AS "brand",
-           orderqty      AS "orderQty",
-           shipment_date AS "shipmentDate",
-           insert_date   AS "updatedAt"
+    SELECT DISTINCT ON (so_no_doc) ${listFields}
     FROM ${SRC}
     ${where.length ? "WHERE " + where.join(" AND ") : ""}
     ORDER BY so_no_doc
