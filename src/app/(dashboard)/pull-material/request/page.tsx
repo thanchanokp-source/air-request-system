@@ -65,11 +65,12 @@ export default function ScmRequestPage() {
     ? { decisionStatus: "PENDING_PC_DECISION", nextStatus: "PENDING_VP_PUR" }   // PC decision → single PC approver (by BU)
     : { decisionStatus: "PENDING_SCM_DECISION", nextStatus: "PENDING_DVM_SCM" } // SCM decision → DVM SCM first
 
-  const [openSo, setOpenSo] = useState<Bom | null>(null)
-  const [materials, setMaterials] = useState<Bom[]>([])
+  // Multi-SO selection: tick several SOs from the search, pull materials across all of them at once.
+  const [pickedSos, setPickedSos] = useState<Bom[]>([])
+  const [matBySo, setMatBySo] = useState<Record<string, Bom[]>>({})
   const [loadingMat, setLoadingMat] = useState(false)
   const [pullGarment, setPullGarment] = useState("")
-  const [ticked, setTicked] = useState<Set<string>>(new Set())
+  const [ticked, setTicked] = useState<Set<string>>(new Set()) // keyed by `${soNoDoc}|${itemCode}`
   const emptyScm = { inHouseAirDate: "", inHouseSeaDate: "", sewingStartDate: "", reasonAirPick: "", grossWeightKg: "", airFreightCost: "" }
   const [scm, setScm] = useState({ ...emptyScm })
 
@@ -120,15 +121,31 @@ export default function ScmRequestPage() {
     return () => clearTimeout(t)
   }, [q, poQ, vendQ, bu])
 
-  const pickSo = async (b: Bom) => {
-    setOpenSo(b); setMaterials([]); setPullGarment(""); setTicked(new Set()); setScm({ ...emptyScm }); setLoadingMat(true)
+  // Materials of every picked SO, combined (each line keeps its own soNoDoc/orderQty).
+  const materials: Bom[] = pickedSos.flatMap(s => matBySo[s.soNoDoc] || [])
+  const matKey = (m: Bom) => `${m.soNoDoc}|${m.itemCode}`
+
+  // Toggle an SO in/out of the selection; fetch its materials on add.
+  const togglePickSo = async (b: Bom) => {
+    const on = pickedSos.some(s => s.soNoDoc === b.soNoDoc)
+    if (on) {
+      setPickedSos(p => p.filter(s => s.soNoDoc !== b.soNoDoc))
+      setMatBySo(p => { const n = { ...p }; delete n[b.soNoDoc]; return n })
+      setTicked(p => new Set([...p].filter(k => !k.startsWith(`${b.soNoDoc}|`))))
+      return
+    }
+    setPickedSos(p => [...p, b]); setLoadingMat(true)
     try {
       const r = await fetch(`/api/bom?bu=${bu}&so=${encodeURIComponent(b.soNoDoc)}`).then(r => r.json())
-      setMaterials(Array.isArray(r.rows) ? r.rows : [])
+      setMatBySo(p => ({ ...p, [b.soNoDoc]: Array.isArray(r.rows) ? r.rows : [] }))
     } finally { setLoadingMat(false) }
   }
+  const clearPicked = () => { setPickedSos([]); setMatBySo({}); setTicked(new Set()); setPullGarment(""); setScm({ ...emptyScm }) }
 
-  const toggle = (code: string) => setTicked(p => { const n = new Set(p); n.has(code) ? n.delete(code) : n.add(code); return n })
+  const toggle = (key: string) => setTicked(p => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n })
+  const allKeys = materials.filter(m => m.itemCode).map(matKey)
+  const allTicked = allKeys.length > 0 && allKeys.every(k => ticked.has(k))
+  const toggleAll = () => setTicked(() => allTicked ? new Set() : new Set(allKeys))
 
   // material qty scales with pull garment: bomQty * (pullGarment / orderQty)
   const calcQty = (m: Bom, garment: number) =>
@@ -137,14 +154,14 @@ export default function ScmRequestPage() {
   const addToCart = () => {
     const g = Number(pullGarment)
     if (!g || g <= 0) return alert("Enter the number of garments to pull first.")
-    const picked = materials.filter(m => m.itemCode && ticked.has(m.itemCode))
+    const picked = materials.filter(m => m.itemCode && ticked.has(matKey(m)))
     if (picked.length === 0) return alert("Tick at least one material line.")
     const add = picked.map(m => ({
       ...m, key: `${m.soNoDoc}|${m.itemCode}`,
       pullGarment: g, pullMaterialQty: calcQty(m, g), ...scm,
     }))
     setCart(prev => [...prev.filter(c => !add.some(a => a.key === c.key)), ...add])
-    setOpenSo(null); setMaterials([]); setPullGarment(""); setTicked(new Set()); setScm({ ...emptyScm })
+    clearPicked()
   }
   const removeCart = (key: string) => setCart(p => p.filter(c => c.key !== key))
 
@@ -200,7 +217,7 @@ export default function ScmRequestPage() {
       {/* BU tabs */}
       <div className="flex gap-1.5">
         {BUS.map(b => (
-          <button key={b} onClick={() => { setBu(b); setResults([]); setOpenSo(null) }}
+          <button key={b} onClick={() => { setBu(b); setResults([]); clearPicked() }}
             className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
             style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
         ))}
@@ -240,15 +257,23 @@ export default function ScmRequestPage() {
           {searching && <span className="absolute right-3 top-2.5 text-xs text-gray-400">Searching…</span>}
           {open && results.length > 0 && (
             <div className="absolute z-20 mt-1 w-full bg-white border rounded-xl shadow-lg max-h-80 overflow-auto">
-              {results.map((b, i) => (
-                <button key={i} onMouseDown={() => { pickSo(b); setQ(b.soNoDoc); setPoQ(""); setVendQ(""); setOpen(false) }}
-                  className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 border-b border-gray-50 last:border-0">
-                  <span className="font-semibold text-gray-800">{b.soNoDoc}</span>
-                  <span className="text-gray-600"> · PO {b.poNoDoc || "-"}</span>
-                  <span className="text-gray-500"> · {b.customerName || "-"} · {b.brand || "-"}/{b.gmtType || "-"} · order {fmt(b.orderQty)}</span>
-                  <span className="text-violet-600"> · 🏭 {b.vendorName || "-"}</span>
-                </button>
-              ))}
+              {/* Tick MULTIPLE SOs — the dropdown stays open so you can select several at once. */}
+              {results.map((b, i) => {
+                const on = pickedSos.some(s => s.soNoDoc === b.soNoDoc)
+                return (
+                  <button key={i} onMouseDown={e => { e.preventDefault(); togglePickSo(b) }}
+                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 border-b border-gray-50 last:border-0 ${on ? "bg-red-50" : "hover:bg-red-50/60"}`}>
+                    <input type="checkbox" readOnly checked={on} className="accent-red-700 pointer-events-none" />
+                    <span className="flex-1">
+                      <span className="font-semibold text-gray-800">{b.soNoDoc}</span>
+                      <span className="text-gray-600"> · PO {b.poNoDoc || "-"}</span>
+                      <span className="text-gray-500"> · {b.customerName || "-"} · {b.brand || "-"}/{b.gmtType || "-"} · order {fmt(b.orderQty)}</span>
+                      <span className="text-violet-600"> · 🏭 {b.vendorName || "-"}</span>
+                    </span>
+                    {on && <span className="text-red-600 font-bold">✓</span>}
+                  </button>
+                )
+              })}
             </div>
           )}
           {open && (q.trim() || poQ.trim() || vendQ.trim()) && !searching && results.length === 0 && (
@@ -257,35 +282,51 @@ export default function ScmRequestPage() {
         </div>
       </div>
 
-      {/* Material lines of the picked SO */}
-      {openSo && (
+      {/* Material lines of every picked SO (multi-select) */}
+      {pickedSos.length > 0 && (
         <div className="bg-white rounded-xl border p-4">
-          <h2 className="font-semibold text-gray-800">Materials of SO {openSo.soNoDoc}
-            <span className="text-xs text-gray-400 font-normal"> · {openSo.customerName} · order {fmt(openSo.orderQty)} pcs</span>
-          </h2>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="font-semibold text-gray-800">Materials · {pickedSos.length} SO เลือก</h2>
+            <button onClick={clearPicked} className="text-xs text-gray-400 hover:text-red-500">✕ ล้างที่เลือก</button>
+          </div>
+          {/* Picked SO chips (removable) */}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {pickedSos.map(s => (
+              <span key={s.soNoDoc} className="inline-flex items-center gap-1 text-[11px] bg-red-50 border border-red-200 text-red-800 rounded-full px-2 py-0.5">
+                {s.soNoDoc} <span className="text-gray-400">· order {fmt(s.orderQty)}</span>
+                <button onClick={() => togglePickSo(s)} className="text-red-400 hover:text-red-600 ml-0.5">✕</button>
+              </span>
+            ))}
+          </div>
+
           <div className="mt-3 flex items-center gap-3 flex-wrap rounded-xl border-2 border-red-200 bg-red-50/50 px-4 py-3">
             <label className="text-sm font-bold" style={{ color: MAROON }}>ดึงกี่ตัว (Pull garments)<span className="text-red-500"> *</span></label>
             <input value={pullGarment} onChange={e => setPullGarment(e.target.value)} type="number" placeholder="0" min={1}
               className="w-40 border-2 border-red-300 rounded-xl px-4 py-2.5 text-xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 bg-white" style={{ color: MAROON }} />
-            <span className="text-xs text-gray-500">จาก order <b>{fmt(openSo.orderQty)}</b> ตัว → คำนวณ material qty อัตโนมัติ</span>
+            <span className="text-xs text-gray-500">คำนวณต่อ SO อัตโนมัติ (แต่ละบรรทัดหารด้วย order qty ของ SO ตัวเอง)</span>
             {!pullGarment && <span className="text-xs font-semibold text-red-500">← กรอกจำนวนก่อนเลือกวัสดุ</span>}
           </div>
 
-          {loadingMat ? <p className="text-sm text-gray-400 mt-3">Loading materials…</p> : (
+          {loadingMat && materials.length === 0 ? <p className="text-sm text-gray-400 mt-3">Loading materials…</p> : (
             <div className="mt-3 border rounded-xl overflow-auto max-h-[340px]">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 sticky top-0"><tr>
-                  <th className="px-3 py-2 text-left font-medium text-gray-500">Pick</th>
+                  <th className="px-3 py-2 text-left font-medium text-gray-500">
+                    <label className="flex items-center gap-1 cursor-pointer whitespace-nowrap" title="เลือก/ยกเลิกทั้งหมด">
+                      <input type="checkbox" checked={allTicked} onChange={toggleAll} /> All
+                    </label>
+                  </th>
                   {MAT_COLS.map(c => <th key={c.k} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{c.label}</th>)}
                   <th className="px-3 py-2 text-left font-medium text-red-700 whitespace-nowrap">PULL (calc)</th>
                 </tr></thead>
                 <tbody className="divide-y divide-gray-50">
                   {materials.map((m, i) => {
                     const g = Number(pullGarment) || 0
+                    const k = matKey(m)
                     return (
-                      <tr key={i} className="hover:bg-gray-50">
+                      <tr key={k + i} className="hover:bg-gray-50">
                         <td className="px-3 py-1.5">
-                          <input type="checkbox" checked={!!m.itemCode && ticked.has(m.itemCode)} onChange={() => m.itemCode && toggle(m.itemCode)} />
+                          <input type="checkbox" checked={!!m.itemCode && ticked.has(k)} onChange={() => m.itemCode && toggle(k)} />
                         </td>
                         {MAT_COLS.map(c => {
                           const v = (m as any)[c.k]
@@ -299,12 +340,13 @@ export default function ScmRequestPage() {
                       </tr>
                     )
                   })}
-                  {materials.length === 0 && <tr><td colSpan={MAT_COLS.length + 2} className="px-3 py-3 text-center text-gray-400">No materials found</td></tr>}
+                  {materials.length === 0 && !loadingMat && <tr><td colSpan={MAT_COLS.length + 2} className="px-3 py-3 text-center text-gray-400">No materials found</td></tr>}
                 </tbody>
               </table>
             </div>
           )}
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="text-xs text-gray-400">เลือกไว้ {ticked.size} บรรทัด</span>
             <button onClick={addToCart} className="px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>
               + Add to request
             </button>
