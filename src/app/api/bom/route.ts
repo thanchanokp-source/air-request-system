@@ -38,21 +38,51 @@ export async function GET(req: NextRequest) {
   const has = (c: string) => cols.has(c.toLowerCase())
   const sel = (dbCol: string, alias: string) => (has(dbCol) ? `${dbCol} AS "${alias}"` : `NULL AS "${alias}"`)
 
+  // Shared material-line column list (used by SO-detail and PO-detail modes).
+  const matFields = [
+    sel("bu", "bu"), sel("so_year", "soYear"), sel("so_no_doc", "soNoDoc"), sel("cust_name", "customerName"),
+    sel("group_code", "groupCode"), sel("ou", "ou"), sel("cpart_no", "cpartNo"), sel("part_desc", "partDesc"),
+    sel("item_no", "itemNo"), sel("item_code", "itemCode"), sel("item_name", "itemName"), sel("orderqty", "orderQty"),
+    sel("poqty_bomdummy", "poqtyBomdummy"), sel("po_no_doc", "poNoDoc"), sel("po_date", "poDate"), sel("upd_inhouse", "updInhouse"),
+    sel("vend_name", "vendorName"), sel("status", "status"), sel("pousername", "poUsername"), sel("mrd_date", "mrdDate"),
+    sel("mrd_need_date", "mrdNeedDate"), sel("mrd2", "mrd2"), sel("cust_po", "customerPo"), sel("style", "style"),
+    sel("gmt_type", "gmtType"), sel("brand_name", "brand"), sel("shipment_date", "shipmentDate"), sel("bomqty", "bomQty"),
+    sel("bom_uom", "bomUom"), sel("consumption", "consumption"),
+  ].join(", ")
+
+  // Vendors mode: distinct vendor names in this BU — the reference list for the PC Excel export.
+  if (sp.get("vendors")) {
+    if (!has("vend_name")) return NextResponse.json({ vendors: [] })
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT DISTINCT vend_name AS v FROM ${SRC} WHERE vend_name IS NOT NULL AND vend_name <> '' ORDER BY vend_name`)
+      return NextResponse.json({ vendors: rows.map(r => r.v) })
+    } catch (e: any) { return NextResponse.json({ error: e?.message || "vendors failed", vendors: [] }, { status: 500 }) }
+  }
+
+  // PO-detail mode: EVERY material line under one PO (matches PO doc no OR customer PO) in this BU.
+  // Optionally scoped to a vendor. Used by the PC "pull whole PO" flow (no per-item pick).
+  const poFull = (sp.get("poFull") || "").trim()
+  if (poFull) {
+    const vendF = (sp.get("vend") || "").trim()
+    const wh: string[] = [], pr: any[] = []
+    const poParts: string[] = []
+    if (has("po_no_doc")) { pr.push(poFull); poParts.push(`po_no_doc = $${pr.length}`) }
+    if (has("cust_po")) { pr.push(poFull); poParts.push(`cust_po = $${pr.length}`) }
+    if (!poParts.length) return NextResponse.json({ rows: [] })
+    wh.push(`(${poParts.join(" OR ")})`)
+    if (vendF && has("vend_name")) { pr.push(vendF); wh.push(`vend_name = $${pr.length}`) }
+    const sql = `SELECT DISTINCT ON (so_no_doc, item_code) ${matFields} FROM ${SRC} WHERE ${wh.join(" AND ")} ORDER BY so_no_doc, item_code LIMIT 1000`
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(sql, ...pr)
+      return NextResponse.json({ rows })
+    } catch (e: any) { return NextResponse.json({ error: e?.message || "PO detail failed", rows: [] }, { status: 500 }) }
+  }
+
   // Detail mode: all material lines (per item) for ONE SO — used after SCM picks an SO.
   // Each row = a material; SCM enters pull-garment per SO, material qty scales proportionally.
   if (so) {
-    const fields = [
-      sel("bu", "bu"), sel("so_year", "soYear"), sel("so_no_doc", "soNoDoc"), sel("cust_name", "customerName"),
-      sel("group_code", "groupCode"), sel("ou", "ou"), sel("cpart_no", "cpartNo"), sel("part_desc", "partDesc"),
-      sel("item_no", "itemNo"), sel("item_code", "itemCode"), sel("item_name", "itemName"), sel("orderqty", "orderQty"),
-      sel("poqty_bomdummy", "poqtyBomdummy"), sel("po_no_doc", "poNoDoc"), sel("po_date", "poDate"), sel("upd_inhouse", "updInhouse"),
-      sel("vend_name", "vendorName"), sel("status", "status"), sel("pousername", "poUsername"), sel("mrd_date", "mrdDate"),
-      sel("mrd_need_date", "mrdNeedDate"), sel("mrd2", "mrd2"), sel("cust_po", "customerPo"), sel("style", "style"),
-      sel("gmt_type", "gmtType"), sel("brand_name", "brand"), sel("shipment_date", "shipmentDate"), sel("bomqty", "bomQty"),
-      sel("bom_uom", "bomUom"), sel("consumption", "consumption"),
-    ].join(", ")
     const sql = `
-      SELECT DISTINCT ON (item_code) ${fields}
+      SELECT DISTINCT ON (item_code) ${matFields}
       FROM ${SRC}
       WHERE so_no_doc = $1
       ORDER BY item_code

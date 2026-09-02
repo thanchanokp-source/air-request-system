@@ -76,6 +76,8 @@ export default function ScmRequestPage() {
   const [scm, setScm] = useState({ ...emptyScm })
 
   const [cart, setCart] = useState<CartItem[]>([])
+  const [pcMissing, setPcMissing] = useState<{ po: string; vend: string; reason: string }[]>([])
+  const [pcBusy, setPcBusy] = useState(false)
   const [remark, setRemark] = useState("")
   const [isTest, setIsTest] = useState(false)
   // Regular (fast-track) vs Irregular (full approval), per doc. Auto-suggested from SO prefix "02";
@@ -166,6 +168,71 @@ export default function ScmRequestPage() {
   }
   const removeCart = (key: string) => setCart(p => p.filter(c => c.key !== key))
 
+  // ── PC (Purchasing) flow: Vendor + PO + Weight via Excel — pull EVERY material under the PO. ──
+  // Export a BU-scoped template: VEND_NAME / PO_NO / WEIGHT to fill, + a "Vendors" reference sheet.
+  const pcExport = async () => {
+    setPcBusy(true)
+    try {
+      const ExcelJS = (await import("exceljs")).default
+      const d = await fetch(`/api/bom?bu=${bu}&vendors=1`).then(r => r.json())
+      const vendors: string[] = d.vendors || []
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet("Pull")
+      const hr = ws.addRow(["VEND_NAME", "PO_NO", "WEIGHT"])
+      hr.eachCell((c: any) => { c.font = { bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2EFDA" } } })
+      ws.columns = [{ width: 36 }, { width: 22 }, { width: 14 }] as any
+      const vs = wb.addWorksheet("Vendors")
+      vs.addRow([`Vendor (${bu}) — ref`]); vs.getCell("A1").font = { bold: true }
+      vs.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEBF7" } }
+      vendors.forEach(v => vs.addRow([v])); vs.getColumn(1).width = 42
+      if (vendors.length) for (let r = 2; r <= 300; r++) {
+        ws.getCell(`A${r}`).dataValidation = { type: "list", allowBlank: true, formulae: [`Vendors!$A$2:$A$${vendors.length + 1}`] } as any
+      }
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a"); a.href = url; a.download = `PullRM_PC_${bu}_template.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    } finally { setPcBusy(false) }
+  }
+
+  // Import the filled template → for each (VEND, PO, WEIGHT) pull EVERY material under the PO in this BU.
+  // Rows whose PO/Vendor aren't in the system are reported (not added).
+  const pcImport = async (file: File) => {
+    const XLSX = await import("xlsx")
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
+    const ws = wb.Sheets["Pull"] || wb.Sheets[wb.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[]
+    const pick = (r: any, ...keys: string[]) => { for (const k of keys) if (r[k] !== undefined && r[k] !== "") return String(r[k]).trim(); return "" }
+    setPcBusy(true)
+    const missing: { po: string; vend: string; reason: string }[] = []
+    const addItems: any[] = []
+    const seen = new Set<string>()
+    try {
+      for (const r of rows) {
+        const vend = pick(r, "VEND_NAME", "Vendor", "VENDOR")
+        const po = pick(r, "PO_NO", "PO", "PONO")
+        const weight = pick(r, "WEIGHT", "Weight", "นน", "น้ำหนัก")
+        if (!po && !vend) continue
+        const key = `${po}|${vend}`.toLowerCase(); if (seen.has(key)) continue; seen.add(key)
+        const qs = new URLSearchParams({ bu, poFull: po }); if (vend) qs.set("vend", vend)
+        const d = await fetch(`/api/bom?${qs.toString()}`).then(r => r.json())
+        const mats: Bom[] = Array.isArray(d.rows) ? d.rows : []
+        if (!mats.length) { missing.push({ po, vend, reason: d.error ? "อ่านข้อมูลไม่ได้" : "ไม่พบ PO/Vendor ในระบบ" }); continue }
+        const w = weight === "" ? null : (Number(weight) || null)
+        mats.forEach((m, idx) => addItems.push({
+          ...m, key: `${m.soNoDoc}|${m.itemCode}`,
+          pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0,
+          weight: idx === 0 ? w : null,   // lot weight recorded once per PO (its first line)
+          ...emptyScm,
+        }))
+      }
+      setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
+      setPcMissing(missing)
+      alert(`นำเข้า ${addItems.length} รายการ${missing.length ? ` · ⚠ ไม่พบ ${missing.length} PO/Vendor (ดูรายการด้านล่าง)` : ""}`)
+    } finally { setPcBusy(false) }
+  }
+
   const submit = async () => {
     if (!requesterName.trim()) return alert("No signed-in user found.")
     if (cart.length === 0) return alert("No items in the request yet.")
@@ -231,6 +298,40 @@ export default function ScmRequestPage() {
         <span className="ml-1">{reqType === "SCM" ? "→ VP SCM → President" : "→ DVM Pur → VP Pur"}</span>
         {isAdmin && <span className="ml-2 text-amber-600">· admin: switch branch via “View as”</span>}
       </div>
+
+      {reqType === "PURCHASING" ? (
+        /* ── PC (Purchasing) flow: Excel (Vendor + PO + Weight) → pull every material under the PO ── */
+        <div className="bg-white rounded-xl border p-4 space-y-3">
+          <div className="flex items-start justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="font-semibold text-gray-800">Purchasing — เลือกด้วย Vendor + PO + น้ำหนัก</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Export เทมเพลต (มีรายชื่อ vendor ตาม BU) → กรอก Vendor / PO / น้ำหนัก → Import · ระบบดึง<b>ทุก material ภายใต้ PO</b>อัตโนมัติ</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={pcExport} disabled={pcBusy}
+                className="px-3 py-2 rounded-lg text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">⬇ Export ({bu})</button>
+              <label className={`px-3 py-2 rounded-lg text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer ${pcBusy ? "opacity-50" : ""}`}>⬆ Import
+                <input type="file" accept=".xlsx,.xls" className="hidden" disabled={pcBusy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pcImport(f) }} />
+              </label>
+            </div>
+          </div>
+          {pcBusy && <p className="text-xs text-gray-400">กำลังประมวลผล…</p>}
+          {pcMissing.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <p className="text-xs font-semibold text-amber-800 mb-1">⚠ ไม่พบข้อมูลในระบบ ({pcMissing.length}) — แก้ไฟล์แล้ว import ใหม่</p>
+              <div className="max-h-40 overflow-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-amber-700"><th className="text-left px-2 py-1">Vendor</th><th className="text-left px-2 py-1">PO</th><th className="text-left px-2 py-1">เหตุผล</th></tr></thead>
+                  <tbody>{pcMissing.map((m, i) => (
+                    <tr key={i} className="border-t border-amber-200"><td className="px-2 py-1">{m.vend || "-"}</td><td className="px-2 py-1 font-medium">{m.po || "-"}</td><td className="px-2 py-1 text-amber-700">{m.reason}</td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <p className="text-[11px] text-gray-400">คอลัมน์ในไฟล์: <b>VEND_NAME · PO_NO · WEIGHT</b> · น้ำหนัก = นน. รวมของ lot ต่อ PO (ใช้คิด Est Air) · country/port/incoterm กรอกที่ขั้น Purchase</p>
+        </div>
+      ) : (<>
 
       {/* Search */}
       <div className="bg-white rounded-xl border p-4">
@@ -359,6 +460,7 @@ export default function ScmRequestPage() {
           </div>
         </div>
       )}
+      </>)}
 
       {/* Cart */}
       <div className="bg-white rounded-xl border p-4">
