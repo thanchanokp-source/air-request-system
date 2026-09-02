@@ -43,7 +43,16 @@ export async function GET(req: NextRequest) {
   const loginToken = crypto.randomUUID()
   await prisma.user.update({ where: { id: target.id }, data: { loginToken, loginTokenExpiry: new Date(Date.now() + 4 * 60 * 60 * 1000) } as any })
 
-  const res = NextResponse.redirect(new URL(`/api/magic-login?token=${loginToken}&redirect=/approvals`, BASE))
+  // Land on the role-appropriate home (mirror src/app/page.tsx): Pull RM roles → Pull Material,
+  // Logistics → LG Booking, else the claim approvals queue.
+  const tRoles: string[] = [target.role, ...((target.roles as string[]) || [])].filter(Boolean)
+  const pullHome = tRoles.includes("PURCHASING") ? "/pull-material/purchase"
+    : tRoles.includes("SCM_PULL") ? "/pull-material/request"
+    : tRoles.includes("LOGISTICS_IMPORT") ? "/pull-material/logistics"
+    : (tRoles.includes("PULL_DVM_SCM") || tRoles.includes("DVM_PUR") || tRoles.includes("VP_PUR")) ? "/pull-material/approval" : null
+  const isLg = tRoles.some(r => ["LOGISTICS", "LOGISTICS_SUB", "LOGISTICS_GW", "LOGISTICS_TRM"].includes(r))
+  const home = pullHome || (isLg ? "/logistics" : "/approvals")
+  const res = NextResponse.redirect(new URL(`/api/magic-login?token=${loginToken}&redirect=${encodeURIComponent(home)}`, BASE))
   res.cookies.set("impersonator", adminId, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 4 * 60 * 60 })
   return res
 }
