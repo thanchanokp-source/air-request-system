@@ -88,6 +88,7 @@ export default function ScmRequestPage() {
   const [pcVendOpen, setPcVendOpen] = useState(false)
   const [pcPos, setPcPos] = useState<any[]>([])
   const [pcSelPos, setPcSelPos] = useState<Set<string>>(new Set())
+  const [pcSelMats, setPcSelMats] = useState<Bom[]>([]) // materials of the selected POs (shown below)
   const [pcWeight, setPcWeight] = useState("")
   const [pcLoad, setPcLoad] = useState(false)
   // Excel import staging: found (VEND, PO) rows → fill ONE total weight on-screen, then Add.
@@ -190,41 +191,52 @@ export default function ScmRequestPage() {
     fetch(`/api/bom?bu=${bu}&vendors=1`).then(r => r.json()).then(d => setPcVendors(d.vendors || [])).catch(() => {})
   }, [bu, reqType])
 
+  const matK = (m: any) => `${m.soNoDoc}|${m.itemCode}`
   const pickPcVend = async (v: string) => {
-    setPcVend(v); setPcVendQ(""); setPcVendOpen(false); setPcSelPos(new Set()); setPcLoad(true)
+    setPcVend(v); setPcVendQ(""); setPcVendOpen(false); setPcSelPos(new Set()); setPcSelMats([]); setPcLoad(true)
     try { const d = await fetch(`/api/bom?bu=${bu}&vendorPos=${encodeURIComponent(v)}`).then(r => r.json()); setPcPos(Array.isArray(d.pos) ? d.pos : []) }
     finally { setPcLoad(false) }
   }
-  const togglePcPo = (po: string) => setPcSelPos(p => { const n = new Set(p); n.has(po) ? n.delete(po) : n.add(po); return n })
+  // Fetch + add a PO's materials to the "selected" list (dedup); or remove them on deselect.
+  const addPoMats = async (po: string) => {
+    const d = await fetch(`/api/bom?bu=${bu}&poFull=${encodeURIComponent(po)}&vend=${encodeURIComponent(pcVend)}`).then(r => r.json())
+    const mats: Bom[] = Array.isArray(d.rows) ? d.rows : []
+    setPcSelMats(prev => [...prev.filter(x => !mats.some(y => matK(y) === matK(x))), ...mats])
+    return mats.length
+  }
+  const togglePcPo = async (po: string) => {
+    if (pcSelPos.has(po)) {
+      setPcSelPos(p => { const n = new Set(p); n.delete(po); return n })
+      setPcSelMats(prev => prev.filter(m => m.poNoDoc !== po))
+      return
+    }
+    setPcSelPos(p => new Set(p).add(po)); setPcLoad(true)
+    try { await addPoMats(po) } finally { setPcLoad(false) }
+  }
   const allPosSel = pcPos.length > 0 && pcPos.every((p: any) => pcSelPos.has(p.po))
   const [pcPoQ, setPcPoQ] = useState("")
   const pcFilteredPos = pcPos.filter((p: any) => !pcPoQ.trim() || String(p.po).toLowerCase().includes(pcPoQ.trim().toLowerCase()))
-  // Enter in the PO search box → tick every PO currently matching the search (then clear).
-  const selectFilteredPos = () => {
-    if (!pcFilteredPos.length) return
-    setPcSelPos(p => { const n = new Set(p); pcFilteredPos.forEach((x: any) => n.add(x.po)); return n })
-    setPcPoQ("")
-  }
-
-  // Add: pull EVERY material under the selected POs; the ONE total weight is recorded once (first line).
-  const addPcToCart = async () => {
-    if (!pcVend) return alert("เลือก vendor ก่อน")
-    if (pcSelPos.size === 0) return alert("เลือก PO อย่างน้อย 1 รายการ")
-    const w = pcWeight === "" ? null : (Number(pcWeight) || null)
+  // Enter in the PO search box → select every PO currently matching (fetch their materials), then clear.
+  const selectFilteredPos = async () => {
+    const toAdd = pcFilteredPos.filter((p: any) => !pcSelPos.has(p.po))
+    if (!toAdd.length) { setPcPoQ(""); return }
     setPcLoad(true)
-    const addItems: any[] = []
     try {
-      let first = true
-      for (const po of pcSelPos) {
-        const d = await fetch(`/api/bom?bu=${bu}&poFull=${encodeURIComponent(po)}&vend=${encodeURIComponent(pcVend)}`).then(r => r.json())
-        const mats: Bom[] = Array.isArray(d.rows) ? d.rows : []
-        mats.forEach(m => { addItems.push({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: first ? w : null, ...emptyScm }); first = false })
-      }
-      if (!addItems.length) return alert("ไม่พบ material ใต้ PO ที่เลือก")
-      setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
-      setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcWeight("")
-      alert(`เพิ่ม ${addItems.length} รายการ จาก ${pcSelPos.size} PO · น้ำหนักรวม ${w ?? "-"} kg`)
-    } finally { setPcLoad(false) }
+      setPcSelPos(p => { const n = new Set(p); toAdd.forEach((x: any) => n.add(x.po)); return n })
+      for (const p of toAdd) await addPoMats(p.po)
+    } finally { setPcLoad(false); setPcPoQ("") }
+  }
+  const removePcMat = (key: string) => setPcSelMats(prev => prev.filter(m => matK(m) !== key))
+  const removePcPo = (po: string) => { setPcSelPos(p => { const n = new Set(p); n.delete(po); return n }); setPcSelMats(prev => prev.filter(m => m.poNoDoc !== po)) }
+
+  // Add the selected materials to the cart with the ONE total weight (recorded once, first line).
+  const addPcToCart = () => {
+    if (!pcSelMats.length) return alert("เลือก PO / material ก่อน")
+    const w = pcWeight === "" ? null : (Number(pcWeight) || null)
+    const addItems = pcSelMats.map((m, idx) => ({ ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: idx === 0 ? w : null, ...emptyScm }))
+    setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
+    setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcSelMats([]); setPcWeight("")
+    alert(`เพิ่ม ${addItems.length} material · น้ำหนักรวม ${w ?? "-"} kg`)
   }
 
   // ── PC (Purchasing) flow: Vendor + PO + Weight via Excel — pull EVERY material under the PO. ──
@@ -451,15 +463,48 @@ export default function ScmRequestPage() {
             </div>
           )}
 
+          {/* Selected materials (from the ticked POs) — with a delete button per row */}
+          {pcSelMats.length > 0 && (
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1">Material ที่เลือก ({pcSelMats.length}) · {pcSelPos.size} PO</label>
+              <div className="border rounded-xl overflow-auto max-h-64">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 sticky top-0"><tr>
+                    {["ITEM NAME", "GROUP", "PO NO", "POQTY BOMDUMMY", "UOM", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {pcSelMats.map(m => (
+                      <tr key={matK(m)} className="hover:bg-gray-50">
+                        <td className="px-3 py-1.5 max-w-[260px] truncate" title={m.itemName || m.itemCode || ""}>{m.itemName || m.itemCode || "-"}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{m.groupCode || "-"}</td>
+                        <td className="px-3 py-1.5 font-medium whitespace-nowrap">{m.poNoDoc || "-"}</td>
+                        <td className="px-3 py-1.5 text-right whitespace-nowrap">{fmt(m.poqtyBomdummy)}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{m.bomUom || "-"}</td>
+                        <td className="px-3 py-1.5 text-center"><button onClick={() => removePcMat(matK(m))} className="text-gray-300 hover:text-red-500" title="ลบรายการนี้">✕</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {[...pcSelPos].map(po => (
+                  <span key={po} className="inline-flex items-center gap-1 text-[11px] bg-gray-100 rounded-full px-2 py-0.5">{po}
+                    <button onClick={() => removePcPo(po)} className="text-gray-400 hover:text-red-600" title="ลบทั้ง PO">✕</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 3 · total weight + add */}
-          {pcVend && pcSelPos.size > 0 && (
+          {pcSelMats.length > 0 && (
             <div className="flex items-end gap-3 flex-wrap rounded-xl border-2 border-red-200 bg-red-50/50 px-4 py-3">
               <div>
                 <label className="text-sm font-bold block mb-1" style={{ color: MAROON }}>3 · น้ำหนักรวม (kg)<span className="text-red-500"> *</span></label>
                 <input value={pcWeight} onChange={e => setPcWeight(e.target.value)} type="number" placeholder="0" min={0}
                   className="w-40 border-2 border-red-300 rounded-xl px-4 py-2 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" style={{ color: MAROON }} />
               </div>
-              <span className="text-xs text-gray-500 self-center">รวมทุก PO ที่เลือก ({pcSelPos.size} PO) — ใช้คิด Est Air</span>
+              <span className="text-xs text-gray-500 self-center">รวมทุก PO ที่เลือก ({pcSelPos.size} PO · {pcSelMats.length} material) — ใช้คิด Est Air</span>
               <button onClick={addPcToCart} disabled={pcLoad} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 ml-auto" style={{ background: MAROON }}>
                 {pcLoad ? "…" : "+ Add to request"}
               </button>
