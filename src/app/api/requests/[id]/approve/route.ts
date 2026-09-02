@@ -1612,7 +1612,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const isClaimOwnerRole = heldRoles.some(r => CLAIM_OWNER_ROLES.includes(r))
     if (!isClaimOwnerRole && !actAsNext) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     const isGW = request.bu === "GW"
-    const expected = isGW ? ["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"] : ["PENDING_CLAIM", "PENDING_VP_CLAIM"]
+    // Allow finishing a claim even after the air side reached ACCOUNTING/COMPLETED — the guard below
+    // (selIds = SOs with a still-pending split for this dept) prevents acting when nothing is pending.
+    const expected = isGW
+      ? ["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"]
+      : ["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_ACCOUNTING", "ACCOUNTING_PENDING", "COMPLETED"]
     if (!expected.includes(request.status)) return NextResponse.json({ error: "Not in the Claim stage" }, { status: 400 })
 
     // Which department does this actor own + their position in the chain?

@@ -1068,11 +1068,14 @@ export default function RequestDetailPage() {
   // Claim stage spans PENDING_CLAIM and PENDING_VP_CLAIM for NYG (the doc rolls to
   // VP_CLAIM once every SO left is at the VP/EVP step) — the forced-position UI must
   // stay visible across both so a forwarded approver can always finish.
+  // The air side can reach COMPLETED / ACCOUNTING while a claim split is still pending — the claim
+  // approver must still be able to finish it, so keep the claim UI available on those statuses too.
+  // (Nothing shows unless gwFwdBase finds an SO with a still-pending split for this dept.)
   const isClaimStageStatus = isGWRequest
     ? req?.status === "PENDING_CLAIM_GW"
-    : (req?.status === "PENDING_CLAIM" || req?.status === "PENDING_VP_CLAIM")
+    : ["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_ACCOUNTING", "ACCOUNTING_PENDING", "COMPLETED"].includes(req?.status)
   const isGwForwardRole = isClaimStageStatus && (fwdEntryRole || claimRole === "CLAIM_NEXT_APPROVER")
-  const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED"]
+  const fwdItemStatuses = isGWRequest ? ["PRES_PASSED", "LOG_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED", "ACCOUNTING_PENDING", "COMPLETED"]
   // My forward row — resolved by token (magic link) or by email (normal login / viewed-as).
   const myClaimToken = myFwdTok
   const myClaimFwdRow = myFwdRow0
