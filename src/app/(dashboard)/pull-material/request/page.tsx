@@ -90,6 +90,9 @@ export default function ScmRequestPage() {
   const [pcSelPos, setPcSelPos] = useState<Set<string>>(new Set())
   const [pcWeight, setPcWeight] = useState("")
   const [pcLoad, setPcLoad] = useState(false)
+  // Excel import staging: found (VEND, PO) rows → fill ONE total weight on-screen, then Add.
+  const [pcStaged, setPcStaged] = useState<{ vend: string; po: string; mats: Bom[] }[]>([])
+  const [pcStageWeight, setPcStageWeight] = useState("")
   const [remark, setRemark] = useState("")
   const [isTest, setIsTest] = useState(false)
   // Regular (fast-track) vs Irregular (full approval), per doc. Auto-suggested from SO prefix "02";
@@ -217,7 +220,8 @@ export default function ScmRequestPage() {
   }
 
   // ── PC (Purchasing) flow: Vendor + PO + Weight via Excel — pull EVERY material under the PO. ──
-  // Export a BU-scoped template: VEND_NAME / PO_NO / WEIGHT to fill, + a "Vendors" reference sheet.
+  // Export a BU-scoped template: VEND_NAME / PO_NO to fill, + a "Vendors" reference sheet.
+  // (Weight is entered on-screen AFTER import, not in the file.)
   const pcExport = async () => {
     setPcBusy(true)
     try {
@@ -226,9 +230,9 @@ export default function ScmRequestPage() {
       const vendors: string[] = d.vendors || []
       const wb = new ExcelJS.Workbook()
       const ws = wb.addWorksheet("Pull")
-      const hr = ws.addRow(["VEND_NAME", "PO_NO", "WEIGHT"])
+      const hr = ws.addRow(["VEND_NAME", "PO_NO"])
       hr.eachCell((c: any) => { c.font = { bold: true }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2EFDA" } } })
-      ws.columns = [{ width: 36 }, { width: 22 }, { width: 14 }] as any
+      ws.columns = [{ width: 36 }, { width: 22 }] as any
       const vs = wb.addWorksheet("Vendors")
       vs.addRow([`Vendor (${bu}) — ref`]); vs.getCell("A1").font = { bold: true }
       vs.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEBF7" } }
@@ -244,8 +248,8 @@ export default function ScmRequestPage() {
     } finally { setPcBusy(false) }
   }
 
-  // Import the filled template → for each (VEND, PO, WEIGHT) pull EVERY material under the PO in this BU.
-  // Rows whose PO/Vendor aren't in the system are reported (not added).
+  // Import (VEND, PO) → validate each against the system → STAGE the found ones (weight entered
+  // on-screen after). Rows whose PO/Vendor aren't in the system are reported (not staged).
   const pcImport = async (file: File) => {
     const XLSX = await import("xlsx")
     const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
@@ -254,31 +258,39 @@ export default function ScmRequestPage() {
     const pick = (r: any, ...keys: string[]) => { for (const k of keys) if (r[k] !== undefined && r[k] !== "") return String(r[k]).trim(); return "" }
     setPcBusy(true)
     const missing: { po: string; vend: string; reason: string }[] = []
-    const addItems: any[] = []
+    const staged: { vend: string; po: string; mats: Bom[] }[] = []
     const seen = new Set<string>()
     try {
       for (const r of rows) {
         const vend = pick(r, "VEND_NAME", "Vendor", "VENDOR")
         const po = pick(r, "PO_NO", "PO", "PONO")
-        const weight = pick(r, "WEIGHT", "Weight", "นน", "น้ำหนัก")
         if (!po && !vend) continue
         const key = `${po}|${vend}`.toLowerCase(); if (seen.has(key)) continue; seen.add(key)
         const qs = new URLSearchParams({ bu, poFull: po }); if (vend) qs.set("vend", vend)
         const d = await fetch(`/api/bom?${qs.toString()}`).then(r => r.json())
         const mats: Bom[] = Array.isArray(d.rows) ? d.rows : []
         if (!mats.length) { missing.push({ po, vend, reason: d.error ? "อ่านข้อมูลไม่ได้" : "ไม่พบ PO/Vendor ในระบบ" }); continue }
-        const w = weight === "" ? null : (Number(weight) || null)
-        mats.forEach((m, idx) => addItems.push({
-          ...m, key: `${m.soNoDoc}|${m.itemCode}`,
-          pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0,
-          weight: idx === 0 ? w : null,   // lot weight recorded once per PO (its first line)
-          ...emptyScm,
-        }))
+        staged.push({ vend: vend || String(mats[0].vendorName || ""), po, mats })
       }
-      setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
+      setPcStaged(prev => [...prev.filter(s => !staged.some(x => x.po === s.po && x.vend === s.vend)), ...staged])
       setPcMissing(missing)
-      alert(`นำเข้า ${addItems.length} รายการ${missing.length ? ` · ⚠ ไม่พบ ${missing.length} PO/Vendor (ดูรายการด้านล่าง)` : ""}`)
+      alert(`พบ ${staged.length} PO${missing.length ? ` · ⚠ ไม่พบ ${missing.length}` : ""} — ใส่น้ำหนักรวมด้านล่างแล้วกด Add`)
     } finally { setPcBusy(false) }
+  }
+
+  // Add the imported (staged) POs to the cart with the ONE total weight entered on-screen.
+  const addStagedToCart = () => {
+    if (!pcStaged.length) return
+    const w = pcStageWeight === "" ? null : (Number(pcStageWeight) || null)
+    const addItems: any[] = []
+    let first = true
+    for (const s of pcStaged) for (const m of s.mats) {
+      addItems.push({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: first ? w : null, ...emptyScm })
+      first = false
+    }
+    setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
+    setPcStaged([]); setPcStageWeight("")
+    alert(`เพิ่ม ${addItems.length} รายการ · น้ำหนักรวม ${w ?? "-"} kg`)
   }
 
   const submit = async () => {
@@ -449,6 +461,30 @@ export default function ScmRequestPage() {
             </label>
             {pcBusy && <span className="text-xs text-gray-400">กำลังประมวลผล…</span>}
           </div>
+
+          {/* Imported POs (staged) → enter ONE total weight → Add */}
+          {pcStaged.length > 0 && (
+            <div className="rounded-lg border border-sky-200 bg-sky-50/40 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-sky-800">📥 PO ที่ import ได้ ({pcStaged.length}) · material รวม {pcStaged.reduce((s, x) => s + x.mats.length, 0)}</p>
+                <button onClick={() => setPcStaged([])} className="text-[11px] text-gray-400 hover:text-red-500">✕ ล้าง</button>
+              </div>
+              <div className="max-h-32 overflow-auto"><table className="w-full text-xs">
+                <thead><tr className="text-gray-500"><th className="text-left px-2 py-1">Vendor</th><th className="text-left px-2 py-1">PO</th><th className="text-right px-2 py-1"># material</th></tr></thead>
+                <tbody>{pcStaged.map((s, i) => <tr key={i} className="border-t border-sky-100"><td className="px-2 py-1">{s.vend || "-"}</td><td className="px-2 py-1 font-medium">{s.po}</td><td className="px-2 py-1 text-right">{s.mats.length}</td></tr>)}</tbody>
+              </table></div>
+              <div className="flex items-end gap-3 flex-wrap pt-1">
+                <div>
+                  <label className="text-xs font-bold block mb-1" style={{ color: MAROON }}>น้ำหนักรวม (kg)<span className="text-red-500"> *</span></label>
+                  <input value={pcStageWeight} onChange={e => setPcStageWeight(e.target.value)} type="number" placeholder="0" min={0}
+                    className="w-40 border-2 border-red-300 rounded-xl px-4 py-2 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" style={{ color: MAROON }} />
+                </div>
+                <span className="text-xs text-gray-500 self-center">รวมทุก PO ที่ import — ใช้คิด Est Air</span>
+                <button onClick={addStagedToCart} className="px-4 py-2 rounded-lg text-white text-sm font-semibold ml-auto" style={{ background: MAROON }}>+ Add to request</button>
+              </div>
+            </div>
+          )}
+
           {pcMissing.length > 0 && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
               <p className="text-xs font-semibold text-amber-800 mb-1">⚠ ไม่พบข้อมูลในระบบ ({pcMissing.length})</p>
