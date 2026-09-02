@@ -73,12 +73,14 @@ export default function LgBookingPage() {
     const out: any[] = []
     for (const r of requests) {
       if (r.isTest && !isAdmin) continue
-      if (r.logisticsSent) continue
       const bu = r.bu || "NYG"
       if (!lgBus.has(bu)) continue
       const bookable = bu === "GW" ? ["PRES_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"]
       for (const it of (r.items || [])) {
         if (!bookable.includes(it.itemStatus)) continue
+        // After "Save & Send" only the SOs still MISSING an Actual remain (LG must finish them);
+        // before send, everything shows so drafts can be edited.
+        if (r.logisticsSent && it.actualAirFreight != null) continue
         out.push({ ...it, request: r, brand: it.brand || r.brandName || "(no brand)" })
       }
     }

@@ -65,11 +65,12 @@ export default function LgEntryPage() {
     const idset = new Set(entryIds)
     const out: any[] = []
     for (const r of requests) {
-      if (r.logisticsSent) continue
       const bookable = bookableOf(r.bu || "NYG")
       for (const it of (r.items || [])) {
         if (!idset.has(it.id)) continue
         if (!bookable.includes(it.itemStatus)) continue
+        // After "Save & Send" keep only SOs still missing an Actual (drafts stay editable pre-send).
+        if (r.logisticsSent && it.actualAirFreight != null) continue
         out.push({ ...it, request: r, brand: it.brand || r.brandName || "(no brand)" })
       }
     }
