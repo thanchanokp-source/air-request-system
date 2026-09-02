@@ -482,13 +482,19 @@ export default function ApprovalsPage() {
           const myDocTotal = reqItems.reduce((s: number, i: any) => s + myClaimForItem(i), 0)
           // Show a CR NO column when this doc has an NYK claim (CR is a NYK-only field).
           const hasNyk = reqItems.some((i: any) => getSplits(i).some((s: any) => s.dept === "NYK" || s.dept === "SCM NYK"))
+          // A doc's air side can COMPLETE while a claim split is still awaiting a dept's approval →
+          // don't show "Completed" then; show that the claim is still pending.
+          const CLAIM_SPLIT_DONE = new Set(["DEPT_APPROVED", "REJECTED", "COMPLETED", "ACCOUNTING_PENDING"])
+          const claimPending = reqItems.some((i: any) => getSplits(i).some((s: any) => !CLAIM_SPLIT_DONE.has(s.status)))
           return (
             <div key={req.id} className="bg-white rounded-xl border overflow-hidden">
               <div className="px-4 py-3 bg-gray-50 border-b flex flex-wrap items-center gap-2">
                 <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                   <Link href={`/requests/${req.id}`} className="font-semibold text-blue-600 hover:underline text-sm shrink-0">{req.documentNo}</Link>
                   <span className="text-xs text-gray-500 truncate">{req.buName}</span>
-                  <StatusBadge status={req.status} />
+                  {req.status === "COMPLETED" && claimPending
+                    ? <span className="px-2 py-1 rounded-full text-xs font-semibold uppercase bg-amber-100 text-amber-700" title="ฝั่ง air เสร็จแล้ว แต่ยังมี claim รออนุมัติ">⏳ Claim pending</span>
+                    : <StatusBadge status={req.status} />}
                   <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">EST {fmtNum(estTotal)} {cur}</span>
                   <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">ACT {fmtNum(actTotal)} {cur}</span>
                   {Object.entries(deptSums).map(([dept, sum]) => (
