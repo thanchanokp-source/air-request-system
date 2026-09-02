@@ -466,3 +466,16 @@ model PullPurchaseCity {
 
   @@index([city])
 }
+
+// Sample log — free-text entries (Brand / Supplier / Qty / Remark). All Pull RM roles.
+model PullSample {
+  id        String   @id @default(cuid())
+  brand     String?
+  supplier  String?
+  qty       String?
+  remark    String?
+  createdBy String?  // username of whoever added it
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
