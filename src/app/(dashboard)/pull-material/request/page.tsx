@@ -466,7 +466,10 @@ export default function ScmRequestPage() {
           {/* Selected materials (from the ticked POs) — with a delete button per row */}
           {pcSelMats.length > 0 && (
             <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1">Material ที่เลือก ({pcSelMats.length}) · {pcSelPos.size} PO</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-gray-600">Material ที่เลือก ({pcSelMats.length}) · {pcSelPos.size} PO</label>
+                <button onClick={() => { setPcSelMats([]); setPcSelPos(new Set()) }} className="text-[11px] text-red-600 font-medium hover:underline">🗑 ล้างทั้งหมด</button>
+              </div>
               <div className="border rounded-xl overflow-auto max-h-64">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 sticky top-0"><tr>
