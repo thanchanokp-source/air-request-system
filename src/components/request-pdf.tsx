@@ -676,6 +676,7 @@ export function HawbPdfDocument({
   const fmt2      = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const fmt0      = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 0 })
   const dated     = generatedDate || new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  const cur       = (String(buName || "").toUpperCase() === "EA" || String(documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"
 
   return (
     <Document title={`HAWB_${hawbNo}_${documentNo}`}>
@@ -688,9 +689,9 @@ export function HawbPdfDocument({
             { label: "HAWB NO.", value: hawbNo },
             { label: "DOCUMENT NO.", value: documentNo },
             { label: "BRAND / BU", value: `${brandName} / ${buName}` },
-            { label: "TOTAL CHARGE (THB)", value: fmt2(totalCharge) },
+            { label: `TOTAL CHARGE (${cur})`, value: fmt2(totalCharge) },
             { label: "TOTAL QTY (PCS)", value: String(totalQty) },
-            { label: "AVG / PC (THB)", value: fmt2(avgPerPc) },
+            { label: `AVG / PC (${cur})`, value: fmt2(avgPerPc) },
           ].map((c, i, arr) => (
             <View key={c.label} style={i < arr.length - 1 ? hw.headerCell : hw.headerCellLast}>
               <Text style={hw.headerLabel}>{c.label}</Text>
@@ -705,7 +706,7 @@ export function HawbPdfDocument({
             {([
               ["#", HW.no], ["S/O NO.", HW.so], ["STYLE", HW.style], ["CUSTOMER PO", HW.po],
               ["CLAIM TO", HW.claim], ["INVOICE NO.", HW.inv], ["QTY", HW.qty],
-              ["VWT (KG)", HW.vwt], ["AVG/PC (THB)", HW.avg], ["AIR CHARGE (THB)", HW.amt],
+              ["VWT (KG)", HW.vwt], [`AVG/PC (${cur})`, HW.avg], [`AIR CHARGE (${cur})`, HW.amt],
             ] as [string, number][]).map(([label, w], i, arr) => (
               <Text key={label} style={[hw.th, { width: w, ...(i === arr.length - 1 ? { borderRightWidth: 0 } : {}) }]}>{label}</Text>
             ))}
@@ -767,6 +768,7 @@ export function HawbReportPdf({ hawbNo, items, generatedDate }: {
   const totalAmt = items.reduce((s, i) => s + (i.actualAirFreight ?? 0), 0)
   const docs = [...new Set(items.map(i => i.documentNo).filter(Boolean))]
   const brands = [...new Set(items.map(i => i.brand).filter(Boolean))]
+  const cur = items.some(i => i.bu === "EA" || String(i.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"
   const C = { no: 26, doc: 82, so: 64, style: 58, inv: 82, qty: 46, vwt: 58, amt: 84 }
   return (
     <Document title={`HAWB_${hawbNo}`}>
@@ -775,7 +777,7 @@ export function HawbReportPdf({ hawbNo, items, generatedDate }: {
         <View style={hw.headerBox}>
           {[
             { label: "HAWB NO.", value: hawbNo || "—" },
-            { label: "TOTAL AIR CHARGE (THB)", value: fmt2(totalAmt) },
+            { label: `TOTAL AIR CHARGE (${cur})`, value: fmt2(totalAmt) },
             { label: "TOTAL QTY (PCS)", value: fmt0(totalQty) },
             { label: "CONTAINS", value: `${items.length} SO · ${docs.length} doc` },
             { label: "BRAND", value: brands.join(", ") || "—" },
@@ -788,7 +790,7 @@ export function HawbReportPdf({ hawbNo, items, generatedDate }: {
         </View>
         <View style={hw.table}>
           <View style={hw.thead} fixed>
-            {([["#", C.no], ["DOC NO.", C.doc], ["S/O NO.", C.so], ["STYLE", C.style], ["INVOICE NO.", C.inv], ["QTY", C.qty], ["WEIGHT (KG)", C.vwt], ["AIR CHARGE (THB)", C.amt]] as [string, number][]).map(([label, w], i, arr) => (
+            {([["#", C.no], ["DOC NO.", C.doc], ["S/O NO.", C.so], ["STYLE", C.style], ["INVOICE NO.", C.inv], ["QTY", C.qty], ["WEIGHT (KG)", C.vwt], [`AIR CHARGE (${cur})`, C.amt]] as [string, number][]).map(([label, w], i, arr) => (
               <Text key={label} style={[hw.th, { width: w, ...(i === arr.length - 1 ? { borderRightWidth: 0 } : {}) }]}>{label}</Text>
             ))}
           </View>
@@ -874,6 +876,7 @@ export function TransportationBookingPdf({ pages, generatedDate }: { pages: { re
   // Group brands & document nos for header
   const brands = [...new Set(pages.map(p => p.req.brandName).filter(Boolean))].join(", ")
   const docNos = [...new Set(pages.map(p => p.req.documentNo).filter(Boolean))].join(", ")
+  const cur = pages.some(p => p.req?.bu === "EA" || String(p.req?.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"
   const dated = generatedDate || new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
 
   // Split into chunks of 25 rows per page (landscape A4)
@@ -959,7 +962,7 @@ export function TransportationBookingPdf({ pages, generatedDate }: { pages: { re
               <TbHeadCell w={COL.invoice}>INVOICE NO.</TbHeadCell>
               <TbHeadCell w={COL.bookDate}>BOOKING DATE</TbHeadCell>
               <TbHeadCell w={COL.gross}>GROSS KG</TbHeadCell>
-              <Text style={[tb.tableHeadCell, { width: COL.freight, borderRightWidth: 0 }]}>ACTUAL FREIGHT{"\n"}(THB)</Text>
+              <Text style={[tb.tableHeadCell, { width: COL.freight, borderRightWidth: 0 }]}>ACTUAL FREIGHT{"\n"}({cur})</Text>
             </View>
 
             {/* Rows */}
@@ -1007,12 +1010,12 @@ export function TransportationBookingPdf({ pages, generatedDate }: { pages: { re
               <View style={tb.summaryBox}>
                 <View style={tb.summaryRow}>
                   <Text style={tb.summaryLabel}>ESTIMATE AIRFREIGHT COST (EST.)</Text>
-                  <Text style={tb.summaryValue}>THB {fmtNum(totalEst)}</Text>
+                  <Text style={tb.summaryValue}>{cur} {fmtNum(totalEst)}</Text>
                 </View>
                 {totalActual > 0 && (
                   <View style={tb.summaryRow}>
                     <Text style={tb.summaryLabel}>ACTUAL AIRFREIGHT COST</Text>
-                    <Text style={[tb.summaryValue, { fontFamily: "SarabunB", color: "#1E3A8A" }]}>THB {fmtNum(totalActual)}</Text>
+                    <Text style={[tb.summaryValue, { fontFamily: "SarabunB", color: "#1E3A8A" }]}>{cur} {fmtNum(totalActual)}</Text>
                   </View>
                 )}
                 <Text style={{ fontSize: 7, fontFamily: "Sarabun", color: "#333", marginTop: 3 }}>

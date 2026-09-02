@@ -26,6 +26,8 @@ function fmt(n: number, dec = 2) {
 }
 
 export default function HawbSection({ requestId, presPassedItems, onReqRefresh, reqInfo, refreshSignal }: Props) {
+  // EA prices in USD; every other BU in THB.
+  const CUR = (String(reqInfo?.buName || "").toUpperCase() === "EA" || String(reqInfo?.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"
   const [hawbs, setHawbs] = useState<HawbGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [checked, setChecked] = useState<Set<string>>(new Set())
@@ -231,9 +233,9 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                 <div className="flex items-center justify-between bg-slate-800 text-white px-4 py-2">
                   <div className="flex items-center gap-4">
                     <span className="text-sm font-bold">HAWB: {hawb.hawbNo}</span>
-                    <span className="text-xs text-slate-300">Total: {fmt(hawb.totalCharge)} THB</span>
+                    <span className="text-xs text-slate-300">Total: {fmt(hawb.totalCharge)} {CUR}</span>
                     <span className="text-xs text-slate-300">PCS: {qty}</span>
-                    <span className="text-xs text-slate-300">AVG: {fmt(avg)} THB/pc</span>
+                    <span className="text-xs text-slate-300">AVG: {fmt(avg)} {CUR}/pc</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <button
@@ -253,7 +255,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      {["SO","STYLE","QTY","AIR CHARGE (THB)"].map(h =>
+                      {["SO","STYLE","QTY",`AIR CHARGE (${CUR})`].map(h =>
                         <th key={h} className="px-3 py-1.5 text-left text-gray-500 font-medium">{h}</th>
                       )}
                     </tr>
@@ -271,7 +273,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                     ))}
                     <tr className="bg-gray-50 border-t font-semibold">
                       <td className="px-3 py-1.5" colSpan={3}>Total {hawb.items.length} SO</td>
-                      <td className="px-3 py-1.5 text-green-700">{fmt(hawbTotal)} THB</td>
+                      <td className="px-3 py-1.5 text-green-700">{fmt(hawbTotal)} {CUR}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -318,7 +320,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Total Air for this HAWB (THB)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Total Air for this HAWB ({CUR})</label>
                 <input
                   type="number" value={totalCharge}
                   onChange={e => setTotalCharge(e.target.value)}
@@ -352,7 +354,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>AVG / PC</span>
-                    <span className="font-bold text-blue-700">{fmt(costPerPc)} THB</span>
+                    <span className="font-bold text-blue-700">{fmt(costPerPc)} {CUR}</span>
                   </div>
                   <div className="border-t pt-2 space-y-1">
                     {selectedItems.map(item => {
@@ -360,7 +362,7 @@ export default function HawbSection({ requestId, presPassedItems, onReqRefresh, 
                       return (
                         <div key={item.id} className="flex justify-between text-gray-500">
                           <span>SO {item.so} ({qty} pcs)</span>
-                          <span className="font-medium text-gray-700">{fmt(costPerPc * qty)} THB</span>
+                          <span className="font-medium text-gray-700">{fmt(costPerPc * qty)} {CUR}</span>
                         </div>
                       )
                     })}

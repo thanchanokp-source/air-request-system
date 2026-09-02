@@ -54,6 +54,8 @@ function fmt(n: number | null | undefined, dec = 2) {
 }
 
 function ReportDoc({ request, hawbs }: { request: any; hawbs: any[] }) {
+  // EA prices in USD; every other BU in THB.
+  const cur = (String(request.buName || "").toUpperCase() === "EA" || String(request.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"
   const allItems = hawbs.flatMap(h => h.items)
   const grandTotal = allItems.reduce((s: number, i: any) => s + (i.actualAirFreight ?? 0), 0)
 
@@ -86,8 +88,8 @@ function ReportDoc({ request, hawbs }: { request: any; hawbs: any[] }) {
               React.createElement(Text, { style: [styles.th, styles.colInv] }, "INV NO"),
               React.createElement(Text, { style: [styles.th, styles.colQty] }, "QTY"),
               React.createElement(Text, { style: [styles.th, styles.colVWT] }, "VWT(KG)"),
-              React.createElement(Text, { style: [styles.th, styles.colAVG] }, "AVG/PC (THB)"),
-              React.createElement(Text, { style: [styles.th, styles.colAmt] }, "AIR CHARGE (THB)")
+              React.createElement(Text, { style: [styles.th, styles.colAVG] }, `AVG/PC (${cur})`),
+              React.createElement(Text, { style: [styles.th, styles.colAmt] }, `AIR CHARGE (${cur})`)
             ),
             ...hawb.items.map((item: any) =>
               React.createElement(View, { key: item.id, style: styles.tr },

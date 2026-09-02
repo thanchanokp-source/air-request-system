@@ -481,9 +481,10 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
         const cell = (v: any, right = false) => `<td style="padding:6px 10px;border-bottom:1px solid #eee${right ? ";text-align:right" : ""}">${v}</td>`
         return `<tr>${cell(i.so)}${cell(i.invoiceNo || "-")}${cell(i.hawbNo || "-")}${cell(actual.toLocaleString(), true)}${cell(amt.toLocaleString(), true)}</tr>`
       }).join("")
+      const cur = ((req as any).bu === "EA" || String((req as any).documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB"
       const lgTable = `<table style="border-collapse:collapse;width:100%;font-size:12px;font-family:Arial;margin-top:12px">
         <thead><tr style="background:#f1f5f9">
-          <th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">INV NO.</th><th style="padding:6px 10px;text-align:left">HAWB#</th><th style="padding:6px 10px;text-align:right">Actual Air (THB)</th><th style="padding:6px 10px;text-align:right">NYK Claim (THB)</th>
+          <th style="padding:6px 10px;text-align:left">SO</th><th style="padding:6px 10px;text-align:left">INV NO.</th><th style="padding:6px 10px;text-align:left">HAWB#</th><th style="padding:6px 10px;text-align:right">Actual Air (${cur})</th><th style="padding:6px 10px;text-align:right">NYK Claim (${cur})</th>
         </tr></thead><tbody>${rows}</tbody></table>`
       const sendNyk = async (role: string, tokenField: string, subject: string, intro: string, assignedEmail?: string | null) => {
         // Prefer the specific person the Approver chose; else fall back to role.

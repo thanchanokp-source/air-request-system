@@ -44,7 +44,7 @@ export function ClaimSplitBadges({ item, showReason = false }: { item: any; show
 }
 
 // Full breakdown table — dept, %, air cost, reason, status.
-export function ClaimSplitTable({ item, highlightDept, showCrNo = false }: { item: any; highlightDept?: string | null; showCrNo?: boolean }) {
+export function ClaimSplitTable({ item, highlightDept, showCrNo = false, cur = "THB" }: { item: any; highlightDept?: string | null; showCrNo?: boolean; cur?: string }) {
   const splits = getSplits(item)
   if (splits.length === 0) return <span className="text-gray-300 text-xs">No claim data</span>
   const sumPct = totalPct(splits)
@@ -54,7 +54,7 @@ export function ClaimSplitTable({ item, highlightDept, showCrNo = false }: { ite
       <table className="text-xs w-full">
         <thead className="bg-gray-50">
           <tr>
-            {["CLAIM DEPT", "% CLAIM", "AIR COST (THB)", "DELAY CODE / DETAIL", ...(showCrNo ? ["CR NO"] : []), "STATUS"].map(h => (
+            {["CLAIM DEPT", "% CLAIM", `AIR COST (${cur})`, "DELAY CODE / DETAIL", ...(showCrNo ? ["CR NO"] : []), "STATUS"].map(h => (
               <th key={h} className="px-3 py-1.5 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>
             ))}
           </tr>

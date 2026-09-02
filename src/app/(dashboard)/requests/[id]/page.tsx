@@ -4634,7 +4634,7 @@ export default function RequestDetailPage() {
                       </div>
                       <div>
                         <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
-                        <ClaimSplitTable item={item} highlightDept={gwFwdCanonicalDept} showCrNo={isNykClaimRole} />
+                        <ClaimSplitTable item={item} highlightDept={gwFwdCanonicalDept} showCrNo={isNykClaimRole} cur={CUR} />
                       </div>
                     </div>
                   )}
@@ -5358,7 +5358,7 @@ export default function RequestDetailPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
-                      <ClaimSplitTable item={item} highlightDept={claimDept || null} showCrNo={isNykClaimRole} />
+                      <ClaimSplitTable item={item} highlightDept={claimDept || null} showCrNo={isNykClaimRole} cur={CUR} />
                     </div>
                   </div>
                 )}
@@ -5678,7 +5678,7 @@ export default function RequestDetailPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
-                      <ClaimSplitTable item={item} highlightDept={claimDept || null} showCrNo={isNykClaimRole} />
+                      <ClaimSplitTable item={item} highlightDept={claimDept || null} showCrNo={isNykClaimRole} cur={CUR} />
                     </div>
                   </div>
                 )}
@@ -5987,7 +5987,7 @@ export default function RequestDetailPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
-                      <ClaimSplitTable item={item} highlightDept={role === "SCM_NYK" ? "NYK" : role === "SCM_NYG" ? "NYG" : null} showCrNo={isNykClaimRole} />
+                      <ClaimSplitTable item={item} highlightDept={role === "SCM_NYK" ? "NYK" : role === "SCM_NYG" ? "NYG" : null} showCrNo={isNykClaimRole} cur={CUR} />
                     </div>
                   </div>
                 )}
@@ -6048,7 +6048,7 @@ export default function RequestDetailPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-gray-600 mb-1">Claim Split</p>
-                      <ClaimSplitTable item={item} />
+                      <ClaimSplitTable item={item} cur={CUR} />
                     </div>
                   </div>
                 )}
