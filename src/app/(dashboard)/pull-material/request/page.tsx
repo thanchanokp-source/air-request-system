@@ -82,6 +82,8 @@ export default function ScmRequestPage() {
   const [pcMissing, setPcMissing] = useState<{ po: string; vend: string; reason: string }[]>([])
   const [pcBusy, setPcBusy] = useState(false)
   // PC interactive: pick vendor → select some POs → one total weight → pull all materials.
+  const [pcCities, setPcCities] = useState<any[]>([])
+  const [pcCityId, setPcCityId] = useState("")
   const [pcVendors, setPcVendors] = useState<string[]>([])
   const [pcVend, setPcVend] = useState("")
   const [pcVendQ, setPcVendQ] = useState("")
@@ -194,6 +196,13 @@ export default function ScmRequestPage() {
     setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcVendQ("")
     fetch(`/api/bom?bu=${bu}&vendors=1`).then(r => r.json()).then(d => setPcVendors(d.vendors || [])).catch(() => {})
   }, [bu, reqType])
+  // Master Purchase cities (Country/Port/City) for the PC City dropdown.
+  useEffect(() => {
+    if (reqType !== "PURCHASING") return
+    fetch("/api/pull-material/cities").then(r => r.json()).then(d => setPcCities(d.rows || [])).catch(() => {})
+  }, [reqType])
+  const pcCity = pcCities.find((c: any) => c.id === pcCityId) || null
+  const applyCity = (m: any) => pcCity ? { ...m, city: pcCity.city, country: pcCity.country || m.country || null, port: pcCity.port || m.port || null } : m
 
   const matK = (m: any) => `${m.soNoDoc}|${m.itemCode}`
   const pickPcVend = async (v: string) => {
@@ -268,7 +277,7 @@ export default function ScmRequestPage() {
       const pullPO = Number(pcPullOf(po)) || 0
       const share = g && g.sum > 0 ? (Number(m.poqtyBomdummy) || 0) / g.sum : (g && g.count ? 1 / g.count : 0)
       const q = Math.round(pullPO * share * 100) / 100
-      return { ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: q, weight: idx === 0 ? w : null, ...emptyScm }
+      return { ...applyCity(m), key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: q, weight: idx === 0 ? w : null, ...emptyScm }
     })
     setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
     setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcSelMats([]); setPcWeight(""); setPcPullQty({})
@@ -341,7 +350,7 @@ export default function ScmRequestPage() {
     const addItems: any[] = []
     let first = true
     for (const s of pcStaged) for (const m of s.mats) {
-      addItems.push({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: first ? w : null, ...emptyScm })
+      addItems.push({ ...applyCity(m), key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: first ? w : null, ...emptyScm })
       first = false
     }
     setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
@@ -434,6 +443,17 @@ export default function ScmRequestPage() {
           <div>
             <h2 className="font-semibold text-gray-800">Purchasing — เลือก Vendor → PO → ใส่น้ำหนักรวม</h2>
             <p className="text-xs text-gray-500 mt-0.5">เลือก vendor แล้วติ๊ก PO ที่จะ pull (บางหรือทั้งหมด) · ใส่น้ำหนักรวมก้อนเดียว · ระบบดึง<b>ทุก material ใต้ PO</b>ให้</p>
+          </div>
+
+          {/* City (ต้นทาง) — from Master Purchase; carries Country/Port onto pulled items */}
+          <div className="max-w-lg">
+            <label className="text-xs font-semibold text-gray-600 block mb-1">City ต้นทาง (Master Purchase)</label>
+            <select value={pcCityId} onChange={e => setPcCityId(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200">
+              <option value="">— เลือกเมือง —</option>
+              {pcCities.map((c: any) => <option key={c.id} value={c.id}>{c.city}{c.country ? ` · ${c.country}` : ""}{c.port ? ` · ${c.port}` : ""}</option>)}
+            </select>
+            {pcCity && <p className="text-[11px] text-gray-400 mt-1">Country: {pcCity.country || "-"} · Port: {pcCity.port || "-"} (จะติดไปกับทุก material ที่ pull)</p>}
           </div>
 
           {/* 1 · Vendor picker (type-ahead from this BU's vendors) */}

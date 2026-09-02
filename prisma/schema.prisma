@@ -404,6 +404,7 @@ model PullMaterialItem {
   weight          Float?    // confirmed / revised per-unit weight (kg)
   weightGenerated Float?    // system-suggested weight (ref)
   country         String?   // origin country — picked by PC (drives which ports show)
+  city            String?   // origin city — picked by PC from Master Purchase (carries country/port)
   port            String?   // origin AIR PORT CODE — picked by PC (for air rate)
   seaPort         String?   // origin SEA PORT — picked by PC (for sea rate)
   incoterm        String?   // FOB / CIF / EX-WORK / FCA — picked by PC
@@ -452,4 +453,16 @@ model PullFreightSea {
   createdAt DateTime @default(now())
 
   @@index([port])
+}
+
+// Pull RM "Master Purchase" — Country / Port / City. Purchasing picks a City on the request; its
+// Country + Port carry onto the pulled items. Maintained by Admin + Purchasing.
+model PullPurchaseCity {
+  id        String   @id @default(cuid())
+  country   String
+  port      String
+  city      String
+  createdAt DateTime @default(now())
+
+  @@index([city])
 }

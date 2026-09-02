@@ -28,6 +28,7 @@ const pullNav = [
   { href: "/pull-material/logistics", label: "LOGISTICS", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/documents", label: "LOGISTICS DOCUMENT", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/rates", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
+  { href: "/pull-material/master-city", label: "MASTER PURCHASE", roles: ["ADMIN", "PURCHASING"] },
   { href: "/pull-material/users", label: "USER MANAGEMENT", roles: ["ADMIN"] },
 ]
 
