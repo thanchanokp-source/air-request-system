@@ -86,6 +86,12 @@ export async function GET(req: NextRequest) {
     // Search by PO — match either the PO doc number or the customer PO.
     where.push(`(po_no_doc ILIKE $${params.length} OR cust_po ILIKE $${params.length})`)
   }
+  const vend = (sp.get("vend") || "").trim()
+  if (vend) {
+    params.push(`%${vend}%`)
+    // Search by supplier / vendor name.
+    where.push(`vend_name ILIKE $${params.length}`)
+  }
   // One row per SO (DISTINCT ON) — the SO-level fields for the search list. Material-line
   // detail (consumption per item) can be fetched per SO later when needed.
   const sql = `
