@@ -89,6 +89,9 @@ export default function ScmRequestPage() {
   const [pcPos, setPcPos] = useState<any[]>([])
   const [pcSelPos, setPcSelPos] = useState<Set<string>>(new Set())
   const [pcSelMats, setPcSelMats] = useState<Bom[]>([]) // materials of the selected POs (shown below)
+  const [pcManualOpen, setPcManualOpen] = useState(false)
+  const [pcManualVend, setPcManualVend] = useState("")
+  const [pcManualPo, setPcManualPo] = useState("")
   const [pcWeight, setPcWeight] = useState("")
   const [pcLoad, setPcLoad] = useState(false)
   // Excel import staging: found (VEND, PO) rows → fill ONE total weight on-screen, then Add.
@@ -225,6 +228,26 @@ export default function ScmRequestPage() {
       setPcSelPos(p => { const n = new Set(p); toAdd.forEach((x: any) => n.add(x.po)); return n })
       for (const p of toAdd) await addPoMats(p.po)
     } finally { setPcLoad(false); setPcPoQ("") }
+  }
+  // Manual add: Purchasing types a Vendor + PO themselves (PO may not be in the system). If the PO
+  // has BOM materials → pull them; otherwise add a single manual placeholder row so it's still recorded.
+  const addManualPo = async () => {
+    const po = pcManualPo.trim(); if (!po) return alert("กรอกเลข PO ก่อน")
+    const vend = pcManualVend.trim() || pcVend
+    setPcLoad(true)
+    try {
+      const qs = new URLSearchParams({ bu, poFull: po }); if (vend) qs.set("vend", vend)
+      const d = await fetch(`/api/bom?${qs.toString()}`).then(r => r.json())
+      const mats: Bom[] = Array.isArray(d.rows) ? d.rows : []
+      if (mats.length) {
+        setPcSelMats(prev => [...prev.filter(x => !mats.some(y => matK(y) === matK(x))), ...mats])
+      } else {
+        const manual: any = { soNoDoc: po, itemCode: `MANUAL-${po}`, itemName: "(กรอกเอง — ไม่มีใน BOM)", poNoDoc: po, vendorName: vend || null, groupCode: null, poqtyBomdummy: null, bomUom: null, bomQty: 0, orderQty: 0 }
+        setPcSelMats(prev => prev.some(x => matK(x) === matK(manual)) ? prev : [...prev, manual])
+      }
+      setPcSelPos(p => new Set(p).add(po))
+      setPcManualPo(""); setPcManualVend("")
+    } finally { setPcLoad(false) }
   }
   const removePcMat = (key: string) => setPcSelMats(prev => prev.filter(m => matK(m) !== key))
   const removePcPo = (po: string) => { setPcSelPos(p => { const n = new Set(p); n.delete(po); return n }); setPcSelMats(prev => prev.filter(m => m.poNoDoc !== po)) }
@@ -422,6 +445,23 @@ export default function ScmRequestPage() {
                   </div>
                 )}
               </>
+            )}
+          </div>
+
+          {/* Manual add — type a Vendor + PO yourself (PO may not be in the system) */}
+          <div>
+            <button onClick={() => setPcManualOpen(o => !o)} className="text-[11px] text-blue-600 font-medium hover:underline">
+              {pcManualOpen ? "− ปิด" : "+ เพิ่ม PO เอง (กรณีไม่มีในระบบ)"}
+            </button>
+            {pcManualOpen && (
+              <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-blue-200 bg-blue-50/40 p-3">
+                <div><label className="text-[11px] text-gray-500 block mb-0.5">Vendor</label>
+                  <input value={pcManualVend} onChange={e => setPcManualVend(e.target.value)} placeholder={pcVend || "ชื่อ vendor"} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-64" /></div>
+                <div><label className="text-[11px] text-gray-500 block mb-0.5">PO NO</label>
+                  <input value={pcManualPo} onChange={e => setPcManualPo(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addManualPo() } }} placeholder="เลข PO" className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-48" /></div>
+                <button onClick={addManualPo} disabled={pcLoad || !pcManualPo.trim()} className="px-3 py-1.5 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: MAROON }}>+ เพิ่ม</button>
+                <span className="text-[11px] text-gray-400 self-center">ถ้า PO มีใน BOM → ดึง material ให้ · ถ้าไม่มี → เพิ่มเป็นรายการกรอกเอง</span>
+              </div>
             )}
           </div>
 
