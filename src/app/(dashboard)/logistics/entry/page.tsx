@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
+import { soCurrency } from "@/lib/currency"
 
 // LG BOOKING — combined Air Waybill Entry for the SOs ticked on the landing page (may span several
 // documents). Same UI as the per-document page (Ship Date & QTY → Attach → INV grouping → HAWB with
@@ -668,6 +669,8 @@ export default function LgEntryPage() {
               {hawbGroups.map((group, gi) => {
                 const { items, totalQty, avgPerUnit, totalCost, hasOverride } = getHawbCalc(group)
                 const hasCost = totalCost > 0
+                // Currency of this HAWB = USD if every item is EA (EA prices in USD), else THB.
+                const gcur = items.length && items.every((i: any) => soCurrency(i.request?.bu, i.brand ?? i.request?.brandName) === "USD") ? "USD" : "THB"
                 return (
                   <div key={group.id} className="bg-white rounded-xl border border-orange-200 overflow-hidden shadow-sm">
                     <div className="bg-orange-50 border-b border-orange-200 px-4 py-3">
@@ -675,9 +678,9 @@ export default function LgEntryPage() {
                         <span className="text-xs font-bold text-orange-800 shrink-0">HAWB #{gi + 1}</span>
                         <div className="flex items-center gap-1.5"><label className="text-xs text-gray-500">HAWB No.</label>
                           <input value={group.hawbNo} placeholder="123-12345678" onChange={e => updateHawb(group.id, { hawbNo: e.target.value })} className="border border-orange-300 rounded-lg px-2.5 py-1 text-xs w-36 focus:ring-1 focus:ring-orange-400 focus:outline-none" /></div>
-                        <div className="flex items-center gap-1.5"><label className="text-xs text-gray-500">Total Cost (THB)</label>
+                        <div className="flex items-center gap-1.5"><label className="text-xs text-gray-500">Total Cost ({gcur})</label>
                           <input type="number" value={group.totalCost} placeholder="0" min="0" onChange={e => updateHawb(group.id, { totalCost: e.target.value })} className="border border-orange-300 rounded-lg px-2.5 py-1 text-xs w-32 focus:ring-1 focus:ring-orange-400 focus:outline-none" /></div>
-                        {items.length > 0 && hasCost && <span className="text-xs text-orange-600 font-medium">{totalQty.toLocaleString()} pcs · avg {avgPerUnit.toFixed(4)} THB/pc</span>}
+                        {items.length > 0 && hasCost && <span className="text-xs text-orange-600 font-medium">{totalQty.toLocaleString()} pcs · avg {avgPerUnit.toFixed(4)} {gcur}/pc</span>}
                         <button onClick={() => removeHawbGroup(group.id)} className="ml-auto text-xs text-red-400 hover:text-red-600 font-medium">Delete</button>
                       </div>
                     </div>
@@ -702,9 +705,9 @@ export default function LgEntryPage() {
                       </div>
                       {items.length > 0 ? (
                         <div className="overflow-x-auto">
-                          {hasCost && !hasOverride && <p className="text-xs text-orange-700 mb-2">Avg/unit = {totalCost.toLocaleString()} ÷ {totalQty} = <strong>THB {avgPerUnit.toFixed(4)}</strong></p>}
+                          {hasCost && !hasOverride && <p className="text-xs text-orange-700 mb-2">Avg/unit = {totalCost.toLocaleString()} ÷ {totalQty} = <strong>{gcur} {avgPerUnit.toFixed(4)}</strong></p>}
                           <table className="w-full text-xs border border-orange-100 whitespace-nowrap">
-                            <thead className="bg-orange-100/60"><tr>{["DOC","SO No.","INV NO.","Style","QTY Air","Actual Freight (THB)"].map(h => <th key={h} className="px-3 py-1.5 text-left text-orange-700 font-medium">{h}</th>)}</tr></thead>
+                            <thead className="bg-orange-100/60"><tr>{["DOC","SO No.","INV NO.","Style","QTY Air",`Actual Freight (${gcur})`].map(h => <th key={h} className="px-3 py-1.5 text-left text-orange-700 font-medium">{h}</th>)}</tr></thead>
                             <tbody className="divide-y divide-orange-50">
                               {items.map((item: any) => {
                                 const calcVal = hasCost && !hasOverride ? liveQty(item) * avgPerUnit : null

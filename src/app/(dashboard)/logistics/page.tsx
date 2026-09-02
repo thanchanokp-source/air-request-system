@@ -231,6 +231,7 @@ export default function LgBookingPage() {
                 {docs.map(({ request: req, items }) => {
                   const est = items.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
                   const act = items.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
+                  const cur = req.bu === "EA" ? "USD" : "THB" // EA prices in USD
                   const docIds = items.map((i: any) => i.id)
                   const docAllOn = docIds.every((id: string) => selected.has(id))
                   const docDraft = items.filter((i: any) => i.hawbNo || i.actualAirFreight != null).length
@@ -252,15 +253,15 @@ export default function LgBookingPage() {
                           onClick={e => { e.stopPropagation(); toggleMany(items.filter((i: any) => i.hawbNo || i.actualAirFreight != null).map((i: any) => i.id), true) }}
                           className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 font-medium whitespace-nowrap cursor-pointer hover:bg-amber-200">📝 draft {docDraft} SO ✓</span>}
                         <span className="text-xs text-gray-500">{req.bu}</span>
-                        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">EST {fmtNum(est)} THB</span>
-                        <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">ACT {fmtNum(act)} THB</span>
+                        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">EST {fmtNum(est)} {cur}</span>
+                        <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">ACT {fmtNum(act)} {cur}</span>
                         <span className="text-xs text-gray-400">{items.length} transaction</span>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs whitespace-nowrap">
                           <thead className="bg-gray-50 border-b"><tr>
                             <th className="px-3 py-2 w-8"></th>
-                            {["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","PLAN DATE","QTY AIR","GROSS (KG)","EST. AIR FREIGHT (THB)","ACTUAL (THB)","FACTORY","COUNTRY","INV NO","HAWB#"].map(h =>
+                            {["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","PLAN DATE","QTY AIR","GROSS (KG)",`EST. AIR FREIGHT (${cur})`,`ACTUAL (${cur})`,"FACTORY","COUNTRY","INV NO","HAWB#"].map(h =>
                               <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium">{h}</th>)}
                           </tr></thead>
                           <tbody className="divide-y divide-gray-100">
