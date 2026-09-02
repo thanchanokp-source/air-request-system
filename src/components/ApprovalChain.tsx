@@ -237,7 +237,9 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     const claimReached = completed || cur >= CLAIM_ORD || !!req?.nykDirect
     // Logistics runs IN PARALLEL with Claim (not a linear step): green ONLY after LG presses
     // "Save & Send" (req.logisticsSent) — NOT on Save Draft (which also fills Actual freight).
-    const lgDone = !!req?.logisticsSent
+    // Per-SO: also require THIS SO to actually have an Actual air freight, so SOs LG hasn't filled
+    // yet stay "waiting" even when other SOs in the same doc were already sent.
+    const lgDone = !!req?.logisticsSent && (soItem ? soItem.actualAirFreight != null : true)
     // Who is each still-pending dept currently waiting on? NYK is handled separately
     // (3-role sub-flow: Approver → EVP + CR user), so exclude it from the generic resolver.
     const soId = soItem?.id
@@ -350,7 +352,8 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   const claimDepts = Object.entries(map).map(([dept, c]) => ({ dept, done: c.done === c.total }))
   const allSplits = claimSource.flatMap(it => getSplits(it))
   const claimDone = allSplits.length > 0 && allSplits.every(gwSplitDone)
-  const lgDone = !!req?.logisticsSent
+  // Per-SO Logistics: sent AND this SO has an Actual (SOs not yet filled stay "waiting").
+  const lgDone = !!req?.logisticsSent && (soItem ? soItem.actualAirFreight != null : true)
   // "Claim" turns green when ALL claim depts approved; "Logistics" only after LG Save & Send.
   const claimChip: "done" | "active" | "pending" = completed || claimDone ? "done" : parallelReached ? "active" : "pending"
   const lgChip: "done" | "active" | "pending" = completed || lgDone ? "done" : parallelReached ? "active" : "pending"
