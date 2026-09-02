@@ -1605,7 +1605,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // A forward addressed to my email = I act as the forwarded approver, even if I logged in with
     // my normal role (e.g. VP_PRODUCTION) rather than via the magic link (CLAIM_NEXT_APPROVER).
     const actAsNext = userRole === "CLAIM_NEXT_APPROVER" || myEmailFwds.length > 0
-    const isClaimOwnerRole = heldRoles.some(r => ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER"].includes(r))
+    // COMMERCIAL claim is approved by the MER team (DVM_MER / VP_MER, per CLAIM_DEPT_ROLE_MAP) — the
+    // same people who approved the upload — so their roles must count as claim owners here too.
+    const CLAIM_OWNER_ROLES = ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER",
+      "DVM_MER", "DVM_MER_EA", "DVM_MER_TRM", "VP_MER", "VP_MER_EA", "VP_MER_TRM"]
+    const isClaimOwnerRole = heldRoles.some(r => CLAIM_OWNER_ROLES.includes(r))
     if (!isClaimOwnerRole && !actAsNext) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     const isGW = request.bu === "GW"
     const expected = isGW ? ["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"] : ["PENDING_CLAIM", "PENDING_VP_CLAIM"]
