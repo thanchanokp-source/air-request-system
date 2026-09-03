@@ -46,8 +46,9 @@ export default function PurchasePage() {
   const { countries, airByCountry, seaByCountry, seaLtByPort } = useMemo(() => {
     const airByCountry: Record<string, Set<string>> = {}, seaByCountry: Record<string, Set<string>> = {}
     const seaLtByPort: Record<string, string> = {}
-    airRows.forEach(r => { const c = r.country || ""; if (c && r.origin) (airByCountry[c] ??= new Set()).add(r.origin) })
-    seaRows.forEach(r => { const c = r.country || ""; if (c && r.port) (seaByCountry[c] ??= new Set()).add(r.port); if (r.port && r.leadTime) seaLtByPort[r.port] = r.leadTime })
+    // Normalize country case so "China" / "CHINA" group into ONE entry (ports merged).
+    airRows.forEach(r => { const c = String(r.country || "").trim().toUpperCase(); if (c && r.origin) (airByCountry[c] ??= new Set()).add(r.origin) })
+    seaRows.forEach(r => { const c = String(r.country || "").trim().toUpperCase(); if (c && r.port) (seaByCountry[c] ??= new Set()).add(r.port); if (r.port && r.leadTime) seaLtByPort[r.port] = r.leadTime })
     const countries = [...new Set([...Object.keys(airByCountry), ...Object.keys(seaByCountry)])].sort()
     return { countries, airByCountry, seaByCountry, seaLtByPort }
   }, [airRows, seaRows])
