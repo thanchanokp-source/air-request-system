@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
       documentNo, bu, requesterName,
       requesterEmail: body.requesterEmail || null,
       remark: body.remark || null,
+      packages: Array.isArray(body.packages) && body.packages.length ? body.packages : undefined,
       createdById: userId,
       requestType,
       mode,

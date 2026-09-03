@@ -107,6 +107,8 @@ export default function ScmRequestPage() {
   // PC purchase info (shipment-level) — moved from the Purchase page into the request. Stamped on every
   // pulled item at submit. Country/Port drive Est Air (freight master); City is separate (Master Purchase).
   const [pcPur, setPcPur] = useState({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
+  // Packing list (per shipment/doc): add lines of { uom, qty }.
+  const [pcPkgs, setPcPkgs] = useState<{ uom: string; qty: string }[]>([{ uom: "", qty: "" }])
   const [airRows, setAirRows] = useState<any[]>([])
   const [seaRows, setSeaRows] = useState<any[]>([])
   // Excel import staging: found (VEND, PO) rows → fill ONE total weight on-screen, then Add.
@@ -403,6 +405,7 @@ export default function ScmRequestPage() {
 
     // PC requests carry the purchase info here (no separate Purchase stage) → validate + stamp on items.
     let items: any[] = cart
+    let pkgs: { uom: string; qty: number }[] = []
     if (reqType === "PURCHASING") {
       const c = pcPur.country === OTHER ? "" : pcPur.country
       const p = pcPur.port === OTHER ? "" : pcPur.port
@@ -411,13 +414,14 @@ export default function ScmRequestPage() {
       if (!p.trim() && !sp.trim()) return alert("เลือก Air Port หรือ Sea Port")
       if (!pcPur.incoterm) return alert("เลือก Incoterm")
       if (NEEDS_ADDRESS.includes(pcPur.incoterm) && !pcPur.pickup.trim()) return alert(`${pcPur.incoterm} ต้องระบุ Pickup address`)
-      if (!String(pcPur.pkg).trim()) return alert("กรอก PKG (จำนวนหีบห่อ)")
       if (!String(pcWeight).trim() || !(Number(pcWeight) > 0)) return alert("กรอกน้ำหนักรวม (kg)")
+      pkgs = pcPkgs.map(x => ({ uom: x.uom.trim(), qty: Number(x.qty) || 0 })).filter(x => x.uom && x.qty > 0)
+      if (!pkgs.length) return alert("เพิ่ม Package อย่างน้อย 1 บรรทัด (UOM + จำนวน)")
       const pu = {
         country: c, port: p, seaPort: sp, incoterm: pcPur.incoterm,
         pickupAddress: NEEDS_ADDRESS.includes(pcPur.incoterm) ? pcPur.pickup : "",
         city: pcCity?.city || "", needDate: pcPur.needDate || "",
-        cartons: pcPur.pkg, boxW: pcPur.boxW, boxL: pcPur.boxL, boxH: pcPur.boxH,
+        cartons: pkgs.reduce((s, x) => s + x.qty, 0), boxW: pcPur.boxW, boxL: pcPur.boxL, boxH: pcPur.boxH,
       }
       // weight (whole shipment) → put on item 0; that's what recomputePullAir reads for Est Air.
       items = cart.map((it, i) => ({ ...it, ...pu, weight: i === 0 ? Number(pcWeight) : null }))
@@ -427,14 +431,14 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode, packages: pkgs }),
       })
       const d = await r.json()
       if (r.ok) {
         alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}`)
         setCart([]); setRemark(""); setIsTest(false); setModeTouched(false)
         setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
-        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight("")
+        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }])
       }
       else alert(`Error: ${d.error || "submit failed"}`)
     } finally { setSubmitting(false) }
@@ -815,9 +819,6 @@ export default function ScmRequestPage() {
             const g: Record<string, { vend: string | null; count: number; sum: number; uoms: Set<string> }> = {}
             cart.forEach(c => { const po = c.poNoDoc || "-"; const x = (g[po] ||= { vend: c.vendorName || null, count: 0, sum: 0, uoms: new Set() }); x.count++; x.sum += Number(c.pullMaterialQty) || 0; if (c.bomUom) x.uoms.add(c.bomUom) })
             const removePoFromCart = (po: string) => setCart(prev => prev.filter(c => (c.poNoDoc || "-") !== po))
-            const setPoUom = (po: string, u: string) => setCart(prev => prev.map(c => ((c.poNoDoc || "-") === po ? { ...c, bomUom: u } : c)))
-            const uomOf = (po: string) => { const s = [...g[po].uoms]; return s.length === 1 ? s[0] : "" }
-            const uomOpts = [...new Set([...pcUoms, ...cart.map(c => c.bomUom).filter(Boolean) as string[]])]
             return (
               <div className="border rounded-xl overflow-auto mt-3">
                 <table className="w-full text-xs">
@@ -831,13 +832,7 @@ export default function ScmRequestPage() {
                         <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
                         <td className="px-3 py-1.5 max-w-[220px] truncate" title={g[po].vend || ""}>{g[po].vend || "-"}</td>
                         <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(g[po].sum)}</td>
-                        <td className="px-3 py-1.5">
-                          <select value={uomOf(po)} onChange={e => setPoUom(po, e.target.value)}
-                            className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-red-200">
-                            <option value="">{[...g[po].uoms].join(", ") || "— UOM —"}</option>
-                            {uomOpts.map(u => <option key={u} value={u}>{u}</option>)}
-                          </select>
-                        </td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{[...g[po].uoms].join(", ") || "-"}</td>
                         <td className="px-3 py-1.5 text-center"><button onClick={() => removePoFromCart(po)} className="text-gray-300 hover:text-red-500" title="ลบทั้ง PO">✕</button></td>
                       </tr>
                     ))}
@@ -878,7 +873,6 @@ export default function ScmRequestPage() {
           const lab = "text-[11px] font-semibold text-gray-600 block mb-1"
           const box = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 disabled:bg-gray-50 disabled:text-gray-400"
           const dimc = "w-16 border border-gray-200 rounded-lg px-1.5 py-1.5 text-sm text-center bg-white focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          const numc = box + " [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           return (
             <div className="mt-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/40 p-4 space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
@@ -936,11 +930,7 @@ export default function ScmRequestPage() {
                   <label className={lab}>Need date (in-house)</label>
                   <input type="date" value={pcPur.needDate} onChange={e => setPcPur(p => ({ ...p, needDate: e.target.value }))} className={box} />
                 </div>
-                <div>
-                  <label className={lab}>PKG <span className="text-red-500">*</span></label>
-                  <input type="number" min={0} value={pcPur.pkg} onChange={e => setPcPur(p => ({ ...p, pkg: e.target.value }))} placeholder="จำนวนหีบห่อ" className={numc} />
-                </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-3">
                   <label className={lab}>Dimension ก×ย×ส (cm) <span className="text-gray-300">— ไม่บังคับ</span></label>
                   <div className="flex items-center gap-1.5">
                     <input type="number" value={pcPur.boxW} onChange={e => setPcPur(p => ({ ...p, boxW: e.target.value }))} placeholder="ก" className={dimc} />
@@ -951,6 +941,38 @@ export default function ScmRequestPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Packing list (per shipment): add lines of UOM + qty */}
+              <div className="rounded-lg border border-gray-200 bg-white p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-semibold text-gray-600">Package (หีบห่อ) <span className="text-red-500">*</span></label>
+                  <button type="button" onClick={() => setPcPkgs(p => [...p, { uom: "", qty: "" }])}
+                    className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50">+ เพิ่ม</button>
+                </div>
+                <div className="space-y-2">
+                  {pcPkgs.map((pk, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <select value={pcUoms.includes(pk.uom) || pk.uom === "" ? pk.uom : "__OTHER__"}
+                        onChange={e => { const v = e.target.value; setPcPkgs(p => p.map((x, j) => j === i ? { ...x, uom: v === "__OTHER__" ? "" : v } : x)) }}
+                        className="w-40 border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200">
+                        <option value="">— UOM —</option>
+                        {pcUoms.map(u => <option key={u} value={u}>{u}</option>)}
+                        <option value="__OTHER__">➕ อื่นๆ (พิมพ์เอง)</option>
+                      </select>
+                      {!pcUoms.includes(pk.uom) && pk.uom !== "" && (
+                        <input value={pk.uom} onChange={e => setPcPkgs(p => p.map((x, j) => j === i ? { ...x, uom: e.target.value } : x))}
+                          placeholder="UOM" className="w-24 border border-amber-300 bg-amber-50 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
+                      )}
+                      <input type="number" min={0} value={pk.qty} onChange={e => setPcPkgs(p => p.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))}
+                        placeholder="จำนวน" className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                      <button type="button" onClick={() => setPcPkgs(p => p.length > 1 ? p.filter((_, j) => j !== i) : [{ uom: "", qty: "" }])}
+                        className="text-gray-300 hover:text-red-500 px-1" title="ลบแถวนี้">✕</button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1.5">เช่น 10 CTN · 2 PALLET — กด “+ เพิ่ม” เพื่อเพิ่มบรรทัด (UOM ดึงจาก BOM)</p>
+              </div>
+
               {NEEDS_ADDRESS.includes(pcPur.incoterm) && (
                 <div>
                   <label className={lab}>📍 {pcPur.incoterm} Pickup address <span className="text-red-500">*</span></label>

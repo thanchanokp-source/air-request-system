@@ -340,6 +340,7 @@ model PullMaterialRequest {
   requesterName  String
   requesterEmail String?
   remark         String?
+  packages       Json?              // PC packing list (per shipment): [{ uom, qty }]
   recallReason   String?
   recalledBy     String?
   actors         String[]           @default([]) // emails of everyone who acted (PC/LG/SCM) — notified on recall
