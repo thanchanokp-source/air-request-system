@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { buColor } from "../_StageWork"
@@ -35,6 +35,12 @@ const MAT_COLS: { k: keyof Bom; label: string; kind?: "date" | "num" }[] = [
 ]
 type ScmInfo = { inHouseAirDate: string; inHouseSeaDate: string; sewingStartDate: string; reasonAirPick: string; grossWeightKg: string; airFreightCost: string }
 type CartItem = Bom & ScmInfo & { key: string; pullGarment: number; pullMaterialQty: number }
+
+const INCOTERMS = ["FOB", "CIF", "EX-WORK", "FCA"]
+const NEEDS_ADDRESS = ["EX-WORK", "FCA"]
+// Air weight breaks (kg) → Q-column key (mirror of Logistics / Purchase so Est Air matches downstream).
+const BREAK_ORDER = [45, 100, 250, 300, 500, 1000, 2000, 8000]
+const breakKey = (w: number) => { let b = 45; for (const x of BREAK_ORDER) if (x <= w) b = x; return "Q" + b }
 
 const fmt = (n: any) => (n == null || isNaN(Number(n)) ? "-" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }))
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toLocaleDateString("en-GB") }
@@ -97,6 +103,11 @@ export default function ScmRequestPage() {
   const [pcPullQty, setPcPullQty] = useState<Record<string, string>>({}) // per-PO "Pull PO" qty (editable; default = sum)
   const [pcWeight, setPcWeight] = useState("")
   const [pcLoad, setPcLoad] = useState(false)
+  // PC purchase info (shipment-level) — moved from the Purchase page into the request. Stamped on every
+  // pulled item at submit. Country/Port drive Est Air (freight master); City is separate (Master Purchase).
+  const [pcPur, setPcPur] = useState({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
+  const [airRows, setAirRows] = useState<any[]>([])
+  const [seaRows, setSeaRows] = useState<any[]>([])
   // Excel import staging: found (VEND, PO) rows → fill ONE total weight on-screen, then Add.
   const [pcStaged, setPcStaged] = useState<{ vend: string; po: string; mats: Bom[] }[]>([])
   const [pcStageWeight, setPcStageWeight] = useState("")
@@ -202,7 +213,33 @@ export default function ScmRequestPage() {
     fetch("/api/pull-material/cities").then(r => r.json()).then(d => setPcCities(d.rows || [])).catch(() => {})
   }, [reqType])
   const pcCity = pcCities.find((c: any) => c.id === pcCityId) || null
-  const applyCity = (m: any) => pcCity ? { ...m, city: pcCity.city, country: pcCity.country || m.country || null, port: pcCity.port || m.port || null } : m
+  // Freight master (air/sea) for the Country → Port cascade + live Est Air preview.
+  useEffect(() => {
+    if (reqType !== "PURCHASING") return
+    fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRows(d.rows || [])).catch(() => {})
+    fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRows(d.rows || [])).catch(() => {})
+  }, [reqType])
+  const { countries, airByCountry, seaByCountry, seaLtByPort } = useMemo(() => {
+    const airByCountry: Record<string, Set<string>> = {}, seaByCountry: Record<string, Set<string>> = {}
+    const seaLtByPort: Record<string, string> = {}
+    airRows.forEach(r => { const c = r.country || ""; if (c && r.origin) (airByCountry[c] ??= new Set()).add(r.origin) })
+    seaRows.forEach(r => { const c = r.country || ""; if (c && r.port) (seaByCountry[c] ??= new Set()).add(r.port); if (r.port && r.leadTime) seaLtByPort[r.port] = r.leadTime })
+    const countries = [...new Set([...Object.keys(airByCountry), ...Object.keys(seaByCountry)])].sort()
+    return { countries, airByCountry, seaByCountry, seaLtByPort }
+  }, [airRows, seaRows])
+  // Live Est Air preview from the shipment total weight + chosen port + incoterm (same rule as backend).
+  const pcEstAir = useMemo(() => {
+    const w = Number(pcWeight) || 0, port = pcPur.port
+    const routes = airRows.filter(r => r.origin === port)
+    if (!w || !port || !routes.length) return null
+    const bk = breakKey(w)
+    const cand = routes.map(r => ({ rate: Number(r.rates?.[bk]), tt: r.tt, exw: Number(r.origCostExw) || 0, fca: Number(r.origCostFca) || 0 })).filter(x => x.rate && !isNaN(x.rate))
+    if (!cand.length) return null
+    const best = cand.reduce((a, b) => (b.rate > a.rate ? b : a))
+    const inc = pcPur.incoterm.toUpperCase()
+    const add = inc === "EX-WORK" ? best.exw : inc === "FCA" ? best.fca : 0
+    return { est: Math.round((best.rate * w + add) * 100) / 100, add, inc }
+  }, [pcWeight, pcPur.port, pcPur.incoterm, airRows])
 
   const matK = (m: any) => `${m.soNoDoc}|${m.itemCode}`
   const pickPcVend = async (v: string) => {
@@ -263,8 +300,9 @@ export default function ScmRequestPage() {
   const removePcPo = (po: string) => { setPcSelPos(p => { const n = new Set(p); n.delete(po); return n }); setPcSelMats(prev => prev.filter(m => m.poNoDoc !== po)) }
 
   // Per-PO summary of the selected materials: count + SUM(poqtyBomdummy). "Pull PO" defaults to the sum.
-  const pcPoSum: Record<string, { count: number; sum: number; vend: string | null }> = {}
-  pcSelMats.forEach(m => { const po = m.poNoDoc || "-"; const g = (pcPoSum[po] ||= { count: 0, sum: 0, vend: (m as any).vendorName || null }); g.count++; g.sum += Number(m.poqtyBomdummy) || 0 })
+  const pcPoSum: Record<string, { count: number; sum: number; vend: string | null; uoms: Set<string> }> = {}
+  pcSelMats.forEach(m => { const po = m.poNoDoc || "-"; const g = (pcPoSum[po] ||= { count: 0, sum: 0, vend: (m as any).vendorName || null, uoms: new Set<string>() }); g.count++; g.sum += Number(m.poqtyBomdummy) || 0; if (m.bomUom) g.uoms.add(m.bomUom) })
+  const pcUomOf = (po: string) => [...(pcPoSum[po]?.uoms || [])].join(", ") || "-"
   const pcPullOf = (po: string) => pcPullQty[po] ?? String(pcPoSum[po]?.sum ?? 0)
 
   // Add: the per-PO "Pull PO" qty is distributed across its materials (by poqtyBomdummy share).
@@ -277,7 +315,7 @@ export default function ScmRequestPage() {
       const pullPO = Number(pcPullOf(po)) || 0
       const share = g && g.sum > 0 ? (Number(m.poqtyBomdummy) || 0) / g.sum : (g && g.count ? 1 / g.count : 0)
       const q = Math.round(pullPO * share * 100) / 100
-      return { ...applyCity(m), key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: q, weight: idx === 0 ? w : null, ...emptyScm }
+      return { ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: q, weight: idx === 0 ? w : null, ...emptyScm }
     })
     setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
     setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcSelMats([]); setPcWeight(""); setPcPullQty({})
@@ -350,7 +388,7 @@ export default function ScmRequestPage() {
     const addItems: any[] = []
     let first = true
     for (const s of pcStaged) for (const m of s.mats) {
-      addItems.push({ ...applyCity(m), key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: first ? w : null, ...emptyScm })
+      addItems.push({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: first ? w : null, ...emptyScm })
       first = false
     }
     setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
@@ -358,18 +396,44 @@ export default function ScmRequestPage() {
     alert(`เพิ่ม ${addItems.length} รายการ · น้ำหนักรวม ${w ?? "-"} kg`)
   }
 
+  const OTHER = "__OTHER__"
   const submit = async () => {
     if (!requesterName.trim()) return alert("No signed-in user found.")
     if (cart.length === 0) return alert("No items in the request yet.")
+
+    // PC requests carry the purchase info here (no separate Purchase stage) → validate + stamp on items.
+    let items: any[] = cart
+    if (reqType === "PURCHASING") {
+      const c = pcPur.country === OTHER ? "" : pcPur.country
+      const p = pcPur.port === OTHER ? "" : pcPur.port
+      const sp = pcPur.seaPort === OTHER ? "" : pcPur.seaPort
+      if (!c.trim()) return alert("เลือก / พิมพ์ Country")
+      if (!p.trim() && !sp.trim()) return alert("เลือก Air Port หรือ Sea Port")
+      if (!pcPur.incoterm) return alert("เลือก Incoterm")
+      if (NEEDS_ADDRESS.includes(pcPur.incoterm) && !pcPur.pickup.trim()) return alert(`${pcPur.incoterm} ต้องระบุ Pickup address`)
+      if (!String(pcPur.pkg).trim()) return alert("กรอก PKG (จำนวนหีบห่อ)")
+      const pu = {
+        country: c, port: p, seaPort: sp, incoterm: pcPur.incoterm,
+        pickupAddress: NEEDS_ADDRESS.includes(pcPur.incoterm) ? pcPur.pickup : "",
+        city: pcCity?.city || "", needDate: pcPur.needDate || "",
+        cartons: pcPur.pkg, boxW: pcPur.boxW, boxL: pcPur.boxL, boxH: pcPur.boxH,
+      }
+      items = cart.map(it => ({ ...it, ...pu })) // weight stays on item 0 (set at add time)
+    }
     if (!confirm(`Submit Pull Material request with ${cart.length} item(s)?`)) return
     setSubmitting(true)
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items: cart, requestType: reqType, isTest, mode }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode }),
       })
       const d = await r.json()
-      if (r.ok) { alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}`); setCart([]); setRemark(""); setIsTest(false); setModeTouched(false) }
+      if (r.ok) {
+        alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}`)
+        setCart([]); setRemark(""); setIsTest(false); setModeTouched(false)
+        setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
+        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({})
+      }
       else alert(`Error: ${d.error || "submit failed"}`)
     } finally { setSubmitting(false) }
   }
@@ -445,16 +509,6 @@ export default function ScmRequestPage() {
             <p className="text-xs text-gray-500 mt-0.5">เลือก vendor แล้วติ๊ก PO ที่จะ pull (บางหรือทั้งหมด) · ใส่น้ำหนักรวมก้อนเดียว · ระบบดึง<b>ทุก material ใต้ PO</b>ให้</p>
           </div>
 
-          {/* City (ต้นทาง) — from Master Purchase; carries Country/Port onto pulled items */}
-          <div className="max-w-lg">
-            <label className="text-xs font-semibold text-gray-600 block mb-1">City ต้นทาง (Master Purchase)</label>
-            <select value={pcCityId} onChange={e => setPcCityId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200">
-              <option value="">— เลือกเมือง —</option>
-              {pcCities.map((c: any) => <option key={c.id} value={c.id}>{c.city}{c.country ? ` · ${c.country}` : ""}{c.port ? ` · ${c.port}` : ""}</option>)}
-            </select>
-            {pcCity && <p className="text-[11px] text-gray-400 mt-1">Country: {pcCity.country || "-"} · Port: {pcCity.port || "-"} (จะติดไปกับทุก material ที่ pull)</p>}
-          </div>
 
           {/* 1 · Vendor picker (type-ahead from this BU's vendors) */}
           <div className="relative max-w-lg">
@@ -536,67 +590,37 @@ export default function ScmRequestPage() {
             </div>
           )}
 
-          {/* Selected materials (from the ticked POs) — with a delete button per row */}
+          {/* Summary BY PO — sum of qty + UOM + editable "Pull PO" (default = sum). ระบบกระจายให้แต่ละ material ตามสัดส่วน */}
           {pcSelMats.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-gray-600">Material ที่เลือก ({pcSelMats.length}) · {pcSelPos.size} PO</label>
+                <label className="text-xs font-semibold text-gray-600">สรุปตาม PO ({pcSelPos.size} PO · {pcSelMats.length} material) — แก้ Pull PO ได้</label>
                 <button onClick={() => { setPcSelMats([]); setPcSelPos(new Set()) }} className="text-[11px] text-red-600 font-medium hover:underline">🗑 ล้างทั้งหมด</button>
               </div>
-              <div className="border rounded-xl overflow-auto max-h-64">
+              <div className="border rounded-xl overflow-auto">
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-50 sticky top-0"><tr>
-                    {["ITEM NAME", "GROUP", "PO NO", "POQTY BOMDUMMY", "UOM", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                  <thead className="bg-gray-50"><tr>
+                    {["PO NO", "VENDOR", "# ITEM", "SUM POQTY", "UOM", "PULL PO", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
-                    {pcSelMats.map(m => (
-                      <tr key={matK(m)} className="hover:bg-gray-50">
-                        <td className="px-3 py-1.5 max-w-[260px] truncate" title={m.itemName || m.itemCode || ""}>{m.itemName || m.itemCode || "-"}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">{m.groupCode || "-"}</td>
-                        <td className="px-3 py-1.5 font-medium whitespace-nowrap">{m.poNoDoc || "-"}</td>
-                        <td className="px-3 py-1.5 text-right whitespace-nowrap">{fmt(m.poqtyBomdummy)}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">{m.bomUom || "-"}</td>
-                        <td className="px-3 py-1.5 text-center"><button onClick={() => removePcMat(matK(m))} className="text-gray-300 hover:text-red-500" title="ลบรายการนี้">✕</button></td>
+                    {Object.keys(pcPoSum).map(po => (
+                      <tr key={po} className="hover:bg-gray-50">
+                        <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
+                        <td className="px-3 py-1.5 max-w-[200px] truncate" title={pcPoSum[po].vend || ""}>{pcPoSum[po].vend || "-"}</td>
+                        <td className="px-3 py-1.5 text-right">{pcPoSum[po].count}</td>
+                        <td className="px-3 py-1.5 text-right">{fmt(pcPoSum[po].sum)}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{pcUomOf(po)}</td>
+                        <td className="px-3 py-1.5">
+                          <input type="number" value={pcPullOf(po)} onChange={e => setPcPullQty(p => ({ ...p, [po]: e.target.value }))}
+                            className="w-28 border border-red-300 rounded-lg px-2 py-1 text-xs text-right font-semibold text-red-800 focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                        </td>
+                        <td className="px-3 py-1.5 text-center"><button onClick={() => removePcPo(po)} className="text-gray-300 hover:text-red-500" title="ลบทั้ง PO">✕</button></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {[...pcSelPos].map(po => (
-                  <span key={po} className="inline-flex items-center gap-1 text-[11px] bg-gray-100 rounded-full px-2 py-0.5">{po}
-                    <button onClick={() => removePcPo(po)} className="text-gray-400 hover:text-red-600" title="ลบทั้ง PO">✕</button>
-                  </span>
-                ))}
-              </div>
-
-              {/* Summary BY PO — sum of qty + editable "Pull PO" (default = sum) */}
-              <div className="mt-3">
-                <label className="text-xs font-semibold text-gray-600 block mb-1">สรุปตาม PO (แก้ Pull PO ได้)</label>
-                <div className="border rounded-xl overflow-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50"><tr>
-                      {["PO NO", "VENDOR", "# ITEM", "SUM POQTY", "PULL PO", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
-                    </tr></thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {Object.keys(pcPoSum).map(po => (
-                        <tr key={po} className="hover:bg-gray-50">
-                          <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
-                          <td className="px-3 py-1.5 max-w-[200px] truncate" title={pcPoSum[po].vend || ""}>{pcPoSum[po].vend || "-"}</td>
-                          <td className="px-3 py-1.5 text-right">{pcPoSum[po].count}</td>
-                          <td className="px-3 py-1.5 text-right">{fmt(pcPoSum[po].sum)}</td>
-                          <td className="px-3 py-1.5">
-                            <input type="number" value={pcPullOf(po)} onChange={e => setPcPullQty(p => ({ ...p, [po]: e.target.value }))}
-                              className="w-28 border border-red-300 rounded-lg px-2 py-1 text-xs text-right font-semibold text-red-800 focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                          </td>
-                          <td className="px-3 py-1.5 text-center"><button onClick={() => removePcPo(po)} className="text-gray-300 hover:text-red-500" title="ลบทั้ง PO">✕</button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="text-[11px] text-gray-400 mt-1">Pull PO = จำนวนที่จะ pull ต่อ PO (default = ยอดรวม, แก้ได้) · ระบบกระจายให้แต่ละ material ตามสัดส่วน</p>
-              </div>
+              <p className="text-[11px] text-gray-400 mt-1">Pull PO = จำนวนที่จะ pull ต่อ PO (default = ยอดรวม, แก้ได้) · ระบบกระจายให้แต่ละ material ตามสัดส่วน</p>
             </div>
           )}
 
@@ -818,6 +842,86 @@ export default function ScmRequestPage() {
             </table>
           </div>
         )}
+
+        {/* PC purchase info — filled here (no separate Purchase stage); stamped on every item at submit */}
+        {reqType === "PURCHASING" && cart.length > 0 && (() => {
+          const airPorts = [...(airByCountry[pcPur.country] || [])].sort()
+          const seaPorts = [...(seaByCountry[pcPur.country] || [])].sort()
+          const lab = "text-[11px] font-semibold text-gray-600 block mb-1"
+          const box = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 disabled:bg-gray-50 disabled:text-gray-400"
+          const dimc = "w-16 border border-gray-200 rounded-lg px-1.5 py-1.5 text-sm text-center bg-white focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          const numc = box + " [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          return (
+            <div className="mt-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/40 p-4 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="text-sm font-bold" style={{ color: MAROON }}>ข้อมูลจัดซื้อ (ใช้ทั้งใบ · จะติดไปทุก material)</h3>
+                {pcEstAir
+                  ? <span className="text-xs font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-2.5 py-1">🔒 Est Air ≈ {fmt(pcEstAir.est)} USD{pcEstAir.add ? <span className="text-amber-600"> (+{pcEstAir.inc})</span> : null}</span>
+                  : <span className="text-[11px] text-gray-400">กรอก Air Port + น้ำหนักรวม → คำนวณ Est Air อัตโนมัติ</span>}
+              </div>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <div>
+                  <label className={lab}>Country <span className="text-red-500">*</span></label>
+                  <PcPick value={pcPur.country} list={countries} sel={box} placeholder="— country —"
+                    onChange={v => setPcPur(p => ({ ...p, country: v, port: "", seaPort: "" }))} />
+                </div>
+                <div>
+                  <label className={lab}>Air Port <span className="text-red-500">*</span></label>
+                  <PcPick value={pcPur.port} list={airPorts} sel={box} disabled={!pcPur.country}
+                    placeholder={pcPur.country ? (airPorts.length ? "— air port —" : "no air port") : "country ก่อน"}
+                    onChange={v => setPcPur(p => ({ ...p, port: v }))} />
+                </div>
+                <div>
+                  <label className={lab}>Sea Port <span className="text-gray-300">(optional)</span></label>
+                  <PcPick value={pcPur.seaPort} list={seaPorts} sel={box} disabled={!pcPur.country}
+                    placeholder={pcPur.country ? (seaPorts.length ? "— sea port —" : "no sea port") : "country ก่อน"}
+                    onChange={v => setPcPur(p => ({ ...p, seaPort: v }))} />
+                </div>
+                <div>
+                  <label className={lab}>Incoterm <span className="text-red-500">*</span></label>
+                  <select value={pcPur.incoterm} onChange={e => setPcPur(p => ({ ...p, incoterm: e.target.value }))} className={box}>
+                    <option value="">—</option>
+                    {INCOTERMS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={lab}>เมือง / City <span className="text-gray-300">(รอมาสเตอร์)</span></label>
+                  <select value={pcCityId} onChange={e => setPcCityId(e.target.value)} className={box}>
+                    <option value="">— เลือกเมือง —</option>
+                    {pcCities.map((c: any) => <option key={c.id} value={c.id}>{c.city}{c.country ? ` · ${c.country}` : ""}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={lab}>Need date (in-house)</label>
+                  <input type="date" value={pcPur.needDate} onChange={e => setPcPur(p => ({ ...p, needDate: e.target.value }))} className={box} />
+                </div>
+                <div>
+                  <label className={lab}>PKG <span className="text-red-500">*</span></label>
+                  <input type="number" min={0} value={pcPur.pkg} onChange={e => setPcPur(p => ({ ...p, pkg: e.target.value }))} placeholder="จำนวนหีบห่อ" className={numc} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={lab}>Dimension ก×ย×ส (cm) <span className="text-gray-300">— ไม่บังคับ</span></label>
+                  <div className="flex items-center gap-1.5">
+                    <input type="number" value={pcPur.boxW} onChange={e => setPcPur(p => ({ ...p, boxW: e.target.value }))} placeholder="ก" className={dimc} />
+                    <span className="text-gray-300">×</span>
+                    <input type="number" value={pcPur.boxL} onChange={e => setPcPur(p => ({ ...p, boxL: e.target.value }))} placeholder="ย" className={dimc} />
+                    <span className="text-gray-300">×</span>
+                    <input type="number" value={pcPur.boxH} onChange={e => setPcPur(p => ({ ...p, boxH: e.target.value }))} placeholder="ส" className={dimc} />
+                  </div>
+                </div>
+              </div>
+              {NEEDS_ADDRESS.includes(pcPur.incoterm) && (
+                <div>
+                  <label className={lab}>📍 {pcPur.incoterm} Pickup address <span className="text-red-500">*</span></label>
+                  <textarea value={pcPur.pickup} onChange={e => setPcPur(p => ({ ...p, pickup: e.target.value }))} rows={2}
+                    placeholder="ที่อยู่รับสินค้า / supplier address (บังคับสำหรับ EX-WORK / FCA)"
+                    className="w-full border border-amber-300 bg-amber-50 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
         <div className="mt-3">
           <label className="text-xs font-semibold text-gray-600">Remark</label>
           <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="Note for this pull request (optional)"
@@ -967,6 +1071,30 @@ function SendApprove({ bu, setBu, decisionStatus = "PENDING_SCM_DECISION", nextS
               <p className="mt-1.5 text-[11px] text-gray-400">Ticked lines = request AIR approval · unticked = NO AIR. If no line is ticked the whole doc is marked NO AIR.</p>
             </div>
           ))}
+    </>
+  )
+}
+
+// Dropdown from a master list + an "Other" choice (type a value not in the master → LG adds its rate).
+const OTHER_VAL = "__OTHER__"
+function PcPick({ value, list, onChange, disabled, placeholder, sel }:
+  { value: string; list: string[]; onChange: (v: string) => void; disabled?: boolean; placeholder: string; sel: string }) {
+  const inList = !!value && list.includes(value)
+  const isOther = !!value && !inList
+  return (
+    <>
+      <select value={inList ? value : (isOther ? OTHER_VAL : "")} disabled={disabled}
+        onChange={e => onChange(e.target.value)} className={sel}>
+        <option value="">{placeholder}</option>
+        <option value={OTHER_VAL}>➕ Other (พิมพ์เอง → แจ้ง LG)</option>
+        {list.length > 0 && <option value="" disabled>──────────</option>}
+        {list.map(p => <option key={p} value={p}>{p}</option>)}
+      </select>
+      {isOther && (
+        <input type="text" autoFocus value={value === OTHER_VAL ? "" : value}
+          onChange={e => onChange(e.target.value || OTHER_VAL)} placeholder="พิมพ์ค่าที่ไม่มีในระบบ"
+          className={`${sel} mt-1.5 border-amber-400 bg-amber-50 focus:ring-amber-200`} />
+      )}
     </>
   )
 }

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { notifyPullStage } from "@/lib/pull-notify"
+import { recomputePullAir } from "@/lib/pull-freight"
 
 // List Pull Material requests (optionally by BU).
 export async function GET(req: NextRequest) {
@@ -58,9 +59,9 @@ export async function POST(req: NextRequest) {
       requestType,
       mode,
       isTest,
-      // Both branches start at Purchasing (fill Country/Port/Incoterm/Weight). requestType only
-      // decides the TAIL after Logistics: SCM → SCM decision → VP SCM → President; PC → PC decision → DVM Pur → VP Pur.
-      status: "PENDING_PURCHASING",
+      // SCM requests land at Purchasing (they fill Country/Port/Incoterm/Weight there).
+      // PURCHASING (PC) requests fill all that ON the request page → straight to DPM approval.
+      status: requestType === "PURCHASING" ? "PENDING_VP_PUR" : "PENDING_PURCHASING",
       items: {
         create: items.map((i: any) => ({
           soNoDoc: String(i.soNoDoc || ""),
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest) {
           country: i.country || null,
           city: i.city || null,
           port: i.port || null,
+          seaPort: i.seaPort || null,
           incoterm: i.incoterm || null,
           pickupAddress: i.pickupAddress || null,
           cartons: num(i.cartons),
@@ -120,9 +122,11 @@ export async function POST(req: NextRequest) {
     include: { items: true },
   })
 
-  // New doc lands at Purchasing → alert the whole Purchasing pool (each gets a magic link; whoever
-  // fills it first advances the status → it drops off everyone else's Purchase queue).
-  await notifyPullStage(created.id, "PENDING_PURCHASING").catch(() => {})
+  // PC requests already carry Country/Port/Incoterm/Weight → auto-compute Est Air before the DPM sees it.
+  if (requestType === "PURCHASING") await recomputePullAir(created.id).catch(() => {})
+
+  // Alert the owner(s) of the landing stage: SCM → the Purchasing pool; PC → the DPM approver (by BU).
+  await notifyPullStage(created.id, created.status).catch(() => {})
 
   return NextResponse.json({ request: created })
 }
