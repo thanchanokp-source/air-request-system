@@ -815,9 +815,37 @@ export default function ScmRequestPage() {
 
       {/* Cart */}
       <div className="bg-white rounded-xl border p-4">
-        <h2 className="font-semibold text-gray-800">Items to pull ({cart.length})</h2>
+        <h2 className="font-semibold text-gray-800">Items to pull {reqType === "PURCHASING" ? `(${new Set(cart.map(c => c.poNoDoc || "-")).size} PO · ${cart.length} material)` : `(${cart.length})`}</h2>
         <p className="text-xs text-gray-500 mt-1">Requester: <span className="font-medium text-gray-700">{requesterName || "-"}</span></p>
-        {cart.length === 0 ? <p className="text-sm text-gray-400 mt-3">No items yet — search an SO and pick materials.</p> : (
+        {cart.length === 0 ? <p className="text-sm text-gray-400 mt-3">No items yet — {reqType === "PURCHASING" ? "เลือก vendor / PO ด้านบน" : "search an SO and pick materials."}</p> :
+          reqType === "PURCHASING" ? (() => {
+            // PC view: group the cart BY PO (sum PULL material, count materials, uoms).
+            const g: Record<string, { vend: string | null; count: number; sum: number; uoms: Set<string> }> = {}
+            cart.forEach(c => { const po = c.poNoDoc || "-"; const x = (g[po] ||= { vend: c.vendorName || null, count: 0, sum: 0, uoms: new Set() }); x.count++; x.sum += Number(c.pullMaterialQty) || 0; if (c.bomUom) x.uoms.add(c.bomUom) })
+            const removePoFromCart = (po: string) => setCart(prev => prev.filter(c => (c.poNoDoc || "-") !== po))
+            return (
+              <div className="border rounded-xl overflow-auto mt-3">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50"><tr>
+                    {["PO NO", "VENDOR", "# MATERIAL", "PULL material (รวม)", "UOM", ""].map(h =>
+                      <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {Object.keys(g).map(po => (
+                      <tr key={po} className="hover:bg-gray-50">
+                        <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
+                        <td className="px-3 py-1.5 max-w-[220px] truncate" title={g[po].vend || ""}>{g[po].vend || "-"}</td>
+                        <td className="px-3 py-1.5 text-right">{g[po].count}</td>
+                        <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(g[po].sum)}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{[...g[po].uoms].join(", ") || "-"}</td>
+                        <td className="px-3 py-1.5 text-center"><button onClick={() => removePoFromCart(po)} className="text-gray-300 hover:text-red-500" title="ลบทั้ง PO">✕</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })() : (
           <div className="border rounded-xl overflow-auto mt-3">
             <table className="w-full text-xs">
               <thead className="bg-gray-50"><tr>
