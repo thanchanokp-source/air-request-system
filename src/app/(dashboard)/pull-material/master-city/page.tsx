@@ -18,6 +18,19 @@ export default function Page() {
   const load = async () => { setLoading(true); try { const d = await fetch("/api/pull-material/cities").then(r => r.json()); setRows(d.rows || []) } finally { setLoading(false) } }
   useEffect(() => { load() }, [])
 
+  // The LIVE LG air Master Rate origins — so each Port shows whether it actually maps (drives Est Air).
+  const [rateOrigins, setRateOrigins] = useState<Set<string>>(new Set())
+  const [rateCountryByOrigin, setRateCountryByOrigin] = useState<Record<string, string>>({})
+  useEffect(() => {
+    fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => {
+      setRateOrigins(new Set((d.origins || []).map((o: string) => String(o).toUpperCase())))
+      const m: Record<string, string> = {}
+      ;(d.rows || []).forEach((r: any) => { if (r.origin && r.country && !m[String(r.origin).toUpperCase()]) m[String(r.origin).toUpperCase()] = r.country })
+      setRateCountryByOrigin(m)
+    }).catch(() => {})
+  }, [])
+  const mapsRate = (port: string) => !!port && rateOrigins.has(String(port).toUpperCase())
+
   // Common origin airports — Port = IATA code (maps to the "origin" in the LG Master Rate → drives Est Air).
   // Country = the LG Master Rate's country name (EN, so the request cascade + Est Air match); City = TH.
   const AIRPORTS: { country: string; port: string; city: string }[] = [
@@ -85,6 +98,22 @@ export default function Page() {
         <button onClick={seedAirports} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50 whitespace-nowrap">✈ โหลดชุดสนามบิน (15)</button>
       </div>
 
+      {/* Map status vs the LIVE LG air Master Rate */}
+      {(() => {
+        const withPort = rows.filter(r => r.port)
+        const ok = withPort.filter(r => mapsRate(r.port)).length
+        const bad = withPort.length - ok
+        return (
+          <div className={`text-sm rounded-xl border px-3 py-2 ${bad ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
+            {rateOrigins.size === 0
+              ? "⏳ กำลังโหลด LG Master Rate…"
+              : bad === 0
+                ? <>✓ ทุก Port ({ok}) map กับ LG Master Rate แล้ว — คิด Est Air ได้</>
+                : <>⚠ {ok} Port ตรง · <b>{bad} Port ไม่พบใน LG Master Rate</b> (แถว ⚠ ด้านล่าง) — Port พวกนี้จะยังไม่คิด Est Air จนกว่า LG จะเพิ่ม rate</>}
+          </div>
+        )
+      })()}
+
       {/* Add row */}
       <div className="bg-white rounded-xl border p-4">
         <p className="text-xs font-semibold text-gray-500 uppercase mb-2">เพิ่มเมือง</p>
@@ -101,16 +130,22 @@ export default function Page() {
       <div className="bg-white rounded-xl border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500"><tr>
-            {["COUNTRY", "PORT", "CITY", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+            {["COUNTRY", "PORT", "CITY", "MAP RATE", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-50">
-            {loading ? <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-400">Loading…</td></tr> :
-              shown.length === 0 ? <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-400">ยังไม่มีข้อมูล</td></tr> :
+            {loading ? <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Loading…</td></tr> :
+              shown.length === 0 ? <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">ยังไม่มีข้อมูล</td></tr> :
                 shown.map(r => (
                   <tr key={r.id} className={`hover:bg-gray-50 ${edits[r.id] ? "bg-green-50" : ""}`}>
                     <td className="px-3 py-1.5"><input value={val(r, "country")} onChange={e => setVal(r, "country", e.target.value)} className={inp} /></td>
                     <td className="px-3 py-1.5"><input value={val(r, "port")} onChange={e => setVal(r, "port", e.target.value)} className={inp} /></td>
                     <td className="px-3 py-1.5"><input value={val(r, "city")} onChange={e => setVal(r, "city", e.target.value)} className={inp} /></td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      {!r.port ? <span className="text-gray-300 text-xs">—</span>
+                        : mapsRate(r.port)
+                          ? <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">✓ ตรง rate</span>
+                          : <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5" title="ไม่พบ port นี้ใน LG Master Rate">⚠ ไม่พบใน rate</span>}
+                    </td>
                     <td className="px-3 py-1.5 whitespace-nowrap text-right">
                       {edits[r.id] && <button onClick={() => save(r.id)} disabled={busy} className="px-3 py-1 rounded-lg text-white text-xs font-semibold bg-green-600 mr-1 disabled:opacity-50">💾 Save</button>}
                       <button onClick={() => del(r.id)} disabled={busy} className="text-gray-300 hover:text-red-500 px-2">✕</button>
