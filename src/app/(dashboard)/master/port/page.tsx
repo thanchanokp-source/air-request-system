@@ -30,6 +30,22 @@ export default function MasterRatePage() {
     XLSX.writeFile(wb, `master-rate-backup_${ts}.xlsx`)
   }
 
+  // Fix one HAWB whose actual was mis-entered (whole total on one SO row) → split across all its SOs by qty.
+  const [fixHawbNo, setFixHawbNo] = useState("")
+  const [fixHawbTotal, setFixHawbTotal] = useState("")
+  const [fixingHawb, setFixingHawb] = useState(false)
+  const fixHawb = async () => {
+    if (!fixHawbNo.trim() || !(Number(fixHawbTotal) > 0)) return alert("กรอก HAWB# และยอด Total (> 0)")
+    if (!confirm(`กระจายยอด ${Number(fixHawbTotal).toLocaleString()} ให้ทุก SO ของ HAWB ${fixHawbNo.trim()} ตาม qty?`)) return
+    setFixingHawb(true)
+    try {
+      const r = await fetch("/api/admin/redistribute-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hawbNo: fixHawbNo.trim(), total: Number(fixHawbTotal) }) })
+      const d = await r.json()
+      if (r.ok) { alert(`แก้แล้ว ✓\nHAWB ${d.hawbNo} · ${d.items} SO (qty รวม ${d.totalQty})\nกระจายยอด ${Number(d.total).toLocaleString()} ตาม qty`); setFixHawbNo(""); setFixHawbTotal("") }
+      else alert("Error: " + (d.error || "fix failed"))
+    } finally { setFixingHawb(false) }
+  }
+
   // Recompute Est Air for existing docs from the current rates (only items not yet shipped — actuals untouched).
   const recalc = async () => {
     if (!confirm("คำนวณใหม่จาก rate ปัจจุบัน?\n• Est Air: เฉพาะเอกสารที่ยังไม่ ship\n• Actual: กระจายยอด HAWB ให้ถูก (แก้ยอดเบิ้ลกรณี HAWB เดียวข้ามหลายเอกสาร)")) return
@@ -135,6 +151,23 @@ export default function MasterRatePage() {
           <span className="text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full font-medium">👁 Read only</span>
         )}
       </div>
+
+      {isAdmin && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-wrap items-end gap-2">
+          <div>
+            <label className="text-xs font-semibold text-amber-800 block mb-1">🛠 Fix HAWB (แก้ยอด actual ที่ใส่รวมแถวเดียว)</label>
+            <input value={fixHawbNo} onChange={e => setFixHawbNo(e.target.value)} placeholder="HAWB# (เช่น CAR-26080002)"
+              className="border border-amber-300 rounded-lg px-3 py-1.5 text-sm w-56" />
+          </div>
+          <input type="number" value={fixHawbTotal} onChange={e => setFixHawbTotal(e.target.value)} placeholder="Total HAWB# (ยอดจริง)"
+            className="border border-amber-300 rounded-lg px-3 py-1.5 text-sm w-48 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+          <button onClick={fixHawb} disabled={fixingHawb}
+            className="bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-amber-700 disabled:opacity-50">
+            {fixingHawb ? "กำลังกระจาย…" : "กระจายตาม qty"}
+          </button>
+          <span className="text-[11px] text-amber-700 w-full">กระจายยอด Total ให้ทุก SO ที่มี HAWB นี้ (ทุกเอกสาร) ตามสัดส่วน qty — ผลรวมจะเท่ากับ Total พอดี</span>
+        </div>
+      )}
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search country…"
         className="w-full sm:w-80 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
