@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { redistributeHawbCost } from "@/lib/freight"
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions)
@@ -43,11 +44,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   })
   if (items.length === 0) return NextResponse.json({ error: "Selected SO not found" }, { status: 400 })
 
-  const totalQty = items.reduce((s, i) => s + (i.qtyActualShip ?? i.qtyRequestAir), 0)
-  if (totalQty === 0) return NextResponse.json({ error: "Total QTY is 0" }, { status: 400 })
-
-  const costPerPc = totalCharge / totalQty
-
   const hawb = await prisma.hawbGroup.create({
     data: {
       requestId: id,
@@ -60,19 +56,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     include: { items: { select: { id: true, so: true, style: true, qtyRequestAir: true, qtyActualShip: true } } }
   })
 
-  // avg/pc = HAWB total ÷ total qty → actualAirFreight per SO. Also store INV per SO if provided.
+  // Bind the selected SOs to this HAWB (+ optional per-SO INV). Do NOT divide the total per-document.
   for (const item of items) {
-    const qty = item.qtyActualShip ?? item.qtyRequestAir
     const inv = itemInvoices && typeof itemInvoices === "object" ? itemInvoices[item.id] : undefined
     await prisma.airRequestItem.update({
       where: { id: item.id },
-      data: {
-        actualAirFreight: parseFloat((costPerPc * qty).toFixed(2)),
-        hawbNo,
-        ...(inv ? { invoiceNo: String(inv) } : {}),
-      }
+      data: { hawbNo, ...(inv ? { invoiceNo: String(inv) } : {}) },
     })
   }
+
+  // ONE HAWB total split across ALL SOs carrying this hawbNo — across EVERY document — by air qty.
+  // Idempotent: booking the same HAWB in two documents can no longer double the actual (sum = totalCharge).
+  await redistributeHawbCost(hawbNo, Number(totalCharge))
 
   return NextResponse.json(hawb)
 }

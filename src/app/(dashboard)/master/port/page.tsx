@@ -32,12 +32,12 @@ export default function MasterRatePage() {
 
   // Recompute Est Air for existing docs from the current rates (only items not yet shipped — actuals untouched).
   const recalc = async () => {
-    if (!confirm("คำนวณ Est Air ใหม่จาก rate ปัจจุบัน?\n(เฉพาะเอกสารที่ยังไม่ ship — ไม่แตะ actual / เอกสารที่จบแล้ว)")) return
+    if (!confirm("คำนวณใหม่จาก rate ปัจจุบัน?\n• Est Air: เฉพาะเอกสารที่ยังไม่ ship\n• Actual: กระจายยอด HAWB ให้ถูก (แก้ยอดเบิ้ลกรณี HAWB เดียวข้ามหลายเอกสาร)")) return
     setRecalcing(true)
     try {
       const r = await fetch("/api/admin/recalc-freight", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) })
       const d = await r.json()
-      if (r.ok) alert(`คำนวณ Est Air ใหม่แล้ว ✓\nอัปเดต ${d.updated} / สแกน ${d.scanned} รายการ`)
+      if (r.ok) alert(`คำนวณใหม่แล้ว ✓\nEst Air: อัปเดต ${d.updated} / สแกน ${d.scanned}\nHAWB actual: normalize ${d.hawbFixed ?? 0} HAWB`)
       else alert("Error: " + (d.error || "recalc failed"))
     } finally { setRecalcing(false) }
   }
@@ -126,7 +126,7 @@ export default function MasterRatePage() {
             {isAdmin && (
               <button onClick={recalc} disabled={recalcing}
                 className="bg-amber-50 border border-amber-300 text-amber-800 px-3 py-2 rounded-lg text-sm font-medium hover:bg-amber-100 disabled:opacity-50">
-                {recalcing ? "กำลังคำนวณ…" : "↻ Recalculate EST"}
+                {recalcing ? "กำลังคำนวณ…" : "↻ Recalculate EST + HAWB"}
               </button>
             )}
             <button onClick={() => setAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">+ ADD</button>

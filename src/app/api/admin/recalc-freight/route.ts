@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { canonCountry } from "@/lib/freight"
+import { canonCountry, redistributeHawbCost } from "@/lib/freight"
 import { soCurrency } from "@/lib/currency"
 
 // Bulk recompute Gross + EST with the new QTY-Air basis for EXISTING documents.
@@ -39,5 +39,17 @@ export async function POST(req: NextRequest) {
     }).catch(() => {})
     updated++
   }
-  return NextResponse.json({ ok: true, updated, scanned: items.length })
+
+  // Normalize HAWB actuals: each HAWB's ONE total split GLOBALLY across all its SOs (every document).
+  // Fixes historically double-counted actuals from the old per-document division. Idempotent.
+  const groups = await (prisma as any).hawbGroup.findMany({
+    where: bu ? { request: { is: { bu } } } : {},
+    select: { hawbNo: true, totalCharge: true }, orderBy: { createdAt: "desc" },
+  })
+  const totalByHawb: Record<string, number> = {}
+  for (const g of groups) { const h = String(g.hawbNo || "").trim(); if (h && !(h in totalByHawb) && g.totalCharge > 0) totalByHawb[h] = g.totalCharge }
+  let hawbFixed = 0
+  for (const [h, tot] of Object.entries(totalByHawb)) { await redistributeHawbCost(h, tot as number); hawbFixed++ }
+
+  return NextResponse.json({ ok: true, updated, scanned: items.length, hawbFixed })
 }
