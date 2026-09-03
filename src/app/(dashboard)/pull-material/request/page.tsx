@@ -91,6 +91,7 @@ export default function ScmRequestPage() {
   const [pcCities, setPcCities] = useState<any[]>([])
   const [pcCityId, setPcCityId] = useState("")
   const [pcVendors, setPcVendors] = useState<string[]>([])
+  const [pcUoms, setPcUoms] = useState<string[]>([])
   const [pcVend, setPcVend] = useState("")
   const [pcVendQ, setPcVendQ] = useState("")
   const [pcVendOpen, setPcVendOpen] = useState(false)
@@ -206,6 +207,7 @@ export default function ScmRequestPage() {
     if (reqType !== "PURCHASING") return
     setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcVendQ("")
     fetch(`/api/bom?bu=${bu}&vendors=1`).then(r => r.json()).then(d => setPcVendors(d.vendors || [])).catch(() => {})
+    fetch(`/api/bom?bu=${bu}&uoms=1`).then(r => r.json()).then(d => setPcUoms(d.uoms || [])).catch(() => {})
   }, [bu, reqType])
   // Master Purchase cities (Country/Port/City) for the PC City dropdown.
   useEffect(() => {
@@ -309,18 +311,18 @@ export default function ScmRequestPage() {
   // Add: the per-PO "Pull PO" qty is distributed across its materials (by poqtyBomdummy share).
   const addPcToCart = () => {
     if (!pcSelMats.length) return alert("เลือก PO / material ก่อน")
-    const w = pcWeight === "" ? null : (Number(pcWeight) || null)
-    const addItems = pcSelMats.map((m, idx) => {
+    const addItems = pcSelMats.map((m) => {
       const po = m.poNoDoc || "-"
       const g = pcPoSum[po]
       const pullPO = Number(pcPullOf(po)) || 0
       const share = g && g.sum > 0 ? (Number(m.poqtyBomdummy) || 0) / g.sum : (g && g.count ? 1 / g.count : 0)
       const q = Math.round(pullPO * share * 100) / 100
-      return { ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: q, weight: idx === 0 ? w : null, ...emptyScm }
+      // weight is entered once in the "ข้อมูลจัดซื้อ" box → applied to item 0 at submit.
+      return { ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: q, weight: null, ...emptyScm }
     })
     setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
-    setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcSelMats([]); setPcWeight(""); setPcPullQty({})
-    alert(`เพิ่ม ${addItems.length} material · น้ำหนักรวม ${w ?? "-"} kg`)
+    setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcSelMats([]); setPcPullQty({})
+    alert(`เพิ่ม ${addItems.length} material`)
   }
 
   // ── PC (Purchasing) flow: Vendor + PO + Weight via Excel — pull EVERY material under the PO. ──
@@ -382,19 +384,16 @@ export default function ScmRequestPage() {
     } finally { setPcBusy(false) }
   }
 
-  // Add the imported (staged) POs to the cart with the ONE total weight entered on-screen.
+  // Add the imported (staged) POs to the cart. Weight is entered once in the "ข้อมูลจัดซื้อ" box.
   const addStagedToCart = () => {
     if (!pcStaged.length) return
-    const w = pcStageWeight === "" ? null : (Number(pcStageWeight) || null)
     const addItems: any[] = []
-    let first = true
     for (const s of pcStaged) for (const m of s.mats) {
-      addItems.push({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: first ? w : null, ...emptyScm })
-      first = false
+      addItems.push({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: null, ...emptyScm })
     }
     setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
     setPcStaged([]); setPcStageWeight("")
-    alert(`เพิ่ม ${addItems.length} รายการ · น้ำหนักรวม ${w ?? "-"} kg`)
+    alert(`เพิ่ม ${addItems.length} รายการ`)
   }
 
   const OTHER = "__OTHER__"
@@ -413,13 +412,15 @@ export default function ScmRequestPage() {
       if (!pcPur.incoterm) return alert("เลือก Incoterm")
       if (NEEDS_ADDRESS.includes(pcPur.incoterm) && !pcPur.pickup.trim()) return alert(`${pcPur.incoterm} ต้องระบุ Pickup address`)
       if (!String(pcPur.pkg).trim()) return alert("กรอก PKG (จำนวนหีบห่อ)")
+      if (!String(pcWeight).trim() || !(Number(pcWeight) > 0)) return alert("กรอกน้ำหนักรวม (kg)")
       const pu = {
         country: c, port: p, seaPort: sp, incoterm: pcPur.incoterm,
         pickupAddress: NEEDS_ADDRESS.includes(pcPur.incoterm) ? pcPur.pickup : "",
         city: pcCity?.city || "", needDate: pcPur.needDate || "",
         cartons: pcPur.pkg, boxW: pcPur.boxW, boxL: pcPur.boxL, boxH: pcPur.boxH,
       }
-      items = cart.map(it => ({ ...it, ...pu })) // weight stays on item 0 (set at add time)
+      // weight (whole shipment) → put on item 0; that's what recomputePullAir reads for Est Air.
+      items = cart.map((it, i) => ({ ...it, ...pu, weight: i === 0 ? Number(pcWeight) : null }))
     }
     if (!confirm(`Submit Pull Material request with ${cart.length} item(s)?`)) return
     setSubmitting(true)
@@ -433,7 +434,7 @@ export default function ScmRequestPage() {
         alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}`)
         setCart([]); setRemark(""); setIsTest(false); setModeTouched(false)
         setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
-        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({})
+        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight("")
       }
       else alert(`Error: ${d.error || "submit failed"}`)
     } finally { setSubmitting(false) }
@@ -625,15 +626,10 @@ export default function ScmRequestPage() {
             </div>
           )}
 
-          {/* 3 · total weight + add */}
+          {/* 3 · add selected POs to the cart (น้ำหนักรวมกรอกในกล่อง "ข้อมูลจัดซื้อ" ด้านล่าง) */}
           {pcSelMats.length > 0 && (
-            <div className="flex items-end gap-3 flex-wrap rounded-xl border-2 border-red-200 bg-red-50/50 px-4 py-3">
-              <div>
-                <label className="text-sm font-bold block mb-1" style={{ color: MAROON }}>3 · น้ำหนักรวม (kg)<span className="text-red-500"> *</span></label>
-                <input value={pcWeight} onChange={e => setPcWeight(e.target.value)} type="number" placeholder="0" min={0}
-                  className="w-40 border-2 border-red-300 rounded-xl px-4 py-2 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" style={{ color: MAROON }} />
-              </div>
-              <span className="text-xs text-gray-500 self-center">รวมทุก PO ที่เลือก ({pcSelPos.size} PO · {pcSelMats.length} material) — ใช้คิด Est Air</span>
+            <div className="flex items-center gap-3 flex-wrap rounded-xl border-2 border-red-200 bg-red-50/50 px-4 py-3">
+              <span className="text-xs text-gray-500">เลือกแล้ว {pcSelPos.size} PO · {pcSelMats.length} material</span>
               <button onClick={addPcToCart} disabled={pcLoad} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 ml-auto" style={{ background: MAROON }}>
                 {pcLoad ? "…" : "+ Add to request"}
               </button>
@@ -661,13 +657,8 @@ export default function ScmRequestPage() {
                 <thead><tr className="text-gray-500"><th className="text-left px-2 py-1">Vendor</th><th className="text-left px-2 py-1">PO</th><th className="text-right px-2 py-1"># material</th></tr></thead>
                 <tbody>{pcStaged.map((s, i) => <tr key={i} className="border-t border-sky-100"><td className="px-2 py-1">{s.vend || "-"}</td><td className="px-2 py-1 font-medium">{s.po}</td><td className="px-2 py-1 text-right">{s.mats.length}</td></tr>)}</tbody>
               </table></div>
-              <div className="flex items-end gap-3 flex-wrap pt-1">
-                <div>
-                  <label className="text-xs font-bold block mb-1" style={{ color: MAROON }}>น้ำหนักรวม (kg)<span className="text-red-500"> *</span></label>
-                  <input value={pcStageWeight} onChange={e => setPcStageWeight(e.target.value)} type="number" placeholder="0" min={0}
-                    className="w-40 border-2 border-red-300 rounded-xl px-4 py-2 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" style={{ color: MAROON }} />
-                </div>
-                <span className="text-xs text-gray-500 self-center">รวมทุก PO ที่ import — ใช้คิด Est Air</span>
+              <div className="flex items-center gap-3 flex-wrap pt-1">
+                <span className="text-xs text-gray-500 self-center">น้ำหนักรวมกรอกในกล่อง “ข้อมูลจัดซื้อ” ด้านล่าง</span>
                 <button onClick={addStagedToCart} className="px-4 py-2 rounded-lg text-white text-sm font-semibold ml-auto" style={{ background: MAROON }}>+ Add to request</button>
               </div>
             </div>
@@ -824,6 +815,9 @@ export default function ScmRequestPage() {
             const g: Record<string, { vend: string | null; count: number; sum: number; uoms: Set<string> }> = {}
             cart.forEach(c => { const po = c.poNoDoc || "-"; const x = (g[po] ||= { vend: c.vendorName || null, count: 0, sum: 0, uoms: new Set() }); x.count++; x.sum += Number(c.pullMaterialQty) || 0; if (c.bomUom) x.uoms.add(c.bomUom) })
             const removePoFromCart = (po: string) => setCart(prev => prev.filter(c => (c.poNoDoc || "-") !== po))
+            const setPoUom = (po: string, u: string) => setCart(prev => prev.map(c => ((c.poNoDoc || "-") === po ? { ...c, bomUom: u } : c)))
+            const uomOf = (po: string) => { const s = [...g[po].uoms]; return s.length === 1 ? s[0] : "" }
+            const uomOpts = [...new Set([...pcUoms, ...cart.map(c => c.bomUom).filter(Boolean) as string[]])]
             return (
               <div className="border rounded-xl overflow-auto mt-3">
                 <table className="w-full text-xs">
@@ -837,7 +831,13 @@ export default function ScmRequestPage() {
                         <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
                         <td className="px-3 py-1.5 max-w-[220px] truncate" title={g[po].vend || ""}>{g[po].vend || "-"}</td>
                         <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(g[po].sum)}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">{[...g[po].uoms].join(", ") || "-"}</td>
+                        <td className="px-3 py-1.5">
+                          <select value={uomOf(po)} onChange={e => setPoUom(po, e.target.value)}
+                            className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-red-200">
+                            <option value="">{[...g[po].uoms].join(", ") || "— UOM —"}</option>
+                            {uomOpts.map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                        </td>
                         <td className="px-3 py-1.5 text-center"><button onClick={() => removePoFromCart(po)} className="text-gray-300 hover:text-red-500" title="ลบทั้ง PO">✕</button></td>
                       </tr>
                     ))}
@@ -886,6 +886,13 @@ export default function ScmRequestPage() {
                 {pcEstAir
                   ? <span className="text-xs font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-2.5 py-1">🔒 Est Air ≈ {fmt(pcEstAir.est)} USD{pcEstAir.add ? <span className="text-amber-600"> (+{pcEstAir.inc})</span> : null}</span>
                   : <span className="text-[11px] text-gray-400">กรอก Air Port + น้ำหนักรวม → คำนวณ Est Air อัตโนมัติ</span>}
+              </div>
+              {/* Weight (once per doc) — drives Est Air */}
+              <div className="flex items-center gap-3 flex-wrap rounded-lg bg-white border border-red-200 px-3 py-2">
+                <label className="text-sm font-bold" style={{ color: MAROON }}>น้ำหนักรวม (kg) <span className="text-red-500">*</span></label>
+                <input value={pcWeight} onChange={e => setPcWeight(e.target.value)} type="number" placeholder="0" min={0}
+                  className="w-40 border-2 border-red-300 rounded-xl px-4 py-2 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" style={{ color: MAROON }} />
+                <span className="text-xs text-gray-500">รวมทั้งใบ ({new Set(cart.map(c => c.poNoDoc || "-")).size} PO) — ใช้คิด Est Air</span>
               </div>
               <div className="grid sm:grid-cols-3 gap-3">
                 <div>

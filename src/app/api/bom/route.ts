@@ -59,6 +59,15 @@ export async function GET(req: NextRequest) {
     } catch (e: any) { return NextResponse.json({ error: e?.message || "vendors failed", vendors: [] }, { status: 500 }) }
   }
 
+  // UOMs mode: distinct bom_uom values in this BU — the PC by-PO "UOM" dropdown list.
+  if (sp.get("uoms")) {
+    if (!has("bom_uom")) return NextResponse.json({ uoms: [] })
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT DISTINCT bom_uom AS u FROM ${SRC} WHERE bom_uom IS NOT NULL AND bom_uom <> '' ORDER BY bom_uom`)
+      return NextResponse.json({ uoms: rows.map(r => r.u) })
+    } catch (e: any) { return NextResponse.json({ error: e?.message || "uoms failed", uoms: [] }, { status: 500 }) }
+  }
+
   // Vendor-POs mode: distinct POs (+ a little context) for one vendor — the PC "select some POs" list.
   const vendorPos = (sp.get("vendorPos") || "").trim()
   if (vendorPos) {
