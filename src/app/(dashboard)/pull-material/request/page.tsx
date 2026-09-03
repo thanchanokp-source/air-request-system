@@ -828,7 +828,7 @@ export default function ScmRequestPage() {
               <div className="border rounded-xl overflow-auto mt-3">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
-                    {["PO NO", "VENDOR", "# MATERIAL", "PULL material (รวม)", "UOM", ""].map(h =>
+                    {["PO NO", "VENDOR", "PULL material (รวม)", "UOM", ""].map(h =>
                       <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
@@ -836,7 +836,6 @@ export default function ScmRequestPage() {
                       <tr key={po} className="hover:bg-gray-50">
                         <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
                         <td className="px-3 py-1.5 max-w-[220px] truncate" title={g[po].vend || ""}>{g[po].vend || "-"}</td>
-                        <td className="px-3 py-1.5 text-right">{g[po].count}</td>
                         <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(g[po].sum)}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{[...g[po].uoms].join(", ") || "-"}</td>
                         <td className="px-3 py-1.5 text-center"><button onClick={() => removePoFromCart(po)} className="text-gray-300 hover:text-red-500" title="ลบทั้ง PO">✕</button></td>
