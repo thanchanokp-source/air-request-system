@@ -828,7 +828,7 @@ export default function ScmRequestPage() {
               <div className="border rounded-xl overflow-auto mt-3">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50"><tr>
-                    {["PO NO", "VENDOR", "PULL material (รวม)", "UOM", ""].map(h =>
+                    {["PO NO", "VENDOR", "PULL AIR", "UOM", ""].map(h =>
                       <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
