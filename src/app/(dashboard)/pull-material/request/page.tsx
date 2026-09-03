@@ -885,10 +885,16 @@ export default function ScmRequestPage() {
                   </select>
                 </div>
                 <div>
-                  <label className={lab}>เมือง / City <span className="text-gray-300">(รอมาสเตอร์)</span></label>
-                  <select value={pcCityId} onChange={e => setPcCityId(e.target.value)} className={box}>
+                  <label className={lab}>เมือง / City <span className="text-gray-300">(auto เติม Country/Port)</span></label>
+                  <select value={pcCityId} className={box}
+                    onChange={e => {
+                      const id = e.target.value; setPcCityId(id)
+                      const c = pcCities.find((x: any) => x.id === id)
+                      // Picking a city fills Country + Port (the port code maps to the LG master rate).
+                      if (c) setPcPur(p => ({ ...p, country: c.country || p.country, port: c.port || p.port, seaPort: "" }))
+                    }}>
                     <option value="">— เลือกเมือง —</option>
-                    {pcCities.map((c: any) => <option key={c.id} value={c.id}>{c.city}{c.country ? ` · ${c.country}` : ""}</option>)}
+                    {pcCities.map((c: any) => <option key={c.id} value={c.id}>{c.city}{c.port ? ` · ${c.port}` : ""}{c.country ? ` · ${c.country}` : ""}</option>)}
                   </select>
                 </div>
                 <div>

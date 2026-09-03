@@ -18,6 +18,37 @@ export default function Page() {
   const load = async () => { setLoading(true); try { const d = await fetch("/api/pull-material/cities").then(r => r.json()); setRows(d.rows || []) } finally { setLoading(false) } }
   useEffect(() => { load() }, [])
 
+  // Common origin airports — Port = IATA code (maps to the "origin" in the LG Master Rate → drives Est Air).
+  // Country = the LG Master Rate's country name (EN, so the request cascade + Est Air match); City = TH.
+  const AIRPORTS: { country: string; port: string; city: string }[] = [
+    { country: "HONG KONG", port: "HKG", city: "ฮ่องกง" },
+    { country: "TAIWAN", port: "TPE", city: "ไทเป" },
+    { country: "CHINA", port: "TAO", city: "ชิงเต่า" },
+    { country: "CHINA", port: "PVG", city: "เซี่ยงไฮ้" },
+    { country: "CHINA", port: "SZX", city: "เซินเจิ้น" },
+    { country: "CHINA", port: "CAN", city: "กวางโจว" },
+    { country: "CHINA", port: "XMN", city: "เซี่ยเหมิน" },
+    { country: "VIETNAM", port: "HAN", city: "ฮานอย" },
+    { country: "VIETNAM", port: "HPH", city: "ไฮฟอง" },
+    { country: "VIETNAM", port: "SGN", city: "โฮจิมินห์ซิตี้" },
+    { country: "JAPAN", port: "KIX", city: "โอซาก้า" },
+    { country: "INDIA", port: "DEL", city: "เดลี" },
+    { country: "INDIA", port: "CJB", city: "โคอิมบาตอร์" },
+    { country: "INDONESIA", port: "CGK", city: "จาการ์ตา" },
+    { country: "ITALY", port: "MXP", city: "มิลาน" },
+  ]
+  const seedAirports = async () => {
+    const have = new Set(rows.map(r => String(r.port || "").toUpperCase()))
+    const todo = AIRPORTS.filter(a => !have.has(a.port))
+    if (!todo.length) return alert("มีครบทั้ง 15 สนามบินแล้ว")
+    if (!confirm(`เพิ่ม ${todo.length} สนามบิน (ข้ามที่มีอยู่แล้ว)?`)) return
+    setBusy(true)
+    try {
+      for (const a of todo) await fetch("/api/pull-material/cities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(a) })
+      await load()
+    } finally { setBusy(false) }
+  }
+
   const add = async () => {
     if (!nw.city.trim()) return alert("กรอก City")
     setBusy(true)
@@ -48,8 +79,11 @@ export default function Page() {
 
   return (
     <div className="p-5 max-w-[900px] mx-auto space-y-4">
-      <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Master Purchase — Country / Port / City</h1>
-        <p className="text-sm text-gray-500">รายการเมืองต้นทาง (Purchasing เลือก City ตอนสร้าง request → country/port ตามมา)</p></div>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Master Purchase — Country / Port / City</h1>
+          <p className="text-sm text-gray-500">Purchasing เลือก City ตอนสร้าง request → Country/Port ตามมา · <b>Port = รหัสสนามบิน</b> ที่ map กับ Master Rate (LG)</p></div>
+        <button onClick={seedAirports} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50 whitespace-nowrap">✈ โหลดชุดสนามบิน (15)</button>
+      </div>
 
       {/* Add row */}
       <div className="bg-white rounded-xl border p-4">
