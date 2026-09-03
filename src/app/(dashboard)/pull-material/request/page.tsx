@@ -430,7 +430,7 @@ export default function ScmRequestPage() {
       if (!pcPur.incoterm) return alert("เลือก Incoterm")
       if (NEEDS_ADDRESS.includes(pcPur.incoterm) && !pcPur.pickup.trim()) return alert(`${pcPur.incoterm} ต้องระบุ Pickup address`)
       if (!String(pcWeight).trim() || !(Number(pcWeight) > 0)) return alert("กรอกน้ำหนักรวม (kg)")
-      pkgs = pcPkgs.map(x => ({ uom: x.uom.trim(), qty: Number(x.qty) || 0 })).filter(x => x.uom && x.qty > 0)
+      pkgs = pcPkgs.map(x => ({ uom: x.uom.trim(), qty: Number(x.qty) || 0 })).filter(x => x.uom && x.uom !== "__OTHER__" && x.qty > 0)
       if (!pkgs.length) return alert("เพิ่ม Package อย่างน้อย 1 บรรทัด (UOM + จำนวน)")
       const pu = {
         country: c, port: p, seaPort: sp, incoterm: pcPur.incoterm,
@@ -936,16 +936,17 @@ export default function ScmRequestPage() {
                 <div className="space-y-2">
                   {pcPkgs.map((pk, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <select value={pcUoms.includes(pk.uom) || pk.uom === "" ? pk.uom : "__OTHER__"}
-                        onChange={e => { const v = e.target.value; setPcPkgs(p => p.map((x, j) => j === i ? { ...x, uom: v === "__OTHER__" ? "" : v } : x)) }}
+                      <select value={pcUoms.includes(pk.uom) ? pk.uom : (pk.uom ? "__OTHER__" : "")}
+                        onChange={e => { const v = e.target.value; setPcPkgs(p => p.map((x, j) => j === i ? { ...x, uom: v } : x)) }}
                         className="w-40 border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200">
                         <option value="">— UOM —</option>
                         {pcUoms.map(u => <option key={u} value={u}>{u}</option>)}
                         <option value="__OTHER__">➕ อื่นๆ (พิมพ์เอง)</option>
                       </select>
-                      {!pcUoms.includes(pk.uom) && pk.uom !== "" && (
-                        <input value={pk.uom} onChange={e => setPcPkgs(p => p.map((x, j) => j === i ? { ...x, uom: e.target.value } : x))}
-                          placeholder="UOM" className="w-24 border border-amber-300 bg-amber-50 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
+                      {pk.uom !== "" && !pcUoms.includes(pk.uom) && (
+                        <input autoFocus value={pk.uom === "__OTHER__" ? "" : pk.uom}
+                          onChange={e => setPcPkgs(p => p.map((x, j) => j === i ? { ...x, uom: e.target.value || "__OTHER__" } : x))}
+                          placeholder="พิมพ์ UOM" className="w-24 border border-amber-300 bg-amber-50 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
                       )}
                       <input type="number" min={0} value={pk.qty} onChange={e => setPcPkgs(p => p.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))}
                         placeholder="จำนวน" className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
