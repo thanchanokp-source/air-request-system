@@ -642,6 +642,7 @@ export default function DashboardPage() {
   const [portFilter,    setPortFilter]    = useState("")
   const [countryFilter, setCountryFilter] = useState("")
   const [claimF, setClaimF] = useState<string[]>([])
+  const [hawbF, setHawbF] = useState<string[]>([])
   const [drillCountry, setDrillCountry]   = useState<string|null>(null)
 
   const [poMap, setPoMap] = useState<Record<string,string>>({})
@@ -680,8 +681,9 @@ export default function DashboardPage() {
            (!cpF.length   || cpF.includes(row.customerPO)) &&
            (!portFilter   || row.port===portFilter) &&
            (!countryFilter|| countryKey(row.country)===countryFilter) &&
-           (!claimF.length|| claimF.includes(row.claimDepartment))
-  }), [allSOs,yearFilter,monthFilter,statusFilter,brandF,docF,soF,cpF,portFilter,countryFilter,claimF])
+           (!claimF.length|| claimF.includes(row.claimDepartment)) &&
+           (!hawbF.length || hawbF.includes(row.hawbNo))
+  }), [allSOs,yearFilter,monthFilter,statusFilter,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF])
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
@@ -828,10 +830,11 @@ export default function DashboardPage() {
   const docNos   = [...new Set(allSOs.map((r:any)=>r.request.documentNo).filter(Boolean))].sort()
   const sos      = [...new Set(allSOs.map(r=>r.so).filter(Boolean))].sort()
   const cps      = [...new Set(allSOs.map(r=>r.customerPO).filter(Boolean))].sort()
+  const hawbs    = [...new Set(allSOs.map((r:any)=>r.hawbNo).filter(Boolean))].sort()
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
   const countries= [...new Set(allSOs.map(r=>countryKey(r.country)).filter(Boolean))].sort()
-  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||brandF.length||docF.length||soF.length||cpF.length||portFilter||countryFilter||claimF.length)
-  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setBrandF([]); setDocF([]); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]) }
+  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||brandF.length||docF.length||soF.length||cpF.length||portFilter||countryFilter||claimF.length||hawbF.length)
+  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setBrandF([]); setDocF([]); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]); setHawbF([]) }
 
   const H = 210
 
@@ -962,7 +965,7 @@ export default function DashboardPage() {
               onChange={labels=>setMonthFilter(labels.map(l=>MONTH_OPTS.find(m=>m.label===l)?.value||l))}/>
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-8 gap-2">
           <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
             <option value="">All Status</option>
             <option value="PENDING">Pending</option>
@@ -978,6 +981,7 @@ export default function DashboardPage() {
             {countries.map((c:any)=><option key={c} value={c}>{c}</option>)}
           </select>
           <MultiSelect label="Claim Dept" options={CLAIM_DEPTS} value={claimF} onChange={setClaimF}/>
+          <MultiSelect label="HAWB#..." options={hawbs} value={hawbF} onChange={setHawbF}/>
         </div>
       </div>
 
