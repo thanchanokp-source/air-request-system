@@ -127,7 +127,8 @@ export async function POST(req: NextRequest) {
   if (requestType === "PURCHASING") await recomputePullAir(created.id).catch(() => {})
 
   // Alert the owner(s) of the landing stage: SCM → the Purchasing pool; PC → the DPM approver (by BU).
-  await notifyPullStage(created.id, created.status).catch(() => {})
+  console.log(`[pull-create] ${created.documentNo} type=${requestType} → status=${created.status} · notifying`)
+  await notifyPullStage(created.id, created.status).catch((e) => console.log(`[pull-create] notify failed: ${String(e).slice(0, 200)}`))
 
   return NextResponse.json({ request: created })
 }

@@ -42,7 +42,7 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
     return
   }
 
-  if (!cfg) return
+  if (!cfg) { console.log(`[pull-notify] no STAGE config for status=${status} (${rq.documentNo})`); return }
   // PC approval (PENDING_VP_PUR) = a SINGLE approver routed by BU → email only that person.
   const pcTo = status === "PENDING_VP_PUR" ? pcApprover(rq.bu) : null
   const users = await (prisma.user as any).findMany({
@@ -53,7 +53,8 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
   })
   const seen = new Set<string>()
   const recips = users.filter((u: any) => u.email && !seen.has(u.email.toLowerCase()) && seen.add(u.email.toLowerCase()))
-  if (!recips.length) return
+  console.log(`[pull-notify] ${rq.documentNo} status=${status} bu=${rq.bu} pcTo=${pcTo ?? "-"} roles=${cfg.roles.join(",")} recips=${recips.length}${rq.isTest ? " TEST→" + (testTo ?? "?") : ""}`)
+  if (!recips.length) { console.log(`[pull-notify] NO RECIPIENT for ${rq.documentNo} status=${status} (pcTo=${pcTo ?? "-"}) — no email sent`); return }
 
   await runWithTestMail(testTo, async () => {
     for (const u of recips) {
