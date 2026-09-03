@@ -310,6 +310,21 @@ export default function ScmRequestPage() {
   const pcUomOf = (po: string) => [...(pcPoSum[po]?.uoms || [])].join(", ") || "-"
   const pcPullOf = (po: string) => pcPullQty[po] ?? String(pcPoSum[po]?.sum ?? 0)
 
+  // PC flow = ONE step: the selected POs (+ imported) ARE the request items (no "Add to request").
+  // Keep the cart auto-synced from the selection so Submit works in a single go.
+  useEffect(() => {
+    if (reqType !== "PURCHASING") return
+    const sel = pcSelMats.map(m => {
+      const po = m.poNoDoc || "-"; const g = pcPoSum[po]
+      const pullPO = Number(pcPullQty[po] ?? (g?.sum ?? 0)) || 0
+      const share = g && g.sum > 0 ? (Number(m.poqtyBomdummy) || 0) / g.sum : (g && g.count ? 1 / g.count : 0)
+      return { ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Math.round(pullPO * share * 100) / 100, weight: null, ...emptyScm }
+    })
+    const staged = pcStaged.flatMap(s => s.mats.map(m => ({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: null, ...emptyScm })))
+    const merged = [...sel, ...staged.filter(s => !sel.some(x => x.key === s.key))]
+    setCart(merged as CartItem[])
+  }, [reqType, pcSelMats, pcPullQty, pcStaged]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Add: the per-PO "Pull PO" qty is distributed across its materials (by poqtyBomdummy share).
   const addPcToCart = () => {
     if (!pcSelMats.length) return alert("เลือก PO / material ก่อน")
@@ -630,13 +645,10 @@ export default function ScmRequestPage() {
             </div>
           )}
 
-          {/* 3 · add selected POs to the cart (น้ำหนักรวมกรอกในกล่อง "ข้อมูลจัดซื้อ" ด้านล่าง) */}
           {pcSelMats.length > 0 && (
-            <div className="flex items-center gap-3 flex-wrap rounded-xl border-2 border-red-200 bg-red-50/50 px-4 py-3">
-              <span className="text-xs text-gray-500">เลือกแล้ว {pcSelPos.size} PO · {pcSelMats.length} material</span>
-              <button onClick={addPcToCart} disabled={pcLoad} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 ml-auto" style={{ background: MAROON }}>
-                {pcLoad ? "…" : "+ Add to request"}
-              </button>
+            <div className="flex items-center gap-3 flex-wrap rounded-xl border border-emerald-200 bg-emerald-50/40 px-4 py-2.5">
+              <span className="text-xs font-semibold text-emerald-800">✓ เลือกแล้ว {pcSelPos.size} PO · {pcSelMats.length} material</span>
+              <span className="text-[11px] text-gray-500">กรอก “ข้อมูลจัดซื้อ” + น้ำหนัก ด้านล่าง แล้วกด Submit ได้เลย (ไม่ต้อง Add)</span>
             </div>
           )}
 
@@ -650,21 +662,17 @@ export default function ScmRequestPage() {
             {pcBusy && <span className="text-xs text-gray-400">กำลังประมวลผล…</span>}
           </div>
 
-          {/* Imported POs (staged) → enter ONE total weight → Add */}
+          {/* Imported POs (staged) → included automatically; weight in the purchase box → Submit */}
           {pcStaged.length > 0 && (
             <div className="rounded-lg border border-sky-200 bg-sky-50/40 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-sky-800">📥 PO ที่ import ได้ ({pcStaged.length}) · material รวม {pcStaged.reduce((s, x) => s + x.mats.length, 0)}</p>
+                <p className="text-xs font-semibold text-sky-800">📥 PO ที่ import ได้ ({pcStaged.length}) · material รวม {pcStaged.reduce((s, x) => s + x.mats.length, 0)} — รวมในคำขอให้อัตโนมัติ</p>
                 <button onClick={() => setPcStaged([])} className="text-[11px] text-gray-400 hover:text-red-500">✕ ล้าง</button>
               </div>
               <div className="max-h-32 overflow-auto"><table className="w-full text-xs">
                 <thead><tr className="text-gray-500"><th className="text-left px-2 py-1">Vendor</th><th className="text-left px-2 py-1">PO</th><th className="text-right px-2 py-1"># material</th></tr></thead>
                 <tbody>{pcStaged.map((s, i) => <tr key={i} className="border-t border-sky-100"><td className="px-2 py-1">{s.vend || "-"}</td><td className="px-2 py-1 font-medium">{s.po}</td><td className="px-2 py-1 text-right">{s.mats.length}</td></tr>)}</tbody>
               </table></div>
-              <div className="flex items-center gap-3 flex-wrap pt-1">
-                <span className="text-xs text-gray-500 self-center">น้ำหนักรวมกรอกในกล่อง “ข้อมูลจัดซื้อ” ด้านล่าง</span>
-                <button onClick={addStagedToCart} className="px-4 py-2 rounded-lg text-white text-sm font-semibold ml-auto" style={{ background: MAROON }}>+ Add to request</button>
-              </div>
             </div>
           )}
 
@@ -814,33 +822,9 @@ export default function ScmRequestPage() {
         <h2 className="font-semibold text-gray-800">Items to pull {reqType === "PURCHASING" ? `(${new Set(cart.map(c => c.poNoDoc || "-")).size} PO · ${cart.length} material)` : `(${cart.length})`}</h2>
         <p className="text-xs text-gray-500 mt-1">Requester: <span className="font-medium text-gray-700">{requesterName || "-"}</span></p>
         {cart.length === 0 ? <p className="text-sm text-gray-400 mt-3">No items yet — {reqType === "PURCHASING" ? "เลือก vendor / PO ด้านบน" : "search an SO and pick materials."}</p> :
-          reqType === "PURCHASING" ? (() => {
-            // PC view: group the cart BY PO (sum PULL material, count materials, uoms).
-            const g: Record<string, { vend: string | null; count: number; sum: number; uoms: Set<string> }> = {}
-            cart.forEach(c => { const po = c.poNoDoc || "-"; const x = (g[po] ||= { vend: c.vendorName || null, count: 0, sum: 0, uoms: new Set() }); x.count++; x.sum += Number(c.pullMaterialQty) || 0; if (c.bomUom) x.uoms.add(c.bomUom) })
-            const removePoFromCart = (po: string) => setCart(prev => prev.filter(c => (c.poNoDoc || "-") !== po))
-            return (
-              <div className="border rounded-xl overflow-auto mt-3">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50"><tr>
-                    {["PO NO", "VENDOR", "PULL AIR", "UOM", ""].map(h =>
-                      <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>)}
-                  </tr></thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {Object.keys(g).map(po => (
-                      <tr key={po} className="hover:bg-gray-50">
-                        <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
-                        <td className="px-3 py-1.5 max-w-[220px] truncate" title={g[po].vend || ""}>{g[po].vend || "-"}</td>
-                        <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(g[po].sum)}</td>
-                        <td className="px-3 py-1.5 whitespace-nowrap">{[...g[po].uoms].join(", ") || "-"}</td>
-                        <td className="px-3 py-1.5 text-center"><button onClick={() => removePoFromCart(po)} className="text-gray-300 hover:text-red-500" title="ลบทั้ง PO">✕</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
-          })() : (
+          reqType === "PURCHASING" ? (
+            <p className="text-xs text-gray-400 mt-2">รายการมาจาก “สรุปตาม PO” ด้านบน · กรอกข้อมูลจัดซื้อ + น้ำหนัก แล้วกด Submit</p>
+          ) : (
           <div className="border rounded-xl overflow-auto mt-3">
             <table className="w-full text-xs">
               <thead className="bg-gray-50"><tr>
