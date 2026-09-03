@@ -16,7 +16,31 @@ export default function MasterRatePage() {
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [recalcing, setRecalcing] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const isAdmin = (session?.user as any)?.role === "ADMIN"
+
+  // Download a full-fidelity backup (COUNTRY / BU / THB / USD) before changing rates.
+  const backup = () => {
+    const data = rates.map(r => ({ COUNTRY: r.country, BU: r.bu || "ALL", "THB/KG": r.ratePerKg || 0, "USD/KG": r.rateUsd || 0 }))
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "MasterRate")
+    const ts = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")
+    XLSX.writeFile(wb, `master-rate-backup_${ts}.xlsx`)
+  }
+
+  // Recompute Est Air for existing docs from the current rates (only items not yet shipped — actuals untouched).
+  const recalc = async () => {
+    if (!confirm("คำนวณ Est Air ใหม่จาก rate ปัจจุบัน?\n(เฉพาะเอกสารที่ยังไม่ ship — ไม่แตะ actual / เอกสารที่จบแล้ว)")) return
+    setRecalcing(true)
+    try {
+      const r = await fetch("/api/admin/recalc-freight", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) })
+      const d = await r.json()
+      if (r.ok) alert(`คำนวณ Est Air ใหม่แล้ว ✓\nอัปเดต ${d.updated} / สแกน ${d.scanned} รายการ`)
+      else alert("Error: " + (d.error || "recalc failed"))
+    } finally { setRecalcing(false) }
+  }
 
   const load = () => {
     setLoading(true)
@@ -91,12 +115,20 @@ export default function MasterRatePage() {
           <p className="text-xs text-gray-400 mt-0.5">Air freight rate by Country — <b>THB/KG</b> (NYG / GW / TRM) · <b>USD/KG</b> (EA). Est. Air Freight = Gross Weight × Rate</p>
         </div>
         {canEdit ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={backup} disabled={!rates.length}
+              className="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50">⬇ Backup</button>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={onImport} className="hidden" />
             <button onClick={() => fileRef.current?.click()} disabled={importing}
               className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-100 disabled:opacity-50">
               {importing ? "Importing…" : "⬆ Import Excel"}
             </button>
+            {isAdmin && (
+              <button onClick={recalc} disabled={recalcing}
+                className="bg-amber-50 border border-amber-300 text-amber-800 px-3 py-2 rounded-lg text-sm font-medium hover:bg-amber-100 disabled:opacity-50">
+                {recalcing ? "กำลังคำนวณ…" : "↻ Recalculate EST"}
+              </button>
+            )}
             <button onClick={() => setAdding(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">+ ADD</button>
           </div>
         ) : (
