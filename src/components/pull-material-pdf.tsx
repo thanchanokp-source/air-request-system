@@ -14,7 +14,7 @@ const s = StyleSheet.create({
   page: { padding: 34, fontSize: 9, fontFamily: "Sarabun", color: "#1e293b" },
   header: { backgroundColor: MAROON, padding: 14, borderRadius: 6, marginBottom: 14, textAlign: "center" },
   brand: { color: "#e8b0b0", fontSize: 8, letterSpacing: 2 },
-  title: { color: "#fff", fontSize: 16, fontFamily: "SarabunB", marginTop: 3, letterSpacing: 2 },
+  title: { color: "#fff", fontSize: 15, fontFamily: "SarabunB", marginTop: 3, letterSpacing: 1 },
   docNo: { fontSize: 13, fontFamily: "SarabunB", color: MAROON },
   sub: { fontSize: 8, color: "#64748b", marginBottom: 10 },
   grid: { flexDirection: "row", flexWrap: "wrap", backgroundColor: "#f8fafc", borderRadius: 6, padding: 8, marginBottom: 10 },
@@ -55,13 +55,13 @@ export function PullMaterialPdf({ req }: { req: any }) {
       <Page size="A4" style={s.page}>
         <View style={s.header}>
           <Text style={s.brand}>NAN YANG TEXTILE</Text>
-          <Text style={s.title}>PULL MATERIAL</Text>
+          <Text style={s.title}>Request Import RM by Air</Text>
         </View>
 
         <Text style={s.docNo}>{req.documentNo} · {req.bu}</Text>
         <Text style={s.sub}>Requester: {req.requesterName || "-"} · {dt(req.createdAt)}</Text>
 
-        <Text style={s.sectionTitle}>Shipment</Text>
+        <Text style={s.sectionTitle}>Confirmed In-house</Text>
         <View style={s.grid}>
           <Cell label="Country" value={d0.country} />
           <Cell label="Port" value={d0.port || d0.seaPort} />
