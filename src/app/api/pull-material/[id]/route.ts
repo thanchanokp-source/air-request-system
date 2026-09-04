@@ -7,6 +7,14 @@ import { runWithTestMail } from "@/lib/test-ctx"
 import { notifyPullStage } from "@/lib/pull-notify"
 import { recomputePullAir } from "@/lib/pull-freight"
 import { magicLoginFor } from "@/lib/notify"
+import { pcApprover } from "@/lib/pull-approvers"
+
+// Role holders that own each stage — used to notify the CURRENT owner when a doc is recalled/rejected.
+const STAGE_ROLES: Record<string, string[]> = {
+  PENDING_PURCHASING: ["PURCHASING"], PENDING_SCM_DECISION: ["SCM_PULL"], PENDING_PC_DECISION: ["PURCHASING"],
+  PENDING_DVM_SCM: ["PULL_DVM_SCM"], PENDING_VP_SCM: ["VP_SCM"], PENDING_FINAL: ["PULL_PRESIDENT"],
+  PENDING_DVM_PUR: ["DVM_PUR"], PENDING_VP_PUR: ["VP_PUR"], APPROVED: ["LOGISTICS_IMPORT"],
+}
 
 // TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
 async function pullTestRecipient(id: string): Promise<string | null> {
@@ -109,6 +117,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.status && (PULL_FLOW as readonly string[]).concat(["NO_AIR", "RECALLED", "REJECTED"]).includes(body.status)) {
     const data: any = { status: body.status }
     const isStop = body.status === "RECALLED" || body.status === "REJECTED"
+    // The stage the doc is on BEFORE this change (lost after the update) — used to alert the current owner on recall.
+    const before = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { status: true, bu: true } })
 
     if (isStop) {
       const reason = String((body.status === "REJECTED" ? body.rejectReason : body.recallReason) || "").trim()
@@ -146,8 +156,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (isStop) {
       const word = body.status === "REJECTED" ? "Rejected" : "Recalled"
       const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, include: { items: true } })
-      // Notify the whole chain (everyone who acted) + the requester.
-      const recipients = [...new Set([...(rq.actors || []), rq.requesterEmail].filter(Boolean))].filter((e) => e !== actorEmail)
+      // The person/role the doc was WAITING on (so they stop waiting) + everyone who acted + the requester.
+      let stageEmails: string[] = []
+      if (before?.status === "PENDING_VP_PUR") { const a = pcApprover(before.bu); if (a) stageEmails = [a] }
+      else if (before?.status && STAGE_ROLES[before.status]) {
+        const us = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: { in: STAGE_ROLES[before.status] } }, { roles: { hasSome: STAGE_ROLES[before.status] } }] }, select: { email: true } })
+        stageEmails = us.map((u: any) => u.email).filter(Boolean)
+      }
+      const recipients = [...new Set([...(rq.actors || []), rq.requesterEmail, ...stageEmails].filter(Boolean))].filter((e) => e !== actorEmail)
       if (recipients.length) {
         const sos = [...new Set((rq.items || []).map((i: any) => i.soNoDoc).filter(Boolean))].join(", ")
         const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
