@@ -502,7 +502,6 @@ export default function ScmRequestPage() {
       )}
       <div>
         <h1 className="text-xl font-bold" style={{ color: MAROON }}>SCM — Pull Material</h1>
-        <p className="text-sm text-gray-500">Request: pick SO / material + pull qty · Send Approve: decide air after LG + PC fill their data</p>
       </div>
 
       {/* Sub-tabs */}
