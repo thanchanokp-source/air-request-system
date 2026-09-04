@@ -13,6 +13,7 @@ export default function Page() {
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
   // edits[docId] = { hawbNo, invoiceNo, actualAir } — ONE set per document (1 shipment / 1 doc).
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
 
@@ -66,9 +67,21 @@ export default function Page() {
         <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
 
+      {/* Request-type toggle */}
+      <div className="flex gap-1.5">
+        {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "PC request"]] as const).map(([v, label]) => {
+          const n = v === "ALL" ? reqs.length : reqs.filter(r => (r.requestType || "SCM") === v).length
+          return (
+            <button key={v} onClick={() => setTypeF(v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${typeF === v ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+              style={typeF === v ? { background: MAROON } : undefined}>{label} <span className="opacity-70">({n})</span></button>
+          )
+        })}
+      </div>
+
       {loading ? <p className="text-sm text-gray-400">Loading…</p> :
-        reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">No approved documents yet</div> :
-          reqs.map(rq => {
+        (() => { const shown = reqs.filter(r => typeF === "ALL" || (r.requestType || "SCM") === typeF); return shown.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">No approved documents</div> :
+          shown.map(rq => {
             const estTotal = rq.items.reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
             const actTotal = raw(rq, "actualAir") === "" ? 0 : Number(raw(rq, "actualAir")) || 0
             const diff = actTotal - estTotal
@@ -101,6 +114,61 @@ export default function Page() {
                       </>}
                   </div>
                 </div>
+
+                {/* Shipment details (like the DVM Purchase view) — 1 ship/1 doc so shown once */}
+                {(() => {
+                  const its = rq.items || []
+                  const d0 = its.find((x: any) => x.airFreightCost != null) || its[0] || {}
+                  const byPo: Record<string, { qty: number; uoms: Set<string> }> = {}
+                  its.forEach((it: any) => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set() }); g.qty += Number(it.pullMaterialQty) || 0; if (it.bomUom) g.uoms.add(it.bomUom) })
+                  const qtyAir = its.reduce((s: number, it: any) => s + (Number(it.pullMaterialQty) || 0), 0)
+                  const pkgs = Array.isArray(rq.packages) ? rq.packages : []
+                  const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (d0.cartons ? String(fmt(d0.cartons)) : "")
+                  const dimStr = (d0.boxW || d0.boxL || d0.boxH) ? `${d0.boxW || "-"}×${d0.boxL || "-"}×${d0.boxH || "-"} cm` : ""
+                  const Info = ({ label, value }: { label: string; value: any }) => <div><div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div><div className="text-gray-800 text-sm">{value || "-"}</div></div>
+                  return (
+                    <div className="mt-3 space-y-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-xl bg-gray-50 p-3">
+                        <Info label="Country" value={d0.country} />
+                        <Info label="Port" value={d0.port || d0.seaPort} />
+                        <Info label="City" value={d0.city} />
+                        <Info label="Incoterm" value={d0.incoterm} />
+                        <Info label="QTY Air" value={fmt(qtyAir)} />
+                        <Info label="Est Air" value={estTotal ? `${fmt(estTotal)} USD` : "-"} />
+                        <Info label="L/T Air" value={d0.leadTimeAir} />
+                        <Info label="Weight (kg)" value={d0.weight != null ? fmt(d0.weight) : "-"} />
+                        <Info label="Need date" value={d0.needDate ? fmtDate(d0.needDate) : "-"} />
+                        <Info label="Package" value={pkgStr} />
+                        <Info label="Dimension" value={dimStr} />
+                        {["EX-WORK", "FCA"].includes(d0.incoterm) && <Info label="Pickup address" value={d0.pickupAddress} />}
+                        {rq.remark && <div className="col-span-2 sm:col-span-4"><Info label="Remark" value={rq.remark} /></div>}
+                      </div>
+                      {(rq.attachments || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {(rq.attachments || []).map((a: any) => (
+                            <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] bg-sky-50 border border-sky-200 text-sky-800 rounded-full px-2.5 py-1 hover:bg-sky-100">📎 <span className="max-w-[200px] truncate" title={a.fileName}>{a.fileName}</span></a>
+                          ))}
+                        </div>
+                      )}
+                      <div className="border rounded-xl overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 text-gray-500"><tr>{["PO NO", "QTY AIR", "UOM"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {Object.keys(byPo).map(po => (
+                              <tr key={po} className="hover:bg-gray-50">
+                                <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
+                                <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(byPo[po].qty)}</td>
+                                <td className="px-3 py-1.5 whitespace-nowrap">{[...byPo[po].uoms].join(", ") || "-"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 {/* ONE entry per document (1 shipment / 1 doc): HAWB · INV · Actual Air Freight */}
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-xl bg-green-50/40 border border-green-100 p-3">
                   <div>
@@ -119,7 +187,7 @@ export default function Page() {
                 <p className="mt-2 text-[11px] text-gray-400">กรอกครั้งเดียวต่อ 1 document · Est Air = ค่าที่อนุมัติ (freeze) ไว้เทียบกับ Actual · Save = บันทึก draft · ปิดงาน = COMPLETED</p>
               </div>
             )
-          })}
+          }) })()}
     </div>
   )
 }
