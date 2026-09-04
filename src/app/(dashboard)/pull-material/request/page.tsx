@@ -908,13 +908,18 @@ export default function ScmRequestPage() {
                 <div>
                   <label className={lab}>Country <span className="text-red-500">*</span></label>
                   <PcPick value={pcPur.country} list={countries} sel={box} placeholder="— country —"
-                    onChange={v => setPcPur(p => ({ ...p, country: v, port: "", seaPort: "" }))} />
+                    onChange={v => { setPcPur(p => ({ ...p, country: v, port: "", seaPort: "" })); setPcCityId("") }} />
                 </div>
                 <div>
                   <label className={lab}>Air Port <span className="text-red-500">*</span></label>
                   <PcPick value={pcPur.port} list={airPorts} sel={box} disabled={!pcPur.country}
                     placeholder={pcPur.country ? (airPorts.length ? "— air port —" : "no air port") : "country ก่อน"}
-                    onChange={v => setPcPur(p => ({ ...p, port: v }))} />
+                    onChange={v => {
+                      setPcPur(p => ({ ...p, port: v }))
+                      // Picking a Port syncs the City (from Master Purchase) to the one with that port.
+                      const c = pcCities.find((x: any) => String(x.port || "").toUpperCase() === String(v || "").toUpperCase())
+                      setPcCityId(c ? c.id : "")
+                    }} />
                 </div>
                 <div>
                   <label className={lab}>Sea Port <span className="text-gray-300">(optional)</span></label>
