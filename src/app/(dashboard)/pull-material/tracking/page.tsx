@@ -52,18 +52,22 @@ export default function Page() {
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
   const [pdfing, setPdfing] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewName, setPreviewName] = useState("")
 
-  // Download the document PDF (available once LG has entered the actual air freight).
-  const downloadPdf = async (rq: any) => {
+  // Build the document PDF and open it in a preview popup (with a Download button inside).
+  const openPdf = async (rq: any) => {
     setPdfing(rq.id)
     try {
       const [{ pdf }, { PullMaterialPdf }] = await Promise.all([import("@react-pdf/renderer"), import("@/components/pull-material-pdf")])
       const blob = await pdf(React.createElement(PullMaterialPdf, { req: rq }) as any).toBlob()
       const url = URL.createObjectURL(blob)
-      const a = document.createElement("a"); a.href = url; a.download = `${rq.documentNo}.pdf`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+      setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url })
+      setPreviewName(`${rq.documentNo}.pdf`)
     } catch (e) { console.error(e); alert("PDF generation failed") } finally { setPdfing(null) }
   }
+  const closePdf = () => setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null })
+  const downloadPdf = () => { if (!previewUrl) return; const a = document.createElement("a"); a.href = previewUrl; a.download = previewName; document.body.appendChild(a); a.click(); document.body.removeChild(a) }
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
@@ -206,7 +210,7 @@ export default function Page() {
                             {!done && (
                               <div className="mt-2 text-[11px] flex items-center gap-1.5 whitespace-nowrap" style={{ color: "#a9600d" }}>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 shrink-0"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-                                <span>รอ <b>{waitName}</b> · {waitDays === 0 ? "วันนี้" : `รอมาแล้ว ${waitDays} วัน`} <span className="text-gray-400">(ตั้งแต่ {fmtDate(rq.updatedAt || rq.createdAt)})</span></span>
+                                <span>รอ <b>{waitName}</b> · <span className="font-semibold">{waitDays} วัน</span></span>
                               </div>
                             )}
                           </div>
@@ -232,8 +236,8 @@ export default function Page() {
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         {["APPROVED", "COMPLETED"].includes(rq.status) && (
-                          <button onClick={() => downloadPdf(rq)} disabled={pdfing === rq.id} title="Download document PDF"
-                            className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50 mr-1" style={{ background: MAROON }}>{pdfing === rq.id ? "…" : "↓ PDF"}</button>
+                          <button onClick={() => openPdf(rq)} disabled={pdfing === rq.id} title="Preview / download PDF"
+                            className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50 mr-1" style={{ background: MAROON }}>{pdfing === rq.id ? "…" : "🔍 PDF"}</button>
                         )}
                         {(isAdmin || rq.createdById === userId) && !["APPROVED", "COMPLETED", "RECALLED"].includes(rq.status) && (
                           <button onClick={() => recall(rq)} disabled={busy === rq.id} title="Recall (creator only)"
@@ -250,6 +254,22 @@ export default function Page() {
               </tbody>
             </table>
           </div>}
+
+      {/* PDF preview popup */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={closePdf}>
+          <div className="bg-white rounded-2xl w-full max-w-4xl h-[88vh] flex flex-col overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <span className="text-sm font-semibold text-gray-700">📄 {previewName}</span>
+              <div className="flex items-center gap-2">
+                <button onClick={downloadPdf} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>↓ Download PDF</button>
+                <button onClick={closePdf} className="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ปิด</button>
+              </div>
+            </div>
+            <iframe src={previewUrl} title="PDF preview" className="flex-1 w-full" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
