@@ -165,9 +165,9 @@ export default function Page() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                        {rq.actualAir != null && (
-                          <button onClick={() => downloadPdf(rq)} disabled={pdfing === rq.id} title="Download PDF"
-                            className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:text-red-800 hover:border-red-300 disabled:opacity-50 mr-1">{pdfing === rq.id ? "…" : "↓ PDF"}</button>
+                        {["APPROVED", "COMPLETED"].includes(rq.status) && (
+                          <button onClick={() => downloadPdf(rq)} disabled={pdfing === rq.id} title="Download document PDF"
+                            className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50 mr-1" style={{ background: MAROON }}>{pdfing === rq.id ? "…" : "↓ PDF"}</button>
                         )}
                         {(isAdmin || rq.createdById === userId) && !["APPROVED", "COMPLETED", "RECALLED"].includes(rq.status) && (
                           <button onClick={() => recall(rq)} disabled={busy === rq.id} title="Recall (creator only)"
