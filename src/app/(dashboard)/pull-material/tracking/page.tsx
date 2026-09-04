@@ -2,10 +2,15 @@
 
 import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { MAROON, BUS, STATUS_LABEL, buColor } from "../_StageWork"
+import { MAROON, BUS, STATUS_LABEL, buColor, fmtDate } from "../_StageWork"
+import { pcApprover } from "@/lib/pull-approvers"
 
-const FLOW = ["PENDING_PURCHASING", "PENDING_LOGISTICS", "PENDING_SCM_DECISION", "PENDING_APPROVAL", "APPROVED"]
-const STEP_SHORT = ["Purchasing", "LG", "SCM", "Approve", "Done"]
+// Pipeline steps branch by request type. Each status maps to the CURRENT (in-progress) step index;
+// steps before it are done. cur >= steps.length → fully done.
+const PC_STEPS = ["PC Req", "DVM App", "LG"]
+const SCM_STEPS = ["SCM Req", "Purchase", "SCM Decision", "SCM App·1", "SCM App·2", "LG"]
+const PC_CUR: Record<string, number> = { PENDING_PURCHASING: 1, PENDING_PC_DECISION: 1, PENDING_VP_PUR: 1, PENDING_DVM_PUR: 1, APPROVED: 2, COMPLETED: 3 }
+const SCM_CUR: Record<string, number> = { PENDING_PURCHASING: 1, PENDING_LOGISTICS: 1, PENDING_SCM_DECISION: 2, PENDING_DVM_SCM: 3, PENDING_VP_SCM: 4, PENDING_FINAL: 4, APPROVED: 5, COMPLETED: 6 }
 
 export default function Page() {
   const { data: session, status: auth } = useSession()
@@ -62,8 +67,6 @@ export default function Page() {
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Pull RM / Admin only</p></div>
-
-  const stepIdx = (s: string) => FLOW.indexOf(s === "COMPLETED" ? "APPROVED" : s)
 
   // Filter by search (doc no / SO) + status.
   const qq = q.trim().toLowerCase()
@@ -124,9 +127,16 @@ export default function Page() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {shown.map(rq => {
-                  const idx = stepIdx(rq.status)
                   const noAir = rq.status === "NO_AIR"
                   const sos = [...new Set((rq.items || []).map((i: any) => i.soNoDoc).filter(Boolean))] as string[]
+                  const isPC = (rq.requestType || "SCM") === "PURCHASING"
+                  const steps = isPC ? PC_STEPS : SCM_STEPS
+                  const cur = isPC ? (PC_CUR[rq.status] ?? 1) : (SCM_CUR[rq.status] ?? 1)
+                  const stopped = ["RECALLED", "REJECTED", "NO_AIR"].includes(rq.status)
+                  const done = cur >= steps.length
+                  const waitName = rq.status === "APPROVED" ? "Logistics"
+                    : (isPC && rq.status === "PENDING_VP_PUR") ? (pcApprover(rq.bu)?.split("@")[0] || "DVM Purchase")
+                    : (steps[cur] || "")
                   return (
                     <tr key={rq.id} className="hover:bg-gray-50">
                       <td className="px-4 py-2.5 whitespace-nowrap">
@@ -135,14 +145,33 @@ export default function Page() {
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 max-w-[220px] truncate" title={sos.join(", ")}>{sos.join(", ") || "-"}</td>
                       <td className="px-4 py-2.5 text-center text-gray-500">{rq.items.length}</td>
-                      <td className="px-4 py-2.5">
-                        {noAir ? <span className="text-xs text-gray-400">—</span> : (
-                          <div className="flex items-center gap-1.5">
-                            {FLOW.map((s, i) => (
-                              <span key={s} title={STEP_SHORT[i]} className="w-2 h-2 rounded-full"
-                                style={{ background: i < idx ? "#16a34a" : i === idx ? MAROON : "#e5e7eb" }} />
-                            ))}
-                            <span className="text-[11px] text-gray-500 ml-1">{STEP_SHORT[Math.min(idx, FLOW.length - 1)]}</span>
+                      <td className="px-4 py-3">
+                        {stopped ? <span className="text-xs text-gray-400">— {STATUS_LABEL[rq.status] || rq.status}</span> : (
+                          <div style={{ minWidth: steps.length * 62 }}>
+                            {/* dots + connectors */}
+                            <div className="flex items-center">
+                              {steps.map((s, i) => (
+                                <React.Fragment key={s}>
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0"
+                                    style={{ background: i < cur ? "#2f7d54" : i === cur ? MAROON : "#e3dccf", boxShadow: i === cur ? `0 0 0 4px ${MAROON}22` : undefined }} />
+                                  {i < steps.length - 1 && <span className="h-0.5 flex-1 min-w-[14px]" style={{ background: i < cur ? "#2f7d54" : "#e3dccf" }} />}
+                                </React.Fragment>
+                              ))}
+                            </div>
+                            {/* labels under each dot */}
+                            <div className="flex mt-1">
+                              {steps.map((s, i) => (
+                                <span key={s} className={`flex-1 text-[8.5px] uppercase tracking-wide ${i === 0 ? "text-left" : i === steps.length - 1 ? "text-right" : "text-center"}`}
+                                  style={{ color: i < cur ? "#2f7d54" : i === cur ? MAROON : "#b7ada1", fontWeight: i === cur ? 800 : 500 }}>{s}</span>
+                              ))}
+                            </div>
+                            {/* waiting-for line */}
+                            {!done && (
+                              <div className="mt-1.5 text-[10.5px] flex items-center gap-1" style={{ color: "#a9600d" }}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                                Waiting for <b>{waitName}</b> <span className="text-gray-400">· since {fmtDate(rq.updatedAt || rq.createdAt)}</span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>
