@@ -1047,6 +1047,12 @@ export default function ScmRequestPage() {
         </div>
 
         <div className="mt-3 flex items-center justify-end gap-3 flex-wrap">
+          {isAdmin && (
+            <label className="flex items-center gap-1.5 text-[11px] text-amber-700 cursor-pointer mr-auto">
+              <input type="checkbox" checked={isTest} onChange={e => setIsTest(e.target.checked)} />
+              🧪 Test (เมลเด้งกลับหาคุณ ไม่ส่ง LG/ผู้อนุมัติจริง)
+            </label>
+          )}
           <button onClick={submit} disabled={submitting || cart.length === 0}
             className="group inline-flex items-center gap-2 px-9 py-2.5 rounded-full text-white text-sm font-bold uppercase tracking-[0.2em] transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
             style={{ background: `linear-gradient(135deg, ${MAROON} 0%, #8a2b2b 100%)`, border: `1px solid ${GOLD_SOFT}`, boxShadow: `0 6px 18px ${MAROON}33, inset 0 1px 0 ${GOLD_SOFT}55` }}>
