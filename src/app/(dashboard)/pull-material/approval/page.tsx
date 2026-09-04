@@ -169,10 +169,8 @@ export default function Page() {
                   <div className="text-sm font-bold text-gray-800 mb-3">📄 Document</div>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                     <Info label="BU" value={openReq.bu} />
-                    <Info label="Type" value={openReq.requestType === "PURCHASING" ? "PC request" : "SCM request"} />
                     <Info label="Requester" value={openReq.requesterName} />
-                    <Info label="Items" value={String(openReq.items?.length || 0)} />
-                    {openReq.remark && <div className="col-span-2"><Info label="Remark" value={openReq.remark} /></div>}
+                    {openReq.requestType !== "PURCHASING" && openReq.remark && <div className="col-span-2"><Info label="Remark" value={openReq.remark} /></div>}
                   </div>
                   <PullAttachments reqId={openReq.id} />
                 </div>
@@ -187,14 +185,25 @@ export default function Page() {
                     const byPo: Record<string, { qty: number; uoms: Set<string> }> = {}
                     items.forEach((it: any) => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set() }); g.qty += Number(it.pullMaterialQty) || 0; if (it.bomUom) g.uoms.add(it.bomUom) })
                     const totalQty = items.reduce((s: number, it: any) => s + (Number(it.pullMaterialQty) || 0), 0)
+                    const pkgs = Array.isArray(openReq.packages) ? openReq.packages : []
+                    const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (s0.cartons ? String(fmt(s0.cartons)) : "")
+                    const dimStr = (s0.boxW || s0.boxL || s0.boxH) ? `${s0.boxW || "-"}×${s0.boxL || "-"}×${s0.boxH || "-"} cm` : ""
                     return (
                       <div className="px-5 pb-5">
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4 rounded-xl bg-gray-50 p-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 rounded-xl bg-gray-50 p-3">
                           <Info label="Country" value={s0.country} />
                           <Info label="Port" value={s0.port || s0.seaPort} />
+                          <Info label="City" value={s0.city} />
+                          <Info label="Incoterm" value={s0.incoterm} />
                           <Info label="QTY Air" value={fmt(totalQty)} />
                           <Info label="Est Air" value={total ? `${fmt(total)} USD` : "-"} />
                           <Info label="L/T Air" value={s0.leadTimeAir} />
+                          <Info label="Weight (kg)" value={s0.weight != null ? fmt(s0.weight) : "-"} />
+                          <Info label="Need date (in-house)" value={s0.needDate ? fmtDate(s0.needDate) : "-"} />
+                          <Info label="Package" value={pkgStr} />
+                          <Info label="Dimension" value={dimStr} />
+                          {["EX-WORK", "FCA"].includes(s0.incoterm) && <Info label="Pickup address" value={s0.pickupAddress} />}
+                          {openReq.remark && <div className="col-span-2 sm:col-span-4"><Info label="Remark" value={openReq.remark} /></div>}
                         </div>
                         <div className="overflow-x-auto border rounded-xl">
                           <table className="w-full text-xs">
