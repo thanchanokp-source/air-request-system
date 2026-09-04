@@ -19,6 +19,7 @@ export default function Page() {
   const [busy, setBusy] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const [statusF, setStatusF] = useState("")
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
@@ -48,6 +49,7 @@ export default function Page() {
   // Filter by search (doc no / SO) + status.
   const qq = q.trim().toLowerCase()
   const shown = reqs.filter(rq => {
+    if (typeF !== "ALL" && (rq.requestType || "SCM") !== typeF) return false
     if (statusF && rq.status !== statusF) return false
     if (!qq) return true
     if (rq.documentNo.toLowerCase().includes(qq)) return true
@@ -62,6 +64,18 @@ export default function Page() {
         <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
 
+      {/* Request type: separate SCM vs Purchasing */}
+      <div className="flex gap-1.5">
+        {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "Purchasing request"]] as const).map(([v, label]) => {
+          const n = v === "ALL" ? reqs.length : reqs.filter(r => (r.requestType || "SCM") === v).length
+          return (
+            <button key={v} onClick={() => setTypeF(v)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${typeF === v ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+              style={typeF === v ? { background: MAROON } : undefined}>{label} <span className="opacity-70">({n})</span></button>
+          )
+        })}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Search SO / document no…"
@@ -71,7 +85,7 @@ export default function Page() {
           <option value="">All statuses</option>
           {Object.keys(STATUS_LABEL).map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
-        {(q || statusF) && <button onClick={() => { setQ(""); setStatusF("") }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-200 rounded-lg">Clear</button>}
+        {(q || statusF || typeF !== "ALL") && <button onClick={() => { setQ(""); setStatusF(""); setTypeF("ALL") }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-200 rounded-lg">Clear</button>}
         <span className="text-xs text-gray-400">{shown.length} / {reqs.length}</span>
       </div>
 
