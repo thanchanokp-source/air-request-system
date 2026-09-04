@@ -251,7 +251,9 @@ export default function ScmRequestPage() {
     return { est: Math.round((best.rate * w + add) * 100) / 100, add, inc }
   }, [pcWeight, pcPur.port, pcPur.incoterm, airRows])
 
-  const matK = (m: any) => `${m.soNoDoc}|${m.itemCode}`
+  // Include the PO — the same SO/item can appear under several POs; keying by SO+item alone would
+  // collapse them and make one PO "disappear" from the summary.
+  const matK = (m: any) => `${m.poNoDoc || "-"}|${m.soNoDoc}|${m.itemCode}`
   const pickPcVend = async (v: string) => {
     setPcVend(v); setPcVendQ(""); setPcVendOpen(false); setPcSelPos(new Set()); setPcSelMats([]); setPcLoad(true)
     try { const d = await fetch(`/api/bom?bu=${bu}&vendorPos=${encodeURIComponent(v)}`).then(r => r.json()); setPcPos(Array.isArray(d.pos) ? d.pos : []) }
@@ -325,7 +327,7 @@ export default function ScmRequestPage() {
       const share = g && g.sum > 0 ? (Number(m.poqtyBomdummy) || 0) / g.sum : (g && g.count ? 1 / g.count : 0)
       return { ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Math.round(pullPO * share * 100) / 100, weight: null, ...emptyScm }
     })
-    const staged = pcStaged.flatMap(s => s.mats.map(m => ({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: null, ...emptyScm })))
+    const staged = pcStaged.flatMap(s => s.mats.map(m => ({ ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: null, ...emptyScm })))
     const merged = [...sel, ...staged.filter(s => !sel.some(x => x.key === s.key))]
     setCart(merged as CartItem[])
   }, [reqType, pcSelMats, pcPullQty, pcStaged]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -411,7 +413,7 @@ export default function ScmRequestPage() {
     if (!pcStaged.length) return
     const addItems: any[] = []
     for (const s of pcStaged) for (const m of s.mats) {
-      addItems.push({ ...m, key: `${m.soNoDoc}|${m.itemCode}`, pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: null, ...emptyScm })
+      addItems.push({ ...m, key: matK(m), pullGarment: Number(m.orderQty) || 0, pullMaterialQty: Number(m.bomQty) || 0, weight: null, ...emptyScm })
     }
     setCart(prev => [...prev.filter(c => !addItems.some(a => a.key === c.key)), ...addItems])
     setPcStaged([]); setPcStageWeight("")
