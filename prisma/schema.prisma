@@ -345,6 +345,10 @@ model PullMaterialRequest {
   actualAir      Float?
   invoiceNo      String?
   hawbNo         String?
+  // DVM Purchase approval signature snapshot (base64 PNG data URI), stamped in the PDF.
+  approverSignature String?
+  approverName      String?
+  approvedAt        DateTime?
   attachments    PullMaterialAttachment[]
   recallReason   String?
   recalledBy     String?

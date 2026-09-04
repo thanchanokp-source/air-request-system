@@ -122,6 +122,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       data.actors = [...set]
     }
 
+    // DVM Purchase approval → snapshot the approver's signature onto the doc (stamped in the PDF).
+    if (body.status === "APPROVED" && typeof body.signatureData === "string" && body.signatureData.startsWith("data:image")) {
+      data.approverSignature = body.signatureData
+      data.approverName = (session.user as any).name || actorEmail || null
+      data.approvedAt = new Date()
+    }
+
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data })
 
     // Purchasing → air decision: auto-compute Est Air + Air L/T from the master (no manual LG step).

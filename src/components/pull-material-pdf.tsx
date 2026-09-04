@@ -1,5 +1,5 @@
 import React from "react"
-import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer"
+import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer"
 
 const MAROON = "#6b1a1a"
 const fmt = (n: any) => (n == null || isNaN(Number(n)) ? "-" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }))
@@ -24,8 +24,10 @@ const s = StyleSheet.create({
   lgBox: { flexDirection: "row", flexWrap: "wrap", borderWidth: 1, borderColor: "#bbf7d0", backgroundColor: "#f0fdf4", borderRadius: 6, padding: 8, marginTop: 10 },
   att: { fontSize: 8, color: "#0369a1", marginTop: 2 },
   foot: { position: "absolute", bottom: 24, left: 34, right: 34, textAlign: "center", fontSize: 7, color: "#94a3b8" },
-  sig: { marginTop: 14, flexDirection: "row", justifyContent: "flex-end" },
-  sigBox: { width: 180, borderTopWidth: 1, borderTopColor: "#94a3b8", paddingTop: 4, textAlign: "center", fontSize: 8, color: "#475569" },
+  sig: { marginTop: 18, flexDirection: "row", justifyContent: "flex-end" },
+  sigBox: { width: 190, alignItems: "center" },
+  sigImg: { height: 34, objectFit: "contain", marginBottom: 2 },
+  sigLine: { width: 190, borderTopWidth: 1, borderTopColor: "#94a3b8", paddingTop: 4, textAlign: "center", fontSize: 8, color: "#475569" },
 })
 
 function Cell({ label, value }: { label: string; value: any }) {
@@ -103,7 +105,10 @@ export function PullMaterialPdf({ req }: { req: any }) {
         ) : null}
 
         <View style={s.sig}>
-          <Text style={s.sigBox}>Approved by (DVM Purchase){req.approverName ? `\n${req.approverName}` : ""}</Text>
+          <View style={s.sigBox}>
+            {req.approverSignature ? <Image src={req.approverSignature} style={s.sigImg} /> : <View style={{ height: 34 }} />}
+            <Text style={s.sigLine}>Approved by · DVM Purchase{req.approverName ? `\n( ${req.approverName} )` : ""}{req.approvedAt ? `\n${dt(req.approvedAt)}` : ""}</Text>
+          </View>
         </View>
 
         <Text style={s.foot} fixed>Pull Material · Nan Yang Textile Group · generated {dt(new Date())}</Text>

@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
 import { pcApprover } from "@/lib/pull-approvers"
+import SignatureModal from "@/components/signature-modal"
 
 // Approver stages: which role owns each, and where Approve / Send-back go.
 const APPROVER: Record<string, { role: string; label: string; next: string; back: string; backLabel: string }> = {
@@ -50,6 +51,10 @@ export default function Page() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
   const [poQ, setPoQ] = useState("")
+  // Signature modal (like Air Claim): opens before an Approve, resolves the promise with the data URI.
+  const [sigOpen, setSigOpen] = useState(false)
+  const sigResolver = useRef<((v: string | undefined) => void) | null>(null)
+  const askSignature = () => new Promise<string | undefined>(resolve => { sigResolver.current = resolve; setSigOpen(true) })
   const [busy, setBusy] = useState(false)
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
@@ -77,13 +82,19 @@ export default function Page() {
   useEffect(() => { load() }, [bu, isAdmin]) // eslint-disable-line
 
   const act = async (rq: any, toStatus: string) => {
-    const label = toStatus === "APPROVED" ? "Approve" : "Send back"
-    if (!confirm(`${label} ${rq.documentNo}?`)) return
+    const isApprove = toStatus === "APPROVED"
+    if (!confirm(`${isApprove ? "Approve" : "Send back"} ${rq.documentNo}?`)) return
+    // Approving requires a signature (like Air Claim) — the modal handles draw/reuse.
+    let signatureData: string | undefined
+    if (isApprove) {
+      signatureData = await askSignature()
+      if (!signatureData) return   // cancelled
+    }
     setBusy(true)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: toStatus }),
+        body: JSON.stringify({ status: toStatus, ...(signatureData ? { signatureData } : {}) }),
       })
       if (r.ok) { setOpenId(null); await load() } else alert("Error")
     } finally { setBusy(false) }
@@ -335,6 +346,15 @@ export default function Page() {
           </div>
         )
       })()}
+
+      {/* Signature popup (draw first time · reuse/confirm after) — like Air Claim */}
+      <SignatureModal
+        open={sigOpen}
+        title="Sign to Approve"
+        confirmLabel="Confirm & Approve"
+        onConfirm={sig => { setSigOpen(false); sigResolver.current?.(sig); sigResolver.current = null }}
+        onCancel={() => { setSigOpen(false); sigResolver.current?.(undefined); sigResolver.current = null }}
+      />
     </div>
   )
 }
