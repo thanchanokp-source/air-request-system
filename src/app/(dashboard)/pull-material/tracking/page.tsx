@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
-import { MAROON, BUS, STATUS_LABEL, buColor, fmtDate } from "../_StageWork"
+import { MAROON, BUS, STATUS_LABEL, buColor, fmtDate, fmt } from "../_StageWork"
 import { pcApprover } from "@/lib/pull-approvers"
 import { MultiSelect } from "@/components/ui/multi-select"
 
@@ -54,6 +54,7 @@ export default function Page() {
   const [pdfing, setPdfing] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewName, setPreviewName] = useState("")
+  const [viewRq, setViewRq] = useState<any>(null)   // read-only document view (like DVM Purchase)
 
   // Build the document PDF and open it in a preview popup (with a Download button inside).
   const openPdf = async (rq: any) => {
@@ -235,7 +236,9 @@ export default function Page() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                        {["APPROVED", "COMPLETED"].includes(rq.status) && (
+                        <button onClick={() => setViewRq(rq)} title="View document (read-only)"
+                          className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:text-red-800 hover:border-red-300 mr-1">👁 View</button>
+                        {rq.status === "COMPLETED" && (
                           <button onClick={() => openPdf(rq)} disabled={pdfing === rq.id} title="Preview / download PDF"
                             className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50 mr-1" style={{ background: MAROON }}>{pdfing === rq.id ? "…" : "🔍 PDF"}</button>
                         )}
@@ -270,6 +273,66 @@ export default function Page() {
           </div>
         </div>
       )}
+
+      {/* Read-only document view (like DVM Purchase) */}
+      {viewRq && (() => {
+        const rq = viewRq, its = rq.items || []
+        const d0 = its.find((x: any) => x.airFreightCost != null) || its[0] || {}
+        const byPo: Record<string, { qty: number; uoms: Set<string> }> = {}
+        its.forEach((it: any) => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set() }); g.qty += Number(it.pullMaterialQty) || 0; if (it.bomUom) g.uoms.add(it.bomUom) })
+        const qtyAir = its.reduce((s: number, it: any) => s + (Number(it.pullMaterialQty) || 0), 0)
+        const estTotal = its.reduce((s: number, it: any) => s + (Number(it.airFreightCost) || 0), 0)
+        const pkgs = Array.isArray(rq.packages) ? rq.packages : []
+        const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (d0.cartons ? String(fmt(d0.cartons)) : "")
+        const dimStr = (d0.boxW || d0.boxL || d0.boxH) ? `${d0.boxW || "-"}×${d0.boxL || "-"}×${d0.boxH || "-"} cm` : ""
+        const Info = ({ label, value }: { label: string; value: any }) => <div><div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div><div className="text-gray-800 text-sm">{value || "-"}</div></div>
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setViewRq(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b">
+                <div><span className="font-bold text-lg text-gray-900">{rq.documentNo}</span> <span className="text-xs text-gray-400">· {rq.requesterName} · {pullStatus(rq)}</span></div>
+                <button onClick={() => setViewRq(null)} className="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ปิด</button>
+              </div>
+              <div className="overflow-y-auto p-5 space-y-4">
+                <div className="bg-white rounded-2xl border border-gray-100 p-4">
+                  <div className="text-sm font-bold text-gray-800 mb-3">📄 Document</div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                    <Info label="BU" value={rq.bu} /><Info label="Requester" value={rq.requesterName} />
+                    {rq.remark && <div className="col-span-2"><Info label="Remark" value={rq.remark} /></div>}
+                  </div>
+                  {(rq.attachments || []).length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1.5">
+                      {rq.attachments.map((a: any) => <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] bg-sky-50 border border-sky-200 text-sky-800 rounded-full px-2.5 py-1 hover:bg-sky-100">📎 <span className="max-w-[200px] truncate">{a.fileName}</span></a>)}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 p-4">
+                  <div className="text-sm font-bold text-gray-800 mb-3">Items</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 rounded-xl bg-gray-50 p-3">
+                    <Info label="Country" value={d0.country} /><Info label="Port" value={d0.port || d0.seaPort} /><Info label="City" value={d0.city} /><Info label="Incoterm" value={d0.incoterm} />
+                    <Info label="QTY Air" value={fmt(qtyAir)} /><Info label="Est Air" value={estTotal ? `${fmt(estTotal)} USD` : "-"} /><Info label="L/T Air" value={d0.leadTimeAir} /><Info label="Weight (kg)" value={d0.weight != null ? fmt(d0.weight) : "-"} />
+                    <Info label="Need date" value={d0.needDate ? fmtDate(d0.needDate) : "-"} /><Info label="Package" value={pkgStr} /><Info label="Dimension" value={dimStr} />
+                    {["EX-WORK", "FCA"].includes(d0.incoterm) && <Info label="Pickup address" value={d0.pickupAddress} />}
+                  </div>
+                  <div className="border rounded-xl overflow-x-auto">
+                    <table className="w-full text-xs"><thead className="bg-gray-50 text-gray-500"><tr>{["PO NO", "QTY AIR", "UOM"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
+                      <tbody className="divide-y divide-gray-50">{Object.keys(byPo).map(po => (<tr key={po}><td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td><td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(byPo[po].qty)}</td><td className="px-3 py-1.5 whitespace-nowrap">{[...byPo[po].uoms].join(", ") || "-"}</td></tr>))}</tbody>
+                    </table>
+                  </div>
+                  {(rq.actualAir != null || rq.hawbNo || rq.invoiceNo) && (
+                    <div className="grid grid-cols-3 gap-3 mt-4 rounded-xl bg-green-50/50 border border-green-100 p-3">
+                      <Info label="HAWB NO" value={rq.hawbNo} /><Info label="Invoice NO" value={rq.invoiceNo} /><Info label="Actual Air" value={rq.actualAir != null ? fmt(rq.actualAir) : "-"} />
+                    </div>
+                  )}
+                  {rq.approverSignature && (
+                    <div className="mt-4 flex justify-end"><div className="text-center"><img src={rq.approverSignature} alt="signature" className="h-12 mx-auto object-contain" /><div className="border-t border-gray-300 pt-1 text-[11px] text-gray-500 w-44">Approved · DVM Purchase<br />{rq.approverName || ""}</div></div></div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
