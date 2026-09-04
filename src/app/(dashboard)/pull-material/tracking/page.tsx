@@ -55,6 +55,46 @@ export default function Page() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewName, setPreviewName] = useState("")
   const [viewRq, setViewRq] = useState<any>(null)   // read-only document view (like DVM Purchase)
+  const [editRq, setEditRq] = useState<any>(null)   // edit a recalled doc before resubmit
+  const [editForm, setEditForm] = useState<any>({})
+  const [editPkgs, setEditPkgs] = useState<{ uom: string; qty: string }[]>([])
+  const [cities, setCities] = useState<any[]>([])
+  useEffect(() => { fetch("/api/pull-material/cities").then(r => r.json()).then(d => setCities(d.rows || [])).catch(() => {}) }, [])
+
+  const openEdit = (rq: any) => {
+    const its = rq.items || []
+    const d0 = its.find((x: any) => x.weight != null) || its[0] || {}
+    setEditForm({ country: d0.country || "", port: d0.port || "", city: d0.city || "", incoterm: d0.incoterm || "", pickup: d0.pickupAddress || "", needDate: d0.needDate ? String(d0.needDate).slice(0, 10) : "", weight: d0.weight != null ? String(d0.weight) : "", remark: rq.remark || "" })
+    setEditPkgs(Array.isArray(rq.packages) && rq.packages.length ? rq.packages.map((p: any) => ({ uom: p.uom, qty: String(p.qty) })) : [{ uom: "", qty: "" }])
+    setEditRq(rq)
+  }
+  const saveEdit = async () => {
+    const f = editForm
+    if (!String(f.country).trim()) return alert("กรอก Country")
+    if (!String(f.port).trim()) return alert("กรอก Air Port")
+    if (!f.incoterm) return alert("เลือก Incoterm")
+    if (["EX-WORK", "FCA"].includes(f.incoterm) && !String(f.pickup).trim()) return alert(`${f.incoterm} ต้องระบุ Pickup address`)
+    if (!(Number(f.weight) > 0)) return alert("กรอกน้ำหนัก (kg)")
+    const pkgs = editPkgs.map(p => ({ uom: p.uom.trim(), qty: Number(p.qty) || 0 })).filter(p => p.uom && p.qty > 0)
+    if (!pkgs.length) return alert("เพิ่ม Package อย่างน้อย 1 บรรทัด")
+    if (!confirm(`บันทึกการแก้ไข ${editRq.documentNo} และส่งเข้า flow อีกครั้ง (Resubmit)?`)) return
+    setBusy(editRq.id)
+    try {
+      const its = editRq.items || []
+      const itemUpdates = its.map((it: any, i: number) => ({
+        id: it.id, country: f.country, port: f.port, city: f.city, incoterm: f.incoterm,
+        pickupAddress: ["EX-WORK", "FCA"].includes(f.incoterm) ? f.pickup : "",
+        needDate: f.needDate || null, cartons: pkgs.reduce((s, x) => s + x.qty, 0),
+        weight: i === 0 ? Number(f.weight) : null,
+      }))
+      const start = (editRq.requestType || "SCM") === "PURCHASING" ? "PENDING_VP_PUR" : "PENDING_PURCHASING"
+      const r = await fetch(`/api/pull-material/${editRq.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemUpdates, packages: pkgs, remark: f.remark || null, status: start }),
+      })
+      if (r.ok) { setEditRq(null); await load() } else { const d = await r.json().catch(() => ({})); alert(d.error || "Error") }
+    } finally { setBusy(null) }
+  }
 
   // Build the document PDF and open it in a preview popup (with a Download button inside).
   const openPdf = async (rq: any) => {
@@ -247,8 +287,8 @@ export default function Page() {
                             className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-amber-700 hover:border-amber-300 disabled:opacity-50">↩ Recall</button>
                         )}
                         {(isAdmin || rq.createdById === userId) && rq.status === "RECALLED" && (
-                          <button onClick={() => resubmit(rq)} disabled={busy === rq.id} title="Resubmit into the flow"
-                            className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50" style={{ background: MAROON }}>↻ Resubmit</button>
+                          <button onClick={() => openEdit(rq)} disabled={busy === rq.id} title="Edit & resubmit"
+                            className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50" style={{ background: MAROON }}>✎ แก้ไข & Resubmit</button>
                         )}
                       </td>
                     </tr>
@@ -361,6 +401,68 @@ export default function Page() {
                   </div>
                 </div>
                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Edit (recalled doc) → Save & Resubmit */}
+      {editRq && (() => {
+        const inp = "w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200"
+        const lab = "text-[11px] font-semibold text-gray-600 block mb-1"
+        const setF = (k: string, v: any) => setEditForm((p: any) => ({ ...p, [k]: v }))
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setEditRq(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b">
+                <div><span className="font-bold text-gray-900">✎ แก้ไข {editRq.documentNo}</span> <span className="text-xs text-gray-400">แล้วส่งเข้า flow อีกครั้ง</span></div>
+                <button onClick={() => setEditRq(null)} className="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ปิด</button>
+              </div>
+              <div className="overflow-y-auto p-5 space-y-3">
+                <div>
+                  <label className={lab}>เมือง / City (จาก Master Purchase)</label>
+                  <select className={inp} value={cities.find(c => c.city === editForm.city && c.port === editForm.port)?.id || ""}
+                    onChange={e => { const c = cities.find(x => x.id === e.target.value); if (c) setEditForm((p: any) => ({ ...p, city: c.city, country: c.country || p.country, port: c.port || p.port })) }}>
+                    <option value="">— เลือกเมือง (เติม country/port) —</option>
+                    {cities.map(c => <option key={c.id} value={c.id}>{c.city} · {c.port} · {c.country}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div><label className={lab}>Country *</label><input className={inp} value={editForm.country || ""} onChange={e => setF("country", e.target.value)} /></div>
+                  <div><label className={lab}>Air Port *</label><input className={inp} value={editForm.port || ""} onChange={e => setF("port", e.target.value)} /></div>
+                  <div><label className={lab}>Incoterm *</label>
+                    <select className={inp} value={editForm.incoterm || ""} onChange={e => setF("incoterm", e.target.value)}>
+                      <option value="">—</option>{["FOB", "CIF", "EX-WORK", "FCA"].map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div><label className={lab}>Need date</label><input type="date" className={inp} value={editForm.needDate || ""} onChange={e => setF("needDate", e.target.value)} /></div>
+                  <div><label className={lab}>Weight (kg) *</label><input type="number" className={inp} value={editForm.weight || ""} onChange={e => setF("weight", e.target.value)} /></div>
+                </div>
+                {["EX-WORK", "FCA"].includes(editForm.incoterm) && (
+                  <div><label className={lab}>📍 {editForm.incoterm} Pickup address *</label><textarea rows={2} className={inp} value={editForm.pickup || ""} onChange={e => setF("pickup", e.target.value)} /></div>
+                )}
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className={lab + " !mb-0"}>Package *</label>
+                    <button type="button" onClick={() => setEditPkgs(p => [...p, { uom: "", qty: "" }])} className="text-xs font-semibold px-2 py-1 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50">+ เพิ่ม</button>
+                  </div>
+                  <div className="space-y-2">
+                    {editPkgs.map((pk, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input className="w-32 border border-gray-200 rounded-lg px-2 py-1.5 text-sm" placeholder="UOM" value={pk.uom} onChange={e => setEditPkgs(p => p.map((x, j) => j === i ? { ...x, uom: e.target.value } : x))} />
+                        <input type="number" className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right" placeholder="จำนวน" value={pk.qty} onChange={e => setEditPkgs(p => p.map((x, j) => j === i ? { ...x, qty: e.target.value } : x))} />
+                        <button type="button" onClick={() => setEditPkgs(p => p.length > 1 ? p.filter((_, j) => j !== i) : [{ uom: "", qty: "" }])} className="text-gray-300 hover:text-red-500 px-1">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div><label className={lab}>Remark</label><textarea rows={2} className={inp} value={editForm.remark || ""} onChange={e => setF("remark", e.target.value)} /></div>
+                <p className="text-[11px] text-gray-400">แก้ข้อมูลจัดซื้อ (PO/material เดิม) · Est Air จะคำนวณใหม่ · กดแล้วส่งเข้า flow + แจ้งเมลตามปกติ</p>
+              </div>
+              <div className="px-5 py-3 border-t flex justify-end gap-2">
+                <button onClick={() => setEditRq(null)} className="px-4 py-2 rounded-lg text-sm text-gray-600 border border-gray-200 hover:bg-gray-50">ยกเลิก</button>
+                <button onClick={saveEdit} disabled={busy === editRq.id} className="px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>{busy === editRq.id ? "…" : "💾 บันทึก & Resubmit"}</button>
               </div>
             </div>
           </div>

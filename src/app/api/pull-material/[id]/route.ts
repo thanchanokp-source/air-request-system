@@ -94,12 +94,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     for (const [k, conv] of Object.entries(FIELD)) if (k in u) data[k] = conv(u[k])
     if (Object.keys(data).length) await (prisma as any).pullMaterialItem.update({ where: { id: u.id }, data })
   }
+  // Edited purchase fields (country/port/weight/incoterm) → recompute Est Air.
+  if (itemUpdates.length && itemUpdates.some((u: any) => "port" in u || "weight" in u || "incoterm" in u || "country" in u)) {
+    await recomputePullAir(id).catch(() => {})
+  }
 
   const actorEmail = (session.user as any).email as string | undefined
 
   // Toggle Regular / Irregular mode per doc (no status change needed).
   if (body.mode === "REGULAR" || body.mode === "IRREGULAR") {
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data: { mode: body.mode } })
+  }
+
+  // Edit (recalled doc): packages / remark at request level.
+  if ("packages" in body || "remark" in body) {
+    await (prisma as any).pullMaterialRequest.update({
+      where: { id },
+      data: {
+        ...("packages" in body ? { packages: Array.isArray(body.packages) && body.packages.length ? body.packages : undefined } : {}),
+        ...("remark" in body ? { remark: body.remark || null } : {}),
+      },
+    })
   }
 
   // LG closes the doc ONCE (1 shipment / 1 doc): actual air freight + INV + HAWB at request level.
