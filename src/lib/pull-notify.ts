@@ -20,6 +20,20 @@ const STAGE: Record<string, { roles: string[]; redirect: string; title: string; 
 
 // Alert the owner(s) of a Pull Material stage when a doc reaches it. Per-recipient magic-login link
 // (auto-login → the right page). TEST doc reroutes every mail to the creator (monitor copy).
+// Clean status labels for the email (no internal role names like "DPM").
+const PULL_STATUS_LABEL: Record<string, string> = {
+  PENDING_PURCHASING: "Pending Purchasing",
+  PENDING_LOGISTICS: "Pending Logistics",
+  PENDING_SCM_DECISION: "Pending SCM Decision",
+  PENDING_PC_DECISION: "Pending Purchase Decision",
+  PENDING_DVM_SCM: "Pending Approval",
+  PENDING_VP_SCM: "Pending Approval",
+  PENDING_FINAL: "Pending Approval",
+  PENDING_DVM_PUR: "Pending Approval",
+  PENDING_VP_PUR: "Pending Approval",
+  APPROVED: "Approved",
+}
+
 export async function notifyPullStage(reqId: string, status: string): Promise<void> {
   const cfg = STAGE[status]
   // NOTE: PullMaterialRequest has createdById but NO `createdBy` relation — selecting it here made the
@@ -63,21 +77,56 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
   console.log(`[pull-notify] ${rq.documentNo} status=${status} bu=${rq.bu} pcTo=${pcTo ?? "-"} roles=${cfg.roles.join(",")} recips=${recips.length}${rq.isTest ? " TEST→" + (testTo ?? "?") : ""}`)
   if (!recips.length) { console.log(`[pull-notify] NO RECIPIENT for ${rq.documentNo} status=${status} (pcTo=${pcTo ?? "-"}) — no email sent`); return }
 
+  const M = "#6b1a1a", M_SOFT = "#e8b0b0"      // maroon theme (matches Air Request card layout)
+  const statusText = PULL_STATUS_LABEL[status] || "Notification"
+  const base = String(process.env.APP_URL || process.env.NEXTAUTH_URL || "").replace(/\/+$/, "")
+  const loginUrl = base ? `${base}/login` : ""
+
   await runWithTestMail(testTo, async () => {
     for (const u of recips) {
       const link = await magicLoginFor(u.id, cfg.redirect)
-      const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
-        <h2 style="color:#6b1a1a;margin:0 0 10px">Pull Material — ${cfg.title}</h2>
-        <p><b>${rq.documentNo}</b> (${rq.bu})</p>
-        <table style="border-collapse:collapse;font-size:13px;margin:6px 0">
-          <tr><td style="color:#888;padding-right:12px">Requester</td><td>${rq.requesterName || "-"}</td></tr>
-          <tr><td style="color:#888;padding-right:12px">SO</td><td>${sos || "-"}</td></tr>
-          <tr><td style="color:#888;padding-right:12px">Items</td><td>${(rq.items || []).length}</td></tr>
-        </table>
-        <p style="margin-top:14px"><a href="${link}" style="background:#6b1a1a;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;display:inline-block">${cfg.cta} →</a></p>
-        <p style="color:#9ca3af;font-size:12px;margin-top:12px">This link logs you in automatically (no password).</p>
-      </div>`
-      await sendMail([u.email], `[Pull Material] ${cfg.title.split(" — ")[0]} — ${rq.documentNo}`, html).catch(() => {})
+      const html = `<body style="margin:0;background:#f1f5f9">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:40px 0">
+    <tr><td align="center">
+      <table role="presentation" width="440" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;max-width:440px">
+        <tr><td style="background:${M};padding:20px;text-align:center">
+          <p style="margin:0;color:${M_SOFT};font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif;text-transform:uppercase">Nan Yang Textile</p>
+          <h1 style="margin:6px 0 0;color:#ffffff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">PULL MATERIAL</h1>
+        </td></tr>
+        <tr><td style="padding:32px 36px">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr><td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
+              <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">DOC NO</span><br>
+              <span style="color:${M};font-size:15px;font-weight:700;font-family:Arial,sans-serif">${rq.documentNo}</span>
+              <span style="color:#94a3b8;font-size:12px;font-family:Arial,sans-serif"> · ${rq.bu}</span>
+            </td></tr>
+            <tr><td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
+              <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">Requester</span><br>
+              <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${rq.requesterName || "-"}</span>
+            </td></tr>
+            <tr><td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
+              <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">Status</span><br>
+              <span style="color:${M};font-size:14px;font-weight:600;font-family:Arial,sans-serif">${statusText}</span>
+            </td></tr>
+            <tr><td style="padding:10px 0">
+              <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">SO</span><br>
+              <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${sos || `${(rq.items || []).length} item(s)`}</span>
+            </td></tr>
+          </table>
+          <div style="text-align:center;margin-top:24px">
+            <a href="${link}" style="display:inline-block;background:${M};color:#fff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif">${cfg.cta} →</a>
+            ${loginUrl ? `<p style="margin:12px 0 0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Or log in to the system with your account</p>
+            <a href="${loginUrl}" style="color:${M};font-size:12px;font-weight:700;font-family:Arial,sans-serif">${loginUrl}</a>` : ""}
+          </div>
+        </td></tr>
+        <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
+          <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Pull Material · Nan Yang Textile Group</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>`
+      await sendMail([u.email], `[Pull Material] ${statusText} — ${rq.documentNo}`, html).catch(() => {})
     }
   }).catch(() => {})
 }

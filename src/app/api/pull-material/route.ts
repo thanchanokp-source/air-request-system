@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const bu = (req.nextUrl.searchParams.get("bu") || "").trim()
   const rows = await (prisma as any).pullMaterialRequest.findMany({
     where: bu ? { bu } : {},
-    include: { items: true },
+    include: { items: true, attachments: { select: { id: true, fileName: true } } },
     orderBy: { createdAt: "desc" },
   })
   return NextResponse.json({ requests: rows })

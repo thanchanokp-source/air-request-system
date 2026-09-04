@@ -105,7 +105,7 @@ export default function Page() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500">
                 <tr>
-                  {["Document", "SO", "Items", "Progress", "Status", ""].map((h, i) =>
+                  {["Document", "SO", "Items", "Progress", "Status", "Files", ""].map((h, i) =>
                     <th key={i} className={`px-4 py-2.5 font-medium whitespace-nowrap ${h === "Items" ? "text-center" : "text-left"}`}>{h}</th>)}
                 </tr>
               </thead>
@@ -138,6 +138,18 @@ export default function Page() {
                           className={`text-xs px-2.5 py-1 rounded-full font-medium ${rq.status === "RECALLED" ? "bg-orange-100 text-orange-700" : noAir ? "bg-gray-100 text-gray-600" : rq.status === "APPROVED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
                           {STATUS_LABEL[rq.status] || rq.status}
                         </span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        {(rq.attachments || []).length === 0 ? <span className="text-xs text-gray-300">—</span> : (
+                          <div className="flex flex-col gap-0.5">
+                            {(rq.attachments || []).map((a: any) => (
+                              <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-sky-700 hover:underline max-w-[180px] truncate" title={a.fileName}>
+                                📎 {a.fileName}
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         {(isAdmin || rq.createdById === userId) && !["APPROVED", "COMPLETED", "RECALLED"].includes(rq.status) && (
