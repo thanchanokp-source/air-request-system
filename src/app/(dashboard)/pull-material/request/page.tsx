@@ -1028,13 +1028,7 @@ export default function ScmRequestPage() {
           </p>
         </div>
 
-        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
-          {isAdmin ? (
-            <label className="flex items-center gap-2 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer">
-              <input type="checkbox" checked={isTest} onChange={e => setIsTest(e.target.checked)} />
-              🧪 Test document — emails reroute to you (not real recipients) &amp; show who they'd go to
-            </label>
-          ) : <span />}
+        <div className="mt-3 flex items-center justify-end gap-3 flex-wrap">
           <button onClick={submit} disabled={submitting || cart.length === 0}
             className="px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: MAROON }}>
             {submitting ? "Submitting…" : "Submit Pull Material →"}
