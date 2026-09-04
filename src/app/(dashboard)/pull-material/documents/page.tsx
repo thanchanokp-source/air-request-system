@@ -14,6 +14,8 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pdfing, setPdfing] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewName, setPreviewName] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
   // edits[docId] = { hawbNo, invoiceNo, actualAir } — ONE set per document (1 shipment / 1 doc).
@@ -48,17 +50,23 @@ export default function Page() {
     } finally { setBusy(false) }
   }
 
-  // Preview / Download the document PDF (PC + LG data + attachment list).
-  const downloadPdf = async (rq: any) => {
+  // Build the document PDF (PC + LG data + attachment list) and open it in a preview popup.
+  const openPreview = async (rq: any) => {
     setPdfing(true)
     try {
       const merged = { ...rq, hawbNo: raw(rq, "hawbNo") || null, invoiceNo: raw(rq, "invoiceNo") || null, actualAir: raw(rq, "actualAir") === "" ? null : Number(raw(rq, "actualAir")) }
       const [{ pdf }, { PullMaterialPdf }] = await Promise.all([import("@react-pdf/renderer"), import("@/components/pull-material-pdf")])
       const blob = await pdf(React.createElement(PullMaterialPdf, { req: merged }) as any).toBlob()
       const url = URL.createObjectURL(blob)
-      const a = document.createElement("a"); a.href = url; a.download = `${rq.documentNo}.pdf`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+      setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url })
+      setPreviewName(`${rq.documentNo}.pdf`)
     } catch (e) { console.error(e); alert("PDF generation failed") } finally { setPdfing(false) }
+  }
+  const closePreview = () => { setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null }) }
+  const downloadPreview = () => {
+    if (!previewUrl) return
+    const a = document.createElement("a"); a.href = previewUrl; a.download = previewName
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
   }
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
@@ -140,8 +148,8 @@ export default function Page() {
                 <span className="text-xs text-gray-400">by {rq.requesterName} · {fmtDate(rq.createdAt)}</span>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button onClick={() => downloadPdf(rq)} disabled={pdfing}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">{pdfing ? "…" : "↓ Preview PDF"}</button>
+                <button onClick={() => openPreview(rq)} disabled={pdfing}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">{pdfing ? "…" : "🔍 Preview PDF"}</button>
                 <button onClick={() => save(rq)} disabled={busy}
                   className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>{busy ? "…" : "💾 Save"}</button>
               </div>
@@ -227,6 +235,22 @@ export default function Page() {
           </div>
         )
       })()}
+
+      {/* PDF preview popup */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={closePreview}>
+          <div className="bg-white rounded-2xl w-full max-w-4xl h-[88vh] flex flex-col overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <span className="text-sm font-semibold text-gray-700">📄 {previewName}</span>
+              <div className="flex items-center gap-2">
+                <button onClick={downloadPreview} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>↓ Download PDF</button>
+                <button onClick={closePreview} className="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ปิด</button>
+              </div>
+            </div>
+            <iframe src={previewUrl} title="PDF preview" className="flex-1 w-full" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
