@@ -11,7 +11,13 @@ export default function Page() {
   const { data: session, status: auth } = useSession()
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const isAdmin = roles.includes("ADMIN")
-  const canUse = isAdmin || roles.includes("PURCHASING") || roles.includes("LOGISTICS_IMPORT")
+  const isScmPull = roles.includes("SCM_PULL")
+  const isPurchasing = roles.includes("PURCHASING")
+  const isLgImport = roles.includes("LOGISTICS_IMPORT")
+  const canUse = isAdmin || isScmPull || isPurchasing || isLgImport
+  // Who may see BOTH types (with the tab): admin, LG (handles both), or a person holding both roles.
+  // A pure SCM / pure Purchasing user sees ONLY their own request type.
+  const canSeeBoth = isAdmin || isLgImport || (isScmPull && isPurchasing)
   const userId = (session?.user as any)?.id
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
@@ -48,8 +54,10 @@ export default function Page() {
 
   // Filter by search (doc no / SO) + status.
   const qq = q.trim().toLowerCase()
+  // Non-admin single-role users are locked to their own request type; only "canSeeBoth" uses the tab.
+  const effType: "ALL" | "SCM" | "PURCHASING" = canSeeBoth ? typeF : (isPurchasing ? "PURCHASING" : isScmPull ? "SCM" : "ALL")
   const shown = reqs.filter(rq => {
-    if (typeF !== "ALL" && (rq.requestType || "SCM") !== typeF) return false
+    if (effType !== "ALL" && (rq.requestType || "SCM") !== effType) return false
     if (statusF && rq.status !== statusF) return false
     if (!qq) return true
     if (rq.documentNo.toLowerCase().includes(qq)) return true
@@ -64,7 +72,8 @@ export default function Page() {
         <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
 
-      {/* Request type: separate SCM vs Purchasing */}
+      {/* Request type tab — only for admin / LG / dual-role. Pure SCM or PC users are auto-locked. */}
+      {canSeeBoth && (
       <div className="flex gap-1.5">
         {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "Purchasing request"]] as const).map(([v, label]) => {
           const n = v === "ALL" ? reqs.length : reqs.filter(r => (r.requestType || "SCM") === v).length
@@ -75,6 +84,7 @@ export default function Page() {
           )
         })}
       </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
