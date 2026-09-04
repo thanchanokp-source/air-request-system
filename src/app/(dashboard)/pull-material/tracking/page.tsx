@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, STATUS_LABEL, buColor, fmtDate } from "../_StageWork"
 import { pcApprover } from "@/lib/pull-approvers"
+import { MultiSelect } from "@/components/ui/multi-select"
 
 // Pipeline steps branch by request type. Each status maps to the CURRENT (in-progress) step index;
 // steps before it are done. cur >= steps.length → fully done.
@@ -28,9 +29,10 @@ export default function Page() {
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
-  const [q, setQ] = useState("")
   const [statusF, setStatusF] = useState("")
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [docF, setDocF] = useState<string[]>([])
+  const [poF, setPoF] = useState<string[]>([])
   const [pdfing, setPdfing] = useState<string | null>(null)
 
   // Download the document PDF (available once LG has entered the actual air freight).
@@ -68,16 +70,17 @@ export default function Page() {
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Pull RM / Admin only</p></div>
 
-  // Filter by search (doc no / SO) + status.
-  const qq = q.trim().toLowerCase()
   // Non-admin single-role users are locked to their own request type; only "canSeeBoth" uses the tab.
   const effType: "ALL" | "SCM" | "PURCHASING" = canSeeBoth ? typeF : (isPurchasing ? "PURCHASING" : isScmPull ? "SCM" : "ALL")
-  const shown = reqs.filter(rq => {
-    if (effType !== "ALL" && (rq.requestType || "SCM") !== effType) return false
+  // Filter option lists (from the loaded docs, respecting the type tab).
+  const scopeReqs = reqs.filter(rq => effType === "ALL" || (rq.requestType || "SCM") === effType)
+  const docNos = [...new Set(scopeReqs.map(r => r.documentNo).filter(Boolean))].sort()
+  const pos = [...new Set(scopeReqs.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort()
+  const shown = scopeReqs.filter(rq => {
     if (statusF && rq.status !== statusF) return false
-    if (!qq) return true
-    if (rq.documentNo.toLowerCase().includes(qq)) return true
-    return (rq.items || []).some((i: any) => String(i.soNoDoc || "").toLowerCase().includes(qq))
+    if (docF.length && !docF.includes(rq.documentNo)) return false
+    if (poF.length && !(rq.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
+    return true
   })
 
   return (
@@ -102,17 +105,17 @@ export default function Page() {
       </div>
       )}
 
-      {/* Filters */}
+      {/* Filters — separate boxes (Doc No · PO · Status) */}
       <div className="flex flex-wrap gap-2 items-center">
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Search SO / document no…"
-          className="flex-1 min-w-[240px] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+        <div className="w-52"><MultiSelect label="Doc No…" options={docNos} value={docF} onChange={setDocF} /></div>
+        <div className="w-52"><MultiSelect label="PO…" options={pos} value={poF} onChange={setPoF} /></div>
         <select value={statusF} onChange={e => setStatusF(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
           <option value="">All statuses</option>
           {Object.keys(STATUS_LABEL).map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
-        {(q || statusF || typeF !== "ALL") && <button onClick={() => { setQ(""); setStatusF(""); setTypeF("ALL") }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-200 rounded-lg">Clear</button>}
-        <span className="text-xs text-gray-400">{shown.length} / {reqs.length}</span>
+        {(docF.length || poF.length || statusF || typeF !== "ALL") && <button onClick={() => { setDocF([]); setPoF([]); setStatusF(""); setTypeF("ALL") }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-200 rounded-lg">Clear</button>}
+        <span className="text-xs text-gray-400 ml-auto">{shown.length} / {reqs.length}</span>
       </div>
 
       {loading ? <p className="text-sm text-gray-400">Loading…</p> :
@@ -121,14 +124,13 @@ export default function Page() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500">
                 <tr>
-                  {["Document", "SO", "Items", "Progress", "Status", "Files", ""].map((h, i) =>
-                    <th key={i} className={`px-4 py-2.5 font-medium whitespace-nowrap ${h === "Items" ? "text-center" : "text-left"}`}>{h}</th>)}
+                  {["Document", "PO", "Progress", "Status", "Files", ""].map((h, i) =>
+                    <th key={i} className="px-4 py-2.5 font-medium whitespace-nowrap text-left">{h}</th>)}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {shown.map(rq => {
-                  const noAir = rq.status === "NO_AIR"
-                  const sos = [...new Set((rq.items || []).map((i: any) => i.soNoDoc).filter(Boolean))] as string[]
+                  const rowPos = [...new Set((rq.items || []).map((i: any) => i.poNoDoc).filter(Boolean))] as string[]
                   const isPC = (rq.requestType || "SCM") === "PURCHASING"
                   const steps = isPC ? PC_STEPS : SCM_STEPS
                   const cur = isPC ? (PC_CUR[rq.status] ?? 1) : (SCM_CUR[rq.status] ?? 1)
@@ -137,14 +139,14 @@ export default function Page() {
                   const waitName = rq.status === "APPROVED" ? "Logistics"
                     : (isPC && rq.status === "PENDING_VP_PUR") ? (pcApprover(rq.bu)?.split("@")[0] || "DVM Purchase")
                     : (steps[cur] || "")
+                  const waitDays = Math.max(0, Math.floor((Date.now() - new Date(rq.updatedAt || rq.createdAt).getTime()) / 86400000))
                   return (
                     <tr key={rq.id} className="hover:bg-gray-50">
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         <div className="font-semibold text-blue-700">{rq.documentNo}</div>
                         <div className="text-[11px] text-gray-400">{rq.requesterName}</div>
                       </td>
-                      <td className="px-4 py-2.5 text-gray-600 max-w-[220px] truncate" title={sos.join(", ")}>{sos.join(", ") || "-"}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-500">{rq.items.length}</td>
+                      <td className="px-4 py-2.5 text-gray-600 max-w-[220px] truncate" title={rowPos.join(", ")}>{rowPos.join(", ") || "-"}</td>
                       <td className="px-4 py-3">
                         {stopped ? <span className="text-xs text-gray-400">— {STATUS_LABEL[rq.status] || rq.status}</span> : (
                           <div style={{ minWidth: steps.length * 62 }}>
@@ -165,11 +167,11 @@ export default function Page() {
                                   style={{ color: i < cur ? "#2f7d54" : i === cur ? MAROON : "#b7ada1", fontWeight: i === cur ? 800 : 500 }}>{s}</span>
                               ))}
                             </div>
-                            {/* waiting-for line */}
+                            {/* waiting-for line — one long line, no wrap */}
                             {!done && (
-                              <div className="mt-1.5 text-[10.5px] flex items-center gap-1" style={{ color: "#a9600d" }}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-                                Waiting for <b>{waitName}</b> <span className="text-gray-400">· since {fmtDate(rq.updatedAt || rq.createdAt)}</span>
+                              <div className="mt-2 text-[11px] flex items-center gap-1.5 whitespace-nowrap" style={{ color: "#a9600d" }}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 shrink-0"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                                <span>รอ <b>{waitName}</b> · {waitDays === 0 ? "วันนี้" : `รอมาแล้ว ${waitDays} วัน`} <span className="text-gray-400">(ตั้งแต่ {fmtDate(rq.updatedAt || rq.createdAt)})</span></span>
                               </div>
                             )}
                           </div>
@@ -177,7 +179,7 @@ export default function Page() {
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         <span title={rq.status === "RECALLED" ? `Recalled by ${rq.recalledBy || "-"}: ${rq.recallReason || ""}` : undefined}
-                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${rq.status === "RECALLED" ? "bg-orange-100 text-orange-700" : noAir ? "bg-gray-100 text-gray-600" : rq.status === "APPROVED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${rq.status === "RECALLED" ? "bg-orange-100 text-orange-700" : stopped ? "bg-gray-100 text-gray-600" : rq.status === "APPROVED" || rq.status === "COMPLETED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
                           {STATUS_LABEL[rq.status] || rq.status}
                         </span>
                       </td>
