@@ -1047,8 +1047,10 @@ export default function ScmRequestPage() {
 
         <div className="mt-3 flex items-center justify-end gap-3 flex-wrap">
           <button onClick={submit} disabled={submitting || cart.length === 0}
-            className="px-5 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: MAROON }}>
-            {submitting ? "Submitting…" : "Submit Pull Material →"}
+            className="group inline-flex items-center gap-2 px-9 py-2.5 rounded-full text-white text-sm font-bold uppercase tracking-[0.2em] transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
+            style={{ background: `linear-gradient(135deg, ${MAROON} 0%, #8a2b2b 100%)`, border: `1px solid ${GOLD_SOFT}`, boxShadow: `0 6px 18px ${MAROON}33, inset 0 1px 0 ${GOLD_SOFT}55` }}>
+            <span style={{ color: GOLD_SOFT }}>✦</span>
+            {submitting ? "กำลังส่ง…" : "Submit"}
           </button>
         </div>
       </div>
