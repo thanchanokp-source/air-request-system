@@ -51,6 +51,7 @@ export default function Page() {
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
+  const [reqF, setReqF] = useState<string[]>([])
   const [pdfing, setPdfing] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewName, setPreviewName] = useState("")
@@ -156,10 +157,12 @@ export default function Page() {
   const scopeReqs = reqs.filter(rq => effType === "ALL" || (rq.requestType || "SCM") === effType)
   const docNos = [...new Set(scopeReqs.map(r => r.documentNo).filter(Boolean))].sort()
   const pos = [...new Set(scopeReqs.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort()
+  const requesters = [...new Set(scopeReqs.map(r => r.requesterName).filter(Boolean))].sort()
   const shown = scopeReqs.filter(rq => {
     if (statusF && rq.status !== statusF) return false
     if (docF.length && !docF.includes(rq.documentNo)) return false
     if (poF.length && !(rq.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
+    if (reqF.length && !reqF.includes(rq.requesterName)) return false
     return true
   })
 
@@ -189,12 +192,13 @@ export default function Page() {
       <div className="flex flex-wrap gap-2 items-center">
         <div className="w-52"><MultiSelect label="Doc No…" options={docNos} value={docF} onChange={setDocF} /></div>
         <div className="w-52"><MultiSelect label="PO…" options={pos} value={poF} onChange={setPoF} /></div>
+        <div className="w-52"><MultiSelect label="Requester…" options={requesters} value={reqF} onChange={setReqF} /></div>
         <select value={statusF} onChange={e => setStatusF(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
           <option value="">All statuses</option>
           {Object.keys(STATUS_LABEL).map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
         </select>
-        {(docF.length || poF.length || statusF || typeF !== "ALL") && <button onClick={() => { setDocF([]); setPoF([]); setStatusF(""); setTypeF("ALL") }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-200 rounded-lg">Clear</button>}
+        {(docF.length || poF.length || reqF.length || statusF || typeF !== "ALL") && <button onClick={() => { setDocF([]); setPoF([]); setReqF([]); setStatusF(""); setTypeF("ALL") }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-200 rounded-lg">Clear</button>}
         <span className="text-xs text-gray-400 ml-auto">{shown.length} / {reqs.length}</span>
       </div>
 
