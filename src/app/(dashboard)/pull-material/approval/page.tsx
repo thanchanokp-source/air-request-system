@@ -152,7 +152,7 @@ export default function Page() {
                 <div className="flex gap-2 shrink-0">
                   <button onClick={() => act(openReq, cfg.next)} disabled={busy}
                     className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 shadow-sm" style={{ background: "#16a34a" }}>
-                    {busy ? "…" : cfg.next === "APPROVED" ? "✓ Approve (final)" : "✓ Approve"}
+                    {busy ? "…" : "✓ Approve"}
                   </button>
                   <button onClick={() => { setRejectReason(""); setShowReject(true) }} disabled={busy}
                     className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 bg-red-600 hover:bg-red-700 shadow-sm">

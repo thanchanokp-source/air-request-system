@@ -34,6 +34,36 @@ const PULL_STATUS_LABEL: Record<string, string> = {
   APPROVED: "Approved",
 }
 
+// Maroon email card (mirrors the Air Request layout). Reused for stage alerts + the LG "enter actual" alert.
+function pullEmailCard(o: { documentNo: string; bu: string; requesterName?: string; statusText: string; so: string; cta: string; link: string }): string {
+  const M = "#6b1a1a", M_SOFT = "#e8b0b0"
+  const base = String(process.env.APP_URL || process.env.NEXTAUTH_URL || "").replace(/\/+$/, "")
+  const loginUrl = base ? `${base}/login` : ""
+  return `<body style="margin:0;background:#f1f5f9">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:40px 0"><tr><td align="center">
+    <table role="presentation" width="440" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;max-width:440px">
+      <tr><td style="background:${M};padding:20px;text-align:center">
+        <p style="margin:0;color:${M_SOFT};font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif;text-transform:uppercase">Nan Yang Textile</p>
+        <h1 style="margin:6px 0 0;color:#ffffff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">PULL MATERIAL</h1>
+      </td></tr>
+      <tr><td style="padding:32px 36px">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr><td style="border-bottom:1px solid #f1f5f9;padding:10px 0"><span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">DOC NO</span><br><span style="color:${M};font-size:15px;font-weight:700;font-family:Arial,sans-serif">${o.documentNo}</span><span style="color:#94a3b8;font-size:12px;font-family:Arial,sans-serif"> · ${o.bu}</span></td></tr>
+          <tr><td style="border-bottom:1px solid #f1f5f9;padding:10px 0"><span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">Requester</span><br><span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${o.requesterName || "-"}</span></td></tr>
+          <tr><td style="border-bottom:1px solid #f1f5f9;padding:10px 0"><span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">Status</span><br><span style="color:${M};font-size:14px;font-weight:600;font-family:Arial,sans-serif">${o.statusText}</span></td></tr>
+          <tr><td style="padding:10px 0"><span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">SO</span><br><span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${o.so}</span></td></tr>
+        </table>
+        <div style="text-align:center;margin-top:24px">
+          <a href="${o.link}" style="display:inline-block;background:${M};color:#fff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif">${o.cta} →</a>
+          ${loginUrl ? `<p style="margin:12px 0 0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Or log in to the system with your account</p><a href="${loginUrl}" style="color:${M};font-size:12px;font-weight:700;font-family:Arial,sans-serif">${loginUrl}</a>` : ""}
+        </div>
+      </td></tr>
+      <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0"><p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Pull Material · Nan Yang Textile Group</p></td></tr>
+    </table>
+  </td></tr></table>
+</body>`
+}
+
 export async function notifyPullStage(reqId: string, status: string): Promise<void> {
   const cfg = STAGE[status]
   // NOTE: PullMaterialRequest has createdById but NO `createdBy` relation — selecting it here made the
@@ -51,15 +81,32 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
   }
   const sos = [...new Set((rq.items || []).map((i: any) => i.soNoDoc).filter(Boolean))].join(", ")
 
-  // Terminal: notify the requester that it's approved (FYI, no action).
+  // Terminal: FYI to the requester + ALERT Logistics to enter the actual air freight.
   if (status === "APPROVED") {
-    const to = rq.requesterEmail
-    if (!to) return
-    const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
-      <h2 style="color:#16a34a;margin:0 0 10px">Pull Material — Approved</h2>
-      <p><b>${rq.documentNo}</b> (${rq.bu}) has been fully approved.</p>
-      <p style="color:#888;font-size:12px">SO: ${sos || "-"}</p></div>`
-    await runWithTestMail(testTo, () => sendMail([to], `[Pull Material] Approved — ${rq.documentNo}`, html)).catch(() => {})
+    const soLine = sos || `${(rq.items || []).length} item(s)`
+    // 1) Requester FYI
+    if (rq.requesterEmail) {
+      const html = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a">
+        <h2 style="color:${"#6b1a1a"};margin:0 0 10px">Pull Material — Approved</h2>
+        <p><b>${rq.documentNo}</b> (${rq.bu}) has been approved.</p>
+        <p style="color:#888;font-size:12px">SO: ${soLine}</p></div>`
+      await runWithTestMail(testTo, () => sendMail([rq.requesterEmail], `[Pull Material] Approved — ${rq.documentNo}`, html)).catch(() => {})
+    }
+    // 2) Logistics alert (fill the actual air freight) — magic link to the LG page.
+    const lgUsers = await (prisma.user as any).findMany({
+      where: { isActive: true, OR: [{ role: "LOGISTICS_IMPORT" }, { roles: { has: "LOGISTICS_IMPORT" } }] },
+      select: { id: true, email: true },
+    })
+    const seenLg = new Set<string>()
+    const lg = lgUsers.filter((u: any) => u.email && !seenLg.has(u.email.toLowerCase()) && seenLg.add(u.email.toLowerCase()))
+    console.log(`[pull-notify] ${rq.documentNo} APPROVED → alert LG recips=${lg.length}`)
+    await runWithTestMail(testTo, async () => {
+      for (const u of lg) {
+        const link = await magicLoginFor(u.id, "/pull-material/logistics")
+        const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, requesterName: rq.requesterName, statusText: "Approved · Logistics — enter actual air freight", so: soLine, cta: "Open Logistics", link })
+        await sendMail([u.email], `[Pull Material] Approved · enter actual — ${rq.documentNo}`, html).catch(() => {})
+      }
+    }).catch(() => {})
     return
   }
 
@@ -77,55 +124,13 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
   console.log(`[pull-notify] ${rq.documentNo} status=${status} bu=${rq.bu} pcTo=${pcTo ?? "-"} roles=${cfg.roles.join(",")} recips=${recips.length}${rq.isTest ? " TEST→" + (testTo ?? "?") : ""}`)
   if (!recips.length) { console.log(`[pull-notify] NO RECIPIENT for ${rq.documentNo} status=${status} (pcTo=${pcTo ?? "-"}) — no email sent`); return }
 
-  const M = "#6b1a1a", M_SOFT = "#e8b0b0"      // maroon theme (matches Air Request card layout)
   const statusText = PULL_STATUS_LABEL[status] || "Notification"
-  const base = String(process.env.APP_URL || process.env.NEXTAUTH_URL || "").replace(/\/+$/, "")
-  const loginUrl = base ? `${base}/login` : ""
+  const soLine = sos || `${(rq.items || []).length} item(s)`
 
   await runWithTestMail(testTo, async () => {
     for (const u of recips) {
       const link = await magicLoginFor(u.id, cfg.redirect)
-      const html = `<body style="margin:0;background:#f1f5f9">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:40px 0">
-    <tr><td align="center">
-      <table role="presentation" width="440" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;max-width:440px">
-        <tr><td style="background:${M};padding:20px;text-align:center">
-          <p style="margin:0;color:${M_SOFT};font-size:10px;letter-spacing:2px;font-family:Arial,sans-serif;text-transform:uppercase">Nan Yang Textile</p>
-          <h1 style="margin:6px 0 0;color:#ffffff;font-size:20px;font-family:Arial,sans-serif;font-weight:800;letter-spacing:2px">PULL MATERIAL</h1>
-        </td></tr>
-        <tr><td style="padding:32px 36px">
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr><td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
-              <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">DOC NO</span><br>
-              <span style="color:${M};font-size:15px;font-weight:700;font-family:Arial,sans-serif">${rq.documentNo}</span>
-              <span style="color:#94a3b8;font-size:12px;font-family:Arial,sans-serif"> · ${rq.bu}</span>
-            </td></tr>
-            <tr><td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
-              <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">Requester</span><br>
-              <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${rq.requesterName || "-"}</span>
-            </td></tr>
-            <tr><td style="border-bottom:1px solid #f1f5f9;padding:10px 0">
-              <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">Status</span><br>
-              <span style="color:${M};font-size:14px;font-weight:600;font-family:Arial,sans-serif">${statusText}</span>
-            </td></tr>
-            <tr><td style="padding:10px 0">
-              <span style="color:#94a3b8;font-size:11px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif;text-transform:uppercase">SO</span><br>
-              <span style="color:#1e293b;font-size:14px;font-family:Arial,sans-serif">${sos || `${(rq.items || []).length} item(s)`}</span>
-            </td></tr>
-          </table>
-          <div style="text-align:center;margin-top:24px">
-            <a href="${link}" style="display:inline-block;background:${M};color:#fff;padding:13px 30px;border-radius:10px;text-decoration:none;font-size:13px;font-weight:700;letter-spacing:1px;font-family:Arial,sans-serif">${cfg.cta} →</a>
-            ${loginUrl ? `<p style="margin:12px 0 0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Or log in to the system with your account</p>
-            <a href="${loginUrl}" style="color:${M};font-size:12px;font-weight:700;font-family:Arial,sans-serif">${loginUrl}</a>` : ""}
-          </div>
-        </td></tr>
-        <tr><td style="background:#f8fafc;padding:14px;text-align:center;border-top:1px solid #e2e8f0">
-          <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial,sans-serif">Pull Material · Nan Yang Textile Group</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>`
+      const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, requesterName: rq.requesterName, statusText, so: soLine, cta: cfg.cta, link })
       await sendMail([u.email], `[Pull Material] ${statusText} — ${rq.documentNo}`, html).catch(() => {})
     }
   }).catch(() => {})
