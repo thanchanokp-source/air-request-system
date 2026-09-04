@@ -10,10 +10,13 @@ import { magicLoginFor } from "@/lib/notify"
 
 // TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
 async function pullTestRecipient(id: string): Promise<string | null> {
+  // PullMaterialRequest has no `createdBy` relation (only createdById) — look the creator up by id.
   const r = await (prisma as any).pullMaterialRequest.findUnique({
-    where: { id }, select: { isTest: true, createdBy: { select: { email: true } } },
+    where: { id }, select: { isTest: true, createdById: true, requesterEmail: true },
   }).catch(() => null)
-  return r?.isTest ? (r.createdBy?.email ?? null) : null
+  if (!r?.isTest) return null
+  const u = r.createdById ? await (prisma.user as any).findUnique({ where: { id: r.createdById }, select: { email: true } }).catch(() => null) : null
+  return u?.email || r.requesterEmail || null
 }
 
 // Valid lifecycle statuses (in order).

@@ -22,12 +22,19 @@ const STAGE: Record<string, { roles: string[]; redirect: string; title: string; 
 // (auto-login → the right page). TEST doc reroutes every mail to the creator (monitor copy).
 export async function notifyPullStage(reqId: string, status: string): Promise<void> {
   const cfg = STAGE[status]
+  // NOTE: PullMaterialRequest has createdById but NO `createdBy` relation — selecting it here made the
+  // whole query throw → notify returned silently → every Pull RM email was lost. Use createdById instead.
   const rq = await (prisma as any).pullMaterialRequest.findUnique({
     where: { id: reqId },
-    select: { documentNo: true, bu: true, requesterName: true, requesterEmail: true, isTest: true, status: true, items: { select: { soNoDoc: true } }, createdBy: { select: { email: true } } },
-  }).catch(() => null)
+    select: { documentNo: true, bu: true, requesterName: true, requesterEmail: true, isTest: true, status: true, createdById: true, items: { select: { soNoDoc: true } } },
+  }).catch((e: any) => { console.log(`[pull-notify] load failed for ${reqId}: ${String(e).slice(0, 160)}`); return null })
   if (!rq) return
-  const testTo = rq.isTest ? (rq.createdBy?.email ?? null) : null
+  // Test docs reroute to the creator; look up their email by id (no relation available).
+  let testTo: string | null = null
+  if (rq.isTest && rq.createdById) {
+    const u = await (prisma.user as any).findUnique({ where: { id: rq.createdById }, select: { email: true } }).catch(() => null)
+    testTo = u?.email || rq.requesterEmail || null
+  }
   const sos = [...new Set((rq.items || []).map((i: any) => i.soNoDoc).filter(Boolean))].join(", ")
 
   // Terminal: notify the requester that it's approved (FYI, no action).
