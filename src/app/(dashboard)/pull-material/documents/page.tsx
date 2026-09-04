@@ -33,7 +33,7 @@ export default function Page() {
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
   const raw = (rq: any, k: string) => edits[rq.id]?.[k] ?? (rq[k] != null ? String(rq[k]) : "")
 
-  // Save the actual (HAWB / INV / Actual Air) — once per document. No status change.
+  // Save the actual (HAWB / INV / Actual Air) → closes the doc (COMPLETED) so it shows done in Tracking.
   const save = async (rq: any) => {
     if (!String(raw(rq, "actualAir")).trim()) return alert("กรอก Actual Air Freight ก่อนบันทึก")
     setBusy(true)
@@ -44,10 +44,13 @@ export default function Page() {
           hawbNo: raw(rq, "hawbNo") || null,
           invoiceNo: raw(rq, "invoiceNo") || null,
           actualAir: raw(rq, "actualAir") === "" ? null : raw(rq, "actualAir"),
+          status: "COMPLETED",
         }),
       })
-      if (r.ok) { setEdits(p => { const n = { ...p }; delete n[rq.id]; return n }); await load() } else alert("Error")
-    } finally { setBusy(false) }
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) { setEdits(p => { const n = { ...p }; delete n[rq.id]; return n }); setOpenId(null); await load() }
+      else alert(`บันทึกไม่สำเร็จ (HTTP ${r.status}): ${d.error || "อาจยังไม่ได้รัน prisma db push (column actualAir/invoiceNo/hawbNo)"}`)
+    } catch (e) { alert("Error: " + String((e as any)?.message || e).slice(0, 160)) } finally { setBusy(false) }
   }
 
   // Build the document PDF (PC + LG data + attachment list) and open it in a preview popup.

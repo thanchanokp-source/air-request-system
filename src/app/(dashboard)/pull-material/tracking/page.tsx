@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, STATUS_LABEL, buColor } from "../_StageWork"
 
@@ -26,6 +26,19 @@ export default function Page() {
   const [q, setQ] = useState("")
   const [statusF, setStatusF] = useState("")
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [pdfing, setPdfing] = useState<string | null>(null)
+
+  // Download the document PDF (available once LG has entered the actual air freight).
+  const downloadPdf = async (rq: any) => {
+    setPdfing(rq.id)
+    try {
+      const [{ pdf }, { PullMaterialPdf }] = await Promise.all([import("@react-pdf/renderer"), import("@/components/pull-material-pdf")])
+      const blob = await pdf(React.createElement(PullMaterialPdf, { req: rq }) as any).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a"); a.href = url; a.download = `${rq.documentNo}.pdf`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch (e) { console.error(e); alert("PDF generation failed") } finally { setPdfing(null) }
+  }
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
@@ -152,6 +165,10 @@ export default function Page() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                        {rq.actualAir != null && (
+                          <button onClick={() => downloadPdf(rq)} disabled={pdfing === rq.id} title="Download PDF"
+                            className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:text-red-800 hover:border-red-300 disabled:opacity-50 mr-1">{pdfing === rq.id ? "…" : "↓ PDF"}</button>
+                        )}
                         {(isAdmin || rq.createdById === userId) && !["APPROVED", "COMPLETED", "RECALLED"].includes(rq.status) && (
                           <button onClick={() => recall(rq)} disabled={busy === rq.id} title="Recall (creator only)"
                             className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-amber-700 hover:border-amber-300 disabled:opacity-50">↩ Recall</button>
