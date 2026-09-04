@@ -48,6 +48,8 @@ export default function Page() {
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [poQ, setPoQ] = useState("")
   const [busy, setBusy] = useState(false)
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
@@ -111,24 +113,46 @@ export default function Page() {
             <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${bu === b ? "text-white border-transparent shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
           ))}</div>
 
-          {loading ? <p className="text-sm text-gray-400">Loading…</p> :
-            reqs.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">No documents pending your approval</div> :
+          {/* Request-type toggle + PO search */}
+          <div className="flex flex-wrap items-center gap-2">
+            {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "PC request"]] as const).map(([v, label]) => {
+              const n = v === "ALL" ? reqs.length : reqs.filter(r => (r.requestType || "SCM") === v).length
+              return (
+                <button key={v} onClick={() => setTypeF(v)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${typeF === v ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                  style={typeF === v ? { background: MAROON } : undefined}>{label} <span className="opacity-70">({n})</span></button>
+              )
+            })}
+            <input value={poQ} onChange={e => setPoQ(e.target.value)} placeholder="🔍 ค้นหา PO / เลขเอกสาร…"
+              className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+          </div>
+
+          {(() => {
+            const pq = poQ.trim().toLowerCase()
+            const shown = reqs.filter(rq => {
+              if (typeF !== "ALL" && (rq.requestType || "SCM") !== typeF) return false
+              if (!pq) return true
+              if (String(rq.documentNo || "").toLowerCase().includes(pq)) return true
+              return (rq.items || []).some((i: any) => String(i.poNoDoc || "").toLowerCase().includes(pq) || String(i.soNoDoc || "").toLowerCase().includes(pq))
+            })
+            return loading ? <p className="text-sm text-gray-400">Loading…</p> :
+            shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">{reqs.length === 0 ? "No documents pending your approval" : "ไม่พบเอกสารที่ตรงกับตัวกรอง"}</div> :
               <div className="space-y-2.5">
-                {reqs.map(rq => (
+                {shown.map(rq => (
                   <button key={rq.id} onClick={() => setOpenId(rq.id)}
                     className="w-full flex items-center justify-between gap-3 px-5 py-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition text-left">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-gray-900">{rq.documentNo}</span>
                         <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{APPROVER[rq.status]?.label || rq.status}</span>
-                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{rq.requestType === "PURCHASING" ? "PC branch" : "SCM branch"}</span>
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items?.length || 0} items · {[...new Set((rq.items || []).map((i: any) => i.soNoDoc))].join(", ")}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items?.length || 0} items · PO {[...new Set((rq.items || []).map((i: any) => i.poNoDoc).filter(Boolean))].join(", ") || "-"}</div>
                     </div>
                     <span className="shrink-0 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>Open →</span>
                   </button>
                 ))}
-              </div>}
+              </div>
+          })()}
         </>
       )}
 
