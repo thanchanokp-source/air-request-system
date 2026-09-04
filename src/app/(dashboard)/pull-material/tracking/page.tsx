@@ -286,14 +286,19 @@ export default function Page() {
         const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (d0.cartons ? String(fmt(d0.cartons)) : "")
         const dimStr = (d0.boxW || d0.boxL || d0.boxH) ? `${d0.boxW || "-"}×${d0.boxL || "-"}×${d0.boxH || "-"} cm` : ""
         const Info = ({ label, value }: { label: string; value: any }) => <div><div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div><div className="text-gray-800 text-sm">{value || "-"}</div></div>
+        const vIsPC = (rq.requestType || "SCM") === "PURCHASING"
+        const vSteps = vIsPC ? ["Requester", "DVM Purchase", "Logistics"] : ["Requester", "Purchase", "SCM Decision", "SCM Approve·1", "SCM Approve·2", "Logistics"]
+        const vCur = vIsPC ? (PC_CUR[rq.status] ?? 1) : (SCM_CUR[rq.status] ?? 1)
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setViewRq(null)}>
-            <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-3 border-b">
                 <div><span className="font-bold text-lg text-gray-900">{rq.documentNo}</span> <span className="text-xs text-gray-400">· {rq.requesterName} · {pullStatus(rq)}</span></div>
                 <button onClick={() => setViewRq(null)} className="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ปิด</button>
               </div>
-              <div className="overflow-y-auto p-5 space-y-4">
+              <div className="overflow-y-auto p-5">
+               <div className="grid lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-2 space-y-4">
                 <div className="bg-white rounded-2xl border border-gray-100 p-4">
                   <div className="text-sm font-bold text-gray-800 mb-3">📄 Document</div>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
@@ -328,6 +333,34 @@ export default function Page() {
                     <div className="mt-4 flex justify-end"><div className="text-center"><img src={rq.approverSignature} alt="signature" className="h-12 mx-auto object-contain" /><div className="border-t border-gray-300 pt-1 text-[11px] text-gray-500 w-44">Approved · DVM Purchase<br />{rq.approverName || ""}</div></div></div>
                   )}
                 </div>
+                </div>
+
+                {/* Approval steps (read-only) */}
+                <div>
+                  <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                    <div className="text-sm font-bold text-gray-800 mb-4">Approval steps</div>
+                    <div className="space-y-0">
+                      {vSteps.map((s, i) => {
+                        const sDone = i < vCur, sNow = i === vCur
+                        const who = i === 0 ? rq.requesterName : (sNow && vIsPC && rq.status === "PENDING_VP_PUR") ? (pcApprover(rq.bu)?.split("@")[0] || "") : ""
+                        return (
+                          <div key={s} className="flex gap-3">
+                            <div className="flex flex-col items-center">
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${sDone ? "bg-green-500 text-white" : sNow ? "bg-amber-400 text-white" : "bg-gray-200 text-gray-400"}`}>{sDone ? "✓" : sNow ? "●" : "○"}</div>
+                              {i < vSteps.length - 1 && <div className={`w-0.5 flex-1 min-h-[26px] ${sDone ? "bg-green-400" : "bg-gray-200"}`} />}
+                            </div>
+                            <div className="pb-4">
+                              <div className={`text-sm font-semibold ${sNow ? "text-amber-700" : sDone ? "text-gray-700" : "text-gray-400"}`}>{s}</div>
+                              {who && <div className="text-[11px] text-gray-500">{who}</div>}
+                              {sNow && <div className="text-[11px] text-amber-600">รออนุมัติ</div>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+               </div>
               </div>
             </div>
           </div>
