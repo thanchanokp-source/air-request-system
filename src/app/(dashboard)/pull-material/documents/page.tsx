@@ -36,6 +36,7 @@ export default function Page() {
   // Save the actual (HAWB / INV / Actual Air) → closes the doc (COMPLETED) so it shows done in Tracking.
   const save = async (rq: any) => {
     if (!String(raw(rq, "actualAir")).trim()) return alert("กรอก Actual Air Freight ก่อนบันทึก")
+    if (!confirm(`บันทึก Actual และปิดงาน ${rq.documentNo}?\n\nActual Air: ${raw(rq, "actualAir")}\nHAWB: ${raw(rq, "hawbNo") || "-"}\nINV: ${raw(rq, "invoiceNo") || "-"}\n\nสถานะเอกสารจะเปลี่ยนเป็น COMPLETED`)) return
     setBusy(true)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
