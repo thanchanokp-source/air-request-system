@@ -10,7 +10,7 @@ const APPROVER: Record<string, { role: string; label: string; next: string; back
   PENDING_DVM_SCM:  { role: "PULL_DVM_SCM",   label: "DVM SCM",        next: "PENDING_VP_SCM",  back: "PENDING_SCM_DECISION", backLabel: "Send back to SCM" },
   PENDING_VP_SCM:   { role: "VP_SCM",         label: "VP SCM",         next: "PENDING_FINAL",   back: "PENDING_DVM_SCM",      backLabel: "Send back to DVM SCM" },
   PENDING_FINAL:    { role: "PULL_PRESIDENT", label: "VP Production",  next: "APPROVED",        back: "PENDING_VP_SCM",       backLabel: "Send back to VP SCM" },
-  PENDING_VP_PUR:   { role: "VP_PUR",         label: "DPM",            next: "APPROVED",        back: "PENDING_PC_DECISION",  backLabel: "Send back to Purchase" },
+  PENDING_VP_PUR:   { role: "VP_PUR",         label: "DVM Purchase",   next: "APPROVED",        back: "PENDING_PC_DECISION",  backLabel: "Send back to Requester" },
   PENDING_APPROVAL: { role: "ADMIN",          label: "Approval (legacy)", next: "APPROVED",     back: "PENDING_SCM_DECISION", backLabel: "Send back" },
 }
 
@@ -22,10 +22,11 @@ const SCM_CHAIN = [
   { s: "PENDING_VP_SCM", l: "VP SCM", role: "VP_SCM" },
   { s: "PENDING_FINAL", l: "VP Production", role: "PULL_PRESIDENT" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
 ]
+// PC branch stepper: Requester → DVM Purchase → Logistics (no role-holder name lists).
 const PC_CHAIN = [
-  { s: "PENDING_PURCHASING", l: "Purchasing", role: "PURCHASING" },
-  { s: "PENDING_PC_DECISION", l: "PC decision", role: "PURCHASING" },
-  { s: "PENDING_VP_PUR", l: "DPM", role: "VP_PUR" }, { s: "APPROVED", l: "Approved · LG fills actual", role: "" },
+  { s: "REQUESTER", l: "Requester", role: "" },
+  { s: "PENDING_VP_PUR", l: "DVM Purchase", role: "VP_PUR" },
+  { s: "APPROVED", l: "Logistics", role: "" },
 ]
 const nameOf = (u: any) => u?.name || (u?.email ? String(u.email).split("@")[0] : "")
 
@@ -178,6 +179,42 @@ export default function Page() {
 
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                   <div className="text-sm font-bold text-gray-800 px-5 pt-5 pb-2">Items</div>
+                  {openReq.requestType === "PURCHASING" ? (() => {
+                    // 1 shipment / 1 doc → shipment fields are identical for all lines. Show them ONCE
+                    // (Country/Port/Est Air/L/T Air) + a by-PO breakdown of the pull qty (QTY AIR).
+                    const items = (openReq.items || [])
+                    const s0 = items.find((x: any) => x.airFreightCost != null) || items[0] || {}
+                    const byPo: Record<string, { qty: number; uoms: Set<string> }> = {}
+                    items.forEach((it: any) => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set() }); g.qty += Number(it.pullMaterialQty) || 0; if (it.bomUom) g.uoms.add(it.bomUom) })
+                    const totalQty = items.reduce((s: number, it: any) => s + (Number(it.pullMaterialQty) || 0), 0)
+                    return (
+                      <div className="px-5 pb-5">
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4 rounded-xl bg-gray-50 p-3">
+                          <Info label="Country" value={s0.country} />
+                          <Info label="Port" value={s0.port || s0.seaPort} />
+                          <Info label="QTY Air" value={fmt(totalQty)} />
+                          <Info label="Est Air" value={total ? `${fmt(total)} USD` : "-"} />
+                          <Info label="L/T Air" value={s0.leadTimeAir} />
+                        </div>
+                        <div className="overflow-x-auto border rounded-xl">
+                          <table className="w-full text-xs">
+                            <thead className="bg-gray-50 text-gray-500"><tr>
+                              {["PO NO", "QTY AIR", "UOM"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+                            </tr></thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {Object.keys(byPo).map(po => (
+                                <tr key={po} className="hover:bg-gray-50">
+                                  <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
+                                  <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(byPo[po].qty)}</td>
+                                  <td className="px-3 py-1.5 whitespace-nowrap">{[...byPo[po].uoms].join(", ") || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )
+                  })() : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead className="bg-gray-50 text-gray-500"><tr>
@@ -204,6 +241,7 @@ export default function Page() {
                       <tfoot><tr className="bg-gray-50 font-semibold"><td colSpan={7} className="px-3 py-2 text-right text-gray-600">Total Air Freight</td><td className="px-3 py-2 text-right" style={{ color: MAROON }}>{fmt(total)}</td><td colSpan={3}></td></tr></tfoot>
                     </table>
                   </div>
+                  )}
                 </div>
               </div>
 
@@ -214,10 +252,13 @@ export default function Page() {
                   <div className="space-y-0">
                     {chain.map((step, i) => {
                       const done = i < curIdx, current = i === curIdx
-                      // PC approval shows the single BU-routed approver; other stages show role holders.
-                      const who = step.s === "PENDING_VP_PUR"
-                        ? nameOf({ email: pcApprover(openReq.bu) })
-                        : step.role ? (roleNames[step.role] || []).join(", ") : ""
+                      // Requester step → the requester; PC approval → the single BU-routed approver;
+                      // other stages (SCM branch) → role holders. Logistics/blank → no names.
+                      const who = step.s === "REQUESTER"
+                        ? (openReq.requesterName || "")
+                        : step.s === "PENDING_VP_PUR"
+                          ? nameOf({ email: pcApprover(openReq.bu) })
+                          : step.role ? (roleNames[step.role] || []).join(", ") : ""
                       return (
                         <div key={step.s} className="flex gap-3">
                           <div className="flex flex-col items-center">
