@@ -85,6 +85,23 @@ export default function Page() {
     } finally { setBusy(null) }
   }
 
+  // Resubmit a recalled document → back into the normal flow (PC → DVM approve · SCM → Purchasing),
+  // which re-sends the stage emails as usual.
+  const resubmit = async (rq: any) => {
+    const start = (rq.requestType || "SCM") === "PURCHASING" ? "PENDING_VP_PUR" : "PENDING_PURCHASING"
+    const to = start === "PENDING_VP_PUR" ? "DVM Purchase (approval)" : "Purchasing"
+    if (!confirm(`ส่ง ${rq.documentNo} เข้า flow อีกครั้ง?\nจะกลับไปที่ขั้น "${to}" และแจ้งเมลตามปกติ`)) return
+    setBusy(rq.id)
+    try {
+      const r = await fetch(`/api/pull-material/${rq.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: start }),
+      })
+      if (r.ok) await load()
+      else { const d = await r.json().catch(() => ({})); alert(d.error || "Resubmit failed") }
+    } finally { setBusy(null) }
+  }
+
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Pull RM / Admin only</p></div>
 
@@ -221,6 +238,10 @@ export default function Page() {
                         {(isAdmin || rq.createdById === userId) && !["APPROVED", "COMPLETED", "RECALLED"].includes(rq.status) && (
                           <button onClick={() => recall(rq)} disabled={busy === rq.id} title="Recall (creator only)"
                             className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-amber-700 hover:border-amber-300 disabled:opacity-50">↩ Recall</button>
+                        )}
+                        {(isAdmin || rq.createdById === userId) && rq.status === "RECALLED" && (
+                          <button onClick={() => resubmit(rq)} disabled={busy === rq.id} title="Resubmit into the flow"
+                            className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50" style={{ background: MAROON }}>↻ Resubmit</button>
                         )}
                       </td>
                     </tr>

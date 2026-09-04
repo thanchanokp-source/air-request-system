@@ -120,6 +120,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const cur = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { actors: true } })
       const set = new Set<string>([...(cur?.actors || []), actorEmail])
       data.actors = [...set]
+      // Resubmit / any forward move → clear a prior recall so it re-enters the flow cleanly.
+      data.recallReason = null
+      data.recalledBy = null
     }
 
     // DVM Purchase approval → snapshot the approver's signature onto the doc (stamped in the PDF).
