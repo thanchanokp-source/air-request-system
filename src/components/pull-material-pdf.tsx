@@ -1,25 +1,30 @@
 import React from "react"
-import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer"
+import { Document, Page, View, Text, Image, StyleSheet, Font } from "@react-pdf/renderer"
+
+// Thai-capable font so Thai text (city / remark / names) renders instead of tofu.
+Font.register({ family: "Sarabun", src: "/fonts/Sarabun-Regular.ttf" })
+Font.register({ family: "SarabunB", src: "/fonts/Sarabun-Bold.ttf" })
+Font.registerHyphenationCallback((word: string) => [word])
 
 const MAROON = "#6b1a1a"
 const fmt = (n: any) => (n == null || isNaN(Number(n)) ? "-" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }))
 const dt = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN(d.getTime()) ? "-" : d.toLocaleDateString("en-GB") }
 
 const s = StyleSheet.create({
-  page: { padding: 34, fontSize: 9, fontFamily: "Helvetica", color: "#1e293b" },
+  page: { padding: 34, fontSize: 9, fontFamily: "Sarabun", color: "#1e293b" },
   header: { backgroundColor: MAROON, padding: 14, borderRadius: 6, marginBottom: 14, textAlign: "center" },
   brand: { color: "#e8b0b0", fontSize: 8, letterSpacing: 2 },
-  title: { color: "#fff", fontSize: 16, fontFamily: "Helvetica-Bold", marginTop: 3, letterSpacing: 2 },
-  docNo: { fontSize: 13, fontFamily: "Helvetica-Bold", color: MAROON },
+  title: { color: "#fff", fontSize: 16, fontFamily: "SarabunB", marginTop: 3, letterSpacing: 2 },
+  docNo: { fontSize: 13, fontFamily: "SarabunB", color: MAROON },
   sub: { fontSize: 8, color: "#64748b", marginBottom: 10 },
   grid: { flexDirection: "row", flexWrap: "wrap", backgroundColor: "#f8fafc", borderRadius: 6, padding: 8, marginBottom: 10 },
   cell: { width: "25%", paddingVertical: 4, paddingRight: 6 },
   label: { fontSize: 7, color: "#94a3b8", textTransform: "uppercase", marginBottom: 1 },
   val: { fontSize: 9 },
-  sectionTitle: { fontSize: 10, fontFamily: "Helvetica-Bold", color: MAROON, marginTop: 6, marginBottom: 4 },
+  sectionTitle: { fontSize: 10, fontFamily: "SarabunB", color: MAROON, marginTop: 6, marginBottom: 4 },
   trH: { flexDirection: "row", backgroundColor: "#f1f5f9", borderBottomWidth: 1, borderBottomColor: "#e2e8f0" },
   tr: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#eef2f7" },
-  th: { fontSize: 8, fontFamily: "Helvetica-Bold", color: "#475569", padding: 4 },
+  th: { fontSize: 8, fontFamily: "SarabunB", color: "#475569", padding: 4 },
   td: { fontSize: 8, padding: 4 },
   lgBox: { flexDirection: "row", flexWrap: "wrap", borderWidth: 1, borderColor: "#bbf7d0", backgroundColor: "#f0fdf4", borderRadius: 6, padding: 8, marginTop: 10 },
   att: { fontSize: 8, color: "#0369a1", marginTop: 2 },
@@ -82,7 +87,7 @@ export function PullMaterialPdf({ req }: { req: any }) {
         </View>
         {Object.keys(byPo).map(po => (
           <View style={s.tr} key={po}>
-            <Text style={[s.td, { width: "40%", fontFamily: "Helvetica-Bold" }]}>{po}</Text>
+            <Text style={[s.td, { width: "40%", fontFamily: "SarabunB" }]}>{po}</Text>
             <Text style={[s.td, { width: "35%" }]}>{byPo[po].vend || "-"}</Text>
             <Text style={[s.td, { width: "15%", textAlign: "right", color: MAROON }]}>{fmt(byPo[po].qty)}</Text>
             <Text style={[s.td, { width: "10%" }]}>{[...byPo[po].uoms].join(", ") || "-"}</Text>
