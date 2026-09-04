@@ -144,8 +144,6 @@ export default function Page() {
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold text-gray-900">{openReq.documentNo}</h1>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{cfg?.label || openReq.status}</span>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">{openReq.requestType === "PURCHASING" ? "PC branch" : "SCM branch"}</span>
                 <span className="text-xs text-gray-400">by {openReq.requesterName} · {fmtDate(openReq.createdAt)}</span>
               </div>
               {cfg && canApprove(openReq.status, openReq.bu) && (
