@@ -123,6 +123,8 @@ export default function ScmRequestPage() {
   const [modeTouched, setModeTouched] = useState(false)
   const suggestRegular = cart.length > 0 && cart.every(c => String(c.soNoDoc || "").startsWith("02"))
   const [submitting, setSubmitting] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+  const showToast = (msg: string, ok: boolean) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 4500) }
   const [lastSync, setLastSync] = useState<string | null>(null)
 
   // Requester is always the logged-in user (creator) — no manual field.
@@ -442,7 +444,6 @@ export default function ScmRequestPage() {
       // weight (whole shipment) → put on item 0; that's what recomputePullAir reads for Est Air.
       items = cart.map((it, i) => ({ ...it, ...pu, weight: i === 0 ? Number(pcWeight) : null }))
     }
-    if (!confirm(`Submit Pull Material request with ${cart.length} item(s)?`)) return
     setSubmitting(true)
     try {
       const r = await fetch("/api/pull-material", {
@@ -461,12 +462,12 @@ export default function ScmRequestPage() {
             if (!ur || !ur.ok) upFail++
           }
         }
-        alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}${files.length ? `\nแนบไฟล์ ${files.length - upFail}/${files.length}${upFail ? " (บางไฟล์ล้มเหลว)" : ""}` : ""}`)
+        showToast(`✓ ส่งคำขอแล้ว: ${d.request?.documentNo}${files.length ? ` · แนบไฟล์ ${files.length - upFail}/${files.length}` : ""}`, true)
         setCart([]); setRemark(""); setIsTest(false); setModeTouched(false); setFiles([])
         setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
         setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }])
       }
-      else alert(`Error: ${d.error || "submit failed"}`)
+      else showToast(`✕ ส่งไม่สำเร็จ: ${d.error || "submit failed"}`, false)
     } finally { setSubmitting(false) }
   }
 
@@ -481,6 +482,22 @@ export default function ScmRequestPage() {
 
   return (
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">
+      {/* Full-screen loading overlay while the request is being submitted (+ files uploading) */}
+      {submitting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
+          <div className="bg-white rounded-2xl shadow-xl px-8 py-6 flex flex-col items-center gap-3">
+            <div className="h-10 w-10 rounded-full border-4 border-gray-200 animate-spin" style={{ borderTopColor: MAROON }} />
+            <p className="text-sm font-semibold text-gray-700">กำลังส่งคำขอ…</p>
+            {files.length > 0 && <p className="text-[11px] text-gray-400">อัปโหลดไฟล์แนบ {files.length} ไฟล์</p>}
+          </div>
+        </div>
+      )}
+      {/* Auto-dismiss toast (no OK button) */}
+      {toast && (
+        <div className={`fixed top-5 right-5 z-50 rounded-xl shadow-lg px-4 py-3 text-sm font-medium text-white max-w-sm ${toast.ok ? "bg-green-600" : "bg-red-600"}`}>
+          {toast.msg}
+        </div>
+      )}
       <div>
         <h1 className="text-xl font-bold" style={{ color: MAROON }}>SCM — Pull Material</h1>
         <p className="text-sm text-gray-500">Request: pick SO / material + pull qty · Send Approve: decide air after LG + PC fill their data</p>
