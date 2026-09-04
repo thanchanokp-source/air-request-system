@@ -13,6 +13,24 @@ const SCM_STEPS = ["SCM Req", "Purchase", "SCM Decision", "SCM App·1", "SCM App
 const PC_CUR: Record<string, number> = { PENDING_PURCHASING: 1, PENDING_PC_DECISION: 1, PENDING_VP_PUR: 1, PENDING_DVM_PUR: 1, APPROVED: 2, COMPLETED: 3 }
 const SCM_CUR: Record<string, number> = { PENDING_PURCHASING: 1, PENDING_LOGISTICS: 1, PENDING_SCM_DECISION: 2, PENDING_DVM_SCM: 3, PENDING_VP_SCM: 4, PENDING_FINAL: 4, APPROVED: 5, COMPLETED: 6 }
 
+// Human status per request type (what stage it's WAITING on).
+//   PC:  Waiting DVM approve → Waiting for LG → Completed
+//   SCM: Waiting Purchase → Waiting SCM air decision → Waiting SCM approve → Waiting for LG → Completed
+function pullStatus(rq: any): string {
+  const s = rq.status
+  if (s === "COMPLETED") return "Completed"
+  if (s === "APPROVED") return "Waiting for LG"
+  if (s === "RECALLED") return "Recalled"
+  if (s === "REJECTED") return "Rejected"
+  if (s === "NO_AIR") return "No air"
+  if ((rq.requestType || "SCM") === "PURCHASING") return "Waiting DVM approve"
+  if (s === "PENDING_PURCHASING") return "Waiting Purchase"
+  if (s === "PENDING_SCM_DECISION") return "Waiting SCM air decision"
+  if (["PENDING_DVM_SCM", "PENDING_VP_SCM", "PENDING_FINAL"].includes(s)) return "Waiting SCM approve"
+  if (s === "PENDING_LOGISTICS") return "Waiting for LG"
+  return STATUS_LABEL[s] || s
+}
+
 export default function Page() {
   const { data: session, status: auth } = useSession()
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
@@ -179,8 +197,8 @@ export default function Page() {
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         <span title={rq.status === "RECALLED" ? `Recalled by ${rq.recalledBy || "-"}: ${rq.recallReason || ""}` : undefined}
-                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${rq.status === "RECALLED" ? "bg-orange-100 text-orange-700" : stopped ? "bg-gray-100 text-gray-600" : rq.status === "APPROVED" || rq.status === "COMPLETED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-                          {STATUS_LABEL[rq.status] || rq.status}
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium ${rq.status === "RECALLED" || rq.status === "REJECTED" ? "bg-orange-100 text-orange-700" : rq.status === "COMPLETED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                          {pullStatus(rq)}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
