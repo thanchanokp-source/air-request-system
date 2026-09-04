@@ -115,6 +115,7 @@ export default function ScmRequestPage() {
   const [pcStaged, setPcStaged] = useState<{ vend: string; po: string; mats: Bom[] }[]>([])
   const [pcStageWeight, setPcStageWeight] = useState("")
   const [remark, setRemark] = useState("")
+  const [files, setFiles] = useState<File[]>([])   // attachments staged in the form → uploaded after create
   const [isTest, setIsTest] = useState(false)
   // Regular (fast-track) vs Irregular (full approval), per doc. Auto-suggested from SO prefix "02";
   // (the Hong-Kong-port / weight<45kg parts are only known after Purchase, so those refine later).
@@ -450,8 +451,18 @@ export default function ScmRequestPage() {
       })
       const d = await r.json()
       if (r.ok) {
-        alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}`)
-        setCart([]); setRemark(""); setIsTest(false); setModeTouched(false)
+        // Upload staged attachments to the freshly-created request.
+        const rid = d.request?.id
+        let upFail = 0
+        if (rid && files.length) {
+          for (const f of files) {
+            const fd = new FormData(); fd.append("file", f)
+            const ur = await fetch(`/api/pull-material/${rid}/attachments`, { method: "POST", body: fd }).catch(() => null)
+            if (!ur || !ur.ok) upFail++
+          }
+        }
+        alert(`Submitted: ${d.request?.documentNo}${isTest ? " (TEST — emails reroute to you)" : ""}${files.length ? `\nแนบไฟล์ ${files.length - upFail}/${files.length}${upFail ? " (บางไฟล์ล้มเหลว)" : ""}` : ""}`)
+        setCart([]); setRemark(""); setIsTest(false); setModeTouched(false); setFiles([])
         setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
         setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }])
       }
@@ -974,6 +985,28 @@ export default function ScmRequestPage() {
           <label className="text-xs font-semibold text-gray-600">Remark</label>
           <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="Note for this pull request (optional)"
             className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+        </div>
+
+        {/* Attachments — staged now, uploaded when the request is created */}
+        <div className="mt-3">
+          <label className="text-xs font-semibold text-gray-600">แนบไฟล์ <span className="text-gray-400 font-normal">(PDF / Excel / รูป — แนบได้หลายไฟล์)</span></label>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <label className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">📎 เลือกไฟล์
+              <input type="file" multiple className="hidden" onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ""; if (fs.length) setFiles(p => [...p, ...fs]) }} />
+            </label>
+            {files.length === 0 && <span className="text-[11px] text-gray-400">ยังไม่ได้แนบไฟล์</span>}
+          </div>
+          {files.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {files.map((f, i) => (
+                <span key={i} className="inline-flex items-center gap-1 text-[11px] bg-gray-100 rounded-full pl-2.5 pr-1 py-1">
+                  📄 <span className="max-w-[200px] truncate" title={f.name}>{f.name}</span>
+                  <span className="text-gray-400">({(f.size / 1024).toFixed(0)} KB)</span>
+                  <button onClick={() => setFiles(p => p.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-600 px-1" title="ลบไฟล์">✕</button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         {/* Regular / Irregular mode — per document. Regular = fast-track (no wait for approval). */}
         <div className="mt-3 rounded-xl border border-gray-200 p-3">

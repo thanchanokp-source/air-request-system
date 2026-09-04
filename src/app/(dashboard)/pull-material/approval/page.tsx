@@ -173,6 +173,7 @@ export default function Page() {
                     <Info label="Items" value={String(openReq.items?.length || 0)} />
                     {openReq.remark && <div className="col-span-2"><Info label="Remark" value={openReq.remark} /></div>}
                   </div>
+                  <PullAttachments reqId={openReq.id} />
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -268,4 +269,24 @@ export default function Page() {
 
 function Info({ label, value }: { label: string; value: any }) {
   return <div><div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div><div className="text-gray-800">{value || "-"}</div></div>
+}
+
+// Attachments uploaded with the request — download links (streamed via the app server).
+function PullAttachments({ reqId }: { reqId: string }) {
+  const [rows, setRows] = useState<any[]>([])
+  useEffect(() => { fetch(`/api/pull-material/${reqId}/attachments`).then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => {}) }, [reqId])
+  if (!rows.length) return null
+  return (
+    <div className="mt-4 pt-3 border-t border-gray-100">
+      <div className="text-[11px] font-semibold text-gray-500 uppercase mb-2">แนบไฟล์ ({rows.length})</div>
+      <div className="flex flex-wrap gap-1.5">
+        {rows.map(a => (
+          <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] bg-sky-50 border border-sky-200 text-sky-800 rounded-full px-2.5 py-1 hover:bg-sky-100">
+            📎 <span className="max-w-[220px] truncate" title={a.fileName}>{a.fileName}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  )
 }

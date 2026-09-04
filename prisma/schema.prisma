@@ -341,6 +341,7 @@ model PullMaterialRequest {
   requesterEmail String?
   remark         String?
   packages       Json?              // PC packing list (per shipment): [{ uom, qty }]
+  attachments    PullMaterialAttachment[]
   recallReason   String?
   recalledBy     String?
   actors         String[]           @default([]) // emails of everyone who acted (PC/LG/SCM) — notified on recall
@@ -466,6 +467,21 @@ model PullPurchaseCity {
   createdAt DateTime @default(now())
 
   @@index([city])
+}
+
+// File attached to a Pull Material request (stored in the shared Supabase bucket, mirrors RequestAttachment).
+model PullMaterialAttachment {
+  id           String              @id @default(cuid())
+  requestId    String
+  uploadedById String?
+  fileName     String
+  filePath     String              // Supabase storage path
+  fileSize     Int
+  mimeType     String
+  createdAt    DateTime            @default(now())
+  request      PullMaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
 }
 
 // Sample log — free-text entries (Brand / Supplier / Qty / Remark). All Pull RM roles.
