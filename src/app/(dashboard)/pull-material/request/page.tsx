@@ -422,8 +422,9 @@ export default function ScmRequestPage() {
 
   const OTHER = "__OTHER__"
   const submit = async () => {
-    if (!requesterName.trim()) return alert("No signed-in user found.")
-    if (cart.length === 0) return alert("No items in the request yet.")
+    const stop = (m: string) => { showToast(`⚠ ${m}`, false); return undefined }
+    if (!requesterName.trim()) return stop("No signed-in user found.")
+    if (cart.length === 0) return stop("ยังไม่มีรายการ — เลือก vendor / PO ก่อน")
 
     // PC requests carry the purchase info here (no separate Purchase stage) → validate + stamp on items.
     let items: any[] = cart
@@ -432,13 +433,13 @@ export default function ScmRequestPage() {
       const c = pcPur.country === OTHER ? "" : pcPur.country
       const p = pcPur.port === OTHER ? "" : pcPur.port
       const sp = pcPur.seaPort === OTHER ? "" : pcPur.seaPort
-      if (!c.trim()) return alert("เลือก / พิมพ์ Country")
-      if (!p.trim() && !sp.trim()) return alert("เลือก Air Port หรือ Sea Port")
-      if (!pcPur.incoterm) return alert("เลือก Incoterm")
-      if (NEEDS_ADDRESS.includes(pcPur.incoterm) && !pcPur.pickup.trim()) return alert(`${pcPur.incoterm} ต้องระบุ Pickup address`)
-      if (!String(pcWeight).trim() || !(Number(pcWeight) > 0)) return alert("กรอกน้ำหนักรวม (kg)")
+      if (!c.trim()) return stop("เลือก / พิมพ์ Country")
+      if (!p.trim() && !sp.trim()) return stop("เลือก Air Port หรือ Sea Port")
+      if (!pcPur.incoterm) return stop("เลือก Incoterm")
+      if (NEEDS_ADDRESS.includes(pcPur.incoterm) && !pcPur.pickup.trim()) return stop(`${pcPur.incoterm} ต้องระบุ Pickup address`)
+      if (!String(pcWeight).trim() || !(Number(pcWeight) > 0)) return stop("กรอกน้ำหนักรวม (kg) ในกล่องข้อมูลจัดซื้อ")
       pkgs = pcPkgs.map(x => ({ uom: x.uom.trim(), qty: Number(x.qty) || 0 })).filter(x => x.uom && x.uom !== "__OTHER__" && x.qty > 0)
-      if (!pkgs.length) return alert("เพิ่ม Package อย่างน้อย 1 บรรทัด (UOM + จำนวน)")
+      if (!pkgs.length) return stop("เพิ่ม Package อย่างน้อย 1 บรรทัด (UOM + จำนวน)")
       const pu = {
         country: c, port: p, seaPort: sp, incoterm: pcPur.incoterm,
         pickupAddress: NEEDS_ADDRESS.includes(pcPur.incoterm) ? pcPur.pickup : "",
@@ -454,7 +455,7 @@ export default function ScmRequestPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode, packages: pkgs }),
       })
-      const d = await r.json()
+      const d = await r.json().catch(() => ({}))
       if (r.ok) {
         // Upload staged attachments to the freshly-created request.
         const rid = d.request?.id
@@ -471,7 +472,9 @@ export default function ScmRequestPage() {
         setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
         setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }])
       }
-      else showToast(`✕ ส่งไม่สำเร็จ: ${d.error || "submit failed"}`, false)
+      else showToast(`✕ ส่งไม่สำเร็จ (HTTP ${r.status}): ${d.error || "submit failed"}`, false)
+    } catch (e) {
+      showToast(`✕ ส่งไม่สำเร็จ: ${String((e as any)?.message || e).slice(0, 140)}`, false)
     } finally { setSubmitting(false) }
   }
 
@@ -1053,7 +1056,7 @@ export default function ScmRequestPage() {
               🧪 Test (เมลเด้งกลับหาคุณ ไม่ส่ง LG/ผู้อนุมัติจริง)
             </label>
           )}
-          <button onClick={submit} disabled={submitting || cart.length === 0}
+          <button onClick={submit} disabled={submitting}
             className="group inline-flex items-center gap-2 px-9 py-2.5 rounded-full text-white text-sm font-bold uppercase tracking-[0.2em] transition-all duration-200 hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0"
             style={{ background: `linear-gradient(135deg, ${MAROON} 0%, #8a2b2b 100%)`, border: `1px solid ${GOLD_SOFT}`, boxShadow: `0 6px 18px ${MAROON}33, inset 0 1px 0 ${GOLD_SOFT}55` }}>
             <span style={{ color: GOLD_SOFT }}>✦</span>
