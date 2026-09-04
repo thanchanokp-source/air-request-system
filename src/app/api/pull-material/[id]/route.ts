@@ -94,6 +94,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data: { mode: body.mode } })
   }
 
+  // LG closes the doc ONCE (1 shipment / 1 doc): actual air freight + INV + HAWB at request level.
+  if ("actualAir" in body || "invoiceNo" in body || "hawbNo" in body) {
+    await (prisma as any).pullMaterialRequest.update({
+      where: { id },
+      data: {
+        ...("actualAir" in body ? { actualAir: num(body.actualAir) } : {}),
+        ...("invoiceNo" in body ? { invoiceNo: body.invoiceNo || null } : {}),
+        ...("hawbNo" in body ? { hawbNo: body.hawbNo || null } : {}),
+      },
+    })
+  }
+
   if (body.status && (PULL_FLOW as readonly string[]).concat(["NO_AIR", "RECALLED", "REJECTED"]).includes(body.status)) {
     const data: any = { status: body.status }
     const isStop = body.status === "RECALLED" || body.status === "REJECTED"

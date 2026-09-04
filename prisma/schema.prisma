@@ -341,6 +341,10 @@ model PullMaterialRequest {
   requesterEmail String?
   remark         String?
   packages       Json?              // PC packing list (per shipment): [{ uom, qty }]
+  // LG closes ONCE per document (1 shipment / 1 doc): actual air freight + INV + HAWB.
+  actualAir      Float?
+  invoiceNo      String?
+  hawbNo         String?
   attachments    PullMaterialAttachment[]
   recallReason   String?
   recalledBy     String?
