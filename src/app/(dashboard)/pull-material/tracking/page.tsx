@@ -269,13 +269,19 @@ export default function Page() {
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         {(rq.attachments || []).length === 0 ? <span className="text-xs text-gray-300">—</span> : (
-                          <div className="flex flex-col gap-0.5">
-                            {(rq.attachments || []).map((a: any) => (
-                              <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-[11px] text-sky-700 hover:underline max-w-[180px] truncate" title={a.fileName}>
-                                📎 {a.fileName}
-                              </a>
-                            ))}
+                          <div className="relative inline-block group">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-sky-700 border border-sky-200 bg-sky-50 rounded-full px-2 py-0.5 cursor-default"
+                              title={(rq.attachments || []).map((a: any) => a.fileName).join("\n")}>
+                              📎 {(rq.attachments || []).length}
+                            </span>
+                            <div className="absolute z-30 left-0 top-full mt-1 hidden group-hover:flex flex-col gap-1 bg-white border border-gray-200 rounded-lg shadow-xl p-2 min-w-[200px] max-w-[280px]">
+                              {(rq.attachments || []).map((a: any) => (
+                                <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] text-sky-700 hover:underline truncate" title={a.fileName}>
+                                  📎 <span className="truncate">{a.fileName}</span>
+                                </a>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </td>
