@@ -249,7 +249,7 @@ export default function LogisticsPage() {
           </div>
         ) : (
           /* ── List of documents ── */
-          reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">No documents at this stage</div> :
+          reqs.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center text-gray-400">ไม่มีเอกสารในขั้นนี้ · การกรอก <b>Actual Air / INV / HAWB</b> หลังอนุมัติ อยู่ที่เมนู <b>LOGISTICS DOCUMENT</b></div> :
             <div className="bg-white rounded-xl border overflow-hidden divide-y divide-gray-100">
               {reqs.map(rq => {
                 const ports = [...new Set(rq.items.map((i: any) => i.port).filter(Boolean))].join(", ")

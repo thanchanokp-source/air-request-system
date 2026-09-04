@@ -122,8 +122,8 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
     console.log(`[pull-notify] ${rq.documentNo} APPROVED → alert LG recips=${lg.length}`)
     await runWithTestMail(testTo, async () => {
       for (const u of lg) {
-        const link = await magicLoginFor(u.id, "/pull-material/logistics")
-        const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText: "Approved · Logistics — enter actual air freight", fields: docFields, cta: "Open Logistics", link })
+        const link = await magicLoginFor(u.id, "/pull-material/documents")   // actual entry lives on the Logistics DOCUMENT page
+        const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText: "Approved · Logistics — enter actual air freight", fields: docFields, cta: "Open Logistics Document", link })
         await sendMail([u.email], `[Pull Material] Approved · enter actual — ${rq.documentNo}`, html).catch(() => {})
       }
     }).catch(() => {})
