@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation"
 import { buColor } from "../_StageWork"
 
 const MAROON = "#6b1a1a"
+const GOLD = "#b08d2e"      // luxury accent
+const GOLD_SOFT = "#c9a94e"
 const BUS = ["NYG", "EA", "TRM", "GW"]
 
 type Bom = {
@@ -552,19 +554,19 @@ export default function ScmRequestPage() {
 
       {reqType === "PURCHASING" ? (
         /* ── PC (Purchasing): pick vendor → select some POs → one total weight → pull every material ── */
-        <div className="bg-white rounded-xl border p-4 space-y-4">
-          <div>
-            <h2 className="font-semibold text-gray-800">Purchasing — เลือก Vendor → PO → ใส่น้ำหนักรวม</h2>
-            <p className="text-xs text-gray-500 mt-0.5">เลือก vendor แล้วติ๊ก PO ที่จะ pull (บางหรือทั้งหมด) · ใส่น้ำหนักรวมก้อนเดียว · ระบบดึง<b>ทุก material ใต้ PO</b>ให้</p>
+        <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: "linear-gradient(180deg,#fffdf8 0%,#ffffff 60%)", border: `1px solid ${GOLD_SOFT}55` }}>
+          <div className="flex items-center gap-3">
+            <span className="h-8 w-1 rounded-full" style={{ background: `linear-gradient(${GOLD},${MAROON})` }} />
+            <h2 className="text-lg font-bold tracking-tight" style={{ color: MAROON }}>Purchasing <span style={{ color: GOLD }}>·</span> Pull Material</h2>
           </div>
 
 
           {/* 1 · Vendor picker (type-ahead from this BU's vendors) */}
           <div className="relative max-w-lg">
-            <label className="text-xs font-semibold text-gray-600 block mb-1">1 · Vendor</label>
+            <label className="text-[11px] font-bold uppercase tracking-wider block mb-1" style={{ color: GOLD }}>1 · Vendor</label>
             {pcVend ? (
               <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-sm bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2 font-medium">🏭 {pcVend}</span>
+                <span className="inline-flex items-center gap-1 text-sm rounded-lg px-3 py-2 font-medium" style={{ background: "#fbf7ec", border: `1px solid ${GOLD_SOFT}66`, color: MAROON }}>🏭 {pcVend}</span>
                 <button onClick={() => { setPcVend(""); setPcPos([]); setPcSelPos(new Set()) }} className="text-xs text-gray-400 hover:text-red-500">เปลี่ยน</button>
               </div>
             ) : (
@@ -605,7 +607,7 @@ export default function ScmRequestPage() {
           {pcVend && (
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-gray-600">2 · เลือก PO ({pcSelPos.size}/{pcPos.length})</label>
+                <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: GOLD }}>2 · เลือก PO ({pcSelPos.size}/{pcPos.length})</label>
                 {pcPos.length > 0 && <button onClick={() => setPcSelPos(allPosSel ? new Set() : new Set(pcPos.map((p: any) => p.po)))} className="text-[11px] text-red-600 font-medium">{allPosSel ? "ยกเลิกทั้งหมด" : "เลือกทั้งหมด"}</button>}
               </div>
               {pcPos.length > 0 && (
@@ -669,20 +671,18 @@ export default function ScmRequestPage() {
                   </tbody>
                 </table>
               </div>
-              <p className="text-[11px] text-gray-400 mt-1">Pull PO = จำนวนที่จะ pull ต่อ PO (default = ยอดรวม, แก้ได้) · ระบบกระจายให้แต่ละ material ตามสัดส่วน</p>
             </div>
           )}
 
           {pcSelMats.length > 0 && (
-            <div className="flex items-center gap-3 flex-wrap rounded-xl border border-emerald-200 bg-emerald-50/40 px-4 py-2.5">
-              <span className="text-xs font-semibold text-emerald-800">✓ เลือกแล้ว {pcSelPos.size} PO · {pcSelMats.length} material</span>
-              <span className="text-[11px] text-gray-500">กรอก “ข้อมูลจัดซื้อ” + น้ำหนัก ด้านล่าง แล้วกด Submit ได้เลย (ไม่ต้อง Add)</span>
+            <div className="flex items-center gap-3 flex-wrap rounded-xl px-4 py-2.5" style={{ background: "#fbf7ec", border: `1px solid ${GOLD_SOFT}66` }}>
+              <span className="text-xs font-bold" style={{ color: MAROON }}>✓ เลือกแล้ว {pcSelPos.size} PO · {pcSelMats.length} material</span>
+              <span className="text-[11px] text-gray-500">กรอก “ข้อมูลจัดซื้อ” + น้ำหนัก ด้านล่าง แล้วกด Submit ได้เลย</span>
             </div>
           )}
 
           {/* Excel alternative */}
-          <div className="border-t pt-3 flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-gray-400">หรือทำเป็นชุดด้วย Excel:</span>
+          <div className="border-t pt-3 flex items-center gap-2 flex-wrap" style={{ borderColor: `${GOLD_SOFT}44` }}>
             <button onClick={pcExport} disabled={pcBusy} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">⬇ Export ({bu})</button>
             <label className={`px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer ${pcBusy ? "opacity-50" : ""}`}>⬆ Import
               <input type="file" accept=".xlsx,.xls" className="hidden" disabled={pcBusy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pcImport(f) }} />
@@ -886,9 +886,9 @@ export default function ScmRequestPage() {
           const box = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 disabled:bg-gray-50 disabled:text-gray-400"
           const dimc = "w-16 border border-gray-200 rounded-lg px-1.5 py-1.5 text-sm text-center bg-white focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           return (
-            <div className="mt-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/40 p-4 space-y-3">
+            <div className="mt-4 rounded-2xl p-4 space-y-3 shadow-sm" style={{ background: "linear-gradient(180deg,#fffdf7,#ffffff)", border: `1.5px solid ${GOLD_SOFT}77` }}>
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <h3 className="text-sm font-bold" style={{ color: MAROON }}>ข้อมูลจัดซื้อ (ใช้ทั้งใบ · จะติดไปทุก material)</h3>
+                <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: MAROON }}><span className="h-4 w-1 rounded-full" style={{ background: GOLD }} />ข้อมูลจัดซื้อ <span className="font-normal text-[11px] text-gray-400">(ใช้ทั้งใบ)</span></h3>
                 {pcEstAir
                   ? <span className="text-xs font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-2.5 py-1">🔒 Est Air ≈ {fmt(pcEstAir.est)} USD{pcEstAir.add ? <span className="text-amber-600"> (+{pcEstAir.inc})</span> : null}</span>
                   : <span className="text-[11px] text-gray-400">กรอก Air Port + น้ำหนักรวม → คำนวณ Est Air อัตโนมัติ</span>}
