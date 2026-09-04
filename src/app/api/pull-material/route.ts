@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
   const num = (v: any) => (v === null || v === undefined || v === "" ? null : Number(v))
   const dt = (v: any) => { if (!v) return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d }
 
+  try {
   const created = await (prisma as any).pullMaterialRequest.create({
     data: {
       documentNo, bu, requesterName,
@@ -131,4 +132,8 @@ export async function POST(req: NextRequest) {
   await notifyPullStage(created.id, created.status).catch((e) => console.log(`[pull-create] notify failed: ${String(e).slice(0, 200)}`))
 
   return NextResponse.json({ request: created })
+  } catch (e: any) {
+    console.log(`[pull-create] FAILED: ${String(e?.message || e).slice(0, 400)}`)
+    return NextResponse.json({ error: String(e?.message || e).slice(0, 300) }, { status: 500 })
+  }
 }
