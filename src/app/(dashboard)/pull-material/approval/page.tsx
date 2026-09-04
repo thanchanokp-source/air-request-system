@@ -83,13 +83,13 @@ export default function Page() {
 
   const act = async (rq: any, toStatus: string) => {
     const isApprove = toStatus === "APPROVED"
-    if (!confirm(`${isApprove ? "Approve" : "Send back"} ${rq.documentNo}?`)) return
-    // Approving requires a signature (like Air Claim) — the modal handles draw/reuse.
+    // Approving requires a signature (like Air Claim) — the signature popup IS the confirmation
+    // (draw first time / reuse after). Non-approve actions still confirm with a dialog.
     let signatureData: string | undefined
     if (isApprove) {
       signatureData = await askSignature()
-      if (!signatureData) return   // cancelled
-    }
+      if (!signatureData) return   // cancelled in the signature popup
+    } else if (!confirm(`Send back ${rq.documentNo}?`)) return
     setBusy(true)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
