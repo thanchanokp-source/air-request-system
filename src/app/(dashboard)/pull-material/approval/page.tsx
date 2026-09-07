@@ -46,7 +46,7 @@ export default function Page() {
   }
 
   const [bu, setBu] = useState("NYG")
-  const [reqs, setReqs] = useState<any[]>([])
+  const [allReqs, setAllReqs] = useState<any[]>([]) // pending-approval docs across ALL BUs
   const [loading, setLoading] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
@@ -74,12 +74,15 @@ export default function Page() {
   const load = async () => {
     setLoading(true)
     try {
-      const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json())
-      // Show docs at any approval status this user owns — evaluate per doc so PC approval respects BU.
-      setReqs((d.requests || []).filter((r: any) => APPROVER[r.status] && canApprove(r.status, r.bu)))
+      // An approver (esp. jariya = PC approver for EVERY BU) must not miss a doc just because it
+      // sits under a different BU tab → load ALL BUs, then filter to what this user can approve.
+      const results = await Promise.all(BUS.map(b => fetch(`/api/pull-material?bu=${b}`).then(r => r.json()).catch(() => ({}))))
+      const seen = new Set<string>()
+      const all = results.flatMap((d: any) => d.requests || []).filter((r: any) => { if (seen.has(r.id)) return false; seen.add(r.id); return true })
+      setAllReqs(all.filter((r: any) => APPROVER[r.status] && canApprove(r.status, r.bu)))
     } finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [bu, isAdmin]) // eslint-disable-line
+  useEffect(() => { load() }, [isAdmin, myEmail]) // eslint-disable-line
 
   const act = async (rq: any, toStatus: string) => {
     const isApprove = toStatus === "APPROVED"
@@ -112,7 +115,8 @@ export default function Page() {
     } finally { setBusy(false) }
   }
 
-  const openReq = reqs.find(r => r.id === openId)
+  const reqs = allReqs.filter((r: any) => r.bu === bu) // docs shown for the selected BU tab
+  const openReq = allReqs.find(r => r.id === openId)
 
   return (
     <div className="p-5 md:p-8 max-w-[1100px] mx-auto space-y-5">
@@ -120,9 +124,13 @@ export default function Page() {
         <>
           <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Approval — Pull Material</h1>
             <p className="text-sm text-gray-400 mt-0.5">Documents pending your approval</p></div>
-          <div className="flex gap-1.5">{BUS.map(b => (
-            <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${bu === b ? "text-white border-transparent shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
-          ))}</div>
+          <div className="flex gap-1.5">{BUS.map(b => {
+            const cnt = allReqs.filter((r: any) => r.bu === b).length
+            return (
+            <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition inline-flex items-center gap-1.5 ${bu === b ? "text-white border-transparent shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>
+              {b}{cnt > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${bu === b ? "bg-white/25 text-white" : "bg-red-100 text-red-700"}`}>{cnt}</span>}
+            </button>
+          )})}</div>
 
           {/* Request-type toggle + PO search */}
           <div className="flex flex-wrap items-center gap-2">
