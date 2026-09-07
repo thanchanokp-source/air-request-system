@@ -211,6 +211,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const cur = byId.get(e.itemId)
       if (!cur) continue
       const data: any = {}
+      if (typeof e.so === "string") {
+        const soRaw = e.so.trim()
+        if (soRaw) {
+          const digits = soRaw.replace(/\D/g, "")
+          if (digits.length < 7 || digits.length > 8) {
+            return NextResponse.json({ error: `SO "${soRaw}" ต้องเป็นตัวเลข 8 หลัก (7 หลักขึ้นต้น 0 ระบบเติมให้)` }, { status: 400 })
+          }
+          data.so = digits.length === 7 ? "0" + digits : digits
+        }
+      }
       if (typeof e.style === "string") data.style = e.style.trim()
       if (typeof e.factory === "string") data.factory = e.factory.trim()
       if (typeof e.country === "string") data.country = e.country.trim()

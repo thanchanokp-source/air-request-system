@@ -1705,6 +1705,7 @@ export default function RequestDetailPage() {
     const edits = (req.items || []).map((it: any) => {
       const o = editRows[it.id]; if (!o) return null
       const e: any = { itemId: it.id }
+      if ("so" in o) e.so = o.so
       if ("style" in o) e.style = o.style
       if ("factory" in o) e.factory = o.factory
       if ("country" in o) e.country = o.country
@@ -1790,7 +1791,8 @@ export default function RequestDetailPage() {
                 const sum = rows.reduce((a: number, r: any) => a + (Number(r.pct) || 0), 0)
                 return (
                   <tr key={it.id} className="border-t border-gray-100 align-top">
-                    <td className="px-2 py-1.5 font-mono text-gray-700 whitespace-nowrap">{it.so || "-"}</td>
+                    <td className="px-2 py-1.5"><input value={editVal(it, "so")} onChange={e => setEdit(it.id, "so", e.target.value)}
+                      placeholder="SO" className="w-28 border border-gray-200 rounded px-1.5 py-1 font-mono" /></td>
                     <td className="px-2 py-1.5"><input value={editVal(it, "style")} onChange={e => setEdit(it.id, "style", e.target.value)}
                       className="w-24 border border-gray-200 rounded px-1.5 py-1" /></td>
                     <td className="px-2 py-1.5"><input type="date" value={editVal(it, "originalShipmentDate")} onChange={e => setEdit(it.id, "originalShipmentDate", e.target.value)}
