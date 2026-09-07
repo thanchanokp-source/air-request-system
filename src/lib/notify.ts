@@ -878,8 +878,14 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
           // NYK claim uses the 3-role sub-flow (Action Approver → EVP + CR user), NOT the
           // forced-position chain. Alert the Action Approver(s); they pick EVP + CR next.
           if (!isVp && dept === "NYK") {
+            // SCM NYK claim = actual air × % → the approver can only act once Logistics has entered
+            // INV + Actual Air Freight on the SO (matches the approvals-queue gate at approvals/page.tsx).
+            // Until then DON'T alert — otherwise the approver gets an email but the doc isn't in their
+            // queue. The post-LG alert is sent by notifyGwClaimNyk() when LG saves its data.
+            const ready = (items as any[]).filter(it => it.invoiceNo && it.actualAirFreight != null)
+            if (!ready.length) continue
             // Include the brand(s) so each NYK approver can tell if it's their brand.
-            const brands = [...new Set((items as any[]).map(it => it.brand).filter(Boolean))].join(", ")
+            const brands = [...new Set(ready.map(it => it.brand).filter(Boolean))].join(", ")
             const brandTag = brands ? ` [${brands}]` : ""
             // SCM_NYK_APPROVER is CROSS-BU (users' bu is often NYG even on GW docs) and may hold the
             // role in roles[] rather than as the primary role → no bu filter, match role OR roles[].
@@ -892,7 +898,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
               if (!u.email) continue
               // Recipient is the SCM NYK Action Approver, NOT a DVM → show the correct status.
               const html = buildHtml(req, newStatus, docLink, undefined, undefined, await magicFor(u.id), "Pending Claim — SCM NYK Approver")
-              await sendMail(u.email, `[Claim – NYK]${brandTag} Pending Approval — ${items.length} SO — ${req.documentNo}`, html)
+              await sendMail(u.email, `[Claim – NYK]${brandTag} Pending Approval — ${ready.length} SO — ${req.documentNo}`, html)
             }
             continue
           }
