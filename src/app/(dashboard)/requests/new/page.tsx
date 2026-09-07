@@ -66,6 +66,24 @@ export default function NewRequestPage() {
     XLSX.utils.book_append_sheet(wb, ws, "Master Description")
     XLSX.writeFile(wb, "Master_Description.xlsx")
   }
+  // ADMIN: pull the latest template files from the source folder into the app + bump the date,
+  // so every MER is prompted to re-download the newest template.
+  const [tplRefreshing, setTplRefreshing] = useState(false)
+  const refreshTemplates = async () => {
+    if (!confirm("ดึงไฟล์เทมเพลตล่าสุดจากโฟลเดอร์ต้นทางมาแทนที่ในระบบ?\n(ผู้ใช้ทุกคนจะเห็นแจ้งเตือนให้ดาวน์โหลดใหม่)")) return
+    setTplRefreshing(true)
+    try {
+      const r = await fetch("/api/template/refresh", { method: "POST" })
+      const d = await r.json().catch(() => ({} as any))
+      if (!r.ok) { alert("รีเฟรชไม่สำเร็จ:\n" + (d.error || `HTTP ${r.status}`)); return }
+      alert(`✓ อัปเดตแล้ว ${d.copied?.length || 0} ไฟล์:\n${(d.copied || []).join("\n")}\n\nวันที่: ${d.updatedAt}\nต้นทาง: ${d.source}`)
+      fetch(`/api/template/version?bu=${userBu}`).then(r2 => r2.json()).then(dd => {
+        if (dd?.version) { setTplVersion(dd.version); setTplUpdatedAt(dd.updatedAt || ""); setTplStale(true) }
+      }).catch(() => {})
+    } catch (e: any) {
+      alert("รีเฟรชไม่สำเร็จ: " + (e?.message || "error"))
+    } finally { setTplRefreshing(false) }
+  }
 
   useEffect(() => {
     // MER picks the FIRST approver from master (dropdown, single). By BU:
@@ -270,6 +288,13 @@ export default function NewRequestPage() {
                   ✓ เทมเพลตล่าสุด{tplUpdatedAt ? ` · อัปเดต ${fmtTplDate(tplUpdatedAt)}` : ""}
                 </span>
               ) : null}
+              {isAdmin && (
+                <button type="button" onClick={refreshTemplates} disabled={tplRefreshing}
+                  title="ADMIN: ดึงไฟล์เทมเพลตล่าสุดจากโฟลเดอร์ต้นทางมาแทนที่ในระบบ (ผู้ใช้จะได้รับแจ้งให้โหลดใหม่)"
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium border bg-white border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                  {tplRefreshing ? "⏳ กำลังรีเฟรช…" : "🔄 Refresh templates"}
+                </button>
+              )}
               <a href={`/api/template?bu=${isGW ? "GW" : isEA ? "EA" : isTRM ? "TRM" : "NYG"}`} download
                 onClick={markTemplateDownloaded}
                 className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium border ${tplStale ? "bg-amber-500 border-amber-500 text-white hover:bg-amber-600" : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"}`}>
