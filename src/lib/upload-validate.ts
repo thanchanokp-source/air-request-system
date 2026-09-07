@@ -56,7 +56,7 @@ export function validateUploadRows(allRows: any[], isGW: boolean): ValidateResul
   const dateFields = ["Original Shipment Date", "Plan Shipment Date"]
   const validDepts = (isGW
     ? ["SCM NYK", "SCM NYG", "NYK", "NYG", "GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
-    : ["COMMERCIAL", "PRODUCTION", "PROCUREMENT", "NYK", "SCM NYK"]
+    : ["COMMERCIAL", "PRODUCTION", "PROCUREMENT", "NYK", "SCM NYK", "SCM NYG"]
   ).map(d => d.toUpperCase().replace(/\s+/g, " ").trim())
 
   const errs: string[] = []

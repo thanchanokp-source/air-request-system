@@ -18,7 +18,7 @@ export default function ApprovalsPage() {
   const userEmail = session?.user?.email || ""
   const userId = (session?.user as any)?.id || ""
   const isGwRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
-  const claimDeptOptions = isGwRole ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
+  const claimDeptOptions = isGwRole ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION", "SCM NYG"]
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [brandF, setBrandF] = useState<string[]>([])

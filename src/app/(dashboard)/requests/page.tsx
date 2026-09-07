@@ -316,7 +316,7 @@ export default function RequestsPage() {
 
   const filtered = applyFilters(allRows, { brand: brandF, style: styleF, so: soF, sub: subF, cp: cpF, port: portF, country: countryF, claim: claimF, invoice: invoiceF, hawb: hawbF, stage: stageF, docNo: docNoF, createdBy: createdByF, desc: descF })
   // Stage filter options: the pipeline stages + a "Claim: <dept>" sub-option per claim department.
-  const claimDeptOpts = activeBu === "GW" ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
+  const claimDeptOpts = activeBu === "GW" ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION", "SCM NYG"]
   const stageOptions = [...POSITIONS.map(p => p.label), ...claimDeptOpts.map(d => `Claim: ${d}`)]
 
   const docGroups = buRequests.map(req => {

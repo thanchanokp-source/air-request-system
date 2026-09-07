@@ -342,8 +342,8 @@ function ClaimStatusBoard({ req }: { req: any }) {
   )
 }
 
-// NYG claim departments (SCM NYG removed — NYG uses NYK, not NYG, as a claim dept).
-const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
+// NYG/EA/TRM claim departments. "SCM NYG" = single-step approval by Saji (VP_SCM).
+const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION", "SCM NYG"]
 const CLAIM_DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
 
 // Avatar colour derived from the name so each person is visually distinct.

@@ -27,7 +27,7 @@ const canonDept = (d: string) => {
   return d
 }
 const DEPT_ORDER_GW = ["NYK", "NYG", "GW", "SUPPLIER"]
-const DEPT_ORDER_NYG = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
+const DEPT_ORDER_NYG = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION", "NYG"]
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 
