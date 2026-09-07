@@ -26,7 +26,7 @@ export async function GET() {
       OR: [{ role: { in: ENTRY_ROLES } }, { roles: { hasSome: ENTRY_ROLES } }],
     },
     select: {
-      email: true, name: true, role: true, roles: true, bu: true,
+      id: true, email: true, name: true, role: true, roles: true, bu: true,
       priority: true, claimDepartment: true, procurementType: true,
     },
     orderBy: [{ priority: "asc" }, { createdAt: "asc" }],

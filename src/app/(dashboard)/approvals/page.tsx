@@ -293,12 +293,29 @@ export default function ApprovalsPage() {
     // pk G2/G4); EA has ONE approver (theerawee, no G-split). Show a PRODUCTION SO only if
     // this claimer's BU covers the doc's BU AND (no G on the SO → all-G approver, or the G matches).
     if (isProdClaimer) {
+      const prodApprovers = approverDir.filter((u: any) => u.role === "CLAIM_PRODUCTION" || (u.roles || []).includes("CLAIM_PRODUCTION"))
+      const me = prodApprovers.find((u: any) => String(u.email || "").toLowerCase() === String(userEmail || "").toLowerCase())
+      const myPrio = me?.priority ?? null
       out = out.filter((i: any) => {
         const onProd = i.claimDepartment === "PRODUCTION" || getSplits(i).some((s: any) => s.dept === "PRODUCTION")
         if (!onProd) return true
         if (userBu && userBu !== "ALL" && !requestInBu(r, userBu)) return false // theerawee(EA) vs rushan/pk(NYG)
         const g = vpProdGroup(i.factory)
-        return !g || prodGroupCovers(userClaimDept, g)
+        if (g && !prodGroupCovers(userClaimDept, g)) return false
+        // Priority turn — at the ENTRY step, hide the SO until EVERY lower-priority approver of the
+        // SAME G + BU has approved it (so e.g. Rushan/PK prio-3 don't see it before sahapat/amporn prio-1).
+        const ss = deptSplitStatus(i, "PRODUCTION")
+        const atEntry = ss == null || ss === "CLAIM_PENDING"
+        if (atEntry && myPrio != null) {
+          const approvedIds = new Set((i.claimApprovals || []).map((a: any) => a.userId))
+          const lowerPending = prodApprovers.some((u: any) =>
+            u.priority != null && u.priority < myPrio &&
+            (u.bu === r.bu || u.bu === "ALL") &&
+            (!g || prodGroupCovers(u.claimDepartment, g)) &&
+            !approvedIds.has(u.id))
+          if (lowerPending) return false
+        }
+        return true
       })
     }
     return out

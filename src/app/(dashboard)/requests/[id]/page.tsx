@@ -229,6 +229,8 @@ function PresidentFinalCard({ req, bu, submitting, onApprove }: {
 // existing claim UI. Works for both NYG (DVM→VP per dept) and GW (parallel per dept).
 function ClaimStatusBoard({ req }: { req: any }) {
   const [open, setOpen] = useState(true)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({}) // per-dept "show all SO chips"
+  const CHIP_CAP = 12
   const items: any[] = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
   const soCur = (item: any) => soCurrency(req?.bu, item?.brand ?? req?.brandName)
 
@@ -319,14 +321,20 @@ function ClaimStatusBoard({ req }: { req: any }) {
                     <div className={`h-full ${DOT[dstate]} rounded-full`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
-                {/* per-SO chips coloured by state */}
+                {/* per-SO chips coloured by state — collapsed to CHIP_CAP unless expanded */}
                 <div className="flex flex-wrap gap-1">
-                  {rows.map((r, k) => (
+                  {(expanded[dept] ? rows : rows.slice(0, CHIP_CAP)).map((r, k) => (
                     <span key={k} title={`${r.so} — ${r.label}`}
                       className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-medium ${CHIP[r.state]}`}>
                       <span className={`w-1 h-1 rounded-full ${DOT[r.state]}`} />{r.so}
                     </span>
                   ))}
+                  {total > CHIP_CAP && (
+                    <button type="button" onClick={() => setExpanded(p => ({ ...p, [dept]: !p[dept] }))}
+                      className="text-[10px] px-1.5 py-0.5 rounded border border-gray-300 text-gray-500 hover:bg-gray-100 font-medium">
+                      {expanded[dept] ? "▲ ย่อ" : `▼ +${total - CHIP_CAP} เพิ่มเติม`}
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center justify-between text-[11px] pt-0.5 border-t border-gray-100">
                   <span className="text-gray-500">Claim: <span className="font-semibold text-gray-700 tabular-nums">{fmtSplit(amt, (n) => fmtNum(n))}</span></span>
