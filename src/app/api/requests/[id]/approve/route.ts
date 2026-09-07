@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
 import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi, notifyRecall, notifyGwClaimNyk, notifyReviseToLg } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
-import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles } from "@/lib/claim"
+import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles, vpProdGroup, prodGroupCovers } from "@/lib/claim"
 import { recomputeRequestFreight, redistributeHawbCost } from "@/lib/freight"
 import { buildRequestItems } from "@/lib/build-items"
 
@@ -1896,10 +1896,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Get all active approvers at this step with priority set (no priority = excluded).
-    const allApprovers = await (prisma.user as any).findMany({
+    let allApprovers = await (prisma.user as any).findMany({
       where: { ...groupWhere, isActive: true, priority: { not: null } },
       orderBy: [{ priority: "asc" }, { createdAt: "asc" }]
     })
+    // PRODUCTION claim is per-factory-G AND per-BU: only approvers whose BU matches the doc and
+    // whose G-group covers THIS SO's factory count toward the priority order / "everyone approved".
+    // (Other depts keep their existing behavior — this guard is PRODUCTION-only.)
+    if (dept === "PRODUCTION") {
+      const g = vpProdGroup((itemData as any).factory)
+      allApprovers = allApprovers.filter((u: any) =>
+        (u.bu === request.bu || u.bu === "ALL") &&
+        (g ? prodGroupCovers(u.claimDepartment, g) : true))
+    }
 
     // Check current user's priority — must have all lower-priority approvals first
     const currentUser = allApprovers.find((u: any) => u.id === userId)
@@ -1969,9 +1978,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const gateItems = await prisma.airRequestItem.findMany({ where: { requestId: id, itemStatus: gate } })
         const mine = await (prisma as any).claimApproval.findMany({ where: { userId, item: { requestId: id } }, select: { itemId: true } })
         const mineIds = new Set(mine.map((a: any) => a.itemId))
-        const remaining = gateItems.filter((it: any) => getSplits(it).some((s: any) => s.dept === dept) && !mineIds.has(it.id))
+        // PRODUCTION cascades PER G-group: this approver only "finishes" the SOs of their own G,
+        // and the next-priority alert is scoped to that G (claimDepartment "G1G3"/"G2G4").
+        const myG = dept === "PRODUCTION" ? (currentUser?.claimDepartment || null) : null
+        const remaining = gateItems.filter((it: any) => getSplits(it).some((s: any) => s.dept === dept) && !mineIds.has(it.id)
+          && (dept !== "PRODUCTION" || prodGroupCovers(myG, vpProdGroup((it as any).factory))))
         if (remaining.length === 0) {
-          await notifyClaimNextPriority(id, groupRoles, null, myPriority, dept).catch(() => {})
+          await notifyClaimNextPriority(id, groupRoles, myG, myPriority, dept).catch(() => {})
         }
       }
     }
