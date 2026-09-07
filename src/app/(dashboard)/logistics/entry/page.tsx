@@ -174,14 +174,24 @@ export default function LgEntryPage() {
       const action = complete && isGw ? "approve" : "save_logistics_draft"
       // Send the full hawbTotals (not just this doc's) so the server can cost each HAWB globally,
       // including its lines that live in OTHER documents.
-      await fetch(`/api/requests/${reqId}/approve`, {
+      const res = await fetch(`/api/requests/${reqId}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, itemLogistics: pick(itemLog), itemActuals: pick(itemAct), itemShipData: pick(itemShip), hawbTotals, lgComplete: complete }),
       })
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({} as any))
+        throw new Error(e.error || `Save failed (${res.status}) — ${docMap[reqId]?.documentNo || reqId}`)
+      }
     }
   }
 
-  const saveDraft = async () => { setSaving(true); await persist(new Set()); await load(); setSaving(false); alert("Draft saved (not sent yet)") }
+  const saveDraft = async () => {
+    setSaving(true)
+    let err = ""
+    try { await persist(new Set()); await load() } catch (e: any) { err = e?.message || "error" }
+    setSaving(false); await new Promise(r => setTimeout(r, 50))
+    alert(err ? `บันทึกไม่สำเร็จ: ${err}` : "Draft saved (not sent yet)")
+  }
 
   const send = async () => {
     // Every selected SO must have Plan Ship Date + QTY Air filled before Send.
@@ -190,8 +200,11 @@ export default function LgEntryPage() {
     const ready = involvedReqIds.filter(docComplete)
     if (ready.length === 0) { alert("No documents are ready to send — selected SOs must be in a HAWB (with HAWB No)"); return }
     if (!confirm(`Forward ${ready.length} ready document(s)? (the rest will be saved as draft)`)) return
-    setSaving(true); await persist(new Set(ready)); await load(); setSaving(false)
-    alert(`Forwarded ${ready.length} document(s)`)
+    setSaving(true)
+    let err = ""
+    try { await persist(new Set(ready)); await load() } catch (e: any) { err = e?.message || "error" }
+    setSaving(false); await new Promise(r => setTimeout(r, 50))
+    alert(err ? `ส่งไม่สำเร็จ: ${err}` : `Forwarded ${ready.length} document(s)`)
   }
 
   // Export the SELECTED transactions (cross-document) as the MER-format sheet + SCM claim columns,
