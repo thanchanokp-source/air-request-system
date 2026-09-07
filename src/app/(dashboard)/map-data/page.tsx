@@ -18,13 +18,15 @@ export default function MapDataPage() {
   const [err, setErr] = useState("")
   const [tab, setTab] = useState<"all" | "matched" | "not_found" | "mer_upload">("all")
   const [q, setQ] = useState("")
+  const [mode, setMode] = useState<"sosub" | "so">("sosub")
 
   useEffect(() => {
-    fetch("/api/map-data").then(async r => {
+    setLoading(true); setErr("")
+    fetch(`/api/map-data?mode=${mode}`).then(async r => {
       if (!r.ok) { const e = await r.json().catch(() => ({} as any)); throw new Error(e.error || `HTTP ${r.status}`) }
       return r.json()
     }).then(setData).catch(e => setErr(e.message)).finally(() => setLoading(false))
-  }, [])
+  }, [mode])
 
   const filtered = useMemo(() => {
     if (!data) return []
@@ -50,7 +52,17 @@ export default function MapDataPage() {
     <div className="p-6 max-w-7xl mx-auto space-y-4">
       <div>
         <h1 className="text-xl font-bold" style={{ color: MAROON }}>Map Data — Air Request ↔ mp_line</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Cross-check ด้วยคีย์ <b>SO + SUB</b> · QTY Air = <b>final_pcs</b> จาก mp_line (INV ไม่ใช้ join เพราะคนละชุด)</p>
+        <p className="text-xs text-gray-500 mt-0.5">QTY Air = <b>final_pcs</b> จาก mp_line (INV ไม่ใช้ join เพราะคนละชุด)</p>
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-xs text-gray-500">จับคู่ด้วย:</span>
+          {(["sosub", "so"] as const).map(mm => (
+            <button key={mm} onClick={() => setMode(mm)}
+              className={`text-xs px-3 py-1 rounded-lg border font-medium ${mode === mm ? "text-white" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+              style={mode === mm ? { background: MAROON, borderColor: MAROON } : {}}>
+              {mm === "sosub" ? "SO + SUB" : "SO อย่างเดียว (รวมทุก SUB)"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading && <div className="text-sm text-gray-500">กำลังโหลด…</div>}
