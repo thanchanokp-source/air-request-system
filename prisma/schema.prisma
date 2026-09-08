@@ -348,6 +348,7 @@ model PullMaterialRequest {
   mawbNo         String?
   flightEtd      DateTime?          // LG: flight estimated time of departure
   flightEta      DateTime?          // LG: flight estimated time of arrival
+  poInvoices     Json?              // LG: per-PO invoice map { "<poNo>": "<invoiceNo>" } (from OCR/manual)
   // DVM Purchase approval signature snapshot (base64 PNG data URI), stamped in the PDF.
   approverSignature String?
   approverName      String?

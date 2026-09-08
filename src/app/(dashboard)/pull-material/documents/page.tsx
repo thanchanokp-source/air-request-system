@@ -49,6 +49,9 @@ export default function Page() {
   const raw = (rq: any, k: string) => edits[rq.id]?.[k] ?? (rq[k] != null ? String(rq[k]) : "")
   // Date fields → normalize to YYYY-MM-DD for <input type=date>.
   const rawDate = (rq: any, k: string) => edits[rq.id]?.[k] ?? (rq[k] ? String(rq[k]).slice(0, 10) : "")
+  // Per-PO invoice (stored in rq.poInvoices map); edits are keyed "poinv:<po>".
+  const poInv = (rq: any, po: string) => edits[rq.id]?.["poinv:" + po] ?? ((rq.poInvoices || {})[po] || "")
+  const buildPoInvoices = (rq: any) => { const m: Record<string, string> = { ...(rq.poInvoices || {}) }; Object.entries(edits[rq.id] || {}).forEach(([k, v]) => { if (k.startsWith("poinv:")) { const po = k.slice(6); if (v) m[po] = v; else delete m[po] } }); return m }
 
   // Save the actual (HAWB / INV / Actual Air) → closes the doc (COMPLETED) so it shows done in Tracking.
   const save = async (rq: any) => {
@@ -64,6 +67,7 @@ export default function Page() {
           invoiceNo: raw(rq, "invoiceNo") || null,
           flightEtd: rawDate(rq, "flightEtd") || null,
           flightEta: rawDate(rq, "flightEta") || null,
+          poInvoices: buildPoInvoices(rq),
           actualAir: raw(rq, "actualAir") === "" ? null : raw(rq, "actualAir"),
           status: "COMPLETED",
         }),
@@ -108,7 +112,7 @@ export default function Page() {
       its.forEach(it => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set() }); g.qty += Number(it.pullMaterialQty) || 0; if (it.bomUom) g.uoms.add(it.bomUom) })
       Object.keys(byPo).forEach(po => ws.addRow({
         doc: rq.documentNo, bu: rq.bu, po, qty: byPo[po].qty, uom: [...byPo[po].uoms].join(", "),
-        hawb: raw(rq, "hawbNo"), mawb: raw(rq, "mawbNo"), inv: raw(rq, "invoiceNo"),
+        hawb: raw(rq, "hawbNo"), mawb: raw(rq, "mawbNo"), inv: poInv(rq, po) || raw(rq, "invoiceNo"),
         etd: rawDate(rq, "flightEtd"), eta: rawDate(rq, "flightEta"), act: raw(rq, "actualAir") === "" ? "" : Number(raw(rq, "actualAir")),
         country: d0.country || "", port: d0.port || d0.seaPort || "", incoterm: d0.incoterm || "",
       }))
@@ -256,13 +260,17 @@ export default function Page() {
                   </div>
                   <div className="border rounded-xl overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-gray-50 text-gray-500"><tr>{["PO NO", "QTY AIR", "UOM"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
+                      <thead className="bg-gray-50 text-gray-500"><tr>{["PO NO", "QTY AIR", "UOM", "INVOICE NO"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
                       <tbody className="divide-y divide-gray-50">
                         {Object.keys(byPo).map(po => (
                           <tr key={po} className="hover:bg-gray-50">
                             <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
                             <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(byPo[po].qty)}</td>
                             <td className="px-3 py-1.5 whitespace-nowrap">{[...byPo[po].uoms].join(", ") || "-"}</td>
+                            <td className="px-3 py-1 min-w-[160px]">
+                              <input value={poInv(rq, po)} onChange={e => setVal(rq.id, "poinv:" + po, e.target.value)} placeholder="INV ต่อ PO นี้…"
+                                className="border border-green-300 bg-green-50/40 rounded-lg px-2 py-1 text-xs w-full focus:outline-none focus:ring-2 focus:ring-green-200" />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
