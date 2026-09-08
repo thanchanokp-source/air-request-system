@@ -99,6 +99,8 @@ export default function ScmRequestPage() {
   const [pcVend, setPcVend] = useState("")
   const [pcVendQ, setPcVendQ] = useState("")
   const [pcVendOpen, setPcVendOpen] = useState(false)
+  const [vendorAddrLoading, setVendorAddrLoading] = useState(false)
+  const [pickupEditing, setPickupEditing] = useState(false)
   const [pcPos, setPcPos] = useState<any[]>([])
   const [pcSelPos, setPcSelPos] = useState<Set<string>>(new Set())
   const [pcSelMats, setPcSelMats] = useState<Bom[]>([]) // materials of the selected POs (shown below)
@@ -257,7 +259,11 @@ export default function ScmRequestPage() {
   // collapse them and make one PO "disappear" from the summary.
   const matK = (m: any) => `${m.poNoDoc || "-"}|${m.soNoDoc}|${m.itemCode}`
   const pickPcVend = async (v: string) => {
-    setPcVend(v); setPcVendQ(""); setPcVendOpen(false); setPcSelPos(new Set()); setPcSelMats([]); setPcLoad(true)
+    setPcVend(v); setPcVendQ(""); setPcVendOpen(false); setPcSelPos(new Set()); setPcSelMats([]); setPcLoad(true); setPickupEditing(false)
+    // Auto-fill the Vendor / Pickup address from dc_vendor (contain match on vendor_name).
+    setVendorAddrLoading(true)
+    fetch(`/api/bom?bu=${bu}&vendorAddr=${encodeURIComponent(v)}`).then(r => r.json())
+      .then(d => setPcPur(p => ({ ...p, pickup: d.address || "" }))).catch(() => {}).finally(() => setVendorAddrLoading(false))
     try { const d = await fetch(`/api/bom?bu=${bu}&vendorPos=${encodeURIComponent(v)}`).then(r => r.json()); setPcPos(Array.isArray(d.pos) ? d.pos : []) }
     finally { setPcLoad(false) }
   }
@@ -444,7 +450,7 @@ export default function ScmRequestPage() {
       if (!pkgs.length) return stop("เพิ่ม Package อย่างน้อย 1 บรรทัด (UOM + จำนวน)")
       const pu = {
         country: c, port: p, seaPort: sp, incoterm: pcPur.incoterm,
-        pickupAddress: NEEDS_ADDRESS.includes(pcPur.incoterm) ? pcPur.pickup : "",
+        pickupAddress: pcPur.pickup || "",
         city: pcCity?.city || "", needDate: pcPur.needDate || "", etc: pcPur.etc || null,
         cartons: pkgs.reduce((s, x) => s + x.qty, 0), boxW: pcPur.boxW, boxL: pcPur.boxL, boxH: pcPur.boxH,
       }
@@ -473,7 +479,7 @@ export default function ScmRequestPage() {
         showToast(`✓ ส่งคำขอแล้ว: ${d.request?.documentNo}${files.length ? ` · แนบไฟล์ ${files.length - upFail}/${files.length}` : ""}`, true)
         setCart([]); setRemark(""); setIsTest(false); setModeTouched(false); setFiles([])
         setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", etc: "", pkg: "", boxW: "", boxL: "", boxH: "" })
-        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }])
+        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }]); setPickupEditing(false)
       }
       else showToast(`✕ ส่งไม่สำเร็จ (HTTP ${r.status}): ${d.error || "submit failed"}`, false)
     } catch (e) {
@@ -574,7 +580,7 @@ export default function ScmRequestPage() {
             {pcVend ? (
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1 text-sm rounded-lg px-3 py-2 font-medium" style={{ background: "#fbf7ec", border: `1px solid ${GOLD_SOFT}66`, color: MAROON }}>🏭 {pcVend}</span>
-                <button onClick={() => { setPcVend(""); setPcPos([]); setPcSelPos(new Set()) }} className="text-xs text-gray-400 hover:text-red-500">เปลี่ยน</button>
+                <button onClick={() => { setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPickupEditing(false); setPcPur(p => ({ ...p, pickup: "" })) }} className="text-xs text-gray-400 hover:text-red-500">เปลี่ยน vendor</button>
               </div>
             ) : (
               <>
@@ -592,6 +598,25 @@ export default function ScmRequestPage() {
               </>
             )}
           </div>
+
+          {/* Vendor / Pickup address — auto-filled from dc_vendor (contain match on vendor_name); "เปลี่ยน" to edit */}
+          {pcVend && (
+            <div className="max-w-lg">
+              <label className="text-[11px] font-bold uppercase tracking-wider block mb-1" style={{ color: GOLD }}>ที่อยู่ Vendor {vendorAddrLoading && <span className="text-gray-400 normal-case font-normal">· กำลังดึง…</span>}</label>
+              {pickupEditing ? (
+                <textarea value={pcPur.pickup} onChange={e => setPcPur(p => ({ ...p, pickup: e.target.value }))} rows={3} autoFocus
+                  placeholder="ที่อยู่ vendor / supplier (พิมพ์แก้ได้)"
+                  className="w-full border border-amber-300 bg-amber-50 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
+              ) : (
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 text-sm rounded-lg px-3 py-2 bg-gray-50 border border-gray-200 text-gray-700 whitespace-pre-wrap min-h-[38px]">
+                    {pcPur.pickup || <span className="text-gray-400">— ไม่พบใน dc_vendor · กด “เปลี่ยน” เพื่อพิมพ์เอง —</span>}
+                  </div>
+                  <button onClick={() => setPickupEditing(true)} className="text-xs text-blue-600 hover:underline whitespace-nowrap mt-2">เปลี่ยน</button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Manual add — type a Vendor + PO yourself (PO may not be in the system) */}
           <div>

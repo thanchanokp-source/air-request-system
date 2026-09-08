@@ -59,6 +59,30 @@ export async function GET(req: NextRequest) {
     } catch (e: any) { return NextResponse.json({ error: e?.message || "vendors failed", vendors: [] }, { status: 500 }) }
   }
 
+  // Vendor address mode: look up dc_vendor by vendor_name (CONTAIN match) and concat its address
+  // (address_line1..4 + city + county + country) → prefill the Pickup/Vendor address on the PC form.
+  const vendorAddr = (sp.get("vendorAddr") || "").trim()
+  if (vendorAddr) {
+    try {
+      const loc = await prisma.$queryRawUnsafe<any[]>(`SELECT table_schema AS s FROM information_schema.tables WHERE lower(table_name)='dc_vendor' LIMIT 1`)
+      if (!loc.length) return NextResponse.json({ address: "", matched: null })
+      const sc = loc[0].s
+      const cc = await prisma.$queryRawUnsafe<any[]>(`SELECT lower(column_name) AS c FROM information_schema.columns WHERE table_schema=$1 AND lower(table_name)='dc_vendor'`, sc)
+      const set = new Set(cc.map(r => r.c))
+      if (!set.has("vendor_name")) return NextResponse.json({ address: "", matched: null })
+      const parts = ["address_line1", "address_line2", "address_line3", "address_line4", "city", "county", "country"].filter(c => set.has(c))
+      if (!parts.length) return NextResponse.json({ address: "", matched: null })
+      const selCols = parts.map(c => `"${c}"`).join(", ")
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT vendor_name, ${selCols} FROM "${sc}"."dc_vendor" WHERE vendor_name ILIKE $1 ORDER BY length(vendor_name) ASC LIMIT 1`,
+        `%${vendorAddr}%`)
+      if (!rows.length) return NextResponse.json({ address: "", matched: null })
+      const r = rows[0]
+      const address = parts.map(c => r[c]).map(v => (v == null ? "" : String(v).trim().replace(/[,\s]+$/, ""))).filter(Boolean).join(", ")
+      return NextResponse.json({ address, matched: r.vendor_name })
+    } catch (e: any) { return NextResponse.json({ address: "", error: e?.message || "vendorAddr failed" }) }
+  }
+
   // UOMs mode: distinct bom_uom values in this BU — the PC by-PO "UOM" dropdown list.
   if (sp.get("uoms")) {
     if (!has("bom_uom")) return NextResponse.json({ uoms: [] })
