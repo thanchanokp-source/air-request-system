@@ -445,6 +445,8 @@ export default function ScmRequestPage() {
       if (!c.trim()) return stop("เลือก / พิมพ์ Country")
       if (!p.trim() && !sp.trim()) return stop("เลือก Air Port หรือ Sea Port")
       if (!pcPur.incoterm) return stop("เลือก Incoterm")
+      if (!pcPur.needDate) return stop("เลือก Need date (in-house)")
+      if (!pcPur.etc) return stop("เลือก ETC")
       if (NEEDS_ADDRESS.includes(pcPur.incoterm) && !pcPur.pickup.trim()) return stop(`${pcPur.incoterm} ต้องระบุ Pickup address`)
       if (!String(pcWeight).trim() || !(Number(pcWeight) > 0)) return stop("กรอกน้ำหนักรวม (kg) ในกล่องข้อมูลจัดซื้อ")
       pkgs = pcPkgs.map(x => ({ uom: x.uom.trim(), qty: Number(x.qty) || 0 })).filter(x => x.uom && x.uom !== "__OTHER__" && x.qty > 0)
@@ -981,7 +983,7 @@ export default function ScmRequestPage() {
                   </select>
                 </div>
                 <div>
-                  <label className={lab}>Need date (in-house)</label>
+                  <label className={lab}>Need date (in-house) <span className="text-red-500">*</span></label>
                   <input type="date" value={pcPur.needDate} onChange={e => setPcPur(p => ({ ...p, needDate: e.target.value }))} className={box} />
                 </div>
                 <div>
@@ -993,7 +995,7 @@ export default function ScmRequestPage() {
                   <div className={`${box} bg-gray-50 text-gray-700`}>{fmtDate(earliest(cart.flatMap((it: any) => [it.shipmentDate, it.mrdDate, it.mrdNeedDate, it.mrd2])))}</div>
                 </div>
                 <div>
-                  <label className={lab}>ETC</label>
+                  <label className={lab}>ETC <span className="text-red-500">*</span></label>
                   <input type="date" value={pcPur.etc} onChange={e => setPcPur(p => ({ ...p, etc: e.target.value }))} className={box} />
                 </div>
                 <div className="sm:col-span-3">
