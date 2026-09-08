@@ -17,3 +17,16 @@ export async function GET(_req: NextRequest) {
   const logs = await (prisma as any).lgEntryLog.findMany({ orderBy: { createdAt: "desc" }, take: 3000 })
   return NextResponse.json(logs)
 }
+
+// Admin adds/edits the note on a log row.
+export async function PATCH(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const role = (session.user as any).role
+  const email = String((session.user as any).email || "").toLowerCase()
+  if (role !== "ADMIN" && email !== "jariya.t@nanyangtextile.com") return NextResponse.json({ error: "Admin only" }, { status: 403 })
+  const { id, comment } = await req.json()
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
+  await (prisma as any).lgEntryLog.update({ where: { id }, data: { comment: String(comment ?? "").trim() || null } })
+  return NextResponse.json({ ok: true })
+}

@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useMemo, useState } from "react"
+import { useSession } from "next-auth/react"
 
 const MAROON = "#6b1a1a"
 const fmtDT = (v: string) => { const d = new Date(v); return isNaN(d.getTime()) ? "-" : d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) }
@@ -10,6 +11,8 @@ const CAP = 500
 
 // Read-only audit of Logistics data entry (LgEntryLog) — what LG entered, when, by whom.
 export default function LgHistory() {
+  const { data: session } = useSession()
+  const isAdmin = (session?.user as any)?.role === "ADMIN" || String((session?.user as any)?.email || "").toLowerCase() === "jariya.t@nanyangtextile.com"
   const [logs, setLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState("")
@@ -17,6 +20,15 @@ export default function LgHistory() {
   const [fromD, setFromD] = useState("")
   const [toD, setToD] = useState("")
   const [actF, setActF] = useState<"all" | "draft" | "send">("all")
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [savingId, setSavingId] = useState("")
+  const saveComment = async (id: string, val: string) => {
+    setSavingId(id)
+    try {
+      const r = await fetch("/api/lg-entries", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, comment: val }) })
+      if (r.ok) setLogs(ls => ls.map(l => (l.id === id ? { ...l, comment: val.trim() || null } : l)))
+    } finally { setSavingId("") }
+  }
 
   useEffect(() => {
     fetch("/api/lg-entries")
@@ -71,6 +83,7 @@ export default function LgHistory() {
                 <th className="px-3 py-2 font-medium text-right">QTY Ship</th>
                 <th className="px-3 py-2 font-medium">Ship Date</th>
                 <th className="px-3 py-2 font-medium">action</th>
+                <th className="px-3 py-2 font-medium min-w-[160px]">Comment {isAdmin && <span className="text-[9px] text-gray-400">(admin)</span>}</th>
               </tr>
             </thead>
             <tbody>
@@ -88,6 +101,18 @@ export default function LgHistory() {
                   <td className="px-3 py-1.5 text-right tabular-nums">{fmtN(l.qtyActualShip)}</td>
                   <td className="px-3 py-1.5 whitespace-nowrap">{fmtD(l.planShipmentDate)}</td>
                   <td className="px-3 py-1.5"><span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${l.action === "send" ? "bg-green-100 text-green-700 border-green-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}>{l.action}</span></td>
+                  <td className="px-3 py-1.5">
+                    {isAdmin ? (
+                      <input value={drafts[l.id] ?? l.comment ?? ""} disabled={savingId === l.id}
+                        onChange={e => setDrafts(d => ({ ...d, [l.id]: e.target.value }))}
+                        onBlur={() => { const v = drafts[l.id]; if (v !== undefined && v !== (l.comment ?? "")) saveComment(l.id, v) }}
+                        onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur() }}
+                        placeholder="ใส่หมายเหตุ…"
+                        className="w-full border border-gray-200 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-red-300 disabled:opacity-50" />
+                    ) : (
+                      <span className="text-gray-600">{l.comment || "-"}</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

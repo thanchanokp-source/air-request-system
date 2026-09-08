@@ -526,6 +526,7 @@ model LgEntryLog {
   userId           String?
   userName         String?
   userEmail        String?
+  comment          String?   // admin note (e.g. "กรอกผิด" / "ตรวจแล้ว")
   createdAt        DateTime  @default(now())
 
   @@index([requestId])
