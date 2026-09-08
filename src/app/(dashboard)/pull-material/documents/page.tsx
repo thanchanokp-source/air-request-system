@@ -21,6 +21,7 @@ export default function Page() {
   // edits[docId] = { hawbNo, mawbNo, invoiceNo, actualAir } — ONE set per document (1 shipment / 1 doc).
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
   const [uploading, setUploading] = useState("")
+  const [exporting, setExporting] = useState(false)
 
   // LG attaches supporting files (HAWB / INV / docs) to the document.
   const uploadAtt = async (rq: any, files: FileList | null) => {
@@ -46,6 +47,8 @@ export default function Page() {
 
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
   const raw = (rq: any, k: string) => edits[rq.id]?.[k] ?? (rq[k] != null ? String(rq[k]) : "")
+  // Date fields → normalize to YYYY-MM-DD for <input type=date>.
+  const rawDate = (rq: any, k: string) => edits[rq.id]?.[k] ?? (rq[k] ? String(rq[k]).slice(0, 10) : "")
 
   // Save the actual (HAWB / INV / Actual Air) → closes the doc (COMPLETED) so it shows done in Tracking.
   const save = async (rq: any) => {
@@ -59,6 +62,8 @@ export default function Page() {
           hawbNo: raw(rq, "hawbNo") || null,
           mawbNo: raw(rq, "mawbNo") || null,
           invoiceNo: raw(rq, "invoiceNo") || null,
+          flightEtd: rawDate(rq, "flightEtd") || null,
+          flightEta: rawDate(rq, "flightEta") || null,
           actualAir: raw(rq, "actualAir") === "" ? null : raw(rq, "actualAir"),
           status: "COMPLETED",
         }),
@@ -81,6 +86,39 @@ export default function Page() {
       setPreviewName(`${rq.documentNo}.pdf`)
     } catch (e) { console.error(e); alert("PDF generation failed") } finally { setPdfing(false) }
   }
+  // Export this document to Excel — ONE row per PO (QTY AIR + LG actuals + shipment info).
+  const exportExcel = async (rq: any) => {
+    setExporting(true)
+    try {
+      const ExcelJS: any = (await import("exceljs")).default
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet("Pull RM by PO")
+      ws.columns = [
+        { header: "DOCUMENT NO", key: "doc", width: 22 }, { header: "BU", key: "bu", width: 8 },
+        { header: "PO NO", key: "po", width: 16 }, { header: "QTY AIR", key: "qty", width: 12 }, { header: "UOM", key: "uom", width: 10 },
+        { header: "HAWB NO", key: "hawb", width: 16 }, { header: "MAWB NO", key: "mawb", width: 16 }, { header: "INVOICE NO", key: "inv", width: 16 },
+        { header: "FLIGHT ETD", key: "etd", width: 14 }, { header: "FLIGHT ETA", key: "eta", width: 14 }, { header: "ACTUAL AIR", key: "act", width: 12 },
+        { header: "COUNTRY", key: "country", width: 14 }, { header: "PORT", key: "port", width: 10 }, { header: "INCOTERM", key: "incoterm", width: 10 },
+      ]
+      ws.getRow(1).font = { bold: true }
+      ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3E9E9" } }
+      const its: any[] = rq.items || []
+      const d0 = its[0] || {}
+      const byPo: Record<string, { qty: number; uoms: Set<string> }> = {}
+      its.forEach(it => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set() }); g.qty += Number(it.pullMaterialQty) || 0; if (it.bomUom) g.uoms.add(it.bomUom) })
+      Object.keys(byPo).forEach(po => ws.addRow({
+        doc: rq.documentNo, bu: rq.bu, po, qty: byPo[po].qty, uom: [...byPo[po].uoms].join(", "),
+        hawb: raw(rq, "hawbNo"), mawb: raw(rq, "mawbNo"), inv: raw(rq, "invoiceNo"),
+        etd: rawDate(rq, "flightEtd"), eta: rawDate(rq, "flightEta"), act: raw(rq, "actualAir") === "" ? "" : Number(raw(rq, "actualAir")),
+        country: d0.country || "", port: d0.port || d0.seaPort || "", incoterm: d0.incoterm || "",
+      }))
+      const buf = await wb.xlsx.writeBuffer()
+      const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }))
+      const a = document.createElement("a"); a.href = url; a.download = `${rq.documentNo}_byPO.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch (e) { alert("Export Excel ไม่สำเร็จ: " + String((e as any)?.message || e).slice(0, 160)) } finally { setExporting(false) }
+  }
+
   const closePreview = () => { setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null }) }
   const downloadPreview = () => {
     if (!previewUrl) return
@@ -169,6 +207,8 @@ export default function Page() {
               <div className="flex gap-2 shrink-0">
                 <button onClick={() => openPreview(rq)} disabled={pdfing}
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">{pdfing ? "…" : "🔍 Preview PDF"}</button>
+                <button onClick={() => exportExcel(rq)} disabled={exporting}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">{exporting ? "…" : "📊 Export Excel (ราย PO)"}</button>
                 <button onClick={() => save(rq)} disabled={busy}
                   className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>{busy ? "…" : "💾 Save"}</button>
               </div>
@@ -242,6 +282,12 @@ export default function Page() {
                       <input value={raw(rq, "mawbNo")} onChange={e => setVal(rq.id, "mawbNo", e.target.value)} placeholder="MAWB…" className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">INVOICE NO</label>
                       <input value={raw(rq, "invoiceNo")} onChange={e => setVal(rq.id, "invoiceNo", e.target.value)} placeholder="INV…" className={inp} /></div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><label className="text-[11px] font-semibold text-green-700 block mb-1">FLIGHT ETD</label>
+                        <input type="date" value={rawDate(rq, "flightEtd")} onChange={e => setVal(rq.id, "flightEtd", e.target.value)} className={inp} /></div>
+                      <div><label className="text-[11px] font-semibold text-green-700 block mb-1">FLIGHT ETA</label>
+                        <input type="date" value={rawDate(rq, "flightEta")} onChange={e => setVal(rq.id, "flightEta", e.target.value)} className={inp} /></div>
+                    </div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">ACTUAL AIR FREIGHT <span className="text-red-500">*</span></label>
                       <input type="number" value={raw(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} /></div>
                   </div>

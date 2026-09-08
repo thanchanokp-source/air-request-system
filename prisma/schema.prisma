@@ -346,6 +346,8 @@ model PullMaterialRequest {
   invoiceNo      String?
   hawbNo         String?
   mawbNo         String?
+  flightEtd      DateTime?          // LG: flight estimated time of departure
+  flightEta      DateTime?          // LG: flight estimated time of arrival
   // DVM Purchase approval signature snapshot (base64 PNG data URI), stamped in the PDF.
   approverSignature String?
   approverName      String?
