@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react"
 
 const MAROON = "#6b1a1a"
-type Row = { status: string; so: string; sub: string; qtyAir: number | null; airQty: number | null; qtyPlan: number | null; docs: string[]; airInv: string[]; mpInv: string[] }
+type Row = { status: string; so: string; sub: string; brand: string[]; mpBrand: string[]; qtyAir: number | null; airQty: number | null; qtyPlan: number | null; docs: string[]; airInv: string[]; mpInv: string[] }
 type Data = { mode: string; summary: { airKeys: number; mpKeys: number; matched: number; notFound: number; merUpload: number; matchPct: number }; rows: Row[] }
 const CAP = 500
 const n = (v: number | null) => (v == null ? "-" : v.toLocaleString())
@@ -52,7 +52,7 @@ export default function QtyAirMapPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-semibold text-gray-800">① จาก Air Request (MER) — เทียบกับ mp_line</h2>
               <span className="text-[11px] text-gray-400">{airRows.length.toLocaleString()} รายการ · ✓ เจอ {data.summary.matched} · ⚠ ไม่เจอ {data.summary.notFound}</span>
-              <button onClick={() => csv(airRows, ["SO", "SUB", "INV(air)", "QTY PLAN", "QTY AIR (MER)", "QTY AIR (mp_line)", "สถานะ"], r => [r.so, r.sub, r.airInv.join(" "), r.qtyPlan, r.airQty, r.qtyAir ?? "", r.status === "matched" ? "เจอ" : "ไม่เจอใน mp_line"], "qty-air-map_air.csv")}
+              <button onClick={() => csv(airRows, ["SO", "SUB", "BRAND", "INV(air)", "QTY PLAN", "QTY AIR (MER)", "QTY AIR (mp_line)", "สถานะ"], r => [r.so, r.sub, r.brand.join(" "), r.airInv.join(" "), r.qtyPlan, r.airQty, r.qtyAir ?? "", r.status === "matched" ? "เจอ" : "ไม่เจอใน mp_line"], "qty-air-map_air.csv")}
                 className="ml-auto text-xs px-3 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">⬇ CSV</button>
             </div>
             <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white">
@@ -61,6 +61,7 @@ export default function QtyAirMapPage() {
                   <tr className="text-left">
                     <th className="px-3 py-2 font-medium">SO</th>
                     <th className="px-3 py-2 font-medium">SUB</th>
+                    <th className="px-3 py-2 font-medium">BRAND</th>
                     <th className="px-3 py-2 font-medium">INV (air)</th>
                     <th className="px-3 py-2 font-medium text-right">QTY PLAN</th>
                     <th className="px-3 py-2 font-medium text-right">QTY AIR (MER)</th>
@@ -73,6 +74,7 @@ export default function QtyAirMapPage() {
                     <tr key={i} className={`border-t border-gray-100 ${r.status === "not_found" ? "bg-amber-50/40" : ""}`}>
                       <td className="px-3 py-1.5 font-mono">{r.so}</td>
                       <td className="px-3 py-1.5 font-mono">{r.sub || "-"}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{r.brand.join(", ") || "-"}</td>
                       <td className="px-3 py-1.5 text-gray-500 text-[10px]">{r.airInv.join(", ") || "-"}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{n(r.qtyPlan)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums font-medium">{n(r.airQty)}</td>
@@ -96,7 +98,7 @@ export default function QtyAirMapPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-semibold text-gray-800">② จาก mp_line — <span className="text-sky-700">ไม่มีใน Air Request</span></h2>
               <span className="text-[11px] text-gray-400">{mpOnlyRows.length.toLocaleString()} รายการ</span>
-              <button onClick={() => csv(mpOnlyRows, ["SO", "SUB", "INV(mp_line)", "QTY AIR (final_pcs)"], r => [r.so, r.sub, r.mpInv.join(" "), r.qtyAir ?? ""], "qty-air-map_mponly.csv")}
+              <button onClick={() => csv(mpOnlyRows, ["SO", "SUB", "BRAND", "INV(mp_line)", "QTY AIR (final_pcs)"], r => [r.so, r.sub, r.mpBrand.join(" "), r.mpInv.join(" "), r.qtyAir ?? ""], "qty-air-map_mponly.csv")}
                 className="ml-auto text-xs px-3 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">⬇ CSV</button>
             </div>
             <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white">
@@ -105,6 +107,7 @@ export default function QtyAirMapPage() {
                   <tr className="text-left">
                     <th className="px-3 py-2 font-medium">SO</th>
                     <th className="px-3 py-2 font-medium">SUB</th>
+                    <th className="px-3 py-2 font-medium">BRAND</th>
                     <th className="px-3 py-2 font-medium">INV (mp_line)</th>
                     <th className="px-3 py-2 font-medium text-right">QTY AIR (final_pcs)</th>
                     <th className="px-3 py-2 font-medium">สถานะ</th>
@@ -115,6 +118,7 @@ export default function QtyAirMapPage() {
                     <tr key={i} className="border-t border-gray-100 bg-sky-50/30">
                       <td className="px-3 py-1.5 font-mono">{r.so}</td>
                       <td className="px-3 py-1.5 font-mono">{r.sub || "-"}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{r.mpBrand.join(", ") || "-"}</td>
                       <td className="px-3 py-1.5 text-gray-500 text-[10px]">{r.mpInv.join(", ") || "-"}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums font-semibold" style={{ color: MAROON }}>{n(r.qtyAir)}</td>
                       <td className="px-3 py-1.5"><span className="text-[10px] px-2 py-0.5 rounded-full border bg-sky-100 text-sky-700 border-sky-200 font-medium">➕ ไม่มีใน air</span></td>
