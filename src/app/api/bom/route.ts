@@ -78,7 +78,9 @@ export async function GET(req: NextRequest) {
         `%${vendorAddr}%`)
       if (!rows.length) return NextResponse.json({ address: "", matched: null })
       const r = rows[0]
-      const address = parts.map(c => r[c]).map(v => (v == null ? "" : String(v).trim().replace(/[,\s]+$/, ""))).filter(Boolean).join(", ")
+      const clean = (v: any) => (v == null ? "" : String(v).trim().replace(/[,\s]+$/, ""))
+      // Vendor name first, then the address lines.
+      const address = [clean(r.vendor_name), ...parts.map(c => clean(r[c]))].filter(Boolean).join(", ")
       return NextResponse.json({ address, matched: r.vendor_name })
     } catch (e: any) { return NextResponse.json({ address: "", error: e?.message || "vendorAddr failed" }) }
   }
