@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import LgHistory from "@/components/lg-history"
 
 // LG BOOKING — Logistics landing. Familiar doc-card layout, but shows only the SOs still waiting on
 // Logistics (itemStatus PRES_PASSED, doc not yet sent) and GROUPS them BY BRAND across documents.
@@ -34,6 +35,7 @@ export default function LgBookingPage() {
   const [noAir, setNoAir] = useState<{ reqId: string; docNo: string; ids: string[] } | null>(null)
   const [noAirReason, setNoAirReason] = useState("No air")
   const [sending, setSending] = useState(false)
+  const [view, setView] = useState<"booking" | "history">("booking")
 
   const openNoAir = (req: any, docIds: string[]) => {
     const ids = docIds.filter(id => selected.has(id))
@@ -136,12 +138,33 @@ export default function LgBookingPage() {
 
   if (!allowed) return <div className="text-center py-20 text-gray-400">Logistics / Admin only</div>
 
+  const TabBar = () => (
+    <div className="flex gap-1 border-b border-gray-200">
+      {([["booking", "จองงาน (Booking)"], ["history", "📜 ประวัติการกรอก"]] as const).map(([v, l]) => (
+        <button key={v} onClick={() => setView(v)}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${view === v ? "border-blue-600 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>{l}</button>
+      ))}
+    </div>
+  )
+
+  if (view === "history") return (
+    <div className="space-y-4 pb-20">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">LG BOOKING</h1>
+        <p className="text-xs text-gray-400 mt-0.5">ประวัติการกรอกข้อมูล Logistics (view only) — ใครกรอกอะไร · เมื่อไหร่ · INV / HAWB / Actual</p>
+      </div>
+      <TabBar />
+      <LgHistory />
+    </div>
+  )
+
   return (
     <div className="space-y-4 pb-20">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">LG BOOKING</h1>
         <p className="text-xs text-gray-400 mt-0.5">Select SOs to book (can span documents within a brand), then click "Open" → enter one HAWB across the selected SOs</p>
       </div>
+      <TabBar />
 
       <div className="flex flex-wrap items-center gap-2">
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Search brand / SO / document no…"

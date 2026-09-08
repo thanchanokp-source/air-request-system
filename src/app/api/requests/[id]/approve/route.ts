@@ -64,6 +64,33 @@ async function allNykApproverApproved(reqId: string): Promise<boolean> {
   return nykSOs.every(it => ((it as any).claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER"))
 }
 
+// Audit: record what Logistics entered this save (one row per touched SO) — who / when / values.
+// Never throws into the save path (callers wrap in .catch).
+async function logLgEntry(request: any, session: any, userId: string, body: any) {
+  const touched = new Set<string>([
+    ...Object.keys(body.itemLogistics || {}),
+    ...Object.keys(body.itemActuals || {}),
+    ...Object.keys(body.itemShipData || {}),
+  ])
+  if (!touched.size) return
+  const items = await prisma.airRequestItem.findMany({
+    where: { id: { in: [...touched] } },
+    select: { id: true, so: true, sub: true, brand: true, invoiceNo: true, hawbNo: true, actualAirFreight: true, qtyActualShip: true, planShipmentDate: true },
+  })
+  const action = body.lgComplete ? "send" : "draft"
+  const uName = (session?.user as any)?.name || null
+  const uEmail = (session?.user as any)?.email || null
+  await (prisma as any).lgEntryLog.createMany({
+    data: items.map((it: any) => ({
+      requestId: request.id, documentNo: request.documentNo, bu: (request as any).bu || (request as any).buName || null,
+      itemId: it.id, so: it.so, sub: it.sub, brand: it.brand, action,
+      invoiceNo: it.invoiceNo, hawbNo: it.hawbNo, actualAirFreight: it.actualAirFreight,
+      qtyActualShip: it.qtyActualShip, planShipmentDate: it.planShipmentDate,
+      userId, userName: uName, userEmail: uEmail,
+    })),
+  })
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
  try {
   const session = await getServerSession(authOptions)
@@ -361,6 +388,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await notifyLgFilesToClaimers(id).catch(() => {})
       await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
     }
+    await logLgEntry(request, session, userId, body).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -402,6 +430,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (body.hawbTotals && typeof body.hawbTotals === "object") {
       for (const [h, t] of Object.entries(body.hawbTotals)) await redistributeHawbCost(h, Number(t)).catch(() => {})
     }
+    await logLgEntry(request, session, userId, body).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

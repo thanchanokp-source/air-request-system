@@ -504,3 +504,30 @@ model PullSample {
 
   @@index([createdAt])
 }
+
+// Audit log of Logistics data entry — one row per SO touched each time LG saves/sends, so LG can
+// review who entered what (INV / HAWB / Actual / QTY / ship date) and when. Values are denormalized
+// snapshots (no FK) so the history view needs no joins and survives edits/deletes.
+model LgEntryLog {
+  id               String    @id @default(cuid())
+  requestId        String
+  documentNo       String
+  bu               String?
+  itemId           String?
+  so               String?
+  sub              String?
+  brand            String?
+  action           String    // "draft" | "send"
+  invoiceNo        String?
+  hawbNo           String?
+  actualAirFreight Float?
+  qtyActualShip    Int?
+  planShipmentDate DateTime?
+  userId           String?
+  userName         String?
+  userEmail        String?
+  createdAt        DateTime  @default(now())
+
+  @@index([requestId])
+  @@index([createdAt])
+}
