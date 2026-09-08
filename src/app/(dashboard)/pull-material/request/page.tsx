@@ -46,6 +46,8 @@ const breakKey = (w: number) => { let b = 45; for (const x of BREAK_ORDER) if (x
 
 const fmt = (n: any) => (n == null || isNaN(Number(n)) ? "-" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }))
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN(d.getTime()) ? String(v).slice(0, 10) : d.toLocaleDateString("en-GB") }
+// Earliest of a list of date-ish values (used for system-derived Shipment Date + MRD on the request form).
+const earliest = (arr: any[]) => { const t = arr.map(v => (v ? new Date(v).getTime() : NaN)).filter(n => !isNaN(n)); return t.length ? new Date(Math.min(...t)) : null }
 
 export default function ScmRequestPage() {
   const { data: session, status } = useSession()
@@ -108,7 +110,7 @@ export default function ScmRequestPage() {
   const [pcLoad, setPcLoad] = useState(false)
   // PC purchase info (shipment-level) — moved from the Purchase page into the request. Stamped on every
   // pulled item at submit. Country/Port drive Est Air (freight master); City is separate (Master Purchase).
-  const [pcPur, setPcPur] = useState({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
+  const [pcPur, setPcPur] = useState({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", etc: "", pkg: "", boxW: "", boxL: "", boxH: "" })
   // Packing list (per shipment/doc): add lines of { uom, qty }.
   const [pcPkgs, setPcPkgs] = useState<{ uom: string; qty: string }[]>([{ uom: "", qty: "" }])
   const [airRows, setAirRows] = useState<any[]>([])
@@ -443,7 +445,7 @@ export default function ScmRequestPage() {
       const pu = {
         country: c, port: p, seaPort: sp, incoterm: pcPur.incoterm,
         pickupAddress: NEEDS_ADDRESS.includes(pcPur.incoterm) ? pcPur.pickup : "",
-        city: pcCity?.city || "", needDate: pcPur.needDate || "",
+        city: pcCity?.city || "", needDate: pcPur.needDate || "", etc: pcPur.etc || null,
         cartons: pkgs.reduce((s, x) => s + x.qty, 0), boxW: pcPur.boxW, boxL: pcPur.boxL, boxH: pcPur.boxH,
       }
       // weight (whole shipment) → put on item 0; that's what recomputePullAir reads for Est Air.
@@ -470,7 +472,7 @@ export default function ScmRequestPage() {
         }
         showToast(`✓ ส่งคำขอแล้ว: ${d.request?.documentNo}${files.length ? ` · แนบไฟล์ ${files.length - upFail}/${files.length}` : ""}`, true)
         setCart([]); setRemark(""); setIsTest(false); setModeTouched(false); setFiles([])
-        setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", pkg: "", boxW: "", boxL: "", boxH: "" })
+        setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", etc: "", pkg: "", boxW: "", boxL: "", boxH: "" })
         setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }])
       }
       else showToast(`✕ ส่งไม่สำเร็จ (HTTP ${r.status}): ${d.error || "submit failed"}`, false)
@@ -951,6 +953,18 @@ export default function ScmRequestPage() {
                 <div>
                   <label className={lab}>Need date (in-house)</label>
                   <input type="date" value={pcPur.needDate} onChange={e => setPcPur(p => ({ ...p, needDate: e.target.value }))} className={box} />
+                </div>
+                <div>
+                  <label className={lab}>Shipment Date <span className="text-gray-300">(จากระบบ)</span></label>
+                  <div className={`${box} bg-gray-50 text-gray-700`}>{fmtDate(earliest(cart.map((it: any) => it.shipmentDate)))}</div>
+                </div>
+                <div>
+                  <label className={lab}>MRD <span className="text-gray-300">(จากระบบ · เร็วสุด)</span></label>
+                  <div className={`${box} bg-gray-50 text-gray-700`}>{fmtDate(earliest(cart.flatMap((it: any) => [it.shipmentDate, it.mrdDate, it.mrdNeedDate, it.mrd2])))}</div>
+                </div>
+                <div>
+                  <label className={lab}>ETC</label>
+                  <input type="date" value={pcPur.etc} onChange={e => setPcPur(p => ({ ...p, etc: e.target.value }))} className={box} />
                 </div>
                 <div className="sm:col-span-3">
                   <label className={lab}>Dimension ก×ย×ส (cm) <span className="text-gray-300">— ไม่บังคับ</span></label>

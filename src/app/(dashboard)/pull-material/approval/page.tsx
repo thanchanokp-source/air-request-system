@@ -30,6 +30,8 @@ const PC_CHAIN = [
   { s: "APPROVED", l: "Logistics", role: "" },
 ]
 const nameOf = (u: any) => u?.name || (u?.email ? String(u.email).split("@")[0] : "")
+// Earliest of date-ish values (system-derived Shipment Date + MRD).
+const earliest = (arr: any[]) => { const t = arr.map(v => (v ? new Date(v).getTime() : NaN)).filter(n => !isNaN(n)); return t.length ? new Date(Math.min(...t)) : null }
 
 export default function Page() {
   const { data: session } = useSession()
@@ -241,6 +243,9 @@ export default function Page() {
                           <Info label="L/T Air" value={s0.leadTimeAir} />
                           <Info label="Weight (kg)" value={s0.weight != null ? fmt(s0.weight) : "-"} />
                           <Info label="Need date (in-house)" value={s0.needDate ? fmtDate(s0.needDate) : "-"} />
+                          <Info label="Shipment Date" value={fmtDate(earliest(items.map((it: any) => it.shipmentDate)))} />
+                          <Info label="MRD" value={fmtDate(earliest(items.flatMap((it: any) => [it.shipmentDate, it.mrdDate, it.mrdNeedDate, it.mrd2])))} />
+                          <Info label="ETC" value={s0.etc ? fmtDate(s0.etc) : "-"} />
                           <Info label="Package" value={pkgStr} />
                           <Info label="Dimension" value={dimStr} />
                           {["EX-WORK", "FCA"].includes(s0.incoterm) && <Info label="Pickup address" value={s0.pickupAddress} />}

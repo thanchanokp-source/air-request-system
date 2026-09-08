@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
           boxL: num(i.boxL),
           boxH: num(i.boxH),
           needDate: dt(i.needDate),
+          etc: dt(i.etc),
           inHouseAirDate: dt(i.inHouseAirDate),
           inHouseSeaDate: dt(i.inHouseSeaDate),
           sewingStartDate: dt(i.sewingStartDate),
