@@ -425,6 +425,7 @@ model PullMaterialItem {
   boxW            Float?    // carton dimension width  (cm, optional)
   boxL            Float?    // carton dimension length (cm, optional)
   boxH            Float?    // carton dimension height (cm, optional)
+  etc             DateTime? // ETC — date Purchasing enters on the purchase page
   // LG actual (close)
   invoiceNo       String?
   actualAir       Float?

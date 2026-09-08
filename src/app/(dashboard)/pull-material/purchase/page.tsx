@@ -63,7 +63,14 @@ export default function PurchasePage() {
   const valOf = (it: any, k: string) => {
     if (edits[it.id]?.[k] !== undefined) return edits[it.id][k]
     if (it[k] == null) return ""
-    return (k === "shipmentDate" || k === "needDate") ? String(it[k]).slice(0, 10) : String(it[k])
+    return (k === "shipmentDate" || k === "needDate" || k === "etc") ? String(it[k]).slice(0, 10) : String(it[k])
+  }
+  // MRD = the EARLIEST of the BOM date columns (shipment / MRD date / MRD need date / MRD2).
+  const mrdOf = (it: any) => {
+    const ds = [it.shipmentDate, it.mrdDate, it.mrdNeedDate, it.mrd2].map(v => (v ? new Date(v) : null)).filter(d => d && !isNaN(d.getTime())) as Date[]
+    if (!ds.length) return "-"
+    const min = new Date(Math.min(...ds.map(d => d.getTime())))
+    return min.toLocaleDateString("en-GB")
   }
   // "__OTHER__" = user picked "Other" but hasn't typed a name yet (not a real value).
   const OTHER = "__OTHER__"
@@ -117,7 +124,7 @@ export default function PurchasePage() {
         id: it.id, country: clean(valOf(it, "country")), port: clean(valOf(it, "port")), seaPort: clean(valOf(it, "seaPort")),
         incoterm: valOf(it, "incoterm"), weight: valOf(it, "weight"), shipmentDate: valOf(it, "shipmentDate"),
         pickupAddress: NEEDS_ADDRESS.includes(valOf(it, "incoterm")) ? valOf(it, "pickupAddress") : "",
-        needDate: valOf(it, "needDate"), cartons: valOf(it, "cartons"),
+        needDate: valOf(it, "needDate"), etc: valOf(it, "etc"), cartons: valOf(it, "cartons"),
         boxW: valOf(it, "boxW"), boxL: valOf(it, "boxL"), boxH: valOf(it, "boxH"),
       }))
       // No manual Logistics step anymore: server auto-computes Est Air + Air L/T, then goes straight to
@@ -326,6 +333,7 @@ export default function PurchasePage() {
                     <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Material</th>
                     <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">PULL</th>
                     <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">Cons.</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200" title="เร็วที่สุดจาก Shipment / MRD dates">MRD</th>
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Country *</th>
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Air Port</th>
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Sea Port</th>
@@ -335,6 +343,7 @@ export default function PurchasePage() {
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Cartons</th>
                     <th className="px-2 py-2 text-center font-semibold bg-emerald-50 border-b border-emerald-200" title="กว้าง × ยาว × สูง (cm) — ไม่บังคับ">Dim W×L×H (cm)</th>
                     <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Ship Date</th>
+                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">ETC</th>
                     <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700" title="คำนวณอัตโนมัติจาก Master Rate">🔒 Air L/T</th>
                     <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700" title="คำนวณอัตโนมัติจาก Master Rate">🔒 Est Air</th>
                     <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Sea L/T</th>
@@ -362,6 +371,7 @@ export default function PurchasePage() {
                         <td className="px-2 py-1.5 text-gray-700 max-w-[180px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || "-"}</td>
                         <td className="px-2 py-1.5 text-right text-gray-700 whitespace-nowrap">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
                         <td className="px-2 py-1.5 text-right text-gray-600 whitespace-nowrap">{fmt(it.consumption)}</td>
+                        <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap font-medium" title="MRD (เร็วที่สุด)">{mrdOf(it)}</td>
                         <td className="px-2 py-1.5 min-w-[150px]">
                           <Picker value={c} list={countries} sel={selc} placeholder="— country —"
                             onChange={v => { setVal(it.id, "country", v); setVal(it.id, "port", ""); setVal(it.id, "seaPort", "") }}
@@ -404,6 +414,9 @@ export default function PurchasePage() {
                         <td className="px-2 py-1.5 min-w-[130px]">
                           <input type="date" value={valOf(it, "shipmentDate")} onChange={e => setVal(it.id, "shipmentDate", e.target.value)} className={selc} />
                         </td>
+                        <td className="px-2 py-1.5 min-w-[130px]">
+                          <input type="date" value={valOf(it, "etc")} onChange={e => setVal(it.id, "etc", e.target.value)} className={selc} title="ETC" />
+                        </td>
                         {(() => {
                           const a = airAuto(it)
                           const airPort = clean(valOf(it, "port"))
@@ -422,7 +435,7 @@ export default function PurchasePage() {
                       NEEDS_ADDRESS.includes(valOf(it, "incoterm")) && (
                         <tr key={`${it.id}-addr`} className={rowBg}>
                           <td className={`px-2 pb-2 sticky left-0 z-10 ${rowBg}`} />
-                          <td colSpan={23} className="px-2 pb-2">
+                          <td colSpan={25} className="px-2 pb-2">
                             <div className="flex items-start gap-2">
                               <span className="text-[11px] font-semibold text-amber-700 whitespace-nowrap mt-1.5">📍 {valOf(it, "incoterm")} Pickup address *</span>
                               <textarea value={valOf(it, "pickupAddress")} onChange={e => setVal(it.id, "pickupAddress", e.target.value)} rows={2}
