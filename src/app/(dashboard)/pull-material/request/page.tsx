@@ -449,6 +449,7 @@ export default function ScmRequestPage() {
       // weight (whole shipment) → put on item 0; that's what recomputePullAir reads for Est Air.
       items = cart.map((it, i) => ({ ...it, ...pu, weight: i === 0 ? Number(pcWeight) : null }))
     }
+    if (!remark.trim()) return stop("กรุณากรอก Material Description (ช่อง Remark)")
     setSubmitting(true)
     try {
       const r = await fetch("/api/pull-material", {
@@ -1008,8 +1009,8 @@ export default function ScmRequestPage() {
         })()}
 
         <div className="mt-3">
-          <label className="text-xs font-semibold text-gray-600">Remark</label>
-          <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="Note for this pull request (optional)"
+          <label className="text-xs font-semibold text-gray-600">Material Description (Remark) <span className="text-red-500">*</span></label>
+          <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="ระบุ Material Description ของงานนี้ (บังคับ)"
             className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
         </div>
 

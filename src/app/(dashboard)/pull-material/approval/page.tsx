@@ -374,19 +374,43 @@ function Info({ label, value }: { label: string; value: any }) {
 // Attachments uploaded with the request — download links (streamed via the app server).
 function PullAttachments({ reqId }: { reqId: string }) {
   const [rows, setRows] = useState<any[]>([])
+  const [pv, setPv] = useState<any | null>(null)
   useEffect(() => { fetch(`/api/pull-material/${reqId}/attachments`).then(r => r.json()).then(d => setRows(Array.isArray(d) ? d : [])).catch(() => {}) }, [reqId])
   if (!rows.length) return null
+  const url = pv ? `/api/pull-material/attachments/${pv.id}` : ""
+  const ext = pv ? String(pv.fileName || "").split(".").pop()?.toLowerCase() : ""
+  const isImg = ["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext || "")
+  const isPdf = ext === "pdf"
   return (
     <div className="mt-4 pt-3 border-t border-gray-100">
       <div className="text-[11px] font-semibold text-gray-500 uppercase mb-2">แนบไฟล์ ({rows.length})</div>
       <div className="flex flex-wrap gap-1.5">
         {rows.map(a => (
-          <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
+          <button key={a.id} type="button" onClick={() => setPv(a)}
             className="inline-flex items-center gap-1 text-[11px] bg-sky-50 border border-sky-200 text-sky-800 rounded-full px-2.5 py-1 hover:bg-sky-100">
             📎 <span className="max-w-[220px] truncate" title={a.fileName}>{a.fileName}</span>
-          </a>
+          </button>
         ))}
       </div>
+
+      {pv && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setPv(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-200">
+              <span className="text-sm font-medium text-gray-800 truncate" title={pv.fileName}>📎 {pv.fileName}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <a href={url} download={pv.fileName} className="text-xs px-3 py-1.5 rounded-lg text-white font-semibold" style={{ background: MAROON }}>⬇ ดาวน์โหลด</a>
+                <button onClick={() => setPv(null)} className="text-gray-400 hover:text-gray-700 text-2xl leading-none px-1">×</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center p-2 min-h-[300px]">
+              {isImg ? <img src={url} alt={pv.fileName} className="max-w-full max-h-[75vh] object-contain" />
+                : isPdf ? <iframe src={url} title={pv.fileName} className="w-full h-[75vh] border-0" />
+                  : <div className="text-center p-10 text-gray-500"><div className="text-5xl mb-3">📄</div><p className="text-sm">ไฟล์ประเภทนี้แสดงตัวอย่างในเบราว์เซอร์ไม่ได้<br />กด <b>“ดาวน์โหลด”</b> มุมขวาบนเพื่อเปิด</p></div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
