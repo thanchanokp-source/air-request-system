@@ -29,8 +29,10 @@ export async function GET(req: NextRequest) {
   }
 
   const mpMap = new Map<string, { so: string; sub: string; pcs: number; rows: number; inv: Set<string>; brand: Set<string> }>()
+  const mpSoSet = new Set<string>() // SO-level presence in mp_line (ignore SUB) — for "no SO at all"
   for (const r of mp) {
     const k = K(r.so_no, r.sub_no)
+    mpSoSet.add(soN(r.so_no))
     const e = mpMap.get(k) || { so: String(r.so_no ?? ""), sub: mode === "so" ? "" : String(r.sub_no ?? ""), pcs: 0, rows: 0, inv: new Set<string>(), brand: new Set<string>() }
     e.pcs += Number(r.final_pcs) || 0
     e.rows++
@@ -60,7 +62,13 @@ export async function GET(req: NextRequest) {
   for (const [k, a] of airMap) {
     const m = mpMap.get(k)
     if (m) { matched++; rows.push({ status: "matched", so: a.so, sub: a.sub || "", qtyAir: m.pcs, airQty: a.qty, qtyPlan: a.plan, brand: [...a.brand].slice(0, 2), mpBrand: [...m.brand].slice(0, 2), shipDates: [...a.dates].sort(), docs: [...a.docs].slice(0, 3), airInv: [...a.inv].slice(0, 3), mpInv: [...m.inv].slice(0, 3) }) }
-    else { notFound++; rows.push({ status: "not_found", so: a.so, sub: a.sub || "", qtyAir: null, airQty: a.qty, qtyPlan: a.plan, brand: [...a.brand].slice(0, 2), mpBrand: [], shipDates: [...a.dates].sort(), docs: [...a.docs].slice(0, 3), airInv: [...a.inv].slice(0, 3), mpInv: [] }) }
+    else {
+      notFound++
+      // Why not found? no INV yet = waiting for LG; has INV but SUB differs (SO exists in mp_line);
+      // has INV and the SO isn't in mp_line at all.
+      const nfReason = a.inv.size === 0 ? "no_inv" : (mpSoSet.has(soN(a.so)) ? "inv_sub" : "inv_no_so")
+      rows.push({ status: "not_found", nfReason, so: a.so, sub: a.sub || "", qtyAir: null, airQty: a.qty, qtyPlan: a.plan, brand: [...a.brand].slice(0, 2), mpBrand: [], shipDates: [...a.dates].sort(), docs: [...a.docs].slice(0, 3), airInv: [...a.inv].slice(0, 3), mpInv: [] })
+    }
   }
   for (const [k, m] of mpMap) {
     if (!airMap.has(k)) { merUpload++; rows.push({ status: "mer_upload", so: m.so, sub: m.sub || "", qtyAir: m.pcs, airQty: null, qtyPlan: null, brand: [], mpBrand: [...m.brand].slice(0, 2), shipDates: [], docs: [], airInv: [], mpInv: [...m.inv].slice(0, 3) }) }

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react"
 
 const MAROON = "#6b1a1a"
-type Row = { status: string; so: string; sub: string; brand: string[]; mpBrand: string[]; shipDates: string[]; qtyAir: number | null; airQty: number | null; qtyPlan: number | null; docs: string[]; airInv: string[]; mpInv: string[] }
+type Row = { status: string; nfReason?: string; so: string; sub: string; brand: string[]; mpBrand: string[]; shipDates: string[]; qtyAir: number | null; airQty: number | null; qtyPlan: number | null; docs: string[]; airInv: string[]; mpInv: string[] }
 const fmtD = (s: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? `${m[3]}/${m[2]}/${m[1]}` : s }
 type Data = { mode: string; summary: { airKeys: number; mpKeys: number; matched: number; notFound: number; merUpload: number; matchPct: number }; rows: Row[] }
 const CAP = 500
@@ -35,8 +35,21 @@ export default function QtyAirMapPage() {
     return [...s].filter(Boolean).sort()
   }, [data])
   const dateOk = (r: Row) => { if (!fromD && !toD) return true; if (!r.shipDates.length) return false; return r.shipDates.some(d => (!fromD || d >= fromD) && (!toD || d <= toD)) }
-  const airRows = useMemo(() => (data?.rows || []).filter(r => (r.status === "matched" || r.status === "not_found") && (statusF === "all" || r.status === statusF) && match(r) && brandOk(r) && dateOk(r)), [data, qq, brandF, statusF, fromD, toD])
+  // Section ① rows honor the status filter; the summary below must reflect the SAME set REGARDLESS of
+  // the status filter (so the % breakdown always adds up) → compute it on a status-unfiltered set.
+  const airBase = useMemo(() => (data?.rows || []).filter(r => (r.status === "matched" || r.status === "not_found") && match(r) && brandOk(r) && dateOk(r)), [data, qq, brandF, fromD, toD])
+  const airRows = useMemo(() => airBase.filter(r => statusF === "all" || r.status === statusF), [airBase, statusF])
   const mpOnlyRows = useMemo(() => (data?.rows || []).filter(r => r.status === "mer_upload" && match(r) && brandOk(r)), [data, qq, brandF])
+  const sum = useMemo(() => {
+    const total = airBase.length
+    const matched = airBase.filter(r => r.status === "matched").length
+    const nf = airBase.filter(r => r.status === "not_found")
+    const noInv = nf.filter(r => r.nfReason === "no_inv").length
+    const invSub = nf.filter(r => r.nfReason === "inv_sub").length
+    const invNoSo = nf.filter(r => r.nfReason === "inv_no_so").length
+    const pct = (x: number) => (total ? Math.round((1000 * x) / total) / 10 : 0)
+    return { total, matched, nf: nf.length, noInv, invSub, invNoSo, pct, mpOnly: mpOnlyRows.length }
+  }, [airBase, mpOnlyRows])
 
   const csv = (rows: Row[], head: string[], pick: (r: Row) => any[], name: string) => {
     const lines = [head.join(",")].concat(rows.map(r => pick(r).map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")))
@@ -77,6 +90,30 @@ export default function QtyAirMapPage() {
             <span className="text-xs text-gray-400">ถึง</span>
             <input type="date" value={toD} onChange={e => setToD(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-xs" />
             {(brandF || statusF !== "all" || q || fromD || toD) && <button onClick={() => { setBrandF(""); setStatusF("all"); setQ(""); setFromD(""); setToD("") }} className="text-xs text-red-600 hover:underline ml-1">ล้างตัวกรอง</button>}
+          </div>
+
+          {/* ── สรุป % + แยกสาเหตุไม่เจอ (ตามตัวกรอง brand/date) ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { l: "ก้อน ① ทั้งหมด", v: sum.total.toLocaleString(), s: "SO+SUB (air req)", c: MAROON },
+              { l: "✓ เจอใน mp_line", v: sum.matched.toLocaleString(), s: `${sum.pct(sum.matched)}%`, c: "#15803d" },
+              { l: "⚠ ไม่เจอ", v: sum.nf.toLocaleString(), s: `${sum.pct(sum.nf)}%`, c: "#b45309" },
+              { l: "ก้อน ② mp_line only", v: sum.mpOnly.toLocaleString(), s: "ไม่มีใน air req", c: "#0369a1" },
+            ].map((c, i) => (
+              <div key={i} className="bg-white rounded-xl border border-gray-200 p-3">
+                <p className="text-[11px] text-gray-400">{c.l}</p>
+                <p className="text-2xl font-bold tabular-nums" style={{ color: c.c }}>{c.v}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{c.s}</p>
+              </div>
+            ))}
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-3">
+            <p className="text-xs font-semibold text-gray-700 mb-2">แยกสาเหตุ “ไม่เจอ” — {sum.nf.toLocaleString()} รายการ (จาก {sum.total.toLocaleString()})</p>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="px-2.5 py-1 rounded-lg border bg-amber-50 border-amber-200 text-amber-800">⏳ รอ LG (ยังไม่มี INV): <b>{sum.noInv.toLocaleString()}</b> ({sum.pct(sum.noInv)}%)</span>
+              <span className="px-2.5 py-1 rounded-lg border bg-orange-50 border-orange-200 text-orange-800">มี INV · SUB ไม่ตรง (SO มีใน mp_line): <b>{sum.invSub.toLocaleString()}</b> ({sum.pct(sum.invSub)}%)</span>
+              <span className="px-2.5 py-1 rounded-lg border bg-red-50 border-red-200 text-red-800">มี INV · ไม่มี SO ใน mp_line: <b>{sum.invNoSo.toLocaleString()}</b> ({sum.pct(sum.invNoSo)}%)</span>
+            </div>
           </div>
 
           {/* ── ก้อน 1: ฝั่ง Air Request ── */}
