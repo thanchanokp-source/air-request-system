@@ -346,7 +346,7 @@ export default function RequestsPage() {
     ["SO",""],["SUB",""],["BU",""],["BRAND","min-w-[90px]"],["CUSTOMER PO",""],["DESCRIPTION","min-w-[110px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
     ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
     ["EST. AIR FREIGHT","min-w-[120px]"],["ACTUAL AIR FREIGHT","min-w-[130px]"],
-    ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],
+    ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],["HAWB#","min-w-[100px]"],
     ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"],["REASON","min-w-[180px]"]
   ] as [string,string][]
 
@@ -671,6 +671,7 @@ export default function RequestsPage() {
                                         : "-"}
                                     </td>
                                     <td className="px-3 py-2 whitespace-nowrap">{row.invoiceNo || "-"}</td>
+                                    <td className="px-3 py-2 whitespace-nowrap">{row.hawbNo || "-"}</td>
                                     <td className="px-3 py-2"><SoBadge s={row.itemStatus} docStatus={row.request.status} /></td>
                                     <td className="px-3 py-2"><CurrentStepBadge row={row} /></td>
                                     {(() => {
@@ -679,7 +680,7 @@ export default function RequestsPage() {
                                     })()}
                                   </tr>
                                   <tr className="bg-gray-50/40">
-                                    <td colSpan={20} className="px-6 py-1.5">
+                                    <td colSpan={21} className="px-6 py-1.5">
                                       <ApprovalChain status={row.request.status} bu={dg.request.bu || "NYG"} soItem={row} claimForwards={dg.request.claimForwards} approvers={claimDir} req={dg.request} sm />
                                     </td>
                                   </tr>
