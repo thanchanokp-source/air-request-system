@@ -100,6 +100,7 @@ export default function ScmRequestPage() {
   const [pcVendQ, setPcVendQ] = useState("")
   const [pcVendOpen, setPcVendOpen] = useState(false)
   const [vendorAddrLoading, setVendorAddrLoading] = useState(false)
+  const [vendorMatched, setVendorMatched] = useState("")
   const [pickupEditing, setPickupEditing] = useState(false)
   const [pcPos, setPcPos] = useState<any[]>([])
   const [pcSelPos, setPcSelPos] = useState<Set<string>>(new Set())
@@ -259,11 +260,11 @@ export default function ScmRequestPage() {
   // collapse them and make one PO "disappear" from the summary.
   const matK = (m: any) => `${m.poNoDoc || "-"}|${m.soNoDoc}|${m.itemCode}`
   const pickPcVend = async (v: string) => {
-    setPcVend(v); setPcVendQ(""); setPcVendOpen(false); setPcSelPos(new Set()); setPcSelMats([]); setPcLoad(true); setPickupEditing(false)
+    setPcVend(v); setPcVendQ(""); setPcVendOpen(false); setPcSelPos(new Set()); setPcSelMats([]); setPcLoad(true); setPickupEditing(false); setVendorMatched("")
     // Auto-fill the Vendor / Pickup address from dc_vendor (contain match on vendor_name).
     setVendorAddrLoading(true)
     fetch(`/api/bom?bu=${bu}&vendorAddr=${encodeURIComponent(v)}`).then(r => r.json())
-      .then(d => setPcPur(p => ({ ...p, pickup: d.address || "" }))).catch(() => {}).finally(() => setVendorAddrLoading(false))
+      .then(d => { setPcPur(p => ({ ...p, pickup: d.address || "" })); setVendorMatched(d.matched || "") }).catch(() => {}).finally(() => setVendorAddrLoading(false))
     try { const d = await fetch(`/api/bom?bu=${bu}&vendorPos=${encodeURIComponent(v)}`).then(r => r.json()); setPcPos(Array.isArray(d.pos) ? d.pos : []) }
     finally { setPcLoad(false) }
   }
@@ -602,7 +603,11 @@ export default function ScmRequestPage() {
           {/* Vendor / Pickup address — auto-filled from dc_vendor (contain match on vendor_name); "เปลี่ยน" to edit */}
           {pcVend && (
             <div className="max-w-lg">
-              <label className="text-[11px] font-bold uppercase tracking-wider block mb-1" style={{ color: GOLD }}>ที่อยู่ Vendor {vendorAddrLoading && <span className="text-gray-400 normal-case font-normal">· กำลังดึง…</span>}</label>
+              <label className="text-[11px] font-bold uppercase tracking-wider block mb-1" style={{ color: GOLD }}>ที่อยู่ Vendor
+                {vendorAddrLoading && <span className="text-gray-400 normal-case font-normal">· กำลังดึง…</span>}
+                {!vendorAddrLoading && vendorMatched && <span className="text-emerald-600 normal-case font-normal"> · match: 🏭 {vendorMatched}</span>}
+                {!vendorAddrLoading && !vendorMatched && <span className="text-amber-500 normal-case font-normal"> · ไม่พบใน dc_vendor</span>}
+              </label>
               {pickupEditing ? (
                 <textarea value={pcPur.pickup} onChange={e => setPcPur(p => ({ ...p, pickup: e.target.value }))} rows={3} autoFocus
                   placeholder="ที่อยู่ vendor / supplier (พิมพ์แก้ได้)"
