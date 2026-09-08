@@ -12,6 +12,8 @@ export default function QtyAirMapPage() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState("")
   const [q, setQ] = useState("")
+  const [brandF, setBrandF] = useState("")
+  const [statusF, setStatusF] = useState<"all" | "matched" | "not_found">("all")
 
   useEffect(() => {
     setLoading(true); setErr("")
@@ -22,9 +24,15 @@ export default function QtyAirMapPage() {
   }, [])
 
   const qq = q.trim().toLowerCase()
-  const match = (r: Row) => !qq || r.so.toLowerCase().includes(qq) || r.sub.toLowerCase().includes(qq) || r.airInv.some(x => x.toLowerCase().includes(qq)) || r.mpInv.some(x => x.toLowerCase().includes(qq))
-  const airRows = useMemo(() => (data?.rows || []).filter(r => r.status === "matched" || r.status === "not_found").filter(match), [data, qq])
-  const mpOnlyRows = useMemo(() => (data?.rows || []).filter(r => r.status === "mer_upload").filter(match), [data, qq])
+  const match = (r: Row) => !qq || r.so.toLowerCase().includes(qq) || r.sub.toLowerCase().includes(qq) || r.airInv.some(x => x.toLowerCase().includes(qq)) || r.mpInv.some(x => x.toLowerCase().includes(qq)) || r.brand.some(x => x.toLowerCase().includes(qq)) || r.mpBrand.some(x => x.toLowerCase().includes(qq))
+  const brandOk = (r: Row) => !brandF || r.brand.includes(brandF) || r.mpBrand.includes(brandF)
+  const brands = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of data?.rows || []) { r.brand.forEach(b => s.add(b)); r.mpBrand.forEach(b => s.add(b)) }
+    return [...s].filter(Boolean).sort()
+  }, [data])
+  const airRows = useMemo(() => (data?.rows || []).filter(r => (r.status === "matched" || r.status === "not_found") && (statusF === "all" || r.status === statusF) && match(r) && brandOk(r)), [data, qq, brandF, statusF])
+  const mpOnlyRows = useMemo(() => (data?.rows || []).filter(r => r.status === "mer_upload" && match(r) && brandOk(r)), [data, qq, brandF])
 
   const csv = (rows: Row[], head: string[], pick: (r: Row) => any[], name: string) => {
     const lines = [head.join(",")].concat(rows.map(r => pick(r).map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")))
@@ -44,8 +52,24 @@ export default function QtyAirMapPage() {
 
       {data && (
         <>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหา SO / SUB / INV"
-            className="w-64 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหา SO / SUB / INV / Brand"
+              className="w-56 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+            <select value={brandF} onChange={e => setBrandF(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200">
+              <option value="">ทุก Brand ({brands.length})</option>
+              {brands.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <span className="text-xs text-gray-400 ml-1">สถานะ (ก้อน ①):</span>
+            {(["all", "matched", "not_found"] as const).map(v => (
+              <button key={v} onClick={() => setStatusF(v)}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-medium ${statusF === v ? "text-white border-transparent" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+                style={statusF === v ? { background: MAROON } : {}}>
+                {v === "all" ? "ทั้งหมด" : v === "matched" ? "✓ เจอ" : "⚠ ไม่เจอ"}
+              </button>
+            ))}
+            {(brandF || statusF !== "all" || q) && <button onClick={() => { setBrandF(""); setStatusF("all"); setQ("") }} className="text-xs text-red-600 hover:underline ml-1">ล้างตัวกรอง</button>}
+          </div>
 
           {/* ── ก้อน 1: ฝั่ง Air Request ── */}
           <section className="space-y-2">
