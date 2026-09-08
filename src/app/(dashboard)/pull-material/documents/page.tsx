@@ -18,8 +18,22 @@ export default function Page() {
   const [previewName, setPreviewName] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
-  // edits[docId] = { hawbNo, invoiceNo, actualAir } — ONE set per document (1 shipment / 1 doc).
+  // edits[docId] = { hawbNo, mawbNo, invoiceNo, actualAir } — ONE set per document (1 shipment / 1 doc).
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
+  const [uploading, setUploading] = useState("")
+
+  // LG attaches supporting files (HAWB / INV / docs) to the document.
+  const uploadAtt = async (rq: any, files: FileList | null) => {
+    if (!files || !files.length) return
+    setUploading(rq.id)
+    try {
+      for (const f of Array.from(files)) {
+        const fd = new FormData(); fd.append("file", f)
+        await fetch(`/api/pull-material/${rq.id}/attachments`, { method: "POST", body: fd }).catch(() => {})
+      }
+      await load()
+    } finally { setUploading("") }
+  }
 
   const load = async () => {
     setLoading(true)
@@ -43,6 +57,7 @@ export default function Page() {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           hawbNo: raw(rq, "hawbNo") || null,
+          mawbNo: raw(rq, "mawbNo") || null,
           invoiceNo: raw(rq, "invoiceNo") || null,
           actualAir: raw(rq, "actualAir") === "" ? null : raw(rq, "actualAir"),
           status: "COMPLETED",
@@ -58,7 +73,7 @@ export default function Page() {
   const openPreview = async (rq: any) => {
     setPdfing(true)
     try {
-      const merged = { ...rq, hawbNo: raw(rq, "hawbNo") || null, invoiceNo: raw(rq, "invoiceNo") || null, actualAir: raw(rq, "actualAir") === "" ? null : Number(raw(rq, "actualAir")) }
+      const merged = { ...rq, hawbNo: raw(rq, "hawbNo") || null, mawbNo: raw(rq, "mawbNo") || null, invoiceNo: raw(rq, "invoiceNo") || null, actualAir: raw(rq, "actualAir") === "" ? null : Number(raw(rq, "actualAir")) }
       const [{ pdf }, { PullMaterialPdf }] = await Promise.all([import("@react-pdf/renderer"), import("@/components/pull-material-pdf")])
       const blob = await pdf(React.createElement(PullMaterialPdf, { req: merged }) as any).toBlob()
       const url = URL.createObjectURL(blob)
@@ -223,6 +238,8 @@ export default function Page() {
                   <div className="space-y-3">
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">HAWB NO</label>
                       <input value={raw(rq, "hawbNo")} onChange={e => setVal(rq.id, "hawbNo", e.target.value)} placeholder="HAWB…" className={inp} /></div>
+                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">MAWB NO</label>
+                      <input value={raw(rq, "mawbNo")} onChange={e => setVal(rq.id, "mawbNo", e.target.value)} placeholder="MAWB…" className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">INVOICE NO</label>
                       <input value={raw(rq, "invoiceNo")} onChange={e => setVal(rq.id, "invoiceNo", e.target.value)} placeholder="INV…" className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">ACTUAL AIR FREIGHT <span className="text-red-500">*</span></label>
@@ -231,6 +248,15 @@ export default function Page() {
                   <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
                     <span className="text-gray-500">Est {fmt(estTotal)} USD</span>
                     {actTotal > 0 && <span className={`px-2 py-0.5 rounded-full font-medium ${diff > 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{diff > 0 ? "▲" : "▼"} {fmt(Math.abs(diff))}</span>}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <label className="text-[11px] font-semibold text-green-700 block mb-1">แนบไฟล์ (HAWB / INV / เอกสาร — แนบได้หลายไฟล์)</label>
+                    <input type="file" multiple disabled={uploading === rq.id}
+                      onChange={e => { uploadAtt(rq, e.target.files); e.currentTarget.value = "" }}
+                      className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100 disabled:opacity-50" />
+                    {uploading === rq.id
+                      ? <p className="text-[11px] text-gray-400 mt-1">กำลังอัปโหลด…</p>
+                      : (rq.attachments || []).length > 0 && <p className="text-[11px] text-gray-400 mt-1">แนบแล้ว {rq.attachments.length} ไฟล์ (ดูรายการด้านบน)</p>}
                   </div>
                   <p className="mt-2 text-[11px] text-gray-400">กรอกครั้งเดียวต่อเอกสาร · Save แล้วกด “Preview PDF” เพื่อออกเอกสาร</p>
                 </div>

@@ -118,13 +118,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   // LG closes the doc ONCE (1 shipment / 1 doc): actual air freight + INV + HAWB at request level.
-  if ("actualAir" in body || "invoiceNo" in body || "hawbNo" in body) {
+  if ("actualAir" in body || "invoiceNo" in body || "hawbNo" in body || "mawbNo" in body) {
     await (prisma as any).pullMaterialRequest.update({
       where: { id },
       data: {
         ...("actualAir" in body ? { actualAir: num(body.actualAir) } : {}),
         ...("invoiceNo" in body ? { invoiceNo: body.invoiceNo || null } : {}),
         ...("hawbNo" in body ? { hawbNo: body.hawbNo || null } : {}),
+        ...("mawbNo" in body ? { mawbNo: body.mawbNo || null } : {}),
       },
     })
   }

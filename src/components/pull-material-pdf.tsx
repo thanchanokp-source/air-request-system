@@ -97,6 +97,7 @@ export function PullMaterialPdf({ req }: { req: any }) {
         <Text style={s.sectionTitle}>Logistics — Actual</Text>
         <View style={s.lgBox}>
           <Cell label="HAWB NO" value={req.hawbNo} />
+          <Cell label="MAWB NO" value={req.mawbNo} />
           <Cell label="Invoice NO" value={req.invoiceNo} />
           <Cell label="Actual Air Freight" value={req.actualAir != null ? fmt(req.actualAir) : "-"} />
           <Cell label="Est vs Actual" value={req.actualAir != null ? fmt((Number(req.actualAir) || 0) - estTotal) : "-"} />
