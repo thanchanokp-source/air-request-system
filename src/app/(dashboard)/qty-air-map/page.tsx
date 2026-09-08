@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState } from "react"
 
 const MAROON = "#6b1a1a"
-type Row = { status: string; so: string; sub: string; brand: string[]; mpBrand: string[]; qtyAir: number | null; airQty: number | null; qtyPlan: number | null; docs: string[]; airInv: string[]; mpInv: string[] }
+type Row = { status: string; so: string; sub: string; brand: string[]; mpBrand: string[]; shipDates: string[]; qtyAir: number | null; airQty: number | null; qtyPlan: number | null; docs: string[]; airInv: string[]; mpInv: string[] }
+const fmtD = (s: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? `${m[3]}/${m[2]}/${m[1]}` : s }
 type Data = { mode: string; summary: { airKeys: number; mpKeys: number; matched: number; notFound: number; merUpload: number; matchPct: number }; rows: Row[] }
 const CAP = 500
 const n = (v: number | null) => (v == null ? "-" : v.toLocaleString())
@@ -14,6 +15,8 @@ export default function QtyAirMapPage() {
   const [q, setQ] = useState("")
   const [brandF, setBrandF] = useState("")
   const [statusF, setStatusF] = useState<"all" | "matched" | "not_found">("all")
+  const [fromD, setFromD] = useState("")
+  const [toD, setToD] = useState("")
 
   useEffect(() => {
     setLoading(true); setErr("")
@@ -31,7 +34,8 @@ export default function QtyAirMapPage() {
     for (const r of data?.rows || []) { r.brand.forEach(b => s.add(b)); r.mpBrand.forEach(b => s.add(b)) }
     return [...s].filter(Boolean).sort()
   }, [data])
-  const airRows = useMemo(() => (data?.rows || []).filter(r => (r.status === "matched" || r.status === "not_found") && (statusF === "all" || r.status === statusF) && match(r) && brandOk(r)), [data, qq, brandF, statusF])
+  const dateOk = (r: Row) => { if (!fromD && !toD) return true; if (!r.shipDates.length) return false; return r.shipDates.some(d => (!fromD || d >= fromD) && (!toD || d <= toD)) }
+  const airRows = useMemo(() => (data?.rows || []).filter(r => (r.status === "matched" || r.status === "not_found") && (statusF === "all" || r.status === statusF) && match(r) && brandOk(r) && dateOk(r)), [data, qq, brandF, statusF, fromD, toD])
   const mpOnlyRows = useMemo(() => (data?.rows || []).filter(r => r.status === "mer_upload" && match(r) && brandOk(r)), [data, qq, brandF])
 
   const csv = (rows: Row[], head: string[], pick: (r: Row) => any[], name: string) => {
@@ -68,7 +72,11 @@ export default function QtyAirMapPage() {
                 {v === "all" ? "ทั้งหมด" : v === "matched" ? "✓ เจอ" : "⚠ ไม่เจอ"}
               </button>
             ))}
-            {(brandF || statusF !== "all" || q) && <button onClick={() => { setBrandF(""); setStatusF("all"); setQ("") }} className="text-xs text-red-600 hover:underline ml-1">ล้างตัวกรอง</button>}
+            <span className="text-xs text-gray-400 ml-1">วันออก air:</span>
+            <input type="date" value={fromD} onChange={e => setFromD(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-xs" />
+            <span className="text-xs text-gray-400">ถึง</span>
+            <input type="date" value={toD} onChange={e => setToD(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-xs" />
+            {(brandF || statusF !== "all" || q || fromD || toD) && <button onClick={() => { setBrandF(""); setStatusF("all"); setQ(""); setFromD(""); setToD("") }} className="text-xs text-red-600 hover:underline ml-1">ล้างตัวกรอง</button>}
           </div>
 
           {/* ── ก้อน 1: ฝั่ง Air Request ── */}
@@ -76,7 +84,7 @@ export default function QtyAirMapPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-semibold text-gray-800">① จาก Air Request (MER) — เทียบกับ mp_line</h2>
               <span className="text-[11px] text-gray-400">{airRows.length.toLocaleString()} รายการ · ✓ เจอ {data.summary.matched} · ⚠ ไม่เจอ {data.summary.notFound}</span>
-              <button onClick={() => csv(airRows, ["SO", "SUB", "BRAND", "INV(air)", "QTY PLAN", "QTY AIR (MER)", "QTY AIR (mp_line)", "สถานะ"], r => [r.so, r.sub, r.brand.join(" "), r.airInv.join(" "), r.qtyPlan, r.airQty, r.qtyAir ?? "", r.status === "matched" ? "เจอ" : "ไม่เจอใน mp_line"], "qty-air-map_air.csv")}
+              <button onClick={() => csv(airRows, ["SO", "SUB", "BRAND", "SHIP AIR", "INV(air)", "QTY PLAN", "QTY AIR (MER)", "QTY AIR (mp_line)", "สถานะ"], r => [r.so, r.sub, r.brand.join(" "), r.shipDates.map(fmtD).join(" "), r.airInv.join(" "), r.qtyPlan, r.airQty, r.qtyAir ?? "", r.status === "matched" ? "เจอ" : "ไม่เจอใน mp_line"], "qty-air-map_air.csv")}
                 className="ml-auto text-xs px-3 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">⬇ CSV</button>
             </div>
             <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white">
@@ -86,6 +94,7 @@ export default function QtyAirMapPage() {
                     <th className="px-3 py-2 font-medium">SO</th>
                     <th className="px-3 py-2 font-medium">SUB</th>
                     <th className="px-3 py-2 font-medium">BRAND</th>
+                    <th className="px-3 py-2 font-medium">SHIP AIR</th>
                     <th className="px-3 py-2 font-medium">INV (air)</th>
                     <th className="px-3 py-2 font-medium text-right">QTY PLAN</th>
                     <th className="px-3 py-2 font-medium text-right">QTY AIR (MER)</th>
@@ -99,6 +108,7 @@ export default function QtyAirMapPage() {
                       <td className="px-3 py-1.5 font-mono">{r.so}</td>
                       <td className="px-3 py-1.5 font-mono">{r.sub || "-"}</td>
                       <td className="px-3 py-1.5 text-gray-600">{r.brand.join(", ") || "-"}</td>
+                      <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.shipDates.map(fmtD).join(", ") || "-"}</td>
                       <td className="px-3 py-1.5 text-gray-500 text-[10px]">{r.airInv.join(", ") || "-"}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{n(r.qtyPlan)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums font-medium">{n(r.airQty)}</td>

@@ -40,16 +40,17 @@ export async function GET(req: NextRequest) {
   }
 
   const items = await prisma.airRequestItem.findMany({
-    select: { so: true, sub: true, brand: true, invoiceNo: true, qtyRequestAir: true, qtyOriginalShipment: true, request: { select: { documentNo: true } } },
+    select: { so: true, sub: true, brand: true, invoiceNo: true, qtyRequestAir: true, qtyOriginalShipment: true, planShipmentDate: true, request: { select: { documentNo: true } } },
   })
-  const airMap = new Map<string, { so: string; sub: string | null; qty: number; plan: number; inv: Set<string>; docs: Set<string>; brand: Set<string> }>()
+  const airMap = new Map<string, { so: string; sub: string | null; qty: number; plan: number; inv: Set<string>; docs: Set<string>; brand: Set<string>; dates: Set<string> }>()
   for (const i of items) {
     const k = K(i.so, i.sub)
-    const e = airMap.get(k) || { so: i.so, sub: mode === "so" ? "" : i.sub, qty: 0, plan: 0, inv: new Set<string>(), docs: new Set<string>(), brand: new Set<string>() }
+    const e = airMap.get(k) || { so: i.so, sub: mode === "so" ? "" : i.sub, qty: 0, plan: 0, inv: new Set<string>(), docs: new Set<string>(), brand: new Set<string>(), dates: new Set<string>() }
     e.qty += Number(i.qtyRequestAir) || 0
     e.plan += Number(i.qtyOriginalShipment) || 0
     if (i.invoiceNo) e.inv.add(i.invoiceNo)
     if (i.brand) e.brand.add(String(i.brand))
+    if (i.planShipmentDate) { const d = new Date(i.planShipmentDate); if (!isNaN(d.getTime())) e.dates.add(d.toISOString().slice(0, 10)) }
     if ((i as any).request?.documentNo) e.docs.add((i as any).request.documentNo)
     airMap.set(k, e)
   }
@@ -58,11 +59,11 @@ export async function GET(req: NextRequest) {
   let matched = 0, notFound = 0, merUpload = 0
   for (const [k, a] of airMap) {
     const m = mpMap.get(k)
-    if (m) { matched++; rows.push({ status: "matched", so: a.so, sub: a.sub || "", qtyAir: m.pcs, airQty: a.qty, qtyPlan: a.plan, brand: [...a.brand].slice(0, 2), mpBrand: [...m.brand].slice(0, 2), docs: [...a.docs].slice(0, 3), airInv: [...a.inv].slice(0, 3), mpInv: [...m.inv].slice(0, 3) }) }
-    else { notFound++; rows.push({ status: "not_found", so: a.so, sub: a.sub || "", qtyAir: null, airQty: a.qty, qtyPlan: a.plan, brand: [...a.brand].slice(0, 2), mpBrand: [], docs: [...a.docs].slice(0, 3), airInv: [...a.inv].slice(0, 3), mpInv: [] }) }
+    if (m) { matched++; rows.push({ status: "matched", so: a.so, sub: a.sub || "", qtyAir: m.pcs, airQty: a.qty, qtyPlan: a.plan, brand: [...a.brand].slice(0, 2), mpBrand: [...m.brand].slice(0, 2), shipDates: [...a.dates].sort(), docs: [...a.docs].slice(0, 3), airInv: [...a.inv].slice(0, 3), mpInv: [...m.inv].slice(0, 3) }) }
+    else { notFound++; rows.push({ status: "not_found", so: a.so, sub: a.sub || "", qtyAir: null, airQty: a.qty, qtyPlan: a.plan, brand: [...a.brand].slice(0, 2), mpBrand: [], shipDates: [...a.dates].sort(), docs: [...a.docs].slice(0, 3), airInv: [...a.inv].slice(0, 3), mpInv: [] }) }
   }
   for (const [k, m] of mpMap) {
-    if (!airMap.has(k)) { merUpload++; rows.push({ status: "mer_upload", so: m.so, sub: m.sub || "", qtyAir: m.pcs, airQty: null, qtyPlan: null, brand: [], mpBrand: [...m.brand].slice(0, 2), docs: [], airInv: [], mpInv: [...m.inv].slice(0, 3) }) }
+    if (!airMap.has(k)) { merUpload++; rows.push({ status: "mer_upload", so: m.so, sub: m.sub || "", qtyAir: m.pcs, airQty: null, qtyPlan: null, brand: [], mpBrand: [...m.brand].slice(0, 2), shipDates: [], docs: [], airInv: [], mpInv: [...m.inv].slice(0, 3) }) }
   }
 
   const airKeys = airMap.size
