@@ -131,6 +131,17 @@ export default function Page() {
     } finally { setBusy(null) }
   }
 
+  // Hard delete — admin only. Removes the document + its items/attachments (cascade). Irreversible.
+  const del = async (rq: any) => {
+    if (!confirm(`⚠️ ลบเอกสาร ${rq.documentNo} ถาวร?\n\nจะลบ items + ไฟล์แนบทั้งหมด กู้คืนไม่ได้\nยืนยันเฉพาะเมื่อแน่ใจจริงๆ`)) return
+    setBusy(rq.id)
+    try {
+      const r = await fetch(`/api/pull-material/${rq.id}`, { method: "DELETE" })
+      if (r.ok) await load()
+      else { const d = await r.json().catch(() => ({})); alert(d.error || "Delete failed") }
+    } finally { setBusy(null) }
+  }
+
   // Resubmit a recalled document → back into the normal flow (PC → DVM approve · SCM → Purchasing),
   // which re-sends the stage emails as usual.
   const resubmit = async (rq: any) => {
@@ -299,6 +310,10 @@ export default function Page() {
                         {(isAdmin || rq.createdById === userId) && rq.status === "RECALLED" && (
                           <button onClick={() => openEdit(rq)} disabled={busy === rq.id} title="Edit & resubmit"
                             className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50" style={{ background: MAROON }}>✎ แก้ไข & Resubmit</button>
+                        )}
+                        {isAdmin && (
+                          <button onClick={() => del(rq)} disabled={busy === rq.id} title="ลบเอกสารถาวร (admin เท่านั้น)"
+                            className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 ml-1">🗑 ลบ</button>
                         )}
                       </td>
                     </tr>
