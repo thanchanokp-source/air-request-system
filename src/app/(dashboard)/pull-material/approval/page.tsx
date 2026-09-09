@@ -229,7 +229,6 @@ export default function Page() {
                     const s0 = items.find((x: any) => x.airFreightCost != null) || items[0] || {}
                     const byPo: Record<string, { qty: number; uoms: Set<string>; freight: number; origin: number }> = {}
                     items.forEach((it: any) => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set(), freight: 0, origin: 0 }); const tot = Number(it.airFreightCost) || 0; const org = Number(it.originCost) || 0; g.qty += Number(it.pullMaterialQty) || 0; g.freight += tot - org; g.origin += org; if (it.bomUom) g.uoms.add(it.bomUom) })
-                    const docAct = openReq.actualAir != null ? `${fmt(openReq.actualAir)}` : "-"
                     const docMawb = openReq.mawbNo || "-", docHawb = openReq.hawbNo || "-"
                     // Est Air = freight only (no incoterm); EXW = origin cost; Total Air = freight + origin.
                     const totalOrigin = items.reduce((s: number, it: any) => s + (Number(it.originCost) || 0), 0)
@@ -261,10 +260,10 @@ export default function Page() {
                         {(() => {
                           const seaFreight = items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)
                           const modes = [
-                            { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: total || null, lt: s0.leadTimeAir || null, accent: "#6b1a1a" },
-                            { key: "sea", label: "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: s0.leadTimeSea || null, accent: "#0369a1" },
-                            { key: "dhl", label: "📦 Courier · DHL", freight: null, inco: null, total: null, lt: null, accent: "#b45309" },
-                            { key: "fedex", label: "📦 Courier · FedEx", freight: null, inco: null, total: null, lt: null, accent: "#7c3aed" },
+                            { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: total || null, lt: s0.leadTimeAir || null, actual: openReq.actualAir ?? null, local: null, accent: "#6b1a1a" },
+                            { key: "sea", label: "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: s0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1" },
+                            { key: "dhl", label: "📦 Courier · DHL", freight: null, inco: null, total: null, lt: null, actual: null, local: null, accent: "#b45309" },
+                            { key: "fedex", label: "📦 Courier · FedEx", freight: null, inco: null, total: null, lt: null, actual: null, local: null, accent: "#7c3aed" },
                           ]
                           const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
                           const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
@@ -282,6 +281,8 @@ export default function Page() {
                                         <div className="flex justify-between"><span className="text-gray-400">Incoterm</span><span className="font-medium text-gray-700">{money(m.inco)}</span></div>
                                         <div className="flex justify-between border-t border-gray-100 pt-1"><span className="text-gray-500 font-semibold">Total Freight</span><span className="font-bold text-gray-900">{money(m.total)}</span></div>
                                         <div className="flex justify-between"><span className="text-gray-400">L/T</span><span className="font-medium text-gray-700">{m.lt || <span className="text-gray-300">–</span>}</span></div>
+                                        <div className="flex justify-between"><span className="text-gray-400">Actual Air</span><span className="font-medium text-gray-700">{money(m.actual)}</span></div>
+                                        <div className="flex justify-between"><span className="text-gray-400">Local Charge (TH)</span><span className="font-medium text-gray-700">{money(m.local)}</span></div>
                                       </div>
                                     </div>
                                   )
@@ -294,7 +295,7 @@ export default function Page() {
                         <div className="overflow-x-auto border rounded-xl">
                           <table className="w-full text-xs">
                             <thead className="bg-gray-50 text-gray-500"><tr>
-                              {["PO NO", "QTY AIR", "UOM", "EST AIR COST", "EXW", "TOTAL AIR", "ACT AIR COST", "MAWB", "HAWB", "LOCAL CHARGE (TH)", "INVOICE NO"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+                              {["PO NO", "QTY AIR", "UOM", "MAWB", "HAWB", "INVOICE NO"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
                             </tr></thead>
                             <tbody className="divide-y divide-gray-50">
                               {Object.keys(byPo).map(po => (
@@ -302,13 +303,8 @@ export default function Page() {
                                   <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
                                   <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(byPo[po].qty)}</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap">{[...byPo[po].uoms].join(", ") || "-"}</td>
-                                  <td className="px-3 py-1.5 text-right whitespace-nowrap">{byPo[po].freight ? fmt(byPo[po].freight) : "-"}</td>
-                                  <td className="px-3 py-1.5 text-right whitespace-nowrap">{byPo[po].origin ? fmt(byPo[po].origin) : "-"}</td>
-                                  <td className="px-3 py-1.5 text-right whitespace-nowrap font-semibold">{(byPo[po].freight + byPo[po].origin) ? fmt(byPo[po].freight + byPo[po].origin) : "-"}</td>
-                                  <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-500" title="ยอดรวมทั้งเอกสาร (LG กรอก)">{docAct}</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap text-gray-500">{docMawb}</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap text-gray-500">{docHawb}</td>
-                                  <td className="px-3 py-1.5 whitespace-nowrap text-gray-400">-</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap font-medium text-gray-700">{(openReq.poInvoices || {})[po] || "-"}</td>
                                 </tr>
                               ))}
