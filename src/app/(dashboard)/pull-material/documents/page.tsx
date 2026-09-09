@@ -39,8 +39,10 @@ export default function Page() {
   const load = async () => {
     setLoading(true)
     try {
-      const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json())
-      setReqs((d.requests || []).filter((r: any) => r.status === "APPROVED" || r.status === "COMPLETED"))
+      const bus = bu === "ALL" ? BUS : [bu]
+      const results = await Promise.all(bus.map(b => fetch(`/api/pull-material?bu=${b}`).then(r => r.json()).catch(() => ({}))))
+      const all = results.flatMap((d: any) => d.requests || [])
+      setReqs(all.filter((r: any) => r.status === "APPROVED" || r.status === "COMPLETED"))
     } finally { setLoading(false) }
   }
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
@@ -145,8 +147,8 @@ export default function Page() {
 
       {!openReq && (
         <>
-          <div className="flex gap-1.5">{BUS.map(b => (
-            <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
+          <div className="flex gap-1.5">{["ALL", ...BUS].map(b => (
+            <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: b === "ALL" ? MAROON : buColor(b) } : undefined}>{b === "ALL" ? "ALL BU" : b}</button>
           ))}</div>
           <div className="flex gap-1.5">
             {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "PC request"]] as const).map(([v, label]) => {

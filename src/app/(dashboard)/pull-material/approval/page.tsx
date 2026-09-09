@@ -117,7 +117,7 @@ export default function Page() {
     } finally { setBusy(false) }
   }
 
-  const reqs = allReqs.filter((r: any) => r.bu === bu) // docs shown for the selected BU tab
+  const reqs = bu === "ALL" ? allReqs : allReqs.filter((r: any) => r.bu === bu) // docs shown for the selected BU tab
   const openReq = allReqs.find(r => r.id === openId)
 
   return (
@@ -126,11 +126,11 @@ export default function Page() {
         <>
           <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Approval — Pull Material</h1>
             <p className="text-sm text-gray-400 mt-0.5">Documents pending your approval</p></div>
-          <div className="flex gap-1.5">{BUS.map(b => {
-            const cnt = allReqs.filter((r: any) => r.bu === b).length
+          <div className="flex gap-1.5">{["ALL", ...BUS].map(b => {
+            const cnt = b === "ALL" ? allReqs.length : allReqs.filter((r: any) => r.bu === b).length
             return (
-            <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition inline-flex items-center gap-1.5 ${bu === b ? "text-white border-transparent shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>
-              {b}{cnt > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${bu === b ? "bg-white/25 text-white" : "bg-red-100 text-red-700"}`}>{cnt}</span>}
+            <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition inline-flex items-center gap-1.5 ${bu === b ? "text-white border-transparent shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: b === "ALL" ? MAROON : buColor(b) } : undefined}>
+              {b === "ALL" ? "ALL BU" : b}{cnt > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${bu === b ? "bg-white/25 text-white" : "bg-red-100 text-red-700"}`}>{cnt}</span>}
             </button>
           )})}</div>
 
