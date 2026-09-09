@@ -214,6 +214,11 @@ export default function Page() {
         const pkgs = Array.isArray(rq.packages) ? rq.packages : []
         const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (d0.cartons ? String(fmt(d0.cartons)) : "")
         const dimStr = (d0.boxW || d0.boxL || d0.boxH) ? `${d0.boxW || "-"}×${d0.boxL || "-"}×${d0.boxH || "-"} cm` : ""
+        const totalOrigin = its.reduce((s: number, it: any) => s + (Number(it.originCost) || 0), 0)
+        const totalFreight = estTotal - totalOrigin
+        const seaFreight = its.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (d0.estSea ? Number(d0.estSea) : 0)
+        const earliest = (arr: any[]) => { const t = arr.map(v => (v ? new Date(v).getTime() : NaN)).filter(n => !isNaN(n)); return t.length ? new Date(Math.min(...t)) : null }
+        const localCh = raw(rq, "localChargeTh") === "" ? null : Number(raw(rq, "localChargeTh")) || null
         return (
           <div className="space-y-5">
             <button onClick={() => setOpenId(null)} className="text-sm text-gray-400 hover:text-gray-700 flex items-center gap-1">← Back</button>
@@ -240,6 +245,8 @@ export default function Page() {
                   <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                     <Info label="BU" value={rq.bu} />
                     <Info label="Requester" value={rq.requesterName} />
+                    <Info label="Brand Name" value={[...new Set(its.map((i: any) => i.brand).filter(Boolean))].join(", ")} />
+                    <Info label="Supplier Name" value={[...new Set(its.map((i: any) => i.vendorName).filter(Boolean))].join(", ") || rq.vendorContact} />
                   </div>
                   {(rq.attachments || []).length > 0 && (
                     <div className="mt-4 pt-3 border-t border-gray-100">
@@ -263,15 +270,52 @@ export default function Page() {
                     <Info label="City" value={d0.city} />
                     <Info label="Incoterm" value={d0.incoterm} />
                     <Info label="QTY Air" value={fmt(qtyAir)} />
-                    <Info label="Est Air" value={estTotal ? `${fmt(estTotal)} USD` : <span className="text-amber-600 text-xs font-medium">⚠️ ไม่มี rate — ให้ LG เพิ่ม Master Rate ของ port {d0.port || d0.seaPort || "นี้"}</span>} />
-                    <Info label="L/T Air" value={d0.leadTimeAir} />
                     <Info label="Weight (kg)" value={d0.weight != null ? fmt(d0.weight) : "-"} />
-                    <Info label="Need date" value={d0.needDate ? fmtDate(d0.needDate) : "-"} />
+                    <Info label="ETC" value={d0.etc ? fmtDate(d0.etc) : "-"} />
+                    <Info label="Need date (in-house)" value={d0.needDate ? fmtDate(d0.needDate) : "-"} />
+                    <Info label="MRD" value={fmtDate(earliest(its.flatMap((it: any) => [it.shipmentDate, it.mrdDate, it.mrdNeedDate, it.mrd2])))} />
+                    <Info label="Shipment Date" value={fmtDate(earliest(its.map((it: any) => it.shipmentDate)))} />
                     <Info label="Package" value={pkgStr} />
                     <Info label="Dimension" value={dimStr} />
-                    {["EX-WORK", "FCA"].includes(d0.incoterm) && <Info label="Pickup address" value={d0.pickupAddress} />}
-                    {rq.remark && <div className="col-span-2 sm:col-span-4"><Info label="Remark" value={rq.remark} /></div>}
+                    {rq.remark && <Info label="Remark" value={rq.remark} />}
+                    {d0.pickupAddress && <div className="col-span-2 sm:col-span-4"><Info label="Supplier / Pickup address" value={d0.pickupAddress} /></div>}
                   </div>
+
+                  {/* Shipping mode comparison (same as approval) */}
+                  {(() => {
+                    const modes = [
+                      { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: estTotal || null, lt: d0.leadTimeAir || null, actual: actTotal || null, local: localCh, accent: "#6b1a1a" },
+                      { key: "sea", label: "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1" },
+                      { key: "dhl", label: "📦 Courier · DHL", freight: null, inco: null, total: null, lt: null, actual: null, local: null, accent: "#b45309" },
+                      { key: "fedex", label: "📦 Courier · FedEx", freight: null, inco: null, total: null, lt: null, actual: null, local: null, accent: "#7c3aed" },
+                    ]
+                    const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
+                    const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
+                    return (
+                      <div className="mb-4">
+                        <div className="text-xs font-bold text-gray-600 mb-2">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total · Lead time)</div>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                          {modes.map(m => {
+                            const best = m.total && m.total === cheapest
+                            return (
+                              <div key={m.key} className={`rounded-xl border p-3 ${best ? "ring-2 ring-emerald-300 border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
+                                <div className="text-xs font-semibold mb-1.5" style={{ color: m.accent }}>{m.label}{best && <span className="ml-1 text-[10px] text-emerald-600">ถูกสุด</span>}</div>
+                                <div className="space-y-1 text-[11px]">
+                                  <div className="flex justify-between"><span className="text-gray-400">Freight</span><span className="font-medium text-gray-700">{money(m.freight)}</span></div>
+                                  <div className="flex justify-between"><span className="text-gray-400">Incoterm</span><span className="font-medium text-gray-700">{money(m.inco)}</span></div>
+                                  <div className="flex justify-between border-t border-gray-100 pt-1"><span className="text-gray-500 font-semibold">Total Freight</span><span className="font-bold text-gray-900">{money(m.total)}</span></div>
+                                  <div className="flex justify-between"><span className="text-gray-400">L/T</span><span className="font-medium text-gray-700">{m.lt || <span className="text-gray-300">–</span>}</span></div>
+                                  <div className="flex justify-between"><span className="text-gray-400">Actual Air</span><span className="font-medium text-gray-700">{money(m.actual)}</span></div>
+                                  <div className="flex justify-between"><span className="text-gray-400">Local Charge (TH)</span><span className="font-medium text-gray-700">{money(m.local)}</span></div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
                   <div className="border rounded-xl overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead className="bg-gray-50 text-gray-500"><tr>{["PO NO", "QTY AIR", "UOM", "INVOICE NO"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
