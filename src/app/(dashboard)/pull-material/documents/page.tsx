@@ -262,7 +262,7 @@ export default function Page() {
                     <Info label="City" value={d0.city} />
                     <Info label="Incoterm" value={d0.incoterm} />
                     <Info label="QTY Air" value={fmt(qtyAir)} />
-                    <Info label="Est Air" value={estTotal ? `${fmt(estTotal)} USD` : "-"} />
+                    <Info label="Est Air" value={estTotal ? `${fmt(estTotal)} USD` : <span className="text-amber-600 text-xs font-medium">⚠️ ไม่มี rate — ให้ LG เพิ่ม Master Rate ของ port {d0.port || d0.seaPort || "นี้"}</span>} />
                     <Info label="L/T Air" value={d0.leadTimeAir} />
                     <Info label="Weight (kg)" value={d0.weight != null ? fmt(d0.weight) : "-"} />
                     <Info label="Need date" value={d0.needDate ? fmtDate(d0.needDate) : "-"} />
@@ -311,7 +311,7 @@ export default function Page() {
                       <input type="number" value={raw(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} /></div>
                   </div>
                   <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
-                    <span className="text-gray-500">Est {fmt(estTotal)} USD</span>
+                    <span className={estTotal ? "text-gray-500" : "text-amber-600 font-medium"}>{estTotal ? `Est ${fmt(estTotal)} USD` : "⚠️ ไม่มี rate — เพิ่ม Master Rate"}</span>
                     {actTotal > 0 && <span className={`px-2 py-0.5 rounded-full font-medium ${diff > 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{diff > 0 ? "▲" : "▼"} {fmt(Math.abs(diff))}</span>}
                   </div>
                   <div className="mt-3 pt-3 border-t border-gray-100">

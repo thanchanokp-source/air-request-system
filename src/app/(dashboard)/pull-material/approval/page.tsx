@@ -239,7 +239,7 @@ export default function Page() {
                           <Info label="City" value={s0.city} />
                           <Info label="Incoterm" value={s0.incoterm} />
                           <Info label="QTY Air" value={fmt(totalQty)} />
-                          <Info label="Est Air" value={total ? `${fmt(total)} USD` : "-"} />
+                          <Info label="Est Air" value={total ? `${fmt(total)} USD` : <span className="text-amber-600 text-xs font-medium">⚠️ ไม่มี rate — ให้ LG เพิ่ม Master Rate ของ port {s0.port || s0.seaPort || "นี้"}</span>} />
                           <Info label="L/T Air" value={s0.leadTimeAir} />
                           <Info label="Weight (kg)" value={s0.weight != null ? fmt(s0.weight) : "-"} />
                           <Info label="Need date (in-house)" value={s0.needDate ? fmtDate(s0.needDate) : "-"} />
