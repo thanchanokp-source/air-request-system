@@ -372,10 +372,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (body.lgComplete) {
       // LG runs in PARALLEL with Claim. Now that Actual is entered, re-derive any item whose
       // claim is fully approved so it can advance to President (needs claim done AND Actual in).
+      // PARTIAL send: an SO advances to President ONLY if its OWN Actual is in. SOs still missing
+      // Actual (null or 0) keep lgDone=false → they stay at CLAIM_PASSED (not "passed"), so LG can
+      // send some SOs now and fill the rest later without finishing the whole document.
       const nygItems = await prisma.airRequestItem.findMany({ where: { requestId: id } })
       for (const it of nygItems) {
         if (!["LOG_PASSED", "CLAIM_PASSED"].includes(it.itemStatus)) continue
-        const ns = deriveNygItemStatus(getSplits(it), true)
+        const ns = deriveNygItemStatus(getSplits(it), !!it.actualAirFreight)
         if (ns !== it.itemStatus) await prisma.airRequestItem.update({ where: { id: it.id }, data: { itemStatus: ns } })
       }
       const nd = await recalcDocStatus(id)
