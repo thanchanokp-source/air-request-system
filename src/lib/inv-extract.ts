@@ -32,18 +32,16 @@ function invFromLine(line: string, po: string, allPos: string[]): string {
   return ""
 }
 
-// Result: pairs = { po: invoice }; present = POs that literally appear in the document;
-// unverified = POs whose invoice came from the single-invoice fallback (PO NOT found in the file)
-// → the caller warns the user (possible wrong document).
-export type PairResult = { pairs: Record<string, string>; present: string[]; unverified: string[] }
+// Result: pairs = { po: invoice } — ONLY for POs that literally appear in the document (no guessing);
+// present = POs found in the document text. A PO not in the file is left blank for manual entry.
+export type PairResult = { pairs: Record<string, string>; present: string[] }
 
 export function pairPoInvoice(text: string, pos: string[]): PairResult {
   const out: Record<string, string> = {}
-  const unverified: string[] = []
-  if (!text || !pos.length) return { pairs: out, present: [], unverified }
+  if (!text || !pos.length) return { pairs: out, present: [] }
   const U = text.toUpperCase()
   const present = pos.filter(po => U.includes(po.toUpperCase())) // POs literally in the doc
-  // 1) line-level: only assign from a line that actually contains the PO (verified).
+  // 1) line-level: assign from a line that actually contains the PO (highest confidence).
   const lines = text.split(/\r?\n/)
   for (const ln of lines) {
     const LU = ln.toUpperCase()
@@ -54,15 +52,12 @@ export function pairPoInvoice(text: string, pos: string[]): PairResult {
       }
     }
   }
-  // 2) single-invoice fallback: if the doc has exactly one invoice number, fill blank POs — but
-  //    mark POs NOT found in the doc as "unverified" so the UI can flag a possible wrong upload.
+  // 2) single-invoice fallback: fill blank POs with the doc's one invoice — but ONLY POs that are
+  //    actually present in the file. POs not in the file are NEVER guessed → left blank to key by hand.
   const kwG = [...text.matchAll(new RegExp(INV_KW.source, "gi"))].map(m => m[1])
   const pfG = [...text.matchAll(new RegExp(INV_PREFIX.source, "gi"))].map(m => m[1])
   const globals = [...kwG, ...pfG].filter(t => /\d/.test(t) && !pos.some(p => p.toUpperCase() === t.toUpperCase()))
   const uniq = [...new Set(globals.map(g => g.toUpperCase()))]
-  if (uniq.length === 1) {
-    const only = globals[0]
-    for (const po of pos) if (!out[po]) { out[po] = only; if (!present.includes(po)) unverified.push(po) }
-  }
-  return { pairs: out, present, unverified }
+  if (uniq.length === 1) { const only = globals[0]; for (const po of present) if (!out[po]) out[po] = only }
+  return { pairs: out, present }
 }

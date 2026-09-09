@@ -43,6 +43,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ kind, error: e?.message || "read failed", pairs: {}, textLen: 0, found: 0 })
   }
 
-  const { pairs, present, unverified } = pairPoInvoice(text, pos)
-  return NextResponse.json({ kind, textLen: text.length, pairs, present, unverified, found: Object.keys(pairs).length })
+  const { pairs, present } = pairPoInvoice(text, pos)
+  return NextResponse.json({ kind, textLen: text.length, pairs, present, found: Object.keys(pairs).length })
 }

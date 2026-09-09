@@ -298,18 +298,14 @@ export default function ScmRequestPage() {
         else {
           const found = (d.pairs || {}) as Record<string, string>
           const present = (d.present || []) as string[]
-          const unverified = (d.unverified || []) as string[]
-          const gotPos = Object.keys(found).filter(p => found[p])
+          const gotPos = Object.keys(found).filter(p => found[p]) // only POs actually in the file
           for (const p of gotPos) if (!merged[p]) merged[p] = found[p]
-          if (!gotPos.length) { status = "none"; detail = `อ่านไฟล์ได้ (${d.kind}, ${d.textLen} ตัวอักษร) แต่ไม่เจอเลข INV` }
-          else if (present.length === 0) {
-            const uniqInv = [...new Set(gotPos.map(p => found[p]))].join(", ")
-            status = "warn"; detail = `⚠️ ไม่พบเลข PO ของเอกสารนี้ในไฟล์เลย — เดา INV = ${uniqInv} ให้ทุก PO · โปรดตรวจว่าอัปถูกเอกสาร (แก้/ลบเองได้)`
+          if (gotPos.length) {
+            status = "ok"; detail = "✓ พบในไฟล์: " + gotPos.map(p => `${p} → ${found[p]}`).join(", ")
+          } else if (present.length === 0) {
+            status = "warn"; detail = "⚠️ ไม่พบ PO ของเอกสารนี้ในไฟล์เลย — ไม่เติม INV ให้ (คีย์เอง) · ตรวจว่าอัปถูกเอกสาร"
           } else {
-            const verified = present.filter(p => found[p])
-            const guessed = unverified.filter(p => found[p])
-            status = guessed.length ? "warn" : "ok"
-            detail = "✓ พบในไฟล์: " + verified.map(p => `${p} → ${found[p]}`).join(", ") + (guessed.length ? ` · ⚠️ เดาให้ (ไม่พบ PO ในไฟล์): ${guessed.join(", ")}` : "")
+            status = "none"; detail = `พบ PO ในไฟล์ (${present.join(", ")}) แต่ไม่เจอเลข INV — คีย์เอง`
           }
         }
       } catch { status = "error"; detail = "เกิดข้อผิดพลาดตอนอ่าน" }
