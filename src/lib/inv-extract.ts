@@ -32,25 +32,37 @@ function invFromLine(line: string, po: string, allPos: string[]): string {
   return ""
 }
 
-// Best-effort { po: invoice } from extracted text, scoped to the POs already in the cart.
-export function pairPoInvoice(text: string, pos: string[]): Record<string, string> {
+// Result: pairs = { po: invoice }; present = POs that literally appear in the document;
+// unverified = POs whose invoice came from the single-invoice fallback (PO NOT found in the file)
+// → the caller warns the user (possible wrong document).
+export type PairResult = { pairs: Record<string, string>; present: string[]; unverified: string[] }
+
+export function pairPoInvoice(text: string, pos: string[]): PairResult {
   const out: Record<string, string> = {}
-  if (!text || !pos.length) return out
+  const unverified: string[] = []
+  if (!text || !pos.length) return { pairs: out, present: [], unverified }
+  const U = text.toUpperCase()
+  const present = pos.filter(po => U.includes(po.toUpperCase())) // POs literally in the doc
+  // 1) line-level: only assign from a line that actually contains the PO (verified).
   const lines = text.split(/\r?\n/)
   for (const ln of lines) {
-    const U = ln.toUpperCase()
+    const LU = ln.toUpperCase()
     for (const po of pos) {
-      if (!out[po] && U.includes(po.toUpperCase())) {
+      if (!out[po] && LU.includes(po.toUpperCase())) {
         const inv = invFromLine(ln, po, pos)
         if (inv) out[po] = inv
       }
     }
   }
-  // If the whole doc has exactly one invoice-labelled number, use it for any PO still blank.
+  // 2) single-invoice fallback: if the doc has exactly one invoice number, fill blank POs — but
+  //    mark POs NOT found in the doc as "unverified" so the UI can flag a possible wrong upload.
   const kwG = [...text.matchAll(new RegExp(INV_KW.source, "gi"))].map(m => m[1])
   const pfG = [...text.matchAll(new RegExp(INV_PREFIX.source, "gi"))].map(m => m[1])
   const globals = [...kwG, ...pfG].filter(t => /\d/.test(t) && !pos.some(p => p.toUpperCase() === t.toUpperCase()))
   const uniq = [...new Set(globals.map(g => g.toUpperCase()))]
-  if (uniq.length === 1) { const only = globals[0]; for (const po of pos) if (!out[po]) out[po] = only }
-  return out
+  if (uniq.length === 1) {
+    const only = globals[0]
+    for (const po of pos) if (!out[po]) { out[po] = only; if (!present.includes(po)) unverified.push(po) }
+  }
+  return { pairs: out, present, unverified }
 }

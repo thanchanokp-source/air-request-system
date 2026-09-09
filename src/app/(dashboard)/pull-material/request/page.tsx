@@ -107,7 +107,7 @@ export default function ScmRequestPage() {
   const [invReading, setInvReading] = useState(false)
   const [invMsg, setInvMsg] = useState("")
   const [invModalOpen, setInvModalOpen] = useState(false)
-  const [invResults, setInvResults] = useState<{ name: string; status: "reading" | "ok" | "none" | "scan" | "error"; detail: string }[]>([])
+  const [invResults, setInvResults] = useState<{ name: string; status: "reading" | "ok" | "warn" | "none" | "scan" | "error"; detail: string }[]>([])
   const [pcPos, setPcPos] = useState<any[]>([])
   const [pcSelPos, setPcSelPos] = useState<Set<string>>(new Set())
   const [pcSelMats, setPcSelMats] = useState<Bom[]>([]) // materials of the selected POs (shown below)
@@ -289,7 +289,7 @@ export default function ScmRequestPage() {
     const merged: Record<string, string> = {}
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      let status: "ok" | "none" | "scan" | "error" = "none"; let detail = ""
+      let status: "ok" | "warn" | "none" | "scan" | "error" = "none"; let detail = ""
       try {
         const fd = new FormData(); fd.append("file", file); fd.append("pos", pos.join(","))
         const d = await fetch("/api/pull-material/read-invoice", { method: "POST", body: fd }).then(r => r.json())
@@ -297,10 +297,20 @@ export default function ScmRequestPage() {
         else if (d.kind === "image" || d.kind === "pdf-scanned") { status = "scan"; detail = "ไฟล์สแกน/รูป — ต้อง OCR (พิมพ์ INV เอง)" }
         else {
           const found = (d.pairs || {}) as Record<string, string>
+          const present = (d.present || []) as string[]
+          const unverified = (d.unverified || []) as string[]
           const gotPos = Object.keys(found).filter(p => found[p])
           for (const p of gotPos) if (!merged[p]) merged[p] = found[p]
-          if (gotPos.length) { status = "ok"; detail = "เจอ INV: " + gotPos.map(p => `${p} → ${found[p]}`).join(", ") }
-          else { status = "none"; detail = `อ่านไฟล์ได้ (${d.kind}, ${d.textLen} ตัวอักษร) แต่ไม่เจอเลข INV` }
+          if (!gotPos.length) { status = "none"; detail = `อ่านไฟล์ได้ (${d.kind}, ${d.textLen} ตัวอักษร) แต่ไม่เจอเลข INV` }
+          else if (present.length === 0) {
+            const uniqInv = [...new Set(gotPos.map(p => found[p]))].join(", ")
+            status = "warn"; detail = `⚠️ ไม่พบเลข PO ของเอกสารนี้ในไฟล์เลย — เดา INV = ${uniqInv} ให้ทุก PO · โปรดตรวจว่าอัปถูกเอกสาร (แก้/ลบเองได้)`
+          } else {
+            const verified = present.filter(p => found[p])
+            const guessed = unverified.filter(p => found[p])
+            status = guessed.length ? "warn" : "ok"
+            detail = "✓ พบในไฟล์: " + verified.map(p => `${p} → ${found[p]}`).join(", ") + (guessed.length ? ` · ⚠️ เดาให้ (ไม่พบ PO ในไฟล์): ${guessed.join(", ")}` : "")
+          }
         }
       } catch { status = "error"; detail = "เกิดข้อผิดพลาดตอนอ่าน" }
       setInvResults(prev => prev.map((r, idx) => (idx === i ? { ...r, status, detail } : r)))
@@ -1134,7 +1144,7 @@ export default function ScmRequestPage() {
               </div>
               <div className="p-4 space-y-2">
                 {invResults.map((r, i) => {
-                  const ic = r.status === "reading" ? "⏳" : r.status === "ok" ? "✅" : r.status === "scan" ? "🖼️" : r.status === "error" ? "❌" : "⚠️"
+                  const ic = r.status === "reading" ? "⏳" : r.status === "ok" ? "✅" : r.status === "warn" ? "⚠️" : r.status === "scan" ? "🖼️" : r.status === "error" ? "❌" : "⚠️"
                   const col = r.status === "ok" ? "text-emerald-700" : r.status === "reading" ? "text-gray-500" : r.status === "error" ? "text-red-600" : "text-amber-600"
                   return (
                     <div key={i} className="rounded-lg border border-gray-100 p-2.5">
