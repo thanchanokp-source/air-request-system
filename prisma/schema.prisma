@@ -349,6 +349,9 @@ model PullMaterialRequest {
   flightEtd      DateTime?          // LG: flight estimated time of departure
   flightEta      DateTime?          // LG: flight estimated time of arrival
   poInvoices     Json?              // LG: per-PO invoice map { "<poNo>": "<invoiceNo>" } (from OCR/manual)
+  vendorEmail    String?            // vendor contact (auto-filled from dc_vendor / typed by PC)
+  vendorContact  String?
+  vendorTel      String?
   // DVM Purchase approval signature snapshot (base64 PNG data URI), stamped in the PDF.
   approverSignature String?
   approverName      String?

@@ -102,6 +102,7 @@ export default function ScmRequestPage() {
   const [vendorAddrLoading, setVendorAddrLoading] = useState(false)
   const [vendorMatched, setVendorMatched] = useState("")
   const [pickupEditing, setPickupEditing] = useState(false)
+  const [vendorInfo, setVendorInfo] = useState({ email: "", contactName: "", tel: "" })
   // Per-PO invoice { po: inv } — read from an uploaded doc (Excel now / PDF+OCR later) or typed by hand.
   const [poInvMap, setPoInvMap] = useState<Record<string, string>>({})
   const [invReading, setInvReading] = useState(false)
@@ -270,7 +271,7 @@ export default function ScmRequestPage() {
     // Auto-fill the Vendor / Pickup address from dc_vendor (contain match on vendor_name).
     setVendorAddrLoading(true)
     fetch(`/api/bom?bu=${bu}&vendorAddr=${encodeURIComponent(v)}`).then(r => r.json())
-      .then(d => { setPcPur(p => ({ ...p, pickup: d.address || "" })); setVendorMatched(d.matched || "") }).catch(() => {}).finally(() => setVendorAddrLoading(false))
+      .then(d => { setPcPur(p => ({ ...p, pickup: d.address || "" })); setVendorMatched(d.matched || ""); setVendorInfo({ email: d.email || "", contactName: d.contactName || "", tel: d.tel || "" }) }).catch(() => {}).finally(() => setVendorAddrLoading(false))
     try { const d = await fetch(`/api/bom?bu=${bu}&vendorPos=${encodeURIComponent(v)}`).then(r => r.json()); setPcPos(Array.isArray(d.pos) ? d.pos : []) }
     finally { setPcLoad(false) }
   }
@@ -514,7 +515,7 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())) }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())), vendorEmail: vendorInfo.email, vendorContact: vendorInfo.contactName, vendorTel: vendorInfo.tel }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) {
@@ -531,7 +532,7 @@ export default function ScmRequestPage() {
         showToast(`✓ ส่งคำขอแล้ว: ${d.request?.documentNo}${files.length ? ` · แนบไฟล์ ${files.length - upFail}/${files.length}` : ""}`, true)
         setCart([]); setRemark(""); setIsTest(false); setModeTouched(false); setFiles([])
         setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", etc: "", pkg: "", boxW: "", boxL: "", boxH: "" })
-        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }]); setPickupEditing(false); setPoInvMap({}); setInvMsg("")
+        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }]); setPickupEditing(false); setPoInvMap({}); setInvMsg(""); setVendorInfo({ email: "", contactName: "", tel: "" })
       }
       else showToast(`✕ ส่งไม่สำเร็จ (HTTP ${r.status}): ${d.error || "submit failed"}`, false)
     } catch (e) {
@@ -632,7 +633,7 @@ export default function ScmRequestPage() {
             {pcVend ? (
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1 text-sm rounded-lg px-3 py-2 font-medium" style={{ background: "#fbf7ec", border: `1px solid ${GOLD_SOFT}66`, color: MAROON }}>🏭 {pcVend}</span>
-                <button onClick={() => { setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPickupEditing(false); setPcPur(p => ({ ...p, pickup: "" })) }} className="text-xs text-gray-400 hover:text-red-500">เปลี่ยน vendor</button>
+                <button onClick={() => { setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPickupEditing(false); setPcPur(p => ({ ...p, pickup: "" })); setVendorInfo({ email: "", contactName: "", tel: "" }); setVendorMatched("") }} className="text-xs text-gray-400 hover:text-red-500">เปลี่ยน vendor</button>
               </div>
             ) : (
               <>
@@ -671,6 +672,24 @@ export default function ScmRequestPage() {
                   <button onClick={() => setPickupEditing(true)} className="text-xs text-blue-600 hover:underline whitespace-nowrap mt-2">เปลี่ยน</button>
                 </div>
               )}
+              {/* Vendor contact — auto-filled from dc_vendor if present, editable */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Email</label>
+                  <input type="email" value={vendorInfo.email} onChange={e => setVendorInfo(v => ({ ...v, email: e.target.value }))} placeholder="email vendor"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-gray-500 block mb-0.5">ชื่อผู้ติดต่อ</label>
+                  <input value={vendorInfo.contactName} onChange={e => setVendorInfo(v => ({ ...v, contactName: e.target.value }))} placeholder="ชื่อผู้ติดต่อ"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Tel</label>
+                  <input value={vendorInfo.tel} onChange={e => setVendorInfo(v => ({ ...v, tel: e.target.value }))} placeholder="เบอร์โทร"
+                    className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+                </div>
+              </div>
             </div>
           )}
 

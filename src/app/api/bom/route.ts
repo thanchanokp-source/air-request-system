@@ -71,17 +71,27 @@ export async function GET(req: NextRequest) {
       const set = new Set(cc.map(r => r.c))
       if (!set.has("vendor_name")) return NextResponse.json({ address: "", matched: null })
       const parts = ["address_line1", "address_line2", "address_line3", "address_line4", "city", "county", "country"].filter(c => set.has(c))
-      if (!parts.length) return NextResponse.json({ address: "", matched: null })
-      const selCols = parts.map(c => `"${c}"`).join(", ")
+      // Auto-detect contact columns (names vary by ERP export) for email / contact name / tel.
+      const colList = [...set] as string[]
+      const emailCol = colList.find(c => /e_?mail/.test(c))
+      const nameCol = colList.find(c => /contact.*name|contact_person|attn|^contact$/.test(c))
+      const telCol = colList.find(c => /(^|_)(tel|phone|mobile|telephone)/.test(c))
+      const extra = [emailCol, nameCol, telCol].filter(Boolean) as string[]
+      const selCols = [...parts, ...extra].map(c => `"${c}"`).join(", ")
       const rows = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT vendor_name, ${selCols} FROM "${sc}"."dc_vendor" WHERE vendor_name ILIKE $1 ORDER BY length(vendor_name) ASC LIMIT 1`,
+        `SELECT vendor_name${selCols ? ", " + selCols : ""} FROM "${sc}"."dc_vendor" WHERE vendor_name ILIKE $1 ORDER BY length(vendor_name) ASC LIMIT 1`,
         `%${vendorAddr}%`)
       if (!rows.length) return NextResponse.json({ address: "", matched: null })
       const r = rows[0]
       const clean = (v: any) => (v == null ? "" : String(v).trim().replace(/[,\s]+$/, ""))
       // Vendor name first, then the address lines.
       const address = [clean(r.vendor_name), ...parts.map(c => clean(r[c]))].filter(Boolean).join(", ")
-      return NextResponse.json({ address, matched: r.vendor_name })
+      return NextResponse.json({
+        address, matched: r.vendor_name,
+        email: emailCol ? clean(r[emailCol]) : "",
+        contactName: nameCol ? clean(r[nameCol]) : "",
+        tel: telCol ? clean(r[telCol]) : "",
+      })
     } catch (e: any) { return NextResponse.json({ address: "", error: e?.message || "vendorAddr failed" }) }
   }
 
