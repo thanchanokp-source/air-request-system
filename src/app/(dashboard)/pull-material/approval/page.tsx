@@ -260,7 +260,7 @@ export default function Page() {
                         {(() => {
                           const seaFreight = items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)
                           const modes = [
-                            { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: total || null, lt: s0.leadTimeAir || null, actual: openReq.actualAir ?? null, local: null, accent: "#6b1a1a" },
+                            { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: total || null, lt: s0.leadTimeAir || null, actual: openReq.actualAir ?? null, local: openReq.localChargeTh ?? null, accent: "#6b1a1a" },
                             { key: "sea", label: "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: s0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1" },
                             { key: "dhl", label: "📦 Courier · DHL", freight: null, inco: null, total: null, lt: null, actual: null, local: null, accent: "#b45309" },
                             { key: "fedex", label: "📦 Courier · FedEx", freight: null, inco: null, total: null, lt: null, actual: null, local: null, accent: "#7c3aed" },

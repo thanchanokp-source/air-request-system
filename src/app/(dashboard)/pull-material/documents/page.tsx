@@ -71,6 +71,7 @@ export default function Page() {
           flightEta: rawDate(rq, "flightEta") || null,
           poInvoices: buildPoInvoices(rq),
           actualAir: raw(rq, "actualAir") === "" ? null : raw(rq, "actualAir"),
+          localChargeTh: raw(rq, "localChargeTh") === "" ? null : raw(rq, "localChargeTh"),
           status: "COMPLETED",
         }),
       })
@@ -309,6 +310,8 @@ export default function Page() {
                     </div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">ACTUAL AIR FREIGHT <span className="text-red-500">*</span></label>
                       <input type="number" value={raw(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} /></div>
+                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">LOCAL CHARGE (TH)</label>
+                      <input type="number" value={raw(rq, "localChargeTh")} onChange={e => setVal(rq.id, "localChargeTh", e.target.value)} placeholder="0" className={inp} /></div>
                   </div>
                   <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
                     <span className={estTotal ? "text-gray-500" : "text-amber-600 font-medium"}>{estTotal ? `Est ${fmt(estTotal)} USD` : "⚠️ ไม่มี rate — เพิ่ม Master Rate"}</span>

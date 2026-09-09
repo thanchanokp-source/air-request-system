@@ -352,6 +352,7 @@ model PullMaterialRequest {
   vendorEmail    String?            // vendor contact (auto-filled from dc_vendor / typed by PC)
   vendorContact  String?
   vendorTel      String?
+  localChargeTh  Float?             // LG-entered local charge at Thailand (USD)
   // DVM Purchase approval signature snapshot (base64 PNG data URI), stamped in the PDF.
   approverSignature String?
   approverName      String?
