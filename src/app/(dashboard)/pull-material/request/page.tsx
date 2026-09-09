@@ -1115,10 +1115,16 @@ export default function ScmRequestPage() {
             <div className="mt-3 rounded-xl border border-green-200 bg-green-50/30 p-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="text-sm font-semibold text-green-800">📄 INV ต่อ PO <span className="text-gray-400 font-normal">(อัปไฟล์ให้ระบบอ่าน · หรือพิมพ์เอง)</span></label>
-                <label className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${invReading ? "opacity-50 pointer-events-none" : "border-green-400 text-green-700 bg-white hover:bg-green-50 cursor-pointer"}`}>
-                  {invReading ? "กำลังอ่าน…" : "⬆ อัปไฟล์อ่าน INV (เลือกได้หลายไฟล์)"}
-                  <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,image/*" className="hidden" onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ""; readInvFile(fs) }} />
-                </label>
+                <div className="flex items-center gap-2">
+                  {Object.values(poInvMap).some(v => v) && !invReading && (
+                    <button type="button" onClick={() => { setPoInvMap({}); setInvMsg("") }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 bg-white hover:bg-red-50">🧹 ล้าง INV ทั้งหมด</button>
+                  )}
+                  <label className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${invReading ? "opacity-50 pointer-events-none" : "border-green-400 text-green-700 bg-white hover:bg-green-50 cursor-pointer"}`}>
+                    {invReading ? "กำลังอ่าน…" : "⬆ อัปไฟล์อ่าน INV (เลือกได้หลายไฟล์)"}
+                    <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,image/*" className="hidden" onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ""; readInvFile(fs) }} />
+                  </label>
+                </div>
               </div>
               {invMsg && <p className="mt-1.5 text-[11px] text-gray-600">{invMsg}</p>}
               <div className="mt-3 grid gap-2">
@@ -1127,6 +1133,10 @@ export default function ScmRequestPage() {
                     <span className="text-xs font-bold text-white px-2 py-1 rounded shrink-0 min-w-[96px] text-center" style={{ background: MAROON }}>{po}</span>
                     <input value={poInvMap[po] || ""} onChange={e => setPoInvMap(m => ({ ...m, [po]: e.target.value }))} placeholder="เลข Invoice ของ PO นี้…"
                       className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" />
+                    {poInvMap[po] && (
+                      <button type="button" onClick={() => setPoInvMap(m => ({ ...m, [po]: "" }))} title="ล้างช่องนี้"
+                        className="shrink-0 text-gray-400 hover:text-red-500 text-sm px-1">✕</button>
+                    )}
                   </div>
                 ))}
               </div>
