@@ -246,10 +246,6 @@ export default function Page() {
                           <Info label="City" value={s0.city} />
                           <Info label="Incoterm" value={s0.incoterm} />
                           <Info label="QTY Air" value={fmt(totalQty)} />
-                          <Info label="Est Air (freight)" value={total ? `${fmt(totalFreight)} USD` : <span className="text-amber-600 text-xs font-medium">⚠️ ไม่มี rate — ให้ LG เพิ่ม Master Rate ของ port {s0.port || s0.seaPort || "นี้"}</span>} />
-                          <Info label={`EXW/${s0.incoterm || "incoterm"}`} value={totalOrigin ? `${fmt(totalOrigin)} USD` : "-"} />
-                          <Info label="Total Air" value={total ? `${fmt(total)} USD` : "-"} />
-                          <Info label="L/T Air" value={s0.leadTimeAir} />
                           <Info label="Weight (kg)" value={s0.weight != null ? fmt(s0.weight) : "-"} />
                           <Info label="ETC" value={s0.etc ? fmtDate(s0.etc) : "-"} />
                           <Info label="Need date (in-house)" value={s0.needDate ? fmtDate(s0.needDate) : "-"} />
@@ -261,27 +257,32 @@ export default function Page() {
                           {s0.pickupAddress && <div className="col-span-2 sm:col-span-4"><Info label="Supplier / Pickup address" value={s0.pickupAddress} /></div>}
                         </div>
 
-                        {/* Shipping mode comparison — cost + lead time per transport type (use what data exists) */}
+                        {/* Shipping mode comparison — Freight / Incoterm / Total Freight / L/T per transport type */}
                         {(() => {
-                          const seaCost = items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)
+                          const seaFreight = items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)
                           const modes = [
-                            { key: "air", label: "✈️ Air", cost: total || null, lt: s0.leadTimeAir || null, accent: "#6b1a1a" },
-                            { key: "sea", label: "🚢 Sea", cost: seaCost || null, lt: s0.leadTimeSea || null, accent: "#0369a1" },
-                            { key: "dhl", label: "📦 Courier · DHL", cost: null, lt: null, accent: "#b45309" },
-                            { key: "fedex", label: "📦 Courier · FedEx", cost: null, lt: null, accent: "#7c3aed" },
+                            { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: total || null, lt: s0.leadTimeAir || null, accent: "#6b1a1a" },
+                            { key: "sea", label: "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: s0.leadTimeSea || null, accent: "#0369a1" },
+                            { key: "dhl", label: "📦 Courier · DHL", freight: null, inco: null, total: null, lt: null, accent: "#b45309" },
+                            { key: "fedex", label: "📦 Courier · FedEx", freight: null, inco: null, total: null, lt: null, accent: "#7c3aed" },
                           ]
-                          const cheapest = Math.min(...modes.filter(m => m.cost).map(m => m.cost as number))
+                          const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
+                          const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
                           return (
                             <div className="mb-4">
-                              <div className="text-xs font-bold text-gray-600 mb-2">เปรียบเทียบวิธีขนส่ง (ค่าใช้จ่าย · Lead time)</div>
+                              <div className="text-xs font-bold text-gray-600 mb-2">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total · Lead time)</div>
                               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                                 {modes.map(m => {
-                                  const best = m.cost && m.cost === cheapest
+                                  const best = m.total && m.total === cheapest
                                   return (
                                     <div key={m.key} className={`rounded-xl border p-3 ${best ? "ring-2 ring-emerald-300 border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
-                                      <div className="text-xs font-semibold" style={{ color: m.accent }}>{m.label}{best && <span className="ml-1 text-[10px] text-emerald-600">ถูกสุด</span>}</div>
-                                      <div className="mt-1.5 text-lg font-bold text-gray-800">{m.cost ? `${fmt(m.cost)}` : <span className="text-gray-300 text-sm">–</span>}<span className="text-[10px] font-normal text-gray-400 ml-1">{m.cost ? "USD" : "รอ data"}</span></div>
-                                      <div className="text-[11px] text-gray-500 mt-0.5">L/T: {m.lt || <span className="text-gray-300">–</span>}</div>
+                                      <div className="text-xs font-semibold mb-1.5" style={{ color: m.accent }}>{m.label}{best && <span className="ml-1 text-[10px] text-emerald-600">ถูกสุด</span>}</div>
+                                      <div className="space-y-1 text-[11px]">
+                                        <div className="flex justify-between"><span className="text-gray-400">Freight</span><span className="font-medium text-gray-700">{money(m.freight)}</span></div>
+                                        <div className="flex justify-between"><span className="text-gray-400">Incoterm</span><span className="font-medium text-gray-700">{money(m.inco)}</span></div>
+                                        <div className="flex justify-between border-t border-gray-100 pt-1"><span className="text-gray-500 font-semibold">Total Freight</span><span className="font-bold text-gray-900">{money(m.total)}</span></div>
+                                        <div className="flex justify-between"><span className="text-gray-400">L/T</span><span className="font-medium text-gray-700">{m.lt || <span className="text-gray-300">–</span>}</span></div>
+                                      </div>
                                     </div>
                                   )
                                 })}
