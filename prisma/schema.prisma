@@ -409,7 +409,8 @@ model PullMaterialItem {
   sewingStartDate DateTime?
   reasonAirPick   String?
   grossWeightKg   Float?
-  airFreightCost  Float?
+  airFreightCost  Float?    // TOTAL est air = freight + origin (kept as-is for back-compat)
+  originCost      Float?    // incoterm origin cost (EXW/FCA) portion bundled inside airFreightCost
   // Logistics input
   estAir          Float?
   estSea          Float?

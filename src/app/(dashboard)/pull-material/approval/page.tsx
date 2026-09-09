@@ -227,11 +227,13 @@ export default function Page() {
                     // (Country/Port/Est Air/L/T Air) + a by-PO breakdown of the pull qty (QTY AIR).
                     const items = (openReq.items || [])
                     const s0 = items.find((x: any) => x.airFreightCost != null) || items[0] || {}
-                    const byPo: Record<string, { qty: number; uoms: Set<string>; est: number }> = {}
-                    items.forEach((it: any) => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set(), est: 0 }); g.qty += Number(it.pullMaterialQty) || 0; g.est += Number(it.airFreightCost) || 0; if (it.bomUom) g.uoms.add(it.bomUom) })
+                    const byPo: Record<string, { qty: number; uoms: Set<string>; freight: number; origin: number }> = {}
+                    items.forEach((it: any) => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set(), freight: 0, origin: 0 }); const tot = Number(it.airFreightCost) || 0; const org = Number(it.originCost) || 0; g.qty += Number(it.pullMaterialQty) || 0; g.freight += tot - org; g.origin += org; if (it.bomUom) g.uoms.add(it.bomUom) })
                     const docAct = openReq.actualAir != null ? `${fmt(openReq.actualAir)}` : "-"
                     const docMawb = openReq.mawbNo || "-", docHawb = openReq.hawbNo || "-"
-                    const exwTxt = s0.incoterm === "EX-WORK" ? "EXW" : (s0.incoterm || "-")
+                    // Est Air = freight only (no incoterm); EXW = origin cost; Total Air = freight + origin.
+                    const totalOrigin = items.reduce((s: number, it: any) => s + (Number(it.originCost) || 0), 0)
+                    const totalFreight = total - totalOrigin
                     const totalQty = items.reduce((s: number, it: any) => s + (Number(it.pullMaterialQty) || 0), 0)
                     const pkgs = Array.isArray(openReq.packages) ? openReq.packages : []
                     const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (s0.cartons ? String(fmt(s0.cartons)) : "")
@@ -244,13 +246,15 @@ export default function Page() {
                           <Info label="City" value={s0.city} />
                           <Info label="Incoterm" value={s0.incoterm} />
                           <Info label="QTY Air" value={fmt(totalQty)} />
-                          <Info label="Est Air" value={total ? `${fmt(total)} USD` : <span className="text-amber-600 text-xs font-medium">⚠️ ไม่มี rate — ให้ LG เพิ่ม Master Rate ของ port {s0.port || s0.seaPort || "นี้"}</span>} />
+                          <Info label="Est Air (freight)" value={total ? `${fmt(totalFreight)} USD` : <span className="text-amber-600 text-xs font-medium">⚠️ ไม่มี rate — ให้ LG เพิ่ม Master Rate ของ port {s0.port || s0.seaPort || "นี้"}</span>} />
+                          <Info label={`EXW/${s0.incoterm || "incoterm"}`} value={totalOrigin ? `${fmt(totalOrigin)} USD` : "-"} />
+                          <Info label="Total Air" value={total ? `${fmt(total)} USD` : "-"} />
                           <Info label="L/T Air" value={s0.leadTimeAir} />
                           <Info label="Weight (kg)" value={s0.weight != null ? fmt(s0.weight) : "-"} />
-                          <Info label="Need date (in-house)" value={s0.needDate ? fmtDate(s0.needDate) : "-"} />
-                          <Info label="Shipment Date" value={fmtDate(earliest(items.map((it: any) => it.shipmentDate)))} />
-                          <Info label="MRD" value={fmtDate(earliest(items.flatMap((it: any) => [it.shipmentDate, it.mrdDate, it.mrdNeedDate, it.mrd2])))} />
                           <Info label="ETC" value={s0.etc ? fmtDate(s0.etc) : "-"} />
+                          <Info label="Need date (in-house)" value={s0.needDate ? fmtDate(s0.needDate) : "-"} />
+                          <Info label="MRD" value={fmtDate(earliest(items.flatMap((it: any) => [it.shipmentDate, it.mrdDate, it.mrdNeedDate, it.mrd2])))} />
+                          <Info label="Shipment Date" value={fmtDate(earliest(items.map((it: any) => it.shipmentDate)))} />
                           <Info label="Package" value={pkgStr} />
                           <Info label="Dimension" value={dimStr} />
                           {openReq.remark && <Info label="Remark" value={openReq.remark} />}
@@ -259,7 +263,7 @@ export default function Page() {
                         <div className="overflow-x-auto border rounded-xl">
                           <table className="w-full text-xs">
                             <thead className="bg-gray-50 text-gray-500"><tr>
-                              {["PO NO", "QTY AIR", "UOM", "EST AIR COST", "ACT AIR COST", "EXW", "MAWB", "HAWB", "LOCAL CHARGE (TH)", "INVOICE NO"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+                              {["PO NO", "QTY AIR", "UOM", "EST AIR COST", "EXW", "TOTAL AIR", "ACT AIR COST", "MAWB", "HAWB", "LOCAL CHARGE (TH)", "INVOICE NO"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
                             </tr></thead>
                             <tbody className="divide-y divide-gray-50">
                               {Object.keys(byPo).map(po => (
@@ -267,9 +271,10 @@ export default function Page() {
                                   <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
                                   <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(byPo[po].qty)}</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap">{[...byPo[po].uoms].join(", ") || "-"}</td>
-                                  <td className="px-3 py-1.5 text-right whitespace-nowrap">{byPo[po].est ? fmt(byPo[po].est) : "-"}</td>
+                                  <td className="px-3 py-1.5 text-right whitespace-nowrap">{byPo[po].freight ? fmt(byPo[po].freight) : "-"}</td>
+                                  <td className="px-3 py-1.5 text-right whitespace-nowrap">{byPo[po].origin ? fmt(byPo[po].origin) : "-"}</td>
+                                  <td className="px-3 py-1.5 text-right whitespace-nowrap font-semibold">{(byPo[po].freight + byPo[po].origin) ? fmt(byPo[po].freight + byPo[po].origin) : "-"}</td>
                                   <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-500" title="ยอดรวมทั้งเอกสาร (LG กรอก)">{docAct}</td>
-                                  <td className="px-3 py-1.5 whitespace-nowrap text-gray-500">{exwTxt}</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap text-gray-500">{docMawb}</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap text-gray-500">{docHawb}</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap text-gray-400">-</td>
