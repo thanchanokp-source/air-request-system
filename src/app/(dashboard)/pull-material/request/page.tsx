@@ -102,6 +102,10 @@ export default function ScmRequestPage() {
   const [vendorAddrLoading, setVendorAddrLoading] = useState(false)
   const [vendorMatched, setVendorMatched] = useState("")
   const [pickupEditing, setPickupEditing] = useState(false)
+  // Per-PO invoice { po: inv } — read from an uploaded doc (Excel now / PDF+OCR later) or typed by hand.
+  const [poInvMap, setPoInvMap] = useState<Record<string, string>>({})
+  const [invReading, setInvReading] = useState(false)
+  const [invMsg, setInvMsg] = useState("")
   const [pcPos, setPcPos] = useState<any[]>([])
   const [pcSelPos, setPcSelPos] = useState<Set<string>>(new Set())
   const [pcSelMats, setPcSelMats] = useState<Bom[]>([]) // materials of the selected POs (shown below)
@@ -268,6 +272,24 @@ export default function ScmRequestPage() {
     try { const d = await fetch(`/api/bom?bu=${bu}&vendorPos=${encodeURIComponent(v)}`).then(r => r.json()); setPcPos(Array.isArray(d.pos) ? d.pos : []) }
     finally { setPcLoad(false) }
   }
+  // Read an uploaded invoice doc → auto-fill INV per PO (Excel now; PDF/scan → type by hand).
+  const readInvFile = async (file: File | null) => {
+    if (!file) return
+    const pos = [...new Set(cart.map((c: any) => c.poNoDoc).filter(Boolean))] as string[]
+    if (!pos.length) { setInvMsg("เลือก PO ก่อน แล้วค่อยอัปไฟล์"); return }
+    setInvReading(true); setInvMsg("")
+    try {
+      const { fileToText, pairPoInvoice } = await import("@/lib/inv-extract")
+      const { text, kind } = await fileToText(file)
+      if (!text) { setInvMsg(kind === "pdf" ? "อ่าน PDF อัตโนมัติยังไม่รองรับ (เฟสถัดไป) — พิมพ์ INV เองด้านล่าง" : kind === "image" ? "ไฟล์รูป/สแกน ยังไม่รองรับ OCR — พิมพ์ INV เอง" : "อ่านไฟล์ไม่ได้ — พิมพ์ INV เอง"); return }
+      const found = pairPoInvoice(text, pos)
+      setPoInvMap(prev => ({ ...prev, ...found }))
+      const n = Object.keys(found).length
+      setInvMsg(n ? `✓ อ่านเจอ INV ${n}/${pos.length} PO — ตรวจ/แก้ได้ด้านล่าง` : "อ่านไฟล์แล้ว แต่จับ INV ไม่ได้ — พิมพ์เอง")
+    } catch (e) { setInvMsg("อ่านไฟล์ผิดพลาด: " + String((e as any)?.message || e).slice(0, 100)) }
+    finally { setInvReading(false) }
+  }
+
   // Fetch + add a PO's materials to the "selected" list (dedup); or remove them on deselect.
   const addPoMats = async (po: string) => {
     const d = await fetch(`/api/bom?bu=${bu}&poFull=${encodeURIComponent(po)}&vend=${encodeURIComponent(pcVend)}`).then(r => r.json())
@@ -465,7 +487,7 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode, packages: pkgs }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())) }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) {
@@ -482,7 +504,7 @@ export default function ScmRequestPage() {
         showToast(`✓ ส่งคำขอแล้ว: ${d.request?.documentNo}${files.length ? ` · แนบไฟล์ ${files.length - upFail}/${files.length}` : ""}`, true)
         setCart([]); setRemark(""); setIsTest(false); setModeTouched(false); setFiles([])
         setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", etc: "", pkg: "", boxW: "", boxL: "", boxH: "" })
-        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }]); setPickupEditing(false)
+        setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }]); setPickupEditing(false); setPoInvMap({}); setInvMsg("")
       }
       else showToast(`✕ ส่งไม่สำเร็จ (HTTP ${r.status}): ${d.error || "submit failed"}`, false)
     } catch (e) {
@@ -1050,6 +1072,33 @@ export default function ScmRequestPage() {
                     className="w-full border border-amber-300 bg-amber-50 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
                 </div>
               )}
+            </div>
+          )
+        })()}
+
+        {/* INV per PO — upload a doc to auto-read (Excel now / PDF+OCR later), or type by hand */}
+        {reqType === "PURCHASING" && (() => {
+          const pos = [...new Set(cart.map((c: any) => c.poNoDoc).filter(Boolean))] as string[]
+          if (!pos.length) return null
+          return (
+            <div className="mt-3 rounded-xl border border-green-200 bg-green-50/30 p-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-sm font-semibold text-green-800">📄 INV ต่อ PO <span className="text-gray-400 font-normal">(อัปไฟล์ให้ระบบอ่าน · หรือพิมพ์เอง)</span></label>
+                <label className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${invReading ? "opacity-50 pointer-events-none" : "border-green-400 text-green-700 bg-white hover:bg-green-50 cursor-pointer"}`}>
+                  {invReading ? "กำลังอ่าน…" : "⬆ อัปไฟล์อ่าน INV"}
+                  <input type="file" accept=".xlsx,.xls,.csv,.pdf,image/*" className="hidden" onChange={e => { const f = e.target.files?.[0] || null; e.target.value = ""; readInvFile(f) }} />
+                </label>
+              </div>
+              {invMsg && <p className="mt-1.5 text-[11px] text-gray-600">{invMsg}</p>}
+              <div className="mt-3 grid gap-2">
+                {pos.map(po => (
+                  <div key={po} className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white px-2 py-1 rounded shrink-0 min-w-[96px] text-center" style={{ background: MAROON }}>{po}</span>
+                    <input value={poInvMap[po] || ""} onChange={e => setPoInvMap(m => ({ ...m, [po]: e.target.value }))} placeholder="เลข Invoice ของ PO นี้…"
+                      className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" />
+                  </div>
+                ))}
+              </div>
             </div>
           )
         })()}

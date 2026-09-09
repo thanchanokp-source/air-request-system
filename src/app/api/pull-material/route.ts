@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
       requesterEmail: body.requesterEmail || null,
       remark: body.remark || null,
       packages: Array.isArray(body.packages) && body.packages.length ? body.packages : undefined,
+      poInvoices: body.poInvoices && typeof body.poInvoices === "object" && Object.keys(body.poInvoices).length ? body.poInvoices : undefined,
       createdById: userId,
       requestType,
       mode,
