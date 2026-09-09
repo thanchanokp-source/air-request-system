@@ -81,8 +81,9 @@ export default function LgBookingPage() {
       for (const it of (r.items || [])) {
         if (!bookable.includes(it.itemStatus)) continue
         // After "Save & Send" only the SOs still MISSING an Actual remain (LG must finish them);
-        // before send, everything shows so drafts can be edited.
-        if (r.logisticsSent && it.actualAirFreight != null) continue
+        // before send, everything shows so drafts can be edited. Actual = 0 counts as NOT entered
+        // (e.g. HAWB total was blank / SO never joined a HAWB) so LG can still complete it.
+        if (r.logisticsSent && it.actualAirFreight) continue
         out.push({ ...it, request: r, brand: it.brand || r.brandName || "(no brand)" })
       }
     }
