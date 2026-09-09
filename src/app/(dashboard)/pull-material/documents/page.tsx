@@ -100,23 +100,34 @@ export default function Page() {
       const wb = new ExcelJS.Workbook()
       const ws = wb.addWorksheet("Pull RM by PO")
       ws.columns = [
-        { header: "DOCUMENT NO", key: "doc", width: 22 }, { header: "BU", key: "bu", width: 8 },
-        { header: "PO NO", key: "po", width: 16 }, { header: "QTY AIR", key: "qty", width: 12 }, { header: "UOM", key: "uom", width: 10 },
-        { header: "HAWB NO", key: "hawb", width: 16 }, { header: "MAWB NO", key: "mawb", width: 16 }, { header: "INVOICE NO", key: "inv", width: 16 },
-        { header: "FLIGHT ETD", key: "etd", width: 14 }, { header: "FLIGHT ETA", key: "eta", width: 14 }, { header: "ACTUAL AIR", key: "act", width: 12 },
-        { header: "COUNTRY", key: "country", width: 14 }, { header: "PORT", key: "port", width: 10 }, { header: "INCOTERM", key: "incoterm", width: 10 },
+        { header: "DOCUMENT NO", key: "doc", width: 22 }, { header: "BU", key: "bu", width: 8 }, { header: "REQUESTER", key: "requester", width: 18 },
+        { header: "PO NO", key: "po", width: 16 }, { header: "QTY AIR", key: "qty", width: 12 }, { header: "UOM", key: "uom", width: 10 }, { header: "INVOICE NO", key: "inv", width: 18 },
+        { header: "COUNTRY", key: "country", width: 14 }, { header: "AIR PORT", key: "port", width: 10 }, { header: "SEA PORT", key: "seaport", width: 10 }, { header: "CITY", key: "city", width: 14 }, { header: "INCOTERM", key: "incoterm", width: 10 }, { header: "WEIGHT (KG)", key: "weight", width: 12 },
+        { header: "NEED DATE", key: "needDate", width: 13 }, { header: "SHIPMENT DATE", key: "shipDate", width: 14 }, { header: "MRD", key: "mrd", width: 13 }, { header: "ETC", key: "etc", width: 13 },
+        { header: "PACKAGE", key: "package", width: 16 }, { header: "DIMENSION", key: "dimension", width: 16 }, { header: "PICKUP/VENDOR ADDRESS", key: "address", width: 40 }, { header: "REMARK", key: "remark", width: 24 },
+        { header: "EST AIR", key: "est", width: 12 }, { header: "L/T AIR", key: "lt", width: 10 },
+        { header: "HAWB NO", key: "hawb", width: 16 }, { header: "MAWB NO", key: "mawb", width: 16 }, { header: "FLIGHT ETD", key: "etd", width: 14 }, { header: "FLIGHT ETA", key: "eta", width: 14 }, { header: "ACTUAL AIR", key: "act", width: 12 },
       ]
       ws.getRow(1).font = { bold: true }
       ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3E9E9" } }
       const its: any[] = rq.items || []
       const d0 = its[0] || {}
+      const dstr = (v: any) => (v ? String(v).slice(0, 10) : "")
+      const earliestD = (arr: any[]) => { const t = arr.map(v => (v ? new Date(v).getTime() : NaN)).filter(n => !isNaN(n)); return t.length ? new Date(Math.min(...t)).toISOString().slice(0, 10) : "" }
+      const pkgs = Array.isArray(rq.packages) ? rq.packages : []
+      const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (d0.cartons ? String(fmt(d0.cartons)) : "")
+      const dimStr = (d0.boxW || d0.boxL || d0.boxH) ? `${d0.boxW || "-"}x${d0.boxL || "-"}x${d0.boxH || "-"} cm` : ""
+      const estTotal = its.reduce((a: number, i: any) => a + (Number(i.airFreightCost) || 0), 0)
       const byPo: Record<string, { qty: number; uoms: Set<string> }> = {}
       its.forEach(it => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set() }); g.qty += Number(it.pullMaterialQty) || 0; if (it.bomUom) g.uoms.add(it.bomUom) })
       Object.keys(byPo).forEach(po => ws.addRow({
-        doc: rq.documentNo, bu: rq.bu, po, qty: byPo[po].qty, uom: [...byPo[po].uoms].join(", "),
-        hawb: raw(rq, "hawbNo"), mawb: raw(rq, "mawbNo"), inv: poInv(rq, po) || raw(rq, "invoiceNo"),
-        etd: rawDate(rq, "flightEtd"), eta: rawDate(rq, "flightEta"), act: raw(rq, "actualAir") === "" ? "" : Number(raw(rq, "actualAir")),
-        country: d0.country || "", port: d0.port || d0.seaPort || "", incoterm: d0.incoterm || "",
+        doc: rq.documentNo, bu: rq.bu, requester: rq.requesterName || "",
+        po, qty: byPo[po].qty, uom: [...byPo[po].uoms].join(", "), inv: poInv(rq, po) || raw(rq, "invoiceNo"),
+        country: d0.country || "", port: d0.port || "", seaport: d0.seaPort || "", city: d0.city || "", incoterm: d0.incoterm || "", weight: d0.weight != null ? Number(d0.weight) : "",
+        needDate: dstr(d0.needDate), shipDate: earliestD(its.map(i => i.shipmentDate)), mrd: earliestD(its.flatMap(i => [i.shipmentDate, i.mrdDate, i.mrdNeedDate, i.mrd2])), etc: dstr(d0.etc),
+        package: pkgStr, dimension: dimStr, address: d0.pickupAddress || "", remark: rq.remark || "",
+        est: estTotal || "", lt: d0.leadTimeAir || "",
+        hawb: raw(rq, "hawbNo"), mawb: raw(rq, "mawbNo"), etd: rawDate(rq, "flightEtd"), eta: rawDate(rq, "flightEta"), act: raw(rq, "actualAir") === "" ? "" : Number(raw(rq, "actualAir")),
       }))
       const buf = await wb.xlsx.writeBuffer()
       const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }))
