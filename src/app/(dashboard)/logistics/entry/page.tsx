@@ -70,7 +70,8 @@ export default function LgEntryPage() {
         if (!idset.has(it.id)) continue
         if (!bookable.includes(it.itemStatus)) continue
         // After "Save & Send" keep only SOs still missing an Actual (drafts stay editable pre-send).
-        if (r.logisticsSent && it.actualAirFreight != null) continue
+        // Actual = 0 counts as NOT entered so LG can re-open and fix it.
+        if (r.logisticsSent && it.actualAirFreight) continue
         out.push({ ...it, request: r, brand: it.brand || r.brandName || "(no brand)" })
       }
     }
