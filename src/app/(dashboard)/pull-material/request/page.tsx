@@ -272,24 +272,32 @@ export default function ScmRequestPage() {
     try { const d = await fetch(`/api/bom?bu=${bu}&vendorPos=${encodeURIComponent(v)}`).then(r => r.json()); setPcPos(Array.isArray(d.pos) ? d.pos : []) }
     finally { setPcLoad(false) }
   }
-  // Read an uploaded invoice doc → auto-fill INV per PO (Excel now; PDF/scan → type by hand).
-  const readInvFile = async (file: File | null) => {
-    if (!file) return
+  // Read uploaded invoice doc(s) → auto-fill INV per PO (Excel/PDF-text; scan → type by hand).
+  // Accepts multiple files: reads each, merges the results, and attaches all to the document.
+  const readInvFile = async (fileList: FileList | File[] | null) => {
+    const files = fileList ? Array.from(fileList) : []
+    if (!files.length) return
     const pos = [...new Set(cart.map((c: any) => c.poNoDoc).filter(Boolean))] as string[]
     if (!pos.length) { setInvMsg("เลือก PO ก่อน แล้วค่อยอัปไฟล์"); return }
-    // Also attach the uploaded file to the document (dedup by name+size).
-    setFiles(prev => prev.some(f => f.name === file.name && f.size === file.size) ? prev : [...prev, file])
+    // Attach every uploaded file to the document (dedup by name+size).
+    setFiles(prev => { const out = [...prev]; for (const f of files) if (!out.some(x => x.name === f.name && x.size === f.size)) out.push(f); return out })
     setInvReading(true); setInvMsg("")
+    const merged: Record<string, string> = {}
+    const notes: string[] = []
     try {
-      const fd = new FormData(); fd.append("file", file); fd.append("pos", pos.join(","))
-      const d = await fetch("/api/pull-material/read-invoice", { method: "POST", body: fd }).then(r => r.json())
-      if (d.error) { setInvMsg("อ่านไฟล์ไม่สำเร็จ: " + d.error + " — พิมพ์ INV เอง"); return }
-      if (d.kind === "image") { setInvMsg("ไฟล์รูป/สแกน ยังไม่รองรับ OCR (เฟสถัดไป) — พิมพ์ INV เอง"); return }
-      if (d.kind === "pdf-scanned") { setInvMsg("PDF นี้เป็นสแกน (ไม่มี text) — ต้อง OCR (เฟสถัดไป) — พิมพ์ INV เอง"); return }
-      const found = (d.pairs || {}) as Record<string, string>
-      setPoInvMap(prev => ({ ...prev, ...found }))
-      const n = Object.keys(found).length
-      setInvMsg((n ? `✓ อ่านเจอ INV ${n}/${pos.length} PO (${d.kind})` : `อ่านไฟล์ได้ (${d.kind}, ${d.textLen} ตัวอักษร) แต่จับ INV ไม่ได้ — พิมพ์เอง`) + " · 📎 แนบไฟล์ไปกับเอกสารแล้ว")
+      for (const file of files) {
+        try {
+          const fd = new FormData(); fd.append("file", file); fd.append("pos", pos.join(","))
+          const d = await fetch("/api/pull-material/read-invoice", { method: "POST", body: fd }).then(r => r.json())
+          if (d.error) { notes.push(`${file.name}: อ่านไม่ได้`); continue }
+          if (d.kind === "image" || d.kind === "pdf-scanned") { notes.push(`${file.name}: สแกน/รูป (ต้อง OCR)`); continue }
+          const found = (d.pairs || {}) as Record<string, string>
+          for (const [po, inv] of Object.entries(found)) if (inv && !merged[po]) merged[po] = inv
+        } catch { notes.push(`${file.name}: error`) }
+      }
+      setPoInvMap(prev => ({ ...prev, ...merged }))
+      const n = Object.keys(merged).length
+      setInvMsg(`${n ? `✓ อ่านเจอ INV ${n}/${pos.length} PO` : "จับ INV ไม่ได้ — พิมพ์เอง"} · 📎 แนบ ${files.length} ไฟล์แล้ว${notes.length ? ` · ${notes.join(" · ")}` : ""}`)
     } catch (e) { setInvMsg("อ่านไฟล์ผิดพลาด: " + String((e as any)?.message || e).slice(0, 100)) }
     finally { setInvReading(false) }
   }
@@ -1089,8 +1097,8 @@ export default function ScmRequestPage() {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="text-sm font-semibold text-green-800">📄 INV ต่อ PO <span className="text-gray-400 font-normal">(อัปไฟล์ให้ระบบอ่าน · หรือพิมพ์เอง)</span></label>
                 <label className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${invReading ? "opacity-50 pointer-events-none" : "border-green-400 text-green-700 bg-white hover:bg-green-50 cursor-pointer"}`}>
-                  {invReading ? "กำลังอ่าน…" : "⬆ อัปไฟล์อ่าน INV"}
-                  <input type="file" accept=".xlsx,.xls,.csv,.pdf,image/*" className="hidden" onChange={e => { const f = e.target.files?.[0] || null; e.target.value = ""; readInvFile(f) }} />
+                  {invReading ? "กำลังอ่าน…" : "⬆ อัปไฟล์อ่าน INV (เลือกได้หลายไฟล์)"}
+                  <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,image/*" className="hidden" onChange={e => { const fs = e.target.files; e.target.value = ""; readInvFile(fs) }} />
                 </label>
               </div>
               {invMsg && <p className="mt-1.5 text-[11px] text-gray-600">{invMsg}</p>}
