@@ -248,13 +248,13 @@ export default function Page() {
                           <Info label="ETC" value={s0.etc ? fmtDate(s0.etc) : "-"} />
                           <Info label="Package" value={pkgStr} />
                           <Info label="Dimension" value={dimStr} />
-                          {["EX-WORK", "FCA"].includes(s0.incoterm) && <Info label="Pickup address" value={s0.pickupAddress} />}
-                          {openReq.remark && <div className="col-span-2 sm:col-span-4"><Info label="Remark" value={openReq.remark} /></div>}
+                          {openReq.remark && <Info label="Remark" value={openReq.remark} />}
+                          {["EX-WORK", "FCA"].includes(s0.incoterm) && <div className="col-span-2 sm:col-span-4"><Info label="Pickup address" value={s0.pickupAddress} /></div>}
                         </div>
                         <div className="overflow-x-auto border rounded-xl">
                           <table className="w-full text-xs">
                             <thead className="bg-gray-50 text-gray-500"><tr>
-                              {["PO NO", "QTY AIR", "UOM"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+                              {["PO NO", "QTY AIR", "UOM", "INVOICE NO"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
                             </tr></thead>
                             <tbody className="divide-y divide-gray-50">
                               {Object.keys(byPo).map(po => (
@@ -262,6 +262,7 @@ export default function Page() {
                                   <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{po}</td>
                                   <td className="px-3 py-1.5 text-right font-semibold" style={{ color: MAROON }}>{fmt(byPo[po].qty)}</td>
                                   <td className="px-3 py-1.5 whitespace-nowrap">{[...byPo[po].uoms].join(", ") || "-"}</td>
+                                  <td className="px-3 py-1.5 whitespace-nowrap font-medium text-gray-700">{(openReq.poInvoices || {})[po] || "-"}</td>
                                 </tr>
                               ))}
                             </tbody>
