@@ -279,13 +279,15 @@ export default function ScmRequestPage() {
     if (!pos.length) { setInvMsg("เลือก PO ก่อน แล้วค่อยอัปไฟล์"); return }
     setInvReading(true); setInvMsg("")
     try {
-      const { fileToText, pairPoInvoice } = await import("@/lib/inv-extract")
-      const { text, kind } = await fileToText(file)
-      if (!text) { setInvMsg(kind === "pdf" ? "อ่าน PDF อัตโนมัติยังไม่รองรับ (เฟสถัดไป) — พิมพ์ INV เองด้านล่าง" : kind === "image" ? "ไฟล์รูป/สแกน ยังไม่รองรับ OCR — พิมพ์ INV เอง" : "อ่านไฟล์ไม่ได้ — พิมพ์ INV เอง"); return }
-      const found = pairPoInvoice(text, pos)
+      const fd = new FormData(); fd.append("file", file); fd.append("pos", pos.join(","))
+      const d = await fetch("/api/pull-material/read-invoice", { method: "POST", body: fd }).then(r => r.json())
+      if (d.error) { setInvMsg("อ่านไฟล์ไม่สำเร็จ: " + d.error + " — พิมพ์ INV เอง"); return }
+      if (d.kind === "image") { setInvMsg("ไฟล์รูป/สแกน ยังไม่รองรับ OCR (เฟสถัดไป) — พิมพ์ INV เอง"); return }
+      if (d.kind === "pdf-scanned") { setInvMsg("PDF นี้เป็นสแกน (ไม่มี text) — ต้อง OCR (เฟสถัดไป) — พิมพ์ INV เอง"); return }
+      const found = (d.pairs || {}) as Record<string, string>
       setPoInvMap(prev => ({ ...prev, ...found }))
       const n = Object.keys(found).length
-      setInvMsg(n ? `✓ อ่านเจอ INV ${n}/${pos.length} PO — ตรวจ/แก้ได้ด้านล่าง` : "อ่านไฟล์แล้ว แต่จับ INV ไม่ได้ — พิมพ์เอง")
+      setInvMsg(n ? `✓ อ่านเจอ INV ${n}/${pos.length} PO (${d.kind}) — ตรวจ/แก้ได้ด้านล่าง` : `อ่านไฟล์ได้ (${d.kind}, ${d.textLen} ตัวอักษร) แต่จับ INV ไม่ได้ — พิมพ์เอง`)
     } catch (e) { setInvMsg("อ่านไฟล์ผิดพลาด: " + String((e as any)?.message || e).slice(0, 100)) }
     finally { setInvReading(false) }
   }
