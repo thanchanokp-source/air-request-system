@@ -260,6 +260,36 @@ export default function Page() {
                           {openReq.remark && <Info label="Remark" value={openReq.remark} />}
                           {s0.pickupAddress && <div className="col-span-2 sm:col-span-4"><Info label="Supplier / Pickup address" value={s0.pickupAddress} /></div>}
                         </div>
+
+                        {/* Shipping mode comparison — cost + lead time per transport type (use what data exists) */}
+                        {(() => {
+                          const seaCost = items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)
+                          const modes = [
+                            { key: "air", label: "✈️ Air", cost: total || null, lt: s0.leadTimeAir || null, accent: "#6b1a1a" },
+                            { key: "sea", label: "🚢 Sea", cost: seaCost || null, lt: s0.leadTimeSea || null, accent: "#0369a1" },
+                            { key: "dhl", label: "📦 Courier · DHL", cost: null, lt: null, accent: "#b45309" },
+                            { key: "fedex", label: "📦 Courier · FedEx", cost: null, lt: null, accent: "#7c3aed" },
+                          ]
+                          const cheapest = Math.min(...modes.filter(m => m.cost).map(m => m.cost as number))
+                          return (
+                            <div className="mb-4">
+                              <div className="text-xs font-bold text-gray-600 mb-2">เปรียบเทียบวิธีขนส่ง (ค่าใช้จ่าย · Lead time)</div>
+                              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                                {modes.map(m => {
+                                  const best = m.cost && m.cost === cheapest
+                                  return (
+                                    <div key={m.key} className={`rounded-xl border p-3 ${best ? "ring-2 ring-emerald-300 border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
+                                      <div className="text-xs font-semibold" style={{ color: m.accent }}>{m.label}{best && <span className="ml-1 text-[10px] text-emerald-600">ถูกสุด</span>}</div>
+                                      <div className="mt-1.5 text-lg font-bold text-gray-800">{m.cost ? `${fmt(m.cost)}` : <span className="text-gray-300 text-sm">–</span>}<span className="text-[10px] font-normal text-gray-400 ml-1">{m.cost ? "USD" : "รอ data"}</span></div>
+                                      <div className="text-[11px] text-gray-500 mt-0.5">L/T: {m.lt || <span className="text-gray-300">–</span>}</div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
                         <div className="overflow-x-auto border rounded-xl">
                           <table className="w-full text-xs">
                             <thead className="bg-gray-50 text-gray-500"><tr>
