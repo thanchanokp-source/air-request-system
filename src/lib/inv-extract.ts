@@ -16,15 +16,20 @@ export async function fileToText(file: File): Promise<{ text: string; kind: "exc
   return { text: "", kind: "other" }
 }
 
-// Grab an invoice-looking token out of a single line, given the PO value to exclude.
+// Invoice keywords: SI / INV / INV NO / INVOICE / INVOICE NO → then the number.
+const INV_KW = /\b(?:invoice|inv|si)\b\.?\s*(?:no\.?|number|#|:)?\s*[:#.\-]?\s*([A-Za-z0-9][A-Za-z0-9/\-]{2,})/i
+// …or a token that itself starts with SI/INV then digits (e.g. "SI2614427", "INV-1234").
+const INV_PREFIX = /\b((?:SI|INV)[-/]?\d[A-Za-z0-9/\-]*)\b/i
+
+// Grab the invoice number from a single line, given the PO value to exclude.
 function invFromLine(line: string, po: string, allPos: string[]): string {
-  // Prefer a token right after an "invoice / inv" keyword.
-  const kw = line.match(/inv(?:oice)?\.?\s*(?:no\.?|number|#|:)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9/\-]{2,})/i)
-  if (kw && kw[1].toUpperCase() !== po.toUpperCase()) return kw[1]
-  // Otherwise the first alphanumeric token (with a digit) that isn't a known PO.
   const upos = allPos.map(p => p.toUpperCase())
-  const toks = (line.match(/[A-Za-z0-9][A-Za-z0-9/\-]{3,}/g) || []).filter(t => /\d/.test(t) && !upos.includes(t.toUpperCase()))
-  return toks[0] || ""
+  const bad = (t: string) => !t || t.toUpperCase() === po.toUpperCase() || upos.includes(t.toUpperCase()) || !/\d/.test(t)
+  const kw = line.match(INV_KW)
+  if (kw && !bad(kw[1])) return kw[1]
+  const pf = line.match(INV_PREFIX)
+  if (pf && !bad(pf[1])) return pf[1]
+  return ""
 }
 
 // Best-effort { po: invoice } from extracted text, scoped to the POs already in the cart.
@@ -42,7 +47,9 @@ export function pairPoInvoice(text: string, pos: string[]): Record<string, strin
     }
   }
   // If the whole doc has exactly one invoice-labelled number, use it for any PO still blank.
-  const globals = [...text.matchAll(/inv(?:oice)?\.?\s*(?:no\.?|number|#|:)?\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9/\-]{2,})/gi)].map(m => m[1])
+  const kwG = [...text.matchAll(new RegExp(INV_KW.source, "gi"))].map(m => m[1])
+  const pfG = [...text.matchAll(new RegExp(INV_PREFIX.source, "gi"))].map(m => m[1])
+  const globals = [...kwG, ...pfG].filter(t => /\d/.test(t) && !pos.some(p => p.toUpperCase() === t.toUpperCase()))
   const uniq = [...new Set(globals.map(g => g.toUpperCase()))]
   if (uniq.length === 1) { const only = globals[0]; for (const po of pos) if (!out[po]) out[po] = only }
   return out

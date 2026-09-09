@@ -277,6 +277,8 @@ export default function ScmRequestPage() {
     if (!file) return
     const pos = [...new Set(cart.map((c: any) => c.poNoDoc).filter(Boolean))] as string[]
     if (!pos.length) { setInvMsg("เลือก PO ก่อน แล้วค่อยอัปไฟล์"); return }
+    // Also attach the uploaded file to the document (dedup by name+size).
+    setFiles(prev => prev.some(f => f.name === file.name && f.size === file.size) ? prev : [...prev, file])
     setInvReading(true); setInvMsg("")
     try {
       const fd = new FormData(); fd.append("file", file); fd.append("pos", pos.join(","))
@@ -287,7 +289,7 @@ export default function ScmRequestPage() {
       const found = (d.pairs || {}) as Record<string, string>
       setPoInvMap(prev => ({ ...prev, ...found }))
       const n = Object.keys(found).length
-      setInvMsg(n ? `✓ อ่านเจอ INV ${n}/${pos.length} PO (${d.kind}) — ตรวจ/แก้ได้ด้านล่าง` : `อ่านไฟล์ได้ (${d.kind}, ${d.textLen} ตัวอักษร) แต่จับ INV ไม่ได้ — พิมพ์เอง`)
+      setInvMsg((n ? `✓ อ่านเจอ INV ${n}/${pos.length} PO (${d.kind})` : `อ่านไฟล์ได้ (${d.kind}, ${d.textLen} ตัวอักษร) แต่จับ INV ไม่ได้ — พิมพ์เอง`) + " · 📎 แนบไฟล์ไปกับเอกสารแล้ว")
     } catch (e) { setInvMsg("อ่านไฟล์ผิดพลาด: " + String((e as any)?.message || e).slice(0, 100)) }
     finally { setInvReading(false) }
   }
