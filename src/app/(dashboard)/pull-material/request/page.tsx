@@ -1107,7 +1107,7 @@ export default function ScmRequestPage() {
                 <label className="text-sm font-semibold text-green-800">📄 INV ต่อ PO <span className="text-gray-400 font-normal">(อัปไฟล์ให้ระบบอ่าน · หรือพิมพ์เอง)</span></label>
                 <label className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${invReading ? "opacity-50 pointer-events-none" : "border-green-400 text-green-700 bg-white hover:bg-green-50 cursor-pointer"}`}>
                   {invReading ? "กำลังอ่าน…" : "⬆ อัปไฟล์อ่าน INV (เลือกได้หลายไฟล์)"}
-                  <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,image/*" className="hidden" onChange={e => { const fs = e.target.files; e.target.value = ""; readInvFile(fs) }} />
+                  <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,image/*" className="hidden" onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ""; readInvFile(fs) }} />
                 </label>
               </div>
               {invMsg && <p className="mt-1.5 text-[11px] text-gray-600">{invMsg}</p>}
