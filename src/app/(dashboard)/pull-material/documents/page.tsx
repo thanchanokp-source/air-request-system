@@ -58,7 +58,7 @@ export default function Page() {
   // Save the actual (HAWB / INV / Actual Air) → closes the doc (COMPLETED) so it shows done in Tracking.
   const save = async (rq: any) => {
     if (!String(raw(rq, "actualAir")).trim()) return alert("กรอก Actual Air Freight ก่อนบันทึก")
-    if (!confirm(`บันทึก Actual และปิดงาน ${rq.documentNo}?\n\nActual Air: ${raw(rq, "actualAir")}\nHAWB: ${raw(rq, "hawbNo") || "-"}\nINV: ${raw(rq, "invoiceNo") || "-"}\n\nสถานะเอกสารจะเปลี่ยนเป็น COMPLETED`)) return
+    if (!confirm(`บันทึก Actual และปิดงาน ${rq.documentNo}?\n\nActual Air: ${raw(rq, "actualAir")}\nHAWB: ${raw(rq, "hawbNo") || "-"}\n\nสถานะเอกสารจะเปลี่ยนเป็น COMPLETED`)) return
     setBusy(true)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
@@ -290,8 +290,6 @@ export default function Page() {
                       <input value={raw(rq, "hawbNo")} onChange={e => setVal(rq.id, "hawbNo", e.target.value)} placeholder="HAWB…" className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">MAWB NO</label>
                       <input value={raw(rq, "mawbNo")} onChange={e => setVal(rq.id, "mawbNo", e.target.value)} placeholder="MAWB…" className={inp} /></div>
-                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">INVOICE NO</label>
-                      <input value={raw(rq, "invoiceNo")} onChange={e => setVal(rq.id, "invoiceNo", e.target.value)} placeholder="INV…" className={inp} /></div>
                     <div className="grid grid-cols-2 gap-3">
                       <div><label className="text-[11px] font-semibold text-green-700 block mb-1">FLIGHT ETD</label>
                         <input type="date" value={rawDate(rq, "flightEtd")} onChange={e => setVal(rq.id, "flightEtd", e.target.value)} className={inp} /></div>
