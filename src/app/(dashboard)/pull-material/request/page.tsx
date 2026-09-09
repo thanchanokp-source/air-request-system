@@ -106,6 +106,8 @@ export default function ScmRequestPage() {
   const [poInvMap, setPoInvMap] = useState<Record<string, string>>({})
   const [invReading, setInvReading] = useState(false)
   const [invMsg, setInvMsg] = useState("")
+  const [invModalOpen, setInvModalOpen] = useState(false)
+  const [invResults, setInvResults] = useState<{ name: string; status: "reading" | "ok" | "none" | "scan" | "error"; detail: string }[]>([])
   const [pcPos, setPcPos] = useState<any[]>([])
   const [pcSelPos, setPcSelPos] = useState<Set<string>>(new Set())
   const [pcSelMats, setPcSelMats] = useState<Bom[]>([]) // materials of the selected POs (shown below)
@@ -282,24 +284,31 @@ export default function ScmRequestPage() {
     // Attach every uploaded file to the document (dedup by name+size).
     setFiles(prev => { const out = [...prev]; for (const f of files) if (!out.some(x => x.name === f.name && x.size === f.size)) out.push(f); return out })
     setInvReading(true); setInvMsg("")
+    setInvModalOpen(true)
+    setInvResults(files.map(f => ({ name: f.name, status: "reading" as const, detail: "กำลังอ่าน…" })))
     const merged: Record<string, string> = {}
-    const notes: string[] = []
-    try {
-      for (const file of files) {
-        try {
-          const fd = new FormData(); fd.append("file", file); fd.append("pos", pos.join(","))
-          const d = await fetch("/api/pull-material/read-invoice", { method: "POST", body: fd }).then(r => r.json())
-          if (d.error) { notes.push(`${file.name}: อ่านไม่ได้`); continue }
-          if (d.kind === "image" || d.kind === "pdf-scanned") { notes.push(`${file.name}: สแกน/รูป (ต้อง OCR)`); continue }
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      let status: "ok" | "none" | "scan" | "error" = "none"; let detail = ""
+      try {
+        const fd = new FormData(); fd.append("file", file); fd.append("pos", pos.join(","))
+        const d = await fetch("/api/pull-material/read-invoice", { method: "POST", body: fd }).then(r => r.json())
+        if (d.error) { status = "error"; detail = "อ่านไฟล์ไม่ได้" }
+        else if (d.kind === "image" || d.kind === "pdf-scanned") { status = "scan"; detail = "ไฟล์สแกน/รูป — ต้อง OCR (พิมพ์ INV เอง)" }
+        else {
           const found = (d.pairs || {}) as Record<string, string>
-          for (const [po, inv] of Object.entries(found)) if (inv && !merged[po]) merged[po] = inv
-        } catch { notes.push(`${file.name}: error`) }
-      }
-      setPoInvMap(prev => ({ ...prev, ...merged }))
-      const n = Object.keys(merged).length
-      setInvMsg(`${n ? `✓ อ่านเจอ INV ${n}/${pos.length} PO` : "จับ INV ไม่ได้ — พิมพ์เอง"} · 📎 แนบ ${files.length} ไฟล์แล้ว${notes.length ? ` · ${notes.join(" · ")}` : ""}`)
-    } catch (e) { setInvMsg("อ่านไฟล์ผิดพลาด: " + String((e as any)?.message || e).slice(0, 100)) }
-    finally { setInvReading(false) }
+          const gotPos = Object.keys(found).filter(p => found[p])
+          for (const p of gotPos) if (!merged[p]) merged[p] = found[p]
+          if (gotPos.length) { status = "ok"; detail = "เจอ INV: " + gotPos.map(p => `${p} → ${found[p]}`).join(", ") }
+          else { status = "none"; detail = `อ่านไฟล์ได้ (${d.kind}, ${d.textLen} ตัวอักษร) แต่ไม่เจอเลข INV` }
+        }
+      } catch { status = "error"; detail = "เกิดข้อผิดพลาดตอนอ่าน" }
+      setInvResults(prev => prev.map((r, idx) => (idx === i ? { ...r, status, detail } : r)))
+    }
+    setPoInvMap(prev => ({ ...prev, ...merged }))
+    const n = Object.keys(merged).length
+    setInvMsg(`✓ อ่านเสร็จ ${files.length} ไฟล์ · เติม INV ${n}/${pos.length} PO · 📎 แนบไฟล์แล้ว`)
+    setInvReading(false)
   }
 
   // Fetch + add a PO's materials to the "selected" list (dedup); or remove them on deselect.
@@ -1114,6 +1123,36 @@ export default function ScmRequestPage() {
             </div>
           )
         })()}
+
+        {/* Upload / read-INV result popup */}
+        {invModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !invReading && setInvModalOpen(false)}>
+            <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white">
+                <div className="font-bold text-gray-800">{invReading ? "⏳ กำลังอ่านไฟล์…" : "📄 ผลการอ่าน INV"}</div>
+                <button onClick={() => setInvModalOpen(false)} disabled={invReading} className="text-sm text-gray-500 hover:text-gray-800 disabled:opacity-40">✕</button>
+              </div>
+              <div className="p-4 space-y-2">
+                {invResults.map((r, i) => {
+                  const ic = r.status === "reading" ? "⏳" : r.status === "ok" ? "✅" : r.status === "scan" ? "🖼️" : r.status === "error" ? "❌" : "⚠️"
+                  const col = r.status === "ok" ? "text-emerald-700" : r.status === "reading" ? "text-gray-500" : r.status === "error" ? "text-red-600" : "text-amber-600"
+                  return (
+                    <div key={i} className="rounded-lg border border-gray-100 p-2.5">
+                      <div className="flex items-center gap-2 text-sm font-medium text-gray-800"><span>{ic}</span><span className="truncate">{r.name}</span></div>
+                      <div className={`text-xs mt-0.5 break-words ${col}`}>{r.detail}</div>
+                    </div>
+                  )
+                })}
+              </div>
+              {!invReading && (
+                <div className="px-5 py-3 border-t border-gray-100 text-right sticky bottom-0 bg-white">
+                  <span className="text-xs text-gray-400 mr-3">📎 ไฟล์ถูกแนบกับเอกสารแล้ว · INV ที่ไม่เจอพิมพ์เองได้</span>
+                  <button onClick={() => setInvModalOpen(false)} className="px-4 py-1.5 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>ตกลง</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="mt-3">
           <label className="text-xs font-semibold text-gray-600">Material Description (Remark) <span className="text-red-500">*</span></label>
