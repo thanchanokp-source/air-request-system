@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
+import { courierUsd, destForBu, EXCHANGE_RATE } from "@/lib/pull-courier"
 
 export default function Page() {
   const { data: session, status: auth } = useSession()
@@ -22,6 +23,8 @@ export default function Page() {
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
   const [uploading, setUploading] = useState("")
   const [exporting, setExporting] = useState(false)
+  const [courierRates, setCourierRates] = useState<any[]>([])
+  useEffect(() => { fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {}) }, [])
 
   // LG attaches supporting files (HAWB / INV / docs) to the document.
   const uploadAtt = async (rq: any, files: FileList | null) => {
@@ -283,17 +286,23 @@ export default function Page() {
 
                   {/* Shipping mode comparison (same as approval) */}
                   {(() => {
+                    const cdest = destForBu(rq.bu), cwt = Number(d0.weight) || 0
+                    const dhl = courierUsd(courierRates, d0.port, cdest, cwt, "DHL")
+                    const fedex = courierUsd(courierRates, d0.port, cdest, cwt, "FEDEX")
                     const modes = [
                       { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: estTotal || null, lt: d0.leadTimeAir || null, actual: actTotal || null, local: localCh, accent: "#6b1a1a" },
                       { key: "sea", label: "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1" },
-                      { key: "dhl", label: "📦 Courier · DHL", freight: null, inco: null, total: null, lt: null, actual: null, local: null, accent: "#b45309" },
-                      { key: "fedex", label: "📦 Courier · FedEx", freight: null, inco: null, total: null, lt: null, actual: null, local: null, accent: "#7c3aed" },
+                      { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309" },
+                      { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed" },
                     ]
                     const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
                     const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
                     return (
                       <div className="mb-4">
-                        <div className="text-xs font-bold text-gray-600 mb-2">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total · Lead time)</div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs font-bold text-gray-600">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total · Lead time) <span className="font-normal text-gray-400">· USD</span></div>
+                          <div className="text-[11px] text-gray-400">Exchange rate = {EXCHANGE_RATE} (Courier THB→USD)</div>
+                        </div>
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                           {modes.map(m => {
                             const best = m.total && m.total === cheapest

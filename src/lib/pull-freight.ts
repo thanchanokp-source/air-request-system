@@ -10,7 +10,13 @@ const breakKey = (w: number) => { let b = 45; for (const x of BREAK_ORDER) if (x
 //   • Est Air = weight × rate(port, break) + origin cost (EX-WORK → EXW, FCA → FCA, else 0)
 //   • same port → pick the MAXIMUM rate at that break; Air L/T = that route's TT
 // Called when Purchasing forwards the doc (or whenever port/weight/incoterm change pre-approval).
+// Destination depends on the requesting BU: NYG/GW ship to Bangkok, EA to Vientiane, TRM to Laos.
+const DEST_BY_BU: Record<string, string> = { NYG: "BKK", GW: "BKK", EA: "VTE", TRM: "LAOS" }
+export const destForBu = (bu: any) => DEST_BY_BU[String(bu || "").toUpperCase()] || "BKK"
+
 export async function recomputePullAir(reqId: string): Promise<void> {
+  const request = await (prisma as any).pullMaterialRequest.findUnique({ where: { id: reqId }, select: { bu: true } })
+  const dest = destForBu(request?.bu)
   const items = await (prisma as any).pullMaterialItem.findMany({ where: { requestId: reqId } })
   if (!items.length) return
   const rateRows = await (prisma as any).pullFreightAir.findMany()
@@ -18,7 +24,8 @@ export async function recomputePullAir(reqId: string): Promise<void> {
     const w = Number(it.weight) || 0
     const port = it.port
     if (!w || !port) continue
-    const routes = rateRows.filter((r: any) => r.origin === port)
+    // Match origin PORT + destination (by BU). Pick the MAX rate at the weight break across forwarders.
+    const routes = rateRows.filter((r: any) => r.origin === port && String(r.destination || "BKK").toUpperCase() === dest)
     if (!routes.length) continue
     const bk = breakKey(w)
     const cand = routes
