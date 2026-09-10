@@ -168,9 +168,11 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
 }
 
 // Send the LG alert to any LG_ALERT_EXTRA email NOT already covered by a registered recipient
-// (i.e. not yet a user, so no magic link) — plain login link to the page instead.
+// (i.e. not yet a user → no magic link). Point them at /login (with a ?next= back to the page) so they
+// must sign in as THEMSELVES — never at the page directly, which would ride whatever session is already
+// in that browser (that is why a non-user opening the link once appeared logged in as someone else).
 async function sendExtraLgAlerts(seen: Set<string>, rq: any, docFields: any[], statusText: string, cta: string, redirect = "/pull-material/documents"): Promise<void> {
-  const link = APP_URL ? `${APP_URL}${redirect}` : redirect
+  const link = APP_URL ? `${APP_URL}/login?next=${encodeURIComponent(redirect)}` : "/login"
   for (const email of LG_ALERT_EXTRA) {
     if (seen.has(email.toLowerCase())) continue
     seen.add(email.toLowerCase())
