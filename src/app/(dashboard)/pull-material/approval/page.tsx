@@ -48,7 +48,7 @@ export default function Page() {
     return myRoles.includes(APPROVER[st]?.role)
   }
 
-  const [bu, setBu] = useState("NYG")
+  const [bu, setBu] = useState("ALL")
   const [allReqs, setAllReqs] = useState<any[]>([]) // pending-approval docs across ALL BUs
   const [loading, setLoading] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
