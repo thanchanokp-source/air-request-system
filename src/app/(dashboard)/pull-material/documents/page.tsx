@@ -284,7 +284,7 @@ export default function Page() {
         const dimStr = (d0.boxW || d0.boxL || d0.boxH) ? `${d0.boxW || "-"}×${d0.boxL || "-"}×${d0.boxH || "-"} cm` : ""
         const totalOrigin = its.reduce((s: number, it: any) => s + (Number(it.originCost) || 0), 0)
         const totalFreight = estTotal - totalOrigin
-        const seaM = seaUsd(seaRates, d0.seaPort || d0.port)
+        const seaM = seaUsd(seaRates, d0.seaPort || d0.port, d0.country)
         const seaFreight = seaM ? seaM.cost : (its.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (d0.estSea ? Number(d0.estSea) : 0)) || null
         const earliest = (arr: any[]) => { const t = arr.map(v => (v ? new Date(v).getTime() : NaN)).filter(n => !isNaN(n)); return t.length ? new Date(Math.min(...t)) : null }
         const localCh = raw(rq, "localChargeTh") === "" ? null : Number(raw(rq, "localChargeTh")) || null

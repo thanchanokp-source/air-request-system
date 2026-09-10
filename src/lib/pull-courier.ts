@@ -5,12 +5,24 @@ export const EXCHANGE_RATE = 32
 // Destination by requesting BU (same rule as air): NYG/GW → BKK, EA → VTE, TRM → LAOS.
 export const destForBu = (bu: any) => (({ NYG: "BKK", GW: "BKK", EA: "VTE", TRM: "LAOS" } as Record<string, string>)[String(bu || "").toUpperCase()] || "BKK")
 
-// Sea freight (USD) from the SEA master — use the LCL rate only (per-shipment, comparable to air/courier;
-// FCL 40'/20' container rates are ignored). Sea master rates are already USD (no /32).
-export function seaUsd(rows: any[], seaPort: string): { cost: number; container: string } | null {
-  if (!seaPort) return null
-  const P = String(seaPort || "").toUpperCase()
-  const matches = (rows || []).filter(x => String(x.port || "").toUpperCase() === P && Number(x.rate) > 0 && String(x.container || "").toUpperCase().includes("LCL"))
+// Sea freight (USD) from the SEA master — LCL rate only (per-shipment, comparable to air/courier;
+// FCL 40'/20' rates are ignored). Sea master rates are already USD (no /32).
+// Matching is forgiving because the doc carries the AIR PORT CODE (e.g. "HKG") while LG keys the SEA
+// master by full name ("HONGKONG"): match on exact port, OR country CONTAINS (either direction), OR the
+// sea port name contains the country — so "HONG KONG" ↔ "HONGKONG" links up. Spaces/punctuation ignored.
+export function seaUsd(rows: any[], seaPort: string, country?: string): { cost: number; container: string } | null {
+  const norm = (s: any) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "")
+  const P = norm(seaPort), C = norm(country)
+  if (!P && !C) return null
+  const contains = (a: string, b: string) => !!a && !!b && (a.includes(b) || b.includes(a))
+  const matches = (rows || []).filter(x => {
+    if (!(Number(x.rate) > 0 && String(x.container || "").toUpperCase().includes("LCL"))) return false
+    const xp = norm(x.port), xc = norm(x.country)
+    if (P && xp === P) return true          // exact air-port code / port name
+    if (C && contains(xc, C)) return true    // sea row's COUNTRY ~ doc country
+    if (C && contains(xp, C)) return true    // sea PORT full name ~ doc country (HKG doc, HONGKONG master)
+    return false
+  })
   if (!matches.length) return null
   const best = matches.reduce((a, b) => (Number(b.rate) < Number(a.rate) ? b : a))
   return { cost: Number(best.rate), container: String(best.container || "LCL") }
@@ -21,7 +33,7 @@ export function seaUsd(rows: any[], seaPort: string): { cost: number; container:
 export function itemHasAnyRate(item: any, seaRows: any[], courierRows: any[], bu: any): boolean {
   if (item?.airFreightCost != null) return true
   const dest = destForBu(bu)
-  if (seaUsd(seaRows, item?.seaPort || item?.port)) return true
+  if (seaUsd(seaRows, item?.seaPort || item?.port, item?.country)) return true
   const wt = Number(item?.weight) || 0
   if (courierUsd(courierRows, item?.port, dest, wt, "DHL") != null) return true
   if (courierUsd(courierRows, item?.port, dest, wt, "FEDEX") != null) return true

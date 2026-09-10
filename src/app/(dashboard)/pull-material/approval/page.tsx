@@ -265,7 +265,7 @@ export default function Page() {
 
                         {/* Shipping mode comparison — Freight / Incoterm / Total Freight / L/T per transport type */}
                         {(() => {
-                          const seaM = seaUsd(seaRates, s0.seaPort || s0.port)
+                          const seaM = seaUsd(seaRates, s0.seaPort || s0.port, s0.country)
                           const seaFreight = seaM ? seaM.cost : (items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)) || null
                           const cdest = destForBu(openReq.bu), cwt = Number(s0.weight) || 0
                           const dhl = courierUsd(courierRates, s0.port, cdest, cwt, "DHL")
