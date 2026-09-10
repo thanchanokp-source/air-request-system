@@ -15,9 +15,11 @@ export function courierUsd(rows: any[], port: string, dest: string, weightKg: nu
   const tier = TIERS.find(t => t >= weightKg)
   if (tier == null) return null
   const P = String(port || "").toUpperCase(), D = String(dest || "").toUpperCase(), C = carrier.toUpperCase()
+  const laos = (x: string) => x === "LAOS" || x === "VTE" || x === "VIENTIANE"
+  const destOk = (rd: string) => { const b = String(rd || "BKK").toUpperCase(); return b === D || (laos(D) && laos(b)) }
   const r = (rows || []).find(x =>
     String(x.origin || "").toUpperCase() === P &&
-    String(x.destination || "BKK").toUpperCase() === D &&
+    destOk(x.destination) &&
     String(x.carrier || "").toUpperCase().includes(C))
   if (!r) return null
   const thb = Number((r.rates || {})[String(tier)])

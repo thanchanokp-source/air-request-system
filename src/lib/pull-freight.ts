@@ -13,6 +13,13 @@ const breakKey = (w: number) => { let b = 45; for (const x of BREAK_ORDER) if (x
 // Destination depends on the requesting BU: NYG/GW ship to Bangkok, EA to Vientiane, TRM to Laos.
 const DEST_BY_BU: Record<string, string> = { NYG: "BKK", GW: "BKK", EA: "VTE", TRM: "LAOS" }
 export const destForBu = (bu: any) => DEST_BY_BU[String(bu || "").toUpperCase()] || "BKK"
+// The master uses airport codes; Laos is written as either LAOS or VTE (Vientiane) → treat as equal.
+export const destMatches = (docDest: any, rowDest: any) => {
+  const a = String(docDest || "BKK").toUpperCase(), b = String(rowDest || "BKK").toUpperCase()
+  if (a === b) return true
+  const laos = (x: string) => x === "LAOS" || x === "VTE" || x === "VIENTIANE"
+  return laos(a) && laos(b)
+}
 
 export async function recomputePullAir(reqId: string): Promise<void> {
   const request = await (prisma as any).pullMaterialRequest.findUnique({ where: { id: reqId }, select: { bu: true } })
@@ -25,7 +32,7 @@ export async function recomputePullAir(reqId: string): Promise<void> {
     const port = it.port
     if (!w || !port) continue
     // Match origin PORT + destination (by BU). Pick the MAX rate at the weight break across forwarders.
-    const routes = rateRows.filter((r: any) => r.origin === port && String(r.destination || "BKK").toUpperCase() === dest)
+    const routes = rateRows.filter((r: any) => r.origin === port && destMatches(dest, r.destination))
     if (!routes.length) continue
     const bk = breakKey(w)
     const cand = routes
