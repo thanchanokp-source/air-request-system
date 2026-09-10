@@ -10,7 +10,7 @@ export default function Page() {
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const isAdmin = roles.includes("ADMIN")
   const canUse = isAdmin || roles.includes("LOGISTICS_IMPORT")
-  const [bu, setBu] = useState("NYG")
+  const [bu, setBu] = useState("ALL")
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)

@@ -18,7 +18,7 @@ export default function PurchasePage() {
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const isAdmin = roles.includes("ADMIN")
   const canUse = isAdmin || roles.includes("PURCHASING")
-  const [bu, setBu] = useState("NYG")
+  const [bu, setBu] = useState("ALL")
   const [reqs, setReqs] = useState<any[]>([])
   const [airRows, setAirRows] = useState<any[]>([])
   const [seaRows, setSeaRows] = useState<any[]>([])
