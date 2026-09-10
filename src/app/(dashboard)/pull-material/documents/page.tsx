@@ -25,6 +25,15 @@ export default function Page() {
   const [exporting, setExporting] = useState(false)
   const [courierRates, setCourierRates] = useState<any[]>([])
   useEffect(() => { fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {}) }, [])
+  const [recomputing, setRecomputing] = useState(false)
+  const recompute = async (rq: any) => {
+    setRecomputing(true)
+    try {
+      const r = await fetch(`/api/pull-material/${rq.id}/recompute`, { method: "POST" })
+      if (r.ok) await load()
+      else { const d = await r.json().catch(() => ({})); alert(d.error || "recompute failed") }
+    } finally { setRecomputing(false) }
+  }
 
   // LG attaches supporting files (HAWB / INV / docs) to the document.
   const uploadAtt = async (rq: any, files: FileList | null) => {
@@ -231,6 +240,8 @@ export default function Page() {
                 <span className="text-xs text-gray-400">by {rq.requesterName} · {fmtDate(rq.createdAt)}</span>
               </div>
               <div className="flex gap-2 shrink-0">
+                <button onClick={() => recompute(rq)} disabled={recomputing} title="คำนวณ freight ใหม่ (dest by BU + origin cost)"
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-50">{recomputing ? "…" : "🔄 Recompute"}</button>
                 <button onClick={() => openPreview(rq)} disabled={pdfing}
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">{pdfing ? "…" : "🔍 Preview PDF"}</button>
                 <button onClick={() => exportExcel(rq)} disabled={exporting}
