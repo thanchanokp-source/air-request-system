@@ -171,10 +171,11 @@ export default function PullRatesPage() {
       const hIdx = aoa.findIndex(row => row.some(c => norm(c).includes("PORT")))
       if (hIdx < 0) return { rows: [], breaks: [], extras: [], hasId: false }
       const H = aoa[hIdx].map(norm)
-      const iPort = H.findIndex(h => h.includes("PORT OF DISCHARGE")) >= 0 ? H.findIndex(h => h.includes("PORT OF DISCHARGE")) : H.findIndex(h => h.includes("PORT"))
+      const first = (...tests: ((h: string) => boolean)[]) => { for (const t of tests) { const i = H.findIndex(t); if (i >= 0) return i } return -1 }
+      const iPort = first(h => h.includes("PORT OF DISCHARGE"), h => h.includes("DISCHARGE"), h => h === "POD", h => h.includes("PORT"))
       const iCountry = H.findIndex(h => h.includes("COUNTRY"))
-      const iCtr = H.findIndex(h => h.includes("CONTAINER"))
-      const iRate = H.findIndex(h => h.includes("FREIGHT RATE")) >= 0 ? H.findIndex(h => h.includes("FREIGHT RATE")) : H.findIndex(h => h.includes("RATE"))
+      const iCtr = first(h => h.includes("CONTAINER"), h => h.includes("CONT"), h => h === "CTR", h => h.includes("SIZE"), h => h.includes("TYPE"))
+      const iRate = first(h => h.includes("FREIGHT RATE"), h => h.includes("RATE"), h => h.includes("USD"))
       const iRemarks = H.findIndex(h => h.includes("REMARK"))
       if (iPort < 0 || iCtr < 0 || iRate < 0) return { rows: [], breaks: [], extras: [], hasId: iPort >= 0 }
       const ctKey = (v: string) => { const u = norm(v).replace(/['\s]/g, ""); if (u.includes("40")) return "40GP"; if (u.includes("20")) return "20GP"; if (u.includes("LCL") || u.includes("CBM")) return "LCL"; return "" }
@@ -195,7 +196,9 @@ export default function PullRatesPage() {
     }
 
     const air = parse(sheetByName("AIR RATE"), true)
-    const sea = parseSeaLong()
+    // SEA: try the LONG format first (one row per container), fall back to the WIDE format (40'GP/20'GP/LCL cols).
+    let sea = parseSeaLong()
+    if (!sea || !sea.breaks.length) { const w = parse(sheetByName("SEA RATE"), false); if (w && w.breaks.length) sea = w }
     const cour = parseCourier()
     if (!air && !sea && !cour) return alert('ไม่พบชีท "AIR RATE" / "SEA RATE" / "COURIER" ในไฟล์')
 
