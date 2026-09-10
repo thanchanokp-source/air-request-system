@@ -464,12 +464,20 @@ model PullFreightAir {
 
 // Pull RM SEA freight master (from Rate_LG.xlsx "SEA RATE"). Keyed by origin sea port (grouped by
 // country). rates = { "40GP": USD/CTR, "20GP": USD/CTR, "LCL": USD/CBM } (sparse).
+// Pull RM SEA freight master — LONG format, one row per (port, container) exactly like the Excel
+// "IMPORT SEA RATE" sheet: COUNTRY / FREIGHT(forwarder) / PORT OF DISCHARGE / CONTAINER / RATE / UNIT / UPDATED / REMARKS.
 model PullFreightSea {
   id        String   @id @default(cuid())
-  country   String
-  port      String   // sea port (e.g. KEELUNG, HO CHI MINH)
-  leadTime  String?  // sea lead time (L/T) — read from the Rate_LG "SEA RATE" sheet
-  rates     Json     @default("{}")
+  country   String?
+  forwarder String?  // "FREIGHT" column (PILOT / LAN / QLOG …)
+  port      String   // PORT OF DISCHARGE
+  container String?  // 40' HC / 20' GP / LCL
+  rate      Float?   // FREIGHT RATE (USD)
+  unit      String?  // PER CTR / PER CBM
+  updated   String?
+  remarks   String?
+  leadTime  String?  // legacy — kept for back-compat
+  rates     Json     @default("{}") // legacy
   createdAt DateTime @default(now())
 
   @@index([port])

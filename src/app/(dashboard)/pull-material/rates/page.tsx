@@ -162,8 +162,8 @@ export default function PullRatesPage() {
       return { rows, breaks: Object.keys(breakCols), extras, hasId: iOrigin >= 0 }
     }
 
-    // SEA sheet is LONG format: COUNTRY / PORT OF DISCHARGE / CONTAINER / FREIGHT RATE (USD) — one row
-    // per container type → pivot into rates { 40GP, 20GP, LCL } grouped by (country, port).
+    // SEA sheet = LONG format, kept as-is (one DB row per sheet line, exactly like the Excel):
+    // COUNTRY / FREIGHT(forwarder) / PORT OF DISCHARGE / CONTAINER / FREIGHT RATE (USD) / UNIT / UPDATED / REMARKS.
     const parseSeaLong = (): Parsed | null => {
       const sheetName = sheetByName("SEA RATE")
       if (!sheetName) return null
@@ -174,33 +174,32 @@ export default function PullRatesPage() {
       const first = (...tests: ((h: string) => boolean)[]) => { for (const t of tests) { const i = H.findIndex(t); if (i >= 0) return i } return -1 }
       const iPort = first(h => h.includes("PORT OF DISCHARGE"), h => h.includes("DISCHARGE"), h => h === "POD", h => h.includes("PORT"))
       const iCountry = H.findIndex(h => h.includes("COUNTRY"))
+      const iFwd = first(h => h === "FREIGHT", h => h.includes("FORWARD") || h === "FWD")
       const iCtr = first(h => h.includes("CONTAINER"), h => h.includes("CONT"), h => h === "CTR", h => h.includes("SIZE"), h => h.includes("TYPE"))
       const iRate = first(h => h.includes("FREIGHT RATE"), h => h.includes("RATE"), h => h.includes("USD"))
-      const iRemarks = H.findIndex(h => h.includes("REMARK"))
-      seaDbg = `หัวคอลัมน์ SEA ที่อ่านได้:\n${JSON.stringify(aoa[hIdx])}\n\nจับได้: PORT=col${iPort} · CONTAINER=col${iCtr} · RATE=col${iRate}\nตัวอย่างแถวแรก: CONTAINER=${JSON.stringify(iCtr >= 0 ? aoa[hIdx + 1]?.[iCtr] : "?")} · RATE=${JSON.stringify(iRate >= 0 ? aoa[hIdx + 1]?.[iRate] : "?")}`
-      if (iPort < 0 || iCtr < 0 || iRate < 0) return { rows: [], breaks: [], extras: [], hasId: iPort >= 0 }
-      const ctKey = (v: string) => { const u = norm(v).replace(/['\s]/g, ""); if (u.includes("40")) return "40GP"; if (u.includes("20")) return "20GP"; if (u.includes("LCL") || u.includes("CBM")) return "LCL"; return "" }
-      const byPort = new Map<string, any>()
+      const iUnit = H.findIndex(h => h === "UNIT")
+      const iUpd = first(h => h.includes("UPDATED"), h => h.includes("UPDATE"))
+      const iRem = H.findIndex(h => h.includes("REMARK"))
+      seaDbg = `หัวคอลัมน์ SEA:\n${JSON.stringify(aoa[hIdx])}\nPORT=col${iPort} CONTAINER=col${iCtr} RATE=col${iRate}`
+      if (iPort < 0 || iRate < 0) return { rows: [], breaks: [], extras: [], hasId: iPort >= 0 }
+      const cleanNum = (v: any) => { const n = Number(String(v ?? "").replace(/[^0-9.\-]/g, "")); return (v === "" || v == null || isNaN(n)) ? "" : n }
+      const rows: any[] = []
       for (let r = hIdx + 1; r < aoa.length; r++) {
         const row = aoa[r]; if (!row) continue
         const port = String(row[iPort] ?? "").trim(); if (!port) continue
-        const ck = ctKey(String(row[iCtr] ?? "")); if (!ck) continue
-        const country = iCountry >= 0 ? String(row[iCountry] ?? "").trim() : ""
-        const key = `${country}||${port}`
-        const e = byPort.get(key) || { country: country || null, port, leadTime: null, rates: {} as Record<string, any>, remarks: iRemarks >= 0 ? row[iRemarks] : null }
-        const rate = Number(row[iRate]); if (!isNaN(rate) && row[iRate] !== "") e.rates[ck] = rate
-        byPort.set(key, e)
+        rows.push({
+          country: iCountry >= 0 ? String(row[iCountry] ?? "").trim() : null, forwarder: iFwd >= 0 ? String(row[iFwd] ?? "").trim() : null,
+          port, container: iCtr >= 0 ? String(row[iCtr] ?? "").trim() : null, rate: cleanNum(row[iRate]),
+          unit: iUnit >= 0 ? String(row[iUnit] ?? "").trim() : null, updated: iUpd >= 0 ? String(row[iUpd] ?? "").trim() : null, remarks: iRem >= 0 ? String(row[iRem] ?? "").trim() : null,
+        })
       }
-      const rows = [...byPort.values()]
-      const breaks = [...new Set(rows.flatMap((r: any) => Object.keys(r.rates)))]
-      return { rows, breaks, extras: [], hasId: true }
+      const breaks = rows.some((r: any) => r.rate !== "" && r.rate != null) ? ["RATE"] : []
+      return { rows, breaks, extras: [], hasId: iPort >= 0 }
     }
 
     let seaDbg = ""
     const air = parse(sheetByName("AIR RATE"), true)
-    // SEA: try the LONG format first (one row per container), fall back to the WIDE format (40'GP/20'GP/LCL cols).
-    let sea = parseSeaLong()
-    if (!sea || !sea.breaks.length) { const w = parse(sheetByName("SEA RATE"), false); if (w && w.breaks.length) sea = w }
+    const sea = parseSeaLong()
     const cour = parseCourier()
     if (!air && !sea && !cour) return alert('ไม่พบชีท "AIR RATE" / "SEA RATE" / "COURIER" ในไฟล์')
 
@@ -289,7 +288,7 @@ export default function PullRatesPage() {
 
   const qq = q.trim().toLowerCase()
   const airRows = air.filter(r => !qq || `${r.origin} ${r.destination} ${r.fwd} ${r.airline}`.toLowerCase().includes(qq))
-  const seaRows = sea.filter(r => !qq || `${r.country} ${r.port}`.toLowerCase().includes(qq))
+  const seaRows = sea.filter(r => !qq || `${r.country} ${r.port} ${r.container} ${r.forwarder}`.toLowerCase().includes(qq))
   const courierRows = courier.filter(r => !qq || `${r.country} ${r.origin} ${r.carrier}`.toLowerCase().includes(qq))
   const newCount = (tab === "air" ? air : tab === "sea" ? sea : courier).filter((r: any) => r._new).length
   const editCount = Object.keys(edits).filter(id => !String(id).startsWith("new_")).length + newCount
@@ -348,25 +347,23 @@ export default function PullRatesPage() {
         {tab === "sea" ? (
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500"><tr>
-              {["COUNTRY", "PORT", "L/T", "40'GP (USD/CTR)", "20'GP (USD/CTR)", "LCL (USD/CBM)"].map(h =>
-                <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+              {["COUNTRY", "FREIGHT", "PORT OF DISCHARGE", "CONTAINER", "FREIGHT RATE (USD)", "UNIT", "UPDATED", "REMARKS"].map(h =>
+                <th key={h} className={`px-3 py-2 font-medium whitespace-nowrap ${h.includes("RATE") ? "text-right" : "text-left"}`}>{h}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {seaRows.map(r => (
-                <tr key={r.id} className={`hover:bg-gray-50 ${r._new ? "bg-amber-50" : edits[r.id] ? "bg-green-50" : ""}`}>
-                  <td className="px-3 py-1.5 text-gray-600">{r.country}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
-                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r.port}</td>
-                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.leadTime || "-"}</td>
-                  {SEA_CT.map(c => (
-                    <td key={c} className="px-2 py-1 text-right">
-                      {isAdmin
-                        ? <input type="number" value={cellVal(r, c)} onChange={e => setCell(r.id, c, e.target.value)} className={cellInp} />
-                        : (r.rates?.[c] != null ? fmt(r.rates[c]) : "-")}
-                    </td>
-                  ))}
+                <tr key={r.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.country || "-"}</td>
+                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.forwarder || "-"}</td>
+                  <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{r.port}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">{r.container || "-"}</td>
+                  <td className="px-3 py-1.5 text-right font-medium" style={{ color: MAROON }}>{r.rate != null ? fmt(r.rate) : "-"}</td>
+                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.unit || "-"}</td>
+                  <td className="px-3 py-1.5 text-gray-400 whitespace-nowrap">{r.updated || "-"}</td>
+                  <td className="px-3 py-1.5 text-gray-400 max-w-[220px] truncate" title={r.remarks || ""}>{r.remarks || "-"}</td>
                 </tr>
               ))}
-              {seaRows.length === 0 && <tr><td colSpan={3 + SEA_CT.length} className="px-3 py-10 text-center text-gray-400">No sea rates {sea.length === 0 && "— click Reload to load from file"}</td></tr>}
+              {seaRows.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">No sea rates {sea.length === 0 && "— Import Excel ที่มีชีท SEA RATE"}</td></tr>}
             </tbody>
           </table>
         ) : tab === "air" ? (
