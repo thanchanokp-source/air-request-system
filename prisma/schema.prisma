@@ -475,6 +475,20 @@ model PullFreightSea {
   @@index([port])
 }
 
+// Pull RM COURIER freight master (DHL / FedEx). Keyed by ORIGIN air port + carrier (BY COURIER).
+// rates = total USD per weight tier { "0.5": usd, "1": usd, "2": ..., "30": usd }.
+model PullFreightCourier {
+  id          String   @id @default(cuid())
+  origin      String   // AIR PORT CODE
+  country     String?
+  destination String   @default("BKK")
+  carrier     String   // BY COURIER (DHL / FEDEX / ...)
+  rates       Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([origin])
+}
+
 // Pull RM "Master Purchase" — Country / Port / City. Purchasing picks a City on the request; its
 // Country + Port carry onto the pulled items. Maintained by Admin + Purchasing.
 model PullPurchaseCity {

@@ -7,15 +7,18 @@ import { MAROON, fmt } from "../_StageWork"
 
 const AIR_BREAKS = ["M", "N", "Q45", "Q100", "Q250", "Q300", "Q500", "Q1000", "Q2000", "Q8000"]
 const SEA_CT = ["40GP", "20GP", "LCL"]
+const COURIER_KG = ["0.5KG", "1KG", "2KG", "3KG", "5KG", "10KG", "15KG", "20KG", "25KG", "30KG"]
+const kgKey = (b: string) => b.replace(/KG$/i, "").trim() // "0.5KG" → "0.5"
 
 export default function PullRatesPage() {
   const { data: session, status: auth } = useSession()
   // Admin + Logistics Import can edit rates (LOGISTICS_IMPORT adds new port rates flagged by Purchase).
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const isAdmin = roles.includes("ADMIN") || roles.includes("LOGISTICS_IMPORT")
-  const [tab, setTab] = useState<"air" | "sea">("air")
+  const [tab, setTab] = useState<"air" | "sea" | "courier">("air")
   const [air, setAir] = useState<any[]>([])
   const [sea, setSea] = useState<any[]>([])
+  const [courier, setCourier] = useState<any[]>([])
   const [q, setQ] = useState("")
   const [busy, setBusy] = useState(false)
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
@@ -26,11 +29,13 @@ export default function PullRatesPage() {
   const params = useSearchParams()
   const prefilled = useRef(false)
   const load = async () => {
-    const [a, s] = await Promise.all([
+    const [a, s, c] = await Promise.all([
       fetch("/api/pull-material/air-rates").then(r => r.json()).catch(() => ({})),
       fetch("/api/pull-material/sea-rates").then(r => r.json()).catch(() => ({})),
+      fetch("/api/pull-material/courier-rates").then(r => r.json()).catch(() => ({})),
     ])
     let airRows = a.rows || [], seaRows = s.rows || []
+    setCourier(c.rows || [])
     if (!prefilled.current) {
       const raw = params.get("prefill")
       if (raw) {
@@ -128,30 +133,60 @@ export default function PullRatesPage() {
       return { rows, breaks: Object.keys(breakCols), extras, hasId: iOrigin >= 0 }
     }
 
+    // Courier sheet: ORIGIN + BY COURIER (carrier) + per-kg tier columns (0.5KG..30KG).
+    const parseCourier = (): Parsed | null => {
+      const sheetName = sheetByName("COURIER")
+      if (!sheetName) return null
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: "" }) as any[][]
+      const hIdx = aoa.findIndex(row => row.some(c => norm(c).includes("ORIGIN")))
+      if (hIdx < 0) return { rows: [], breaks: [], extras: [], hasId: false }
+      const H = aoa[hIdx].map(norm)
+      const iOrigin = H.findIndex(h => h.includes("ORIGIN"))
+      const iCountry = H.findIndex(h => h.includes("COUNTRY"))
+      const iDest = H.findIndex(h => h.includes("DESTINATION") || h === "DEST")
+      const iCarrier = H.findIndex(h => h.includes("COURIER") || h.includes("CARRIER"))
+      const breakCols: Record<string, number> = {}
+      COURIER_KG.forEach(b => { const i = H.findIndex(h => h === norm(b) || h === norm(kgKey(b))); if (i >= 0) breakCols[b] = i })
+      const known = new Set([iOrigin, iCountry, iDest, iCarrier, ...Object.values(breakCols)].filter(i => i >= 0))
+      const extras = H.map((h, i) => (h && !known.has(i) ? h : "")).filter(Boolean)
+      const rows: any[] = []
+      for (let r = hIdx + 1; r < aoa.length; r++) {
+        const row = aoa[r]; if (!row) continue
+        const idv = iOrigin >= 0 ? String(row[iOrigin] ?? "").trim() : ""
+        if (!idv) continue
+        const rates: Record<string, any> = {}
+        for (const [b, ci] of Object.entries(breakCols)) rates[kgKey(b)] = row[ci]
+        rows.push({ origin: idv, country: iCountry >= 0 ? row[iCountry] : null, destination: iDest >= 0 ? row[iDest] : "BKK", carrier: iCarrier >= 0 ? row[iCarrier] : "", rates })
+      }
+      return { rows, breaks: Object.keys(breakCols), extras, hasId: iOrigin >= 0 }
+    }
+
     const air = parse(sheetByName("AIR RATE"), true)
     const sea = parse(sheetByName("SEA RATE"), false)
-    if (!air && !sea) return alert('ไม่พบชีท "AIR RATE" หรือ "SEA RATE" ในไฟล์ (ใช้แค่ 2 ชีทนี้เท่านั้น ชีทอื่นถูกข้าม)')
+    const cour = parseCourier()
+    if (!air && !sea && !cour) return alert('ไม่พบชีท "AIR RATE" / "SEA RATE" / "COURIER" ในไฟล์')
 
     // A side is SAFE to replace only if it found the ID column AND ≥1 rate column AND ≥1 data row.
     // (Guards against a renamed header silently wiping the master with empty/garbage data.)
     const ok = (p: Parsed | null) => !!p && p.hasId && p.breaks.length > 0 && p.rows.length > 0
     const report = (name: string, p: Parsed | null) => {
       if (!p) return `${name}: — ไม่มีชีทนี้ (ข้าม)`
-      if (!p.hasId) return `⚠ ${name}: ไม่เจอคอลัมน์ ${name === "AIR" ? "ORIGIN" : "PORT"} → ข้าม (เปลี่ยนชื่อหัวคอลัมน์?)`
+      if (!p.hasId) return `⚠ ${name}: ไม่เจอคอลัมน์ ${name === "SEA" ? "PORT" : "ORIGIN"} → ข้าม (เปลี่ยนชื่อหัวคอลัมน์?)`
       if (!p.breaks.length) return `⚠ ${name}: ไม่เจอคอลัมน์ราคา → ข้าม (เปลี่ยนชื่อหัวคอลัมน์?)`
       if (!p.rows.length) return `⚠ ${name}: 0 แถว → ข้าม (กันเขียนทับด้วยข้อมูลว่าง)`
       return `✓ ${name}: ${p.rows.length} แถว · ราคา ${p.breaks.join(",")}${p.extras.length ? `\n   คอลัมน์ที่ไม่ได้ใช้ (ข้าม): ${p.extras.join(", ")}` : ""}`
     }
-    const willAir = ok(air), willSea = ok(sea)
-    if (!willAir && !willSea) return alert(`ไม่ได้แทนที่อะไรเลย — ตรวจหัวคอลัมน์ในไฟล์:\n\n${report("AIR", air)}\n${report("SEA", sea)}`)
+    const willAir = ok(air), willSea = ok(sea), willCour = ok(cour)
+    if (!willAir && !willSea && !willCour) return alert(`ไม่ได้แทนที่อะไรเลย — ตรวจหัวคอลัมน์ในไฟล์:\n\n${report("AIR", air)}\n${report("SEA", sea)}\n${report("COURIER", cour)}`)
 
-    const summary = `${report("AIR", air)}\n${report("SEA", sea)}\n\nจะ “แทนที่” เฉพาะชีทที่ ✓ (ค่าเดิมของชีทนั้นถูกเขียนทับ)\nกด Backup ไว้ก่อนถ้าต้องการ · ดำเนินการต่อ?`
+    const summary = `${report("AIR", air)}\n${report("SEA", sea)}\n${report("COURIER", cour)}\n\nจะ “แทนที่” เฉพาะชีทที่ ✓ (ค่าเดิมของชีทนั้นถูกเขียนทับ)\nกด Backup ไว้ก่อนถ้าต้องการ · ดำเนินการต่อ?`
     if (!confirm(summary)) return
     setBusy(true)
     try {
       if (willAir) await fetch("/api/pull-material/air-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: air!.rows }) })
       if (willSea) await fetch("/api/pull-material/sea-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: sea!.rows }) })
-      alert(`นำเข้าเสร็จ:\n${willAir ? report("AIR", air) : ""}${willAir && willSea ? "\n" : ""}${willSea ? report("SEA", sea) : ""}`)
+      if (willCour) await fetch("/api/pull-material/courier-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: cour!.rows }) })
+      alert(`นำเข้าเสร็จ:\n${willAir ? report("AIR", air) + "\n" : ""}${willSea ? report("SEA", sea) + "\n" : ""}${willCour ? report("COURIER", cour) : ""}`)
       await load()
     } finally { setBusy(false) }
   }
@@ -216,7 +251,8 @@ export default function PullRatesPage() {
   const qq = q.trim().toLowerCase()
   const airRows = air.filter(r => !qq || `${r.origin} ${r.destination} ${r.fwd} ${r.airline}`.toLowerCase().includes(qq))
   const seaRows = sea.filter(r => !qq || `${r.country} ${r.port}`.toLowerCase().includes(qq))
-  const newCount = (tab === "air" ? air : sea).filter((r: any) => r._new).length
+  const courierRows = courier.filter(r => !qq || `${r.country} ${r.origin} ${r.carrier}`.toLowerCase().includes(qq))
+  const newCount = (tab === "air" ? air : tab === "sea" ? sea : courier).filter((r: any) => r._new).length
   const editCount = Object.keys(edits).filter(id => !String(id).startsWith("new_")).length + newCount
   const cellInp = "w-16 border border-gray-200 rounded px-1.5 py-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-red-300"
 
@@ -234,13 +270,13 @@ export default function PullRatesPage() {
               <input type="file" accept=".xlsx,.xls" className="hidden" disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
             </label>
             <button onClick={exportBackup} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white disabled:opacity-50">⬇ Backup (Excel)</button>
-            <button onClick={() => reload(tab)} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 disabled:opacity-50">↻ Reload from seed</button>
+            <button onClick={() => { if (tab !== "courier") reload(tab) }} disabled={busy || tab === "courier"} title={tab === "courier" ? "courier ไม่มี seed — ใช้ Import Excel" : ""} className="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 disabled:opacity-50">↻ Reload from seed</button>
           </div>
         )}
       </div>
 
       <div className="flex gap-1 border-b border-gray-200">
-        {([["air", `Air Rate (${air.length})`], ["sea", `Sea Rate (${sea.length})`]] as const).map(([k, label]) => (
+        {([["air", `Air Rate (${air.length})`], ["sea", `Sea Rate (${sea.length})`], ["courier", `Courier (${courier.length})`]] as const).map(([k, label]) => (
           <button key={k} onClick={() => { if (editCount && !confirm("Discard unsaved edits?")) return; setTab(k); setEdits({}) }}
             className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === k ? "border-current" : "border-transparent text-gray-400 hover:text-gray-600"}`}
             style={tab === k ? { color: MAROON, borderColor: MAROON } : undefined}>{label}</button>
@@ -264,7 +300,31 @@ export default function PullRatesPage() {
         className="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        {tab === "air" ? (
+        {tab === "sea" ? (
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-gray-500"><tr>
+              {["COUNTRY", "PORT", "L/T", "40'GP (USD/CTR)", "20'GP (USD/CTR)", "LCL (USD/CBM)"].map(h =>
+                <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {seaRows.map(r => (
+                <tr key={r.id} className={`hover:bg-gray-50 ${r._new ? "bg-amber-50" : edits[r.id] ? "bg-green-50" : ""}`}>
+                  <td className="px-3 py-1.5 text-gray-600">{r.country}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
+                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r.port}</td>
+                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.leadTime || "-"}</td>
+                  {SEA_CT.map(c => (
+                    <td key={c} className="px-2 py-1 text-right">
+                      {isAdmin
+                        ? <input type="number" value={cellVal(r, c)} onChange={e => setCell(r.id, c, e.target.value)} className={cellInp} />
+                        : (r.rates?.[c] != null ? fmt(r.rates[c]) : "-")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {seaRows.length === 0 && <tr><td colSpan={3 + SEA_CT.length} className="px-3 py-10 text-center text-gray-400">No sea rates {sea.length === 0 && "— click Reload to load from file"}</td></tr>}
+            </tbody>
+          </table>
+        ) : tab === "air" ? (
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500"><tr>
               {["COUNTRY", "ORIGIN", "DEST", "FWD", "A/L", "TT"].map(h =>
@@ -304,25 +364,20 @@ export default function PullRatesPage() {
         ) : (
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500"><tr>
-              {["COUNTRY", "PORT", "L/T", "40'GP (USD/CTR)", "20'GP (USD/CTR)", "LCL (USD/CBM)"].map(h =>
-                <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+              {["COUNTRY", "ORIGIN", "DEST", "BY COURIER"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+              {COURIER_KG.map(h => <th key={h} className="px-3 py-2 text-right font-medium whitespace-nowrap">{h}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
-              {seaRows.map(r => (
-                <tr key={r.id} className={`hover:bg-gray-50 ${r._new ? "bg-amber-50" : edits[r.id] ? "bg-green-50" : ""}`}>
-                  <td className="px-3 py-1.5 text-gray-600">{r.country}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
-                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r.port}</td>
-                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.leadTime || "-"}</td>
-                  {SEA_CT.map(c => (
-                    <td key={c} className="px-2 py-1 text-right">
-                      {isAdmin
-                        ? <input type="number" value={cellVal(r, c)} onChange={e => setCell(r.id, c, e.target.value)} className={cellInp} />
-                        : (r.rates?.[c] != null ? fmt(r.rates[c]) : "-")}
-                    </td>
-                  ))}
+              {courierRows.map(r => (
+                <tr key={r.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.country || "-"}</td>
+                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r.origin}</td>
+                  <td className="px-3 py-1.5">{r.destination}</td>
+                  <td className="px-3 py-1.5 font-medium whitespace-nowrap" style={{ color: MAROON }}>{r.carrier || "-"}</td>
+                  {COURIER_KG.map(b => <td key={b} className="px-2 py-1 text-right">{r.rates?.[kgKey(b)] != null ? fmt(r.rates[kgKey(b)]) : "-"}</td>)}
                 </tr>
               ))}
-              {seaRows.length === 0 && <tr><td colSpan={3 + SEA_CT.length} className="px-3 py-10 text-center text-gray-400">No sea rates {sea.length === 0 && "— click Reload to load from file"}</td></tr>}
+              {courierRows.length === 0 && <tr><td colSpan={4 + COURIER_KG.length} className="px-3 py-10 text-center text-gray-400">No courier rates {courier.length === 0 && "— Import Excel ที่มีชีท COURIER"}</td></tr>}
             </tbody>
           </table>
         )}
