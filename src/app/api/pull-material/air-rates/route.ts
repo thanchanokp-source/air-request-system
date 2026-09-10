@@ -82,7 +82,7 @@ export async function POST() {
   if (!session || (session.user as any).role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   await (prisma as any).pullFreightAir.deleteMany({})
   await (prisma as any).pullFreightAir.createMany({
-    data: (seed as any[]).map(s => ({ origin: s.origin, country: s.country || null, destination: s.destination || "BKK", fwd: s.fwd || null, airline: s.airline || null, tt: s.tt || null, rates: s.rates || {} })),
+    data: (seed as any[]).map(s => ({ origin: s.origin, country: s.country || null, destination: s.destination || "BKK", fwd: s.fwd || null, airline: s.airline || null, tt: s.tt || null, origCostExw: s.origCostExw ?? null, origCostFca: s.origCostFca ?? null, rates: s.rates || {} })),
   })
   const count = await (prisma as any).pullFreightAir.count()
   return NextResponse.json({ ok: true, count })
