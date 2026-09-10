@@ -6,6 +6,7 @@ import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
 import { notifyPullStage } from "@/lib/pull-notify"
 import { recomputePullAir } from "@/lib/pull-freight"
+import { itemHasAnyRate } from "@/lib/pull-courier"
 import { magicLoginFor } from "@/lib/notify"
 import { pcApprover } from "@/lib/pull-approvers"
 
@@ -142,12 +143,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // The stage the doc is on BEFORE this change (lost after the update) — used to alert the current owner on recall.
     const before = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { status: true, bu: true } })
 
-    // GATE: LG forwarding out of PENDING_LG_RATE → must have EVERY line's air rate filled first.
+    // GATE: LG forwarding out of PENDING_LG_RATE → every line must have a rate in at least one mode
+    // (air OR sea OR courier) before it can go to approval.
     if (before?.status === "PENDING_LG_RATE" && !isStop) {
       await recomputePullAir(id).catch(() => {})
-      const its = await (prisma as any).pullMaterialItem.findMany({ where: { requestId: id }, select: { airFreightCost: true, weight: true, port: true } })
-      const stillMissing = its.some((i: any) => i.port && Number(i.weight) > 0 && i.airFreightCost == null)
-      if (stillMissing) return NextResponse.json({ error: "ยังมี port ที่ไม่มี Air rate ใน master — เพิ่ม rate ให้ครบก่อนส่งต่อ Approval" }, { status: 400 })
+      const [seaRows, courierRows] = await Promise.all([(prisma as any).pullFreightSea.findMany(), (prisma as any).pullFreightCourier.findMany()])
+      const its = await (prisma as any).pullMaterialItem.findMany({ where: { requestId: id }, select: { airFreightCost: true, weight: true, port: true, seaPort: true } })
+      const stillMissing = its.some((i: any) => i.port && Number(i.weight) > 0 && !itemHasAnyRate(i, seaRows, courierRows, before.bu))
+      if (stillMissing) return NextResponse.json({ error: "ยังมี port ที่ไม่มี rate เลย (air/sea/courier) — เพิ่ม rate อย่างน้อย 1 mode ให้ครบก่อนส่งต่อ Approval" }, { status: 400 })
     }
 
     if (isStop) {

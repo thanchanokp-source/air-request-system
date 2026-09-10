@@ -6,6 +6,29 @@ import { prisma } from "@/lib/prisma"
 // Pull RM COURIER freight master (DHL / FedEx). Keyed by ORIGIN air port + carrier.
 // rates = { "<kg tier>": total USD }.
 
+// Inline-add a NEW courier row, or edit one row's rate tiers (Admin + Logistics Import).
+export async function PATCH(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  const u: any = session?.user
+  const canEdit = !!u && (u.role === "ADMIN" || (Array.isArray(u.roles) && u.roles.includes("LOGISTICS_IMPORT")))
+  if (!canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const body = await req.json()
+  const clean: Record<string, number> = {}
+  for (const [k, v] of Object.entries(body.rates || {})) { const n = Number(v); if (v !== "" && v != null && !isNaN(n)) clean[k] = n }
+  if (body.create) {
+    if (!body.origin) return NextResponse.json({ error: "origin (air port) required" }, { status: 400 })
+    if (!body.carrier) return NextResponse.json({ error: "carrier required (DHL / FedEx)" }, { status: 400 })
+    const row = await (prisma as any).pullFreightCourier.create({ data: {
+      origin: String(body.origin).trim(), country: body.country || null, destination: body.destination || "BKK",
+      carrier: String(body.carrier).trim().toUpperCase(), rates: clean,
+    } })
+    return NextResponse.json({ ok: true, row })
+  }
+  if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 })
+  const row = await (prisma as any).pullFreightCourier.update({ where: { id: body.id }, data: { rates: clean } })
+  return NextResponse.json({ ok: true, row })
+}
+
 // Bulk REPLACE the whole courier master from an uploaded "BY COURIER" sheet (Admin + Logistics Import).
 export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions)

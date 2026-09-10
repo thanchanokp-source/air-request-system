@@ -35,8 +35,7 @@ export default function PullRatesPage() {
       fetch("/api/pull-material/sea-rates").then(r => r.json()).catch(() => ({})),
       fetch("/api/pull-material/courier-rates").then(r => r.json()).catch(() => ({})),
     ])
-    let airRows = a.rows || [], seaRows = s.rows || []
-    setCourier(c.rows || [])
+    let airRows = a.rows || [], seaRows = s.rows || [], courierRows = c.rows || []
     if (!prefilled.current) {
       const raw = params.get("prefill")
       if (raw) {
@@ -44,14 +43,17 @@ export default function PullRatesPage() {
           const list = JSON.parse(raw) as any[]
           const airNew = list.filter(x => x.type === "air" && x.port).map((x, i) => ({ id: `new_air_${i}`, _new: true, origin: x.port, country: x.country || null, destination: "BKK", fwd: null, airline: null, tt: null, rates: {} }))
           const seaNew = list.filter(x => x.type === "sea" && x.port).map((x, i) => ({ id: `new_sea_${i}`, _new: true, country: x.country || null, forwarder: null, port: x.port, container: "LCL", rate: null, unit: null, remarks: null }))
+          const courNew = list.filter(x => x.type === "courier" && x.port).map((x, i) => ({ id: `new_courier_${i}`, _new: true, origin: x.port, country: x.country || null, destination: "BKK", carrier: (x.carrier || "").toUpperCase(), rates: {} }))
           if (airNew.length) airRows = [...airNew, ...airRows]
           if (seaNew.length) seaRows = [...seaNew, ...seaRows]
-          if (seaNew.length && !airNew.length) setTab("sea"); else if (airNew.length) setTab("air")
+          if (courNew.length) courierRows = [...courNew, ...courierRows]
+          if (courNew.length && !airNew.length && !seaNew.length) setTab("courier")
+          else if (seaNew.length && !airNew.length) setTab("sea"); else if (airNew.length) setTab("air")
         } catch { /* bad prefill → ignore */ }
       }
       prefilled.current = true
     }
-    setAir(airRows); setSea(seaRows); setEdits({})
+    setAir(airRows); setSea(seaRows); setCourier(courierRows); setEdits({})
   }
   useEffect(() => { load() }, []) // eslint-disable-line
   // Deep-link from the compare box "no master" link → open the right tab + prefill the search with the port.
@@ -262,15 +264,33 @@ export default function PullRatesPage() {
     const id = `new_${tab}_${Date.now()}`
     if (tab === "air") setAir(p => [{ id, _new: true, origin: "", country: null, destination: "BKK", fwd: null, airline: null, tt: null, rates: {} }, ...p])
     else if (tab === "sea") setSea(p => [{ id, _new: true, country: null, forwarder: null, port: "", container: "LCL", rate: null, unit: null, remarks: null }, ...p])
+    else if (tab === "courier") setCourier(p => [{ id, _new: true, origin: "", country: null, destination: "BKK", carrier: "DHL", rates: {} }, ...p])
   }
 
   const saveAll = async () => {
     const which = tab
-    const src = which === "air" ? air : sea
+    const src = which === "air" ? air : which === "sea" ? sea : courier
     const newRows = src.filter((r: any) => r._new)
     const editedIds = Object.keys(edits).filter(id => !String(id).startsWith("new_"))
     if (!newRows.length && !editedIds.length) return
     setBusy(true)
+    // COURIER = per-kg tiers stored in THB (LG types USD in the table → ×EXCHANGE_RATE to store).
+    if (which === "courier") {
+      try {
+        for (const nr of newRows) {
+          const e = edits[nr.id] || {}
+          const g = (k: string) => e[k] ?? (nr[k] != null ? String(nr[k]) : "")
+          if (!g("origin").trim()) { alert("กรอก ORIGIN (air port) ก่อนบันทึกแถวใหม่"); setBusy(false); return }
+          if (!g("carrier").trim()) { alert("เลือก CARRIER (DHL / FedEx) ก่อนบันทึก"); setBusy(false); return }
+          const rates: Record<string, number> = {}
+          for (const b of COURIER_KG) { const v = e[kgKey(b)]; if (v !== undefined && v !== "") { const n = Number(v); if (!isNaN(n)) rates[kgKey(b)] = Math.round(n * EXCHANGE_RATE * 100) / 100 } }
+          await fetch(`/api/pull-material/courier-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ create: true, origin: g("origin"), country: g("country") || null, destination: g("destination") || "BKK", carrier: g("carrier"), rates }) })
+        }
+        await load()
+      } finally { setBusy(false) }
+      return
+    }
     // SEA = LONG format: each row's columns are plain fields → save them directly (no rates JSON).
     if (which === "sea") {
       try {
@@ -339,7 +359,7 @@ export default function PullRatesPage() {
         {isAdmin && (
           <div className="flex gap-2">
             {editCount > 0 && <button onClick={saveAll} disabled={busy} className="px-3 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 bg-green-600">💾 Save {editCount} row(s)</button>}
-            {tab !== "courier" && <button onClick={addRow} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-50">➕ เพิ่มแถว</button>}
+            <button onClick={addRow} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-50">➕ เพิ่มแถว</button>
             <label className="px-3 py-2 rounded-lg text-sm font-semibold border border-blue-300 text-blue-700 bg-white cursor-pointer hover:bg-blue-50">⬆ Import Excel
               <input type="file" accept=".xlsx,.xls" className="hidden" disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
             </label>
@@ -462,15 +482,27 @@ export default function PullRatesPage() {
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {courierRows.map(r => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r.origin || "-"}</td>
-                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.country || "-"}</td>
+                <tr key={r.id} className={`hover:bg-gray-50 ${r._new ? "bg-amber-50" : ""}`}>
+                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r._new
+                    ? <input value={fieldVal(r, "origin")} placeholder="ORIGIN*" onChange={e => setCell(r.id, "origin", e.target.value)} className="w-20 border border-gray-200 rounded px-1.5 py-0.5 text-xs" />
+                    : (r.origin || "-")}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
+                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r._new
+                    ? <input value={fieldVal(r, "country")} placeholder="country" onChange={e => setCell(r.id, "country", e.target.value)} className="w-24 border border-gray-200 rounded px-1.5 py-0.5 text-xs" />
+                    : (r.country || "-")}</td>
                   <td className="px-3 py-1.5">{r.destination}</td>
-                  <td className="px-3 py-1.5 font-medium whitespace-nowrap" style={{ color: MAROON }}>{r.carrier || "-"}</td>
-                  {COURIER_KG.map(b => <td key={b} className="px-2 py-1 text-right">{r.rates?.[kgKey(b)] != null ? fmt(Number(r.rates[kgKey(b)]) / EXCHANGE_RATE) : "-"}</td>)}
+                  <td className="px-3 py-1.5 font-medium whitespace-nowrap" style={{ color: MAROON }}>{r._new
+                    ? <select value={fieldVal(r, "carrier")} onChange={e => setCell(r.id, "carrier", e.target.value)} className="border border-gray-200 rounded px-1 py-0.5 text-xs"><option value="DHL">DHL</option><option value="FEDEX">FedEx</option></select>
+                    : (r.carrier || "-")}</td>
+                  {COURIER_KG.map(b => (
+                    <td key={b} className="px-2 py-1 text-right">
+                      {r._new
+                        ? <input type="number" value={cellVal(r, kgKey(b))} onChange={e => setCell(r.id, kgKey(b), e.target.value)} className={cellInp} title="ใส่เป็น USD" />
+                        : (r.rates?.[kgKey(b)] != null ? fmt(Number(r.rates[kgKey(b)]) / EXCHANGE_RATE) : "-")}
+                    </td>
+                  ))}
                 </tr>
               ))}
-              {courierRows.length === 0 && <tr><td colSpan={4 + COURIER_KG.length} className="px-3 py-10 text-center text-gray-400">No courier rates {courier.length === 0 && "— Import Excel ที่มีชีท COURIER"}</td></tr>}
+              {courierRows.length === 0 && <tr><td colSpan={4 + COURIER_KG.length} className="px-3 py-10 text-center text-gray-400">No courier rates {courier.length === 0 && "— กด ➕ เพิ่มแถว หรือ Import Excel ที่มีชีท COURIER"}</td></tr>}
             </tbody>
           </table>
         )}

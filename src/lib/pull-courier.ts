@@ -16,6 +16,18 @@ export function seaUsd(rows: any[], seaPort: string): { cost: number; container:
   return { cost: Number(best.rate), container: String(best.container || "LCL") }
 }
 
+// A Pull item is "No Master" only when it has NO rate in ANY mode — air, sea AND courier are all missing
+// for its port. If any single mode has a master rate, the item is considered covered.
+export function itemHasAnyRate(item: any, seaRows: any[], courierRows: any[], bu: any): boolean {
+  if (item?.airFreightCost != null) return true
+  const dest = destForBu(bu)
+  if (seaUsd(seaRows, item?.seaPort || item?.port)) return true
+  const wt = Number(item?.weight) || 0
+  if (courierUsd(courierRows, item?.port, dest, wt, "DHL") != null) return true
+  if (courierUsd(courierRows, item?.port, dest, wt, "FEDEX") != null) return true
+  return false
+}
+
 // Courier weight tiers (kg, ascending) — the price column is the TOTAL for a shipment up to that tier.
 const TIERS = [0.5, 1, 2, 3, 5, 10, 15, 20, 25, 30]
 

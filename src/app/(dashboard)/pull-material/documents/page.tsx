@@ -363,13 +363,14 @@ export default function Page() {
                     const dhl = courierUsd(courierRates, d0.port, cdest, cwt, "DHL")
                     const fedex = courierUsd(courierRates, d0.port, cdest, cwt, "FEDEX")
                     const rlink = (tab: string, port: any) => `/pull-material/rates?tab=${tab}&port=${encodeURIComponent(port || "")}&country=${encodeURIComponent(d0.country || "")}`
-                    // For air/sea "no master": deep-link that PRE-CREATES a draft row (port+country filled) → LG only fills the numbers.
+                    // For "no master": deep-link that PRE-CREATES a draft row (port+country filled) → LG only fills the numbers.
                     const addLink = (type: "air" | "sea", port: any) => `/pull-material/rates?prefill=${encodeURIComponent(JSON.stringify([{ type, country: d0.country || "", port: port || "" }]))}`
+                    const addCourier = (carrier: string) => `/pull-material/rates?prefill=${encodeURIComponent(JSON.stringify([{ type: "courier", country: d0.country || "", port: d0.port || "", carrier }]))}`
                     const modes = [
                       { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: estTotal || null, lt: d0.leadTimeAir || null, actual: actTotal || null, local: localCh, accent: "#6b1a1a", link: addLink("air", d0.port) },
                       { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: addLink("sea", d0.seaPort || d0.port) },
-                      { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: rlink("courier", d0.port), over: cwt > 30 },
-                      { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed", link: rlink("courier", d0.port), over: cwt > 30 },
+                      { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: addCourier("DHL"), over: cwt > 30 },
+                      { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed", link: addCourier("FEDEX"), over: cwt > 30 },
                     ]
                     const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
                     const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
