@@ -57,13 +57,13 @@ export default function Page() {
   // Target stage depends on where it came from: SCM request → SCM decision; PC request → DPM (VP Purchasing).
   const forwardApproval = async (rq: any) => {
     const next = (rq.requestType || "SCM") === "SCM" ? "PENDING_SCM_DECISION" : "PENDING_VP_PUR"
-    if (!confirm(`ส่งต่อ ${rq.documentNo}?\nระบบจะเช็คว่ามี rate อย่างน้อย 1 mode (air/sea/courier) ก่อน`)) return
+    if (!confirm(`Save ${rq.documentNo}?\nระบบจะเช็คว่ามี rate อย่างน้อย 1 mode (air/sea/courier) — ถ้าครบจะเด้งไป Approval ให้อัตโนมัติ`)) return
     setBusy(true)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: next }) })
       const d = await r.json().catch(() => ({}))
-      if (r.ok) { setOpenId(null); await load(); alert("✅ ส่งต่อ Approval แล้ว") }
-      else alert(d.error || "ส่งต่อไม่สำเร็จ")
+      if (r.ok) { setOpenId(null); await load(); alert("✅ บันทึกแล้ว — เด้งไป Approval เรียบร้อย") }
+      else alert(d.error || "บันทึกไม่สำเร็จ (ยังไม่มี rate?)")
     } finally { setBusy(false) }
   }
 
@@ -299,8 +299,8 @@ export default function Page() {
               </div>
               <div className="flex gap-2 shrink-0">
                 {rq.status === "PENDING_LG_RATE" && (
-                  <button onClick={() => forwardApproval(rq)} disabled={busy} title="เติม rate ครบแล้ว → ส่งต่อ Approval"
-                    className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#16a34a" }}>{busy ? "…" : "🚀 ส่งต่อ Approval"}</button>
+                  <button onClick={() => forwardApproval(rq)} disabled={busy} title="เติม rate ครบแล้ว → Save แล้วเด้งไป Approval"
+                    className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#16a34a" }}>{busy ? "…" : "💾 Save"}</button>
                 )}
                 <button onClick={() => recompute(rq)} disabled={recomputing} title="คำนวณ freight ใหม่ (dest by BU + origin cost)"
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-50">{recomputing ? "…" : "🔄 Recompute"}</button>
@@ -425,42 +425,48 @@ export default function Page() {
                 </div>
               </div>
 
-              {/* LG entry — HAWB / INV / Actual (once per doc) */}
+              {/* LG entry — HAWB / INV / Actual (once per doc). LOCKED (grey) while No Master: LG must fill
+                  the rate + Save (→ Approval) first; actual is entered later after the doc is approved. */}
+              {(() => { const locked = rq.status === "PENDING_LG_RATE"; return (
               <div className="space-y-4">
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                  <div className="text-sm font-bold text-gray-800 mb-3">Logistics — Actual</div>
-                  <div className="space-y-3">
+                <div className={`bg-white rounded-2xl border shadow-sm p-5 ${locked ? "border-gray-200 bg-gray-50" : "border-gray-100"}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-sm font-bold text-gray-800">Logistics — Actual</div>
+                    {locked && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 font-semibold">🔒 เติม rate ก่อน</span>}
+                  </div>
+                  <div className={`space-y-3 ${locked ? "opacity-50 pointer-events-none select-none" : ""}`}>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">HAWB NO</label>
-                      <input value={raw(rq, "hawbNo")} onChange={e => setVal(rq.id, "hawbNo", e.target.value)} placeholder="HAWB…" className={inp} /></div>
+                      <input disabled={locked} value={raw(rq, "hawbNo")} onChange={e => setVal(rq.id, "hawbNo", e.target.value)} placeholder="HAWB…" className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">MAWB NO</label>
-                      <input value={raw(rq, "mawbNo")} onChange={e => setVal(rq.id, "mawbNo", e.target.value)} placeholder="MAWB…" className={inp} /></div>
+                      <input disabled={locked} value={raw(rq, "mawbNo")} onChange={e => setVal(rq.id, "mawbNo", e.target.value)} placeholder="MAWB…" className={inp} /></div>
                     <div className="grid grid-cols-2 gap-3">
                       <div><label className="text-[11px] font-semibold text-green-700 block mb-1">FLIGHT ETD</label>
-                        <input type="date" value={rawDate(rq, "flightEtd")} onChange={e => setVal(rq.id, "flightEtd", e.target.value)} className={inp} /></div>
+                        <input disabled={locked} type="date" value={rawDate(rq, "flightEtd")} onChange={e => setVal(rq.id, "flightEtd", e.target.value)} className={inp} /></div>
                       <div><label className="text-[11px] font-semibold text-green-700 block mb-1">FLIGHT ETA</label>
-                        <input type="date" value={rawDate(rq, "flightEta")} onChange={e => setVal(rq.id, "flightEta", e.target.value)} className={inp} /></div>
+                        <input disabled={locked} type="date" value={rawDate(rq, "flightEta")} onChange={e => setVal(rq.id, "flightEta", e.target.value)} className={inp} /></div>
                     </div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">ACTUAL AIR FREIGHT <span className="text-red-500">*</span></label>
-                      <input type="number" value={raw(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} /></div>
+                      <input disabled={locked} type="number" value={raw(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">LOCAL CHARGE (TH)</label>
-                      <input type="number" value={raw(rq, "localChargeTh")} onChange={e => setVal(rq.id, "localChargeTh", e.target.value)} placeholder="0" className={inp} /></div>
+                      <input disabled={locked} type="number" value={raw(rq, "localChargeTh")} onChange={e => setVal(rq.id, "localChargeTh", e.target.value)} placeholder="0" className={inp} /></div>
                   </div>
                   <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
                     <span className={estTotal ? "text-gray-500" : "text-amber-600 font-medium"}>{estTotal ? `Est ${fmt(estTotal)} USD` : "⚠️ ไม่มี rate — เพิ่ม Master Rate"}</span>
                     {actTotal > 0 && <span className={`px-2 py-0.5 rounded-full font-medium ${diff > 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{diff > 0 ? "▲" : "▼"} {fmt(Math.abs(diff))}</span>}
                   </div>
-                  <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className={`mt-3 pt-3 border-t border-gray-100 ${locked ? "opacity-50 pointer-events-none select-none" : ""}`}>
                     <label className="text-[11px] font-semibold text-green-700 block mb-1">แนบไฟล์ (HAWB / INV / เอกสาร — แนบได้หลายไฟล์)</label>
-                    <input type="file" multiple disabled={uploading === rq.id}
+                    <input type="file" multiple disabled={locked || uploading === rq.id}
                       onChange={e => { uploadAtt(rq, e.target.files); e.currentTarget.value = "" }}
                       className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100 disabled:opacity-50" />
                     {uploading === rq.id
                       ? <p className="text-[11px] text-gray-400 mt-1">กำลังอัปโหลด…</p>
                       : (rq.attachments || []).length > 0 && <p className="text-[11px] text-gray-400 mt-1">แนบแล้ว {rq.attachments.length} ไฟล์ (ดูรายการด้านบน)</p>}
                   </div>
-                  <p className="mt-2 text-[11px] text-gray-400">กรอกครั้งเดียวต่อเอกสาร · Save แล้วกด “Preview PDF” เพื่อออกเอกสาร</p>
+                  <p className="mt-2 text-[11px] text-gray-400">{locked ? "🔒 เอกสารนี้ยังไม่มี rate — เติม Master Rate แล้วกด 💾 Save (มุมขวาบน) เพื่อเด้งไป Approval ก่อน แล้วจึงกลับมากรอก Actual ทีหลัง" : "กรอกครั้งเดียวต่อเอกสาร · Save แล้วกด “Preview PDF” เพื่อออกเอกสาร"}</p>
                 </div>
               </div>
+              )})()}
             </div>
           </div>
         )
