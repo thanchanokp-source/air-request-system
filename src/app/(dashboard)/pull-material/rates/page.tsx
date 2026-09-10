@@ -161,8 +161,40 @@ export default function PullRatesPage() {
       return { rows, breaks: Object.keys(breakCols), extras, hasId: iOrigin >= 0 }
     }
 
+    // SEA sheet is LONG format: COUNTRY / PORT OF DISCHARGE / CONTAINER / FREIGHT RATE (USD) — one row
+    // per container type → pivot into rates { 40GP, 20GP, LCL } grouped by (country, port).
+    const parseSeaLong = (): Parsed | null => {
+      const sheetName = sheetByName("SEA RATE")
+      if (!sheetName) return null
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: "" }) as any[][]
+      const hIdx = aoa.findIndex(row => row.some(c => norm(c).includes("PORT")))
+      if (hIdx < 0) return { rows: [], breaks: [], extras: [], hasId: false }
+      const H = aoa[hIdx].map(norm)
+      const iPort = H.findIndex(h => h.includes("PORT OF DISCHARGE")) >= 0 ? H.findIndex(h => h.includes("PORT OF DISCHARGE")) : H.findIndex(h => h.includes("PORT"))
+      const iCountry = H.findIndex(h => h.includes("COUNTRY"))
+      const iCtr = H.findIndex(h => h.includes("CONTAINER"))
+      const iRate = H.findIndex(h => h.includes("FREIGHT RATE")) >= 0 ? H.findIndex(h => h.includes("FREIGHT RATE")) : H.findIndex(h => h.includes("RATE"))
+      const iRemarks = H.findIndex(h => h.includes("REMARK"))
+      if (iPort < 0 || iCtr < 0 || iRate < 0) return { rows: [], breaks: [], extras: [], hasId: iPort >= 0 }
+      const ctKey = (v: string) => { const u = norm(v).replace(/['\s]/g, ""); if (u.includes("40")) return "40GP"; if (u.includes("20")) return "20GP"; if (u.includes("LCL") || u.includes("CBM")) return "LCL"; return "" }
+      const byPort = new Map<string, any>()
+      for (let r = hIdx + 1; r < aoa.length; r++) {
+        const row = aoa[r]; if (!row) continue
+        const port = String(row[iPort] ?? "").trim(); if (!port) continue
+        const ck = ctKey(String(row[iCtr] ?? "")); if (!ck) continue
+        const country = iCountry >= 0 ? String(row[iCountry] ?? "").trim() : ""
+        const key = `${country}||${port}`
+        const e = byPort.get(key) || { country: country || null, port, leadTime: null, rates: {} as Record<string, any>, remarks: iRemarks >= 0 ? row[iRemarks] : null }
+        const rate = Number(row[iRate]); if (!isNaN(rate) && row[iRate] !== "") e.rates[ck] = rate
+        byPort.set(key, e)
+      }
+      const rows = [...byPort.values()]
+      const breaks = [...new Set(rows.flatMap((r: any) => Object.keys(r.rates)))]
+      return { rows, breaks, extras: [], hasId: true }
+    }
+
     const air = parse(sheetByName("AIR RATE"), true)
-    const sea = parse(sheetByName("SEA RATE"), false)
+    const sea = parseSeaLong()
     const cour = parseCourier()
     if (!air && !sea && !cour) return alert('ไม่พบชีท "AIR RATE" / "SEA RATE" / "COURIER" ในไฟล์')
 
