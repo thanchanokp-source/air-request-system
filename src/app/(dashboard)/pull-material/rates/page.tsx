@@ -177,6 +177,7 @@ export default function PullRatesPage() {
       const iCtr = first(h => h.includes("CONTAINER"), h => h.includes("CONT"), h => h === "CTR", h => h.includes("SIZE"), h => h.includes("TYPE"))
       const iRate = first(h => h.includes("FREIGHT RATE"), h => h.includes("RATE"), h => h.includes("USD"))
       const iRemarks = H.findIndex(h => h.includes("REMARK"))
+      seaDbg = `หัวคอลัมน์ SEA ที่อ่านได้:\n${JSON.stringify(aoa[hIdx])}\n\nจับได้: PORT=col${iPort} · CONTAINER=col${iCtr} · RATE=col${iRate}\nตัวอย่างแถวแรก: CONTAINER=${JSON.stringify(iCtr >= 0 ? aoa[hIdx + 1]?.[iCtr] : "?")} · RATE=${JSON.stringify(iRate >= 0 ? aoa[hIdx + 1]?.[iRate] : "?")}`
       if (iPort < 0 || iCtr < 0 || iRate < 0) return { rows: [], breaks: [], extras: [], hasId: iPort >= 0 }
       const ctKey = (v: string) => { const u = norm(v).replace(/['\s]/g, ""); if (u.includes("40")) return "40GP"; if (u.includes("20")) return "20GP"; if (u.includes("LCL") || u.includes("CBM")) return "LCL"; return "" }
       const byPort = new Map<string, any>()
@@ -195,6 +196,7 @@ export default function PullRatesPage() {
       return { rows, breaks, extras: [], hasId: true }
     }
 
+    let seaDbg = ""
     const air = parse(sheetByName("AIR RATE"), true)
     // SEA: try the LONG format first (one row per container), fall back to the WIDE format (40'GP/20'GP/LCL cols).
     let sea = parseSeaLong()
@@ -215,7 +217,8 @@ export default function PullRatesPage() {
     const willAir = ok(air), willSea = ok(sea), willCour = ok(cour)
     if (!willAir && !willSea && !willCour) return alert(`ไม่ได้แทนที่อะไรเลย — ตรวจหัวคอลัมน์ในไฟล์:\n\n${report("AIR", air)}\n${report("SEA", sea)}\n${report("COURIER", cour)}`)
 
-    const summary = `${report("AIR", air)}\n${report("SEA", sea)}\n${report("COURIER", cour)}\n\nจะ “แทนที่” เฉพาะชีทที่ ✓ (ค่าเดิมของชีทนั้นถูกเขียนทับ)\nกด Backup ไว้ก่อนถ้าต้องการ · ดำเนินการต่อ?`
+    const seaDebugMsg = !willSea && seaDbg ? `\n\n🔍 DEBUG SEA:\n${seaDbg}` : ""
+    const summary = `${report("AIR", air)}\n${report("SEA", sea)}\n${report("COURIER", cour)}${seaDebugMsg}\n\nจะ “แทนที่” เฉพาะชีทที่ ✓ (ค่าเดิมของชีทนั้นถูกเขียนทับ)\nกด Backup ไว้ก่อนถ้าต้องการ · ดำเนินการต่อ?`
     if (!confirm(summary)) return
     setBusy(true)
     try {
