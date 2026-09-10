@@ -371,8 +371,8 @@ export default function Page() {
                     const modes = [
                       { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: estTotal || null, lt: d0.leadTimeAir || null, actual: actTotal || null, local: localCh, accent: "#6b1a1a", link: addLink("air", d0.port) },
                       { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: addLink("sea", d0.seaPort || d0.port) },
-                      { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: addCourier("DHL"), over: cwt > 30 },
-                      { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed", link: addCourier("FEDEX"), over: cwt > 30 },
+                      { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: addCourier("DHL"), over: cwt > 45 },
+                      { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed", link: addCourier("FEDEX"), over: cwt > 45 },
                     ]
                     const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
                     const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
@@ -391,7 +391,7 @@ export default function Page() {
                                 <div className="space-y-1 text-[11px]">
                                   <div className="flex justify-between"><span className="text-gray-400">Freight</span><span className="font-medium text-gray-700">{money(m.freight)}</span></div>
                                   <div className="flex justify-between"><span className="text-gray-400">Incoterm</span><span className="font-medium text-gray-700">{money(m.inco)}</span></div>
-                                  <div className="flex justify-between border-t border-gray-100 pt-1"><span className="text-gray-500 font-semibold">Total Freight</span>{m.total != null ? <span className="font-bold text-gray-900">{fmt(m.total)}</span> : (m as any).over ? <span className="text-gray-400 text-[10px]">&gt; 30kg</span> : <a href={m.link} className="text-amber-600 text-[10px] font-semibold underline hover:text-amber-700" title="ไปเพิ่ม rate ในหน้า Master Rate">no master → เพิ่ม</a>}</div>
+                                  <div className="flex justify-between border-t border-gray-100 pt-1"><span className="text-gray-500 font-semibold">Total Freight</span>{m.total != null ? <span className="font-bold text-gray-900">{fmt(m.total)}</span> : (m as any).over ? <span className="text-gray-400 text-[10px]">&gt; 45kg</span> : <a href={m.link} className="text-amber-600 text-[10px] font-semibold underline hover:text-amber-700" title="ไปเพิ่ม rate ในหน้า Master Rate">no master → เพิ่ม</a>}</div>
                                   <div className="flex justify-between"><span className="text-gray-400">L/T</span><span className="font-medium text-gray-700">{m.lt || <span className="text-gray-300">–</span>}</span></div>
                                   <div className="flex justify-between"><span className="text-gray-400">Actual Air</span><span className="font-medium text-gray-700">{money(m.actual)}</span></div>
                                   <div className="flex justify-between"><span className="text-gray-400">Local Charge (TH)</span><span className="font-medium text-gray-700">{money(m.local)}</span></div>
