@@ -15,11 +15,21 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json()
   if (body.create) {
     if (!body.port) return NextResponse.json({ error: "port required" }, { status: 400 })
-    const row = await (prisma as any).pullFreightSea.create({ data: { country: body.country || null, port: String(body.port).trim(), container: body.container || null, rate: numOrNull(body.rate) } })
+    const row = await (prisma as any).pullFreightSea.create({ data: {
+      country: body.country || null, forwarder: body.forwarder || null, port: String(body.port).trim(),
+      container: body.container || null, rate: numOrNull(body.rate), unit: body.unit || null, remarks: body.remarks || null,
+    } })
     return NextResponse.json({ ok: true, row })
   }
   if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 })
-  const row = await (prisma as any).pullFreightSea.update({ where: { id: body.id }, data: { rate: numOrNull(body.rate) } })
+  // Update whichever LONG fields were sent (rate normalized; text fields kept as-is / nulled when blank).
+  const data: any = {}
+  if (body.rate !== undefined) data.rate = numOrNull(body.rate)
+  for (const k of ["country", "forwarder", "port", "container", "unit", "remarks"]) {
+    if (body[k] !== undefined) data[k] = String(body[k]).trim() === "" ? null : String(body[k]).trim()
+  }
+  if (!Object.keys(data).length) return NextResponse.json({ error: "nothing to update" }, { status: 400 })
+  const row = await (prisma as any).pullFreightSea.update({ where: { id: body.id }, data })
   return NextResponse.json({ ok: true, row })
 }
 

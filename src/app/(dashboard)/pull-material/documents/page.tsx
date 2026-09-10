@@ -19,6 +19,7 @@ export default function Page() {
   const [previewName, setPreviewName] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [lgTab, setLgTab] = useState<"actual" | "nomaster">("actual")
   // edits[docId] = { hawbNo, mawbNo, invoiceNo, actualAir } — ONE set per document (1 shipment / 1 doc).
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
   const [uploading, setUploading] = useState("")
@@ -30,6 +31,7 @@ export default function Page() {
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRates(d.rows || [])).catch(() => {})
   }, [])
   const [recomputing, setRecomputing] = useState(false)
+  const [backfilling, setBackfilling] = useState(false)
   const recompute = async (rq: any) => {
     setRecomputing(true)
     try {
@@ -37,6 +39,18 @@ export default function Page() {
       if (r.ok) await load()
       else { const d = await r.json().catch(() => ({})); alert(d.error || "recompute failed") }
     } finally { setRecomputing(false) }
+  }
+
+  // Admin: pull EVERY doc still missing an Air rate back to LG (PENDING_LG_RATE) + email LG.
+  const backfill = async () => {
+    if (!confirm("ดึงเอกสารทั้งหมดที่ยังไม่มี Air rate กลับมาให้ LG เติม (PENDING_LG_RATE) + ส่งอีเมลแจ้ง LG?\n\nระบบจะ recompute ก่อน — เอกสารที่ master มี rate แล้วจะไม่ถูกดึงกลับ")) return
+    setBackfilling(true)
+    try {
+      const r = await fetch(`/api/pull-material/backfill-lg-rate`, { method: "POST" })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) { await load(); alert(`✅ ดึงกลับ ${d.count} เอกสาร${d.count ? ":\n" + (d.docs || []).join("\n") : " (ไม่มีเอกสารที่ขาด rate)"}`) }
+      else alert(d.error || "backfill ไม่สำเร็จ")
+    } finally { setBackfilling(false) }
   }
 
   // Forward a PENDING_LG_RATE doc to approval (server re-checks every line has an air rate).
@@ -178,21 +192,43 @@ export default function Page() {
   const inp = "border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
   const Info = ({ label, value }: { label: string; value: any }) => <div><div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div><div className="text-gray-800 text-sm">{value || "-"}</div></div>
   const openReq = reqs.find(r => r.id === openId)
-  const shown = reqs.filter(r => typeF === "ALL" || (r.requestType || "SCM") === typeF)
+  // Two LG tabs: "actual" = approved docs waiting for actual air entry; "nomaster" = docs still missing Air rate.
+  const inTab = (r: any) => lgTab === "nomaster" ? r.status === "PENDING_LG_RATE" : r.status !== "PENDING_LG_RATE"
+  const nNoMaster = reqs.filter(r => r.status === "PENDING_LG_RATE").length
+  const nActual = reqs.length - nNoMaster
+  const shown = reqs.filter(r => inTab(r) && (typeF === "ALL" || (r.requestType || "SCM") === typeF))
 
   return (
     <div className="p-5 md:p-8 max-w-[1100px] mx-auto space-y-4">
-      <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Logistics Document — Pull Material</h1>
-        <p className="text-sm text-gray-400 mt-0.5">เอกสารที่อนุมัติแล้ว — LG กรอก Actual Air / INV / HAWB ครั้งเดียวต่อเอกสาร แล้ว Save + ดาวน์โหลด PDF</p></div>
+      <div className="flex items-start justify-between gap-3">
+        <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Logistics Document — Pull Material</h1>
+          <p className="text-sm text-gray-400 mt-0.5">เอกสารที่อนุมัติแล้ว — LG กรอก Actual Air / INV / HAWB ครั้งเดียวต่อเอกสาร แล้ว Save + ดาวน์โหลด PDF</p></div>
+        {isAdmin && !openReq && (
+          <button onClick={backfill} disabled={backfilling}
+            className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+            style={{ background: MAROON }} title="ดึงเอกสารที่ยังไม่มี Air rate กลับมาให้ LG เติม + แจ้งอีเมล">
+            {backfilling ? "กำลังดึง…" : "🔄 ดึงเอกสารที่ไม่มี rate กลับมา"}
+          </button>
+        )}
+      </div>
 
       {!openReq && (
         <>
+          <div className="flex gap-2 border-b border-gray-200">
+            {([["actual", "📥 รอกรอก Actual", nActual], ["nomaster", "⚠️ No Master", nNoMaster]] as const).map(([v, label, n]) => (
+              <button key={v} onClick={() => { setLgTab(v); setOpenId(null) }}
+                className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${lgTab === v ? "" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+                style={lgTab === v ? { color: v === "nomaster" ? "#b91c1c" : MAROON, borderColor: v === "nomaster" ? "#b91c1c" : MAROON } : undefined}>
+                {label} <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[11px] ${v === "nomaster" && n > 0 ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-500"}`}>{n}</span>
+              </button>
+            ))}
+          </div>
           <div className="flex gap-1.5">{["ALL", ...BUS].map(b => (
             <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: b === "ALL" ? MAROON : buColor(b) } : undefined}>{b === "ALL" ? "ALL BU" : b}</button>
           ))}</div>
           <div className="flex gap-1.5">
             {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "PC request"]] as const).map(([v, label]) => {
-              const n = v === "ALL" ? reqs.length : reqs.filter(r => (r.requestType || "SCM") === v).length
+              const n = reqs.filter(r => inTab(r) && (v === "ALL" || (r.requestType || "SCM") === v)).length
               return (
                 <button key={v} onClick={() => setTypeF(v)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${typeF === v ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
@@ -202,7 +238,7 @@ export default function Page() {
           </div>
 
           {loading ? <p className="text-sm text-gray-400">Loading…</p> :
-            shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">No approved documents</div> :
+            shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">{lgTab === "nomaster" ? "ไม่มีเอกสารที่รอเติม Air rate 🎉" : "ไม่มีเอกสารที่รอกรอก Actual"}</div> :
               <div className="space-y-2.5">
                 {shown.map(rq => {
                   const estTotal = rq.items.reduce((sm: number, i: any) => sm + (Number(i.airFreightCost) || 0), 0)
@@ -270,8 +306,10 @@ export default function Page() {
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">{pdfing ? "…" : "🔍 Preview PDF"}</button>
                 <button onClick={() => exportExcel(rq)} disabled={exporting}
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">{exporting ? "…" : "📊 Export Excel (ราย PO)"}</button>
-                <button onClick={() => save(rq)} disabled={busy}
-                  className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>{busy ? "…" : "💾 Save"}</button>
+                {rq.status !== "PENDING_LG_RATE" && (
+                  <button onClick={() => save(rq)} disabled={busy}
+                    className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>{busy ? "…" : "💾 Save"}</button>
+                )}
               </div>
             </div>
 
@@ -325,9 +363,11 @@ export default function Page() {
                     const dhl = courierUsd(courierRates, d0.port, cdest, cwt, "DHL")
                     const fedex = courierUsd(courierRates, d0.port, cdest, cwt, "FEDEX")
                     const rlink = (tab: string, port: any) => `/pull-material/rates?tab=${tab}&port=${encodeURIComponent(port || "")}&country=${encodeURIComponent(d0.country || "")}`
+                    // For air/sea "no master": deep-link that PRE-CREATES a draft row (port+country filled) → LG only fills the numbers.
+                    const addLink = (type: "air" | "sea", port: any) => `/pull-material/rates?prefill=${encodeURIComponent(JSON.stringify([{ type, country: d0.country || "", port: port || "" }]))}`
                     const modes = [
-                      { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: estTotal || null, lt: d0.leadTimeAir || null, actual: actTotal || null, local: localCh, accent: "#6b1a1a", link: rlink("air", d0.port) },
-                      { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: rlink("sea", d0.seaPort || d0.port) },
+                      { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: estTotal || null, lt: d0.leadTimeAir || null, actual: actTotal || null, local: localCh, accent: "#6b1a1a", link: addLink("air", d0.port) },
+                      { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: addLink("sea", d0.seaPort || d0.port) },
                       { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: rlink("courier", d0.port), over: cwt > 30 },
                       { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed", link: rlink("courier", d0.port), over: cwt > 30 },
                     ]

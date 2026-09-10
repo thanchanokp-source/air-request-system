@@ -4,11 +4,18 @@ import { runWithTestMail } from "@/lib/test-ctx"
 import { magicLoginFor } from "@/lib/notify"
 import { pcApprover } from "@/lib/pull-approvers"
 
+// Extra LG recipients to always alert on LG stages (fill Master rate / actual air), on top of every
+// LOGISTICS_IMPORT user. Shared worklist: whoever fills the rate/actual first, the doc drops for the others.
+const LG_ALERT_EXTRA = ["krittamet.h@nanyangtextile.com"]
+const LG_STAGES = new Set(["PENDING_LG_RATE", "PENDING_LOGISTICS", "APPROVED"])
+const APP_URL = process.env.APP_URL || process.env.NEXTAUTH_URL || ""
+
 // Per-stage recipient config for the Pull Material flow. Each entry = who to alert when a doc REACHES
 // that status, and where their magic link should land. Covers BOTH branches (SCM / PC).
 const STAGE: Record<string, { roles: string[]; redirect: string; title: string; cta: string }> = {
   PENDING_PURCHASING:   { roles: ["PURCHASING"],       redirect: "/pull-material/purchase",  title: "new request for Purchasing — fill Country / Port / Incoterm / Weight", cta: "Open Purchase queue" },
   PENDING_LOGISTICS:    { roles: ["LOGISTICS_IMPORT"], redirect: "/pull-material/logistics", title: "ready for Logistics — enter freight (Air rate / In-House date)", cta: "Open Logistics queue" },
+  PENDING_LG_RATE:      { roles: ["LOGISTICS_IMPORT"], redirect: "/pull-material/documents",  title: "รอ LG เติม Air rate — port นี้ยังไม่มีใน Master Rate (ต้องเติมก่อนส่ง Approval)", cta: "Open LOGISTICS" },
   PENDING_SCM_DECISION: { roles: ["SCM_PULL"],         redirect: "/pull-material/request?tab=approve", title: "ready for SCM — confirm which lines go by AIR", cta: "Open SCM decision" },
   PENDING_PC_DECISION:  { roles: ["PURCHASING"],       redirect: "/pull-material/request?tab=approve", title: "ready for Purchase — decide which lines go by AIR", cta: "Open PC decision" },
   PENDING_DVM_SCM:      { roles: ["PULL_DVM_SCM"],      redirect: "/pull-material/approval",  title: "pending your approval — DVM SCM", cta: "Open Approval" },
@@ -24,6 +31,7 @@ const STAGE: Record<string, { roles: string[]; redirect: string; title: string; 
 const PULL_STATUS_LABEL: Record<string, string> = {
   PENDING_PURCHASING: "Pending Purchasing",
   PENDING_LOGISTICS: "Pending Logistics",
+  PENDING_LG_RATE: "รอ LG เติม Air rate",
   PENDING_SCM_DECISION: "Pending SCM Decision",
   PENDING_PC_DECISION: "Pending Purchase Decision",
   PENDING_DVM_SCM: "Pending Approval",
@@ -114,7 +122,7 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
     }
     // 2) Logistics alert (fill the actual air freight) — magic link to the LG page.
     const lgUsers = await (prisma.user as any).findMany({
-      where: { isActive: true, OR: [{ role: "LOGISTICS_IMPORT" }, { roles: { has: "LOGISTICS_IMPORT" } }] },
+      where: { isActive: true, OR: [{ role: "LOGISTICS_IMPORT" }, { roles: { has: "LOGISTICS_IMPORT" } }, { email: { in: LG_ALERT_EXTRA, mode: "insensitive" } }] },
       select: { id: true, email: true },
     })
     const seenLg = new Set<string>()
@@ -126,6 +134,8 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
         const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText: "Approved · Logistics — enter actual air freight", fields: docFields, cta: "Open Logistics Document", link })
         await sendMail([u.email], `[Pull Material] Approved · enter actual — ${rq.documentNo}`, html).catch(() => {})
       }
+      // Extra LG emails not matched to a registered user → plain login link.
+      await sendExtraLgAlerts(seenLg, rq, docFields, "Approved · Logistics — enter actual air freight", "Open Logistics Document")
     }).catch(() => {})
     return
   }
@@ -133,10 +143,11 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
   if (!cfg) { console.log(`[pull-notify] no STAGE config for status=${status} (${rq.documentNo})`); return }
   // PC approval (PENDING_VP_PUR) = a SINGLE approver routed by BU → email only that person.
   const pcTo = status === "PENDING_VP_PUR" ? pcApprover(rq.bu) : null
+  const withExtra = !pcTo && LG_STAGES.has(status)
   const users = await (prisma.user as any).findMany({
     where: pcTo
       ? { isActive: true, email: { equals: pcTo, mode: "insensitive" } }
-      : { isActive: true, OR: [{ role: { in: cfg.roles } }, { roles: { hasSome: cfg.roles } }] },
+      : { isActive: true, OR: [{ role: { in: cfg.roles } }, { roles: { hasSome: cfg.roles } }, ...(withExtra ? [{ email: { in: LG_ALERT_EXTRA, mode: "insensitive" } }] : [])] },
     select: { id: true, email: true },
   })
   const seen = new Set<string>()
@@ -152,7 +163,20 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
       const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText, fields: docFields, cta: cfg.cta, link })
       await sendMail([u.email], `[Pull Material] ${statusText} — ${rq.documentNo}`, html).catch(() => {})
     }
+    if (withExtra) await sendExtraLgAlerts(seen, rq, docFields, statusText, cfg.cta, cfg.redirect)
   }).catch(() => {})
+}
+
+// Send the LG alert to any LG_ALERT_EXTRA email NOT already covered by a registered recipient
+// (i.e. not yet a user, so no magic link) — plain login link to the page instead.
+async function sendExtraLgAlerts(seen: Set<string>, rq: any, docFields: any[], statusText: string, cta: string, redirect = "/pull-material/documents"): Promise<void> {
+  const link = APP_URL ? `${APP_URL}${redirect}` : redirect
+  for (const email of LG_ALERT_EXTRA) {
+    if (seen.has(email.toLowerCase())) continue
+    seen.add(email.toLowerCase())
+    const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText, fields: docFields, cta, link })
+    await sendMail([email], `[Pull Material] ${statusText} — ${rq.documentNo}`, html).catch(() => {})
+  }
 }
 
 // Back-compat: the old LG-only helper now delegates to the generic stage notifier.

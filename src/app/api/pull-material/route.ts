@@ -35,10 +35,11 @@ export async function POST(req: NextRequest) {
   if (!requesterName) return NextResponse.json({ error: "requesterName required" }, { status: 400 })
   if (items.length === 0) return NextResponse.json({ error: "no items selected" }, { status: 400 })
 
-  // Doc no: PULL_<BU>_YYMM_<seq>
+  // Doc no: <FAMILY>_<BU>_YYMM_<seq> — SCM-keyed docs use SCM_ prefix, Purchase-keyed keep PULL_.
   const now = new Date()
   const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, "0")}`
-  const prefix = `PULL_${bu}_${yymm}_`
+  const family = requestType === "SCM" ? "SCM" : "PULL"
+  const prefix = `${family}_${bu}_${yymm}_`
   const last = await (prisma as any).pullMaterialRequest.findFirst({
     where: { documentNo: { startsWith: prefix } },
     orderBy: { documentNo: "desc" },

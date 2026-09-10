@@ -43,7 +43,7 @@ export default function PullRatesPage() {
         try {
           const list = JSON.parse(raw) as any[]
           const airNew = list.filter(x => x.type === "air" && x.port).map((x, i) => ({ id: `new_air_${i}`, _new: true, origin: x.port, country: x.country || null, destination: "BKK", fwd: null, airline: null, tt: null, rates: {} }))
-          const seaNew = list.filter(x => x.type === "sea" && x.port).map((x, i) => ({ id: `new_sea_${i}`, _new: true, country: x.country || null, port: x.port, rates: {} }))
+          const seaNew = list.filter(x => x.type === "sea" && x.port).map((x, i) => ({ id: `new_sea_${i}`, _new: true, country: x.country || null, forwarder: null, port: x.port, container: "LCL", rate: null, unit: null, remarks: null }))
           if (airNew.length) airRows = [...airNew, ...airRows]
           if (seaNew.length) seaRows = [...seaNew, ...seaRows]
           if (seaNew.length && !airNew.length) setTab("sea"); else if (airNew.length) setTab("air")
@@ -253,6 +253,16 @@ export default function PullRatesPage() {
   // Row-level fields (not inside the rates JSON): origin cost per incoterm.
   const FIELD_KEYS = ["origCostExw", "origCostFca"]
   const fieldVal = (row: any, k: string) => edits[row.id]?.[k] ?? (row[k] != null ? String(row[k]) : "")
+  // SEA is LONG format — each column is a plain row field (no rates JSON). Edits stored per key.
+  const SEA_KEYS = ["country", "forwarder", "port", "container", "rate", "unit", "remarks"]
+  const seaVal = (row: any, k: string) => edits[row.id]?.[k] ?? (row[k] != null ? String(row[k]) : "")
+
+  // Insert a blank draft row for the current tab (LG adds a missing port manually).
+  const addRow = () => {
+    const id = `new_${tab}_${Date.now()}`
+    if (tab === "air") setAir(p => [{ id, _new: true, origin: "", country: null, destination: "BKK", fwd: null, airline: null, tt: null, rates: {} }, ...p])
+    else if (tab === "sea") setSea(p => [{ id, _new: true, country: null, forwarder: null, port: "", container: "LCL", rate: null, unit: null, remarks: null }, ...p])
+  }
 
   const saveAll = async () => {
     const which = tab
@@ -261,20 +271,40 @@ export default function PullRatesPage() {
     const editedIds = Object.keys(edits).filter(id => !String(id).startsWith("new_"))
     if (!newRows.length && !editedIds.length) return
     setBusy(true)
+    // SEA = LONG format: each row's columns are plain fields → save them directly (no rates JSON).
+    if (which === "sea") {
+      try {
+        for (const nr of newRows) {
+          const e = edits[nr.id] || {}
+          const g = (k: string) => e[k] ?? (nr[k] != null ? String(nr[k]) : "")
+          if (!g("port").trim()) { alert("กรอก PORT ก่อนบันทึกแถวใหม่"); setBusy(false); return }
+          await fetch(`/api/pull-material/sea-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ create: true, country: g("country") || null, forwarder: g("forwarder") || null, port: g("port"), container: g("container") || null, rate: g("rate"), unit: g("unit") || null, remarks: g("remarks") || null }) })
+        }
+        await Promise.all(editedIds.map(id => {
+          const e = edits[id]; const payload: any = { id }
+          for (const k of SEA_KEYS) if (e[k] !== undefined) payload[k] = e[k]
+          return fetch(`/api/pull-material/sea-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        }))
+        await load()
+      } finally { setBusy(false) }
+      return
+    }
+    // AIR (sea returns above): split an edits bag into rate breaks vs row-level fields (EXW/FCA cost + meta).
+    const META_KEYS = ["origin", "country", "destination", "fwd", "airline", "tt"]
     try {
-      // Split an edits[id] bag into rate-break edits vs row-level field edits (EXW/FCA cost).
       const split = (e: Record<string, string> = {}) => {
         const rates: Record<string, string> = {}, fields: Record<string, string> = {}
-        for (const [k, v] of Object.entries(e)) (FIELD_KEYS.includes(k) ? fields : rates)[k] = v
+        for (const [k, v] of Object.entries(e)) ((FIELD_KEYS.includes(k) || META_KEYS.includes(k)) ? fields : rates)[k] = v
         return { rates, fields }
       }
-      // Create the new port rows (from the "Other" flag) with whatever cells LG filled.
+      // Create the new port rows (prefill OR manual "➕ เพิ่มแถว") with whatever cells LG filled.
       for (const nr of newRows) {
         const { rates, fields } = split(edits[nr.id])
-        const payload: any = which === "air"
-          ? { create: true, origin: nr.origin, country: nr.country, destination: nr.destination || "BKK", fwd: nr.fwd, airline: nr.airline, tt: nr.tt, rates, ...fields }
-          : { create: true, country: nr.country, port: nr.port, rates }
-        await fetch(`/api/pull-material/${which}-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+        const g = (k: string) => (fields as any)[k] ?? nr[k]  // edits win over the draft defaults
+        if (!String(g("origin") || "").trim()) { alert("กรอก ORIGIN ก่อนบันทึกแถวใหม่"); setBusy(false); return }
+        const payload: any = { create: true, origin: g("origin"), country: g("country") || null, destination: g("destination") || "BKK", fwd: g("fwd") || null, airline: g("airline") || null, tt: g("tt") || null, rates, origCostExw: (fields as any).origCostExw, origCostFca: (fields as any).origCostFca }
+        await fetch(`/api/pull-material/air-rates`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       }
       // Update the edited existing rows.
       await Promise.all(editedIds.map(id => {
@@ -309,6 +339,7 @@ export default function PullRatesPage() {
         {isAdmin && (
           <div className="flex gap-2">
             {editCount > 0 && <button onClick={saveAll} disabled={busy} className="px-3 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 bg-green-600">💾 Save {editCount} row(s)</button>}
+            {tab !== "courier" && <button onClick={addRow} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-50">➕ เพิ่มแถว</button>}
             <label className="px-3 py-2 rounded-lg text-sm font-semibold border border-blue-300 text-blue-700 bg-white cursor-pointer hover:bg-blue-50">⬆ Import Excel
               <input type="file" accept=".xlsx,.xls" className="hidden" disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
             </label>
@@ -356,19 +387,30 @@ export default function PullRatesPage() {
                 <th key={h} className={`px-3 py-2 font-medium whitespace-nowrap ${h.includes("RATE") ? "text-right" : "text-left"}`}>{h}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
-              {seaRows.map(r => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.country || "-"}</td>
-                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.forwarder || "-"}</td>
-                  <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{r.port}</td>
-                  <td className="px-3 py-1.5 whitespace-nowrap">{r.container || "-"}</td>
-                  <td className="px-3 py-1.5 text-right font-medium" style={{ color: MAROON }}>{r.rate != null ? fmt(r.rate) : "-"}</td>
-                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.unit || "-"}</td>
-                  <td className="px-3 py-1.5 text-gray-400 whitespace-nowrap">{r.updated || "-"}</td>
-                  <td className="px-3 py-1.5 text-gray-400 max-w-[220px] truncate" title={r.remarks || ""}>{r.remarks || "-"}</td>
-                </tr>
-              ))}
-              {seaRows.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">No sea rates {sea.length === 0 && "— Import Excel ที่มีชีท SEA RATE"}</td></tr>}
+              {seaRows.map(r => {
+                const seaInp = "w-full border border-gray-200 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-red-300"
+                // New draft row → every column editable; existing row → only RATE editable inline (admin).
+                const txt = (k: string, ph = "") => r._new
+                  ? <input value={seaVal(r, k)} placeholder={ph} onChange={e => setCell(r.id, k, e.target.value)} className={seaInp} />
+                  : <span>{r[k] || "-"}</span>
+                return (
+                  <tr key={r.id} className={`hover:bg-gray-50 ${r._new ? "bg-amber-50" : edits[r.id] ? "bg-green-50" : ""}`}>
+                    <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{txt("country")}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
+                    <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{txt("forwarder")}</td>
+                    <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{r._new ? txt("port", "PORT*") : r.port}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{r._new ? txt("container", "LCL") : (r.container || "-")}</td>
+                    <td className="px-2 py-1 text-right font-medium" style={{ color: MAROON }}>
+                      {isAdmin
+                        ? <input type="number" value={seaVal(r, "rate")} onChange={e => setCell(r.id, "rate", e.target.value)} className={`${seaInp} text-right w-24`} />
+                        : (r.rate != null ? fmt(r.rate) : "-")}
+                    </td>
+                    <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{txt("unit")}</td>
+                    <td className="px-3 py-1.5 text-gray-400 whitespace-nowrap">{r.updated || "-"}</td>
+                    <td className="px-3 py-1.5 text-gray-400 max-w-[220px] truncate" title={r.remarks || ""}>{r._new ? txt("remarks") : (r.remarks || "-")}</td>
+                  </tr>
+                )
+              })}
+              {seaRows.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">No sea rates {sea.length === 0 && "— กด ➕ เพิ่มแถว หรือ Import Excel ที่มีชีท SEA RATE"}</td></tr>}
             </tbody>
           </table>
         ) : tab === "air" ? (
@@ -383,8 +425,12 @@ export default function PullRatesPage() {
             <tbody className="divide-y divide-gray-50">
               {airRows.map(r => (
                 <tr key={r.id} className={`hover:bg-gray-50 ${r._new ? "bg-amber-50" : edits[r.id] ? "bg-green-50" : ""}`}>
-                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.country || "-"}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
-                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r.origin}</td>
+                  <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r._new
+                    ? <input value={fieldVal(r, "country")} placeholder="country" onChange={e => setCell(r.id, "country", e.target.value)} className="w-24 border border-gray-200 rounded px-1.5 py-0.5 text-xs" />
+                    : (r.country || "-")}{r._new && <span className="ml-1 text-[9px] text-amber-700 font-bold">NEW</span>}</td>
+                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r._new
+                    ? <input value={fieldVal(r, "origin")} placeholder="ORIGIN*" onChange={e => setCell(r.id, "origin", e.target.value)} className="w-20 border border-gray-200 rounded px-1.5 py-0.5 text-xs" />
+                    : r.origin}</td>
                   <td className="px-3 py-1.5">{r.destination}</td>
                   <td className="px-3 py-1.5">{r.fwd || "-"}</td>
                   <td className="px-3 py-1.5">{r.airline || "-"}</td>
