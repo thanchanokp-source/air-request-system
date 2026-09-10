@@ -77,7 +77,7 @@ export default function LgBookingPage() {
       if (r.isTest && !isAdmin) continue
       const bu = r.bu || "NYG"
       if (!lgBus.has(bu)) continue
-      const bookable = bu === "GW" ? ["PRES_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"]
+      const bookable = bu === "GW" ? ["PRES_PASSED", "PRESIDENT_PENDING"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED", "PRESIDENT_PENDING"]
       for (const it of (r.items || [])) {
         if (!bookable.includes(it.itemStatus)) continue
         // After "Save & Send" only the SOs still MISSING an Actual remain (LG must finish them);

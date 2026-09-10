@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   // LG books in PARALLEL with claim, so accept every bookable status (LOG_PASSED / CLAIM_PASSED for
   // NYG-style BUs, PRES_PASSED for GW). Booking only writes actual/hawb/inv — it never changes status.
   const items = await prisma.airRequestItem.findMany({
-    where: { id: { in: ids }, itemStatus: { in: ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"] } },
+    where: { id: { in: ids }, itemStatus: { in: ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED", "PRESIDENT_PENDING"] } },
   })
   if (items.length === 0) return NextResponse.json({ error: "Selected SO not found (or already booked)" }, { status: 400 })
 

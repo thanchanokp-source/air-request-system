@@ -58,7 +58,7 @@ export default function LgEntryPage() {
     fetch("/api/users/lg-forward-targets").then(r => r.json()).then(d => setFwTargets(Array.isArray(d) ? d : [])).catch(() => {})
   }, [load])
 
-  const bookableOf = (bu: string) => bu === "GW" ? ["PRES_PASSED"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"]
+  const bookableOf = (bu: string) => bu === "GW" ? ["PRES_PASSED", "PRESIDENT_PENDING"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED", "PRESIDENT_PENDING"]
 
   // Selected bookable SOs, each carrying its parent document.
   const allLgItems = useMemo(() => {

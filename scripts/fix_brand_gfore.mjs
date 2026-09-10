@@ -8,11 +8,20 @@ const TO = "G/FORE"
 const apply = process.argv.includes("--apply")
 
 try {
-  const items = await p.airRequestItem.findMany({
-    where: { so: { in: SOS }, brand: { contains: FROM, mode: "insensitive" } },
+  const nz = (s) => String(s ?? "").replace(/^0+/, "") // normalize leading zeros (DB "01252021" vs "1252021")
+  const targetSet = new Set(SOS.map(nz))
+  // Fetch all PETER MILLAR items, then keep only the target SOs (leading-zero tolerant).
+  const all = await p.airRequestItem.findMany({
+    where: { brand: { contains: FROM, mode: "insensitive" } },
     include: { request: { select: { documentNo: true, bu: true } } },
   })
-  if (!items.length) { console.log("ไม่พบ item ที่ brand contains", FROM, "ใน SO", SOS.join(",")); process.exit(0) }
+  const items = all.filter(i => targetSet.has(nz(i.so)))
+  if (!items.length) {
+    console.log(`ไม่พบ item ที่ brand contains "${FROM}" ใน SO ${SOS.join(",")}`)
+    console.log(`\nPETER MILLAR items ทั้งหมดในระบบ (${all.length}) — SO ที่มี:`)
+    console.log([...new Set(all.map(i => i.so))].join(", ") || "(ไม่มี PETER MILLAR เลย)")
+    process.exit(0)
+  }
 
   const docs = [...new Set(items.map(i => i.request.documentNo))]
   console.log(`พบ ${items.length} รายการ · เอกสาร: ${docs.join(", ")}\n`)

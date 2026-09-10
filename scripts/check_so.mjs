@@ -9,7 +9,7 @@ try {
     take: 50,
   })
   if (!items.length) { console.log("no items match SO", so); process.exit(0) }
-  const bookable = ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED"]
+  const bookable = ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED", "PRESIDENT_PENDING"]
   for (const it of items) {
     const actual = it.actualAirFreight
     const willShow = bookable.includes(it.itemStatus) && !(it.request.logisticsSent && actual)
