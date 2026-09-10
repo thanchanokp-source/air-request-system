@@ -255,8 +255,10 @@ export default function LgBookingPage() {
             {open && (
               <div className="p-3 space-y-2.5 bg-gray-50/40">
                 {docs.map(({ request: req, items }) => {
-                  const est = items.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
-                  const act = items.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
+                  // Header EST/ACT = the WHOLE document (matches AIR REQUESTS), not just the unbooked pool.
+                  const allItems = (req.items && req.items.length ? req.items : items)
+                  const est = allItems.reduce((s: number, i: any) => s + (i.airFreight || 0), 0)
+                  const act = allItems.reduce((s: number, i: any) => s + (i.actualAirFreight || 0), 0)
                   const cur = (req.bu === "EA" || String(req.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB" // EA prices in USD
                   const docIds = items.map((i: any) => i.id)
                   const docAllOn = docIds.every((id: string) => selected.has(id))
@@ -281,7 +283,7 @@ export default function LgBookingPage() {
                         <span className="text-xs text-gray-500">{req.bu}</span>
                         <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">EST {fmtNum(est)} {cur}</span>
                         <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">ACT {fmtNum(act)} {cur}</span>
-                        <span className="text-xs text-gray-400">{items.length} transaction</span>
+                        <span className="text-xs text-gray-400">{allItems.length} transaction · <span className="text-amber-600 font-medium">เหลือ {items.length} รอกรอก actual</span></span>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs whitespace-nowrap">
