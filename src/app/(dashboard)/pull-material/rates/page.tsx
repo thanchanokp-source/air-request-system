@@ -406,14 +406,14 @@ export default function PullRatesPage() {
         ) : (
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500"><tr>
-              {["COUNTRY", "ORIGIN", "DEST", "BY COURIER"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+              {["ORIGIN", "ORIGIN COUNTRY", "DEST", "BY COURIER"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
               {COURIER_KG.map(h => <th key={h} className="px-3 py-2 text-right font-medium whitespace-nowrap">{h}</th>)}
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {courierRows.map(r => (
                 <tr key={r.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r.origin || "-"}</td>
                   <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{r.country || "-"}</td>
-                  <td className="px-3 py-1.5 font-semibold text-gray-800">{r.origin}</td>
                   <td className="px-3 py-1.5">{r.destination}</td>
                   <td className="px-3 py-1.5 font-medium whitespace-nowrap" style={{ color: MAROON }}>{r.carrier || "-"}</td>
                   {COURIER_KG.map(b => <td key={b} className="px-2 py-1 text-right">{r.rates?.[kgKey(b)] != null ? fmt(Number(r.rates[kgKey(b)]) / EXCHANGE_RATE) : "-"}</td>)}
