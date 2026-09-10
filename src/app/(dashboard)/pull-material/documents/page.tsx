@@ -53,12 +53,14 @@ export default function Page() {
     } finally { setBackfilling(false) }
   }
 
-  // Forward a PENDING_LG_RATE doc to approval (server re-checks every line has an air rate).
+  // Forward a PENDING_LG_RATE doc onward (server re-checks a rate exists in ≥1 mode first).
+  // Target stage depends on where it came from: SCM request → SCM decision; PC request → DPM (VP Purchasing).
   const forwardApproval = async (rq: any) => {
-    if (!confirm(`ส่งต่อ ${rq.documentNo} ไป Approval?\nระบบจะเช็คว่า Air rate ครบทุก port ก่อน`)) return
+    const next = (rq.requestType || "SCM") === "SCM" ? "PENDING_SCM_DECISION" : "PENDING_VP_PUR"
+    if (!confirm(`ส่งต่อ ${rq.documentNo}?\nระบบจะเช็คว่ามี rate อย่างน้อย 1 mode (air/sea/courier) ก่อน`)) return
     setBusy(true)
     try {
-      const r = await fetch(`/api/pull-material/${rq.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "PENDING_VP_PUR" }) })
+      const r = await fetch(`/api/pull-material/${rq.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: next }) })
       const d = await r.json().catch(() => ({}))
       if (r.ok) { setOpenId(null); await load(); alert("✅ ส่งต่อ Approval แล้ว") }
       else alert(d.error || "ส่งต่อไม่สำเร็จ")

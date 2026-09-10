@@ -178,8 +178,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data })
 
     // Purchasing → air decision: auto-compute Est Air + Air L/T from the master (no manual LG step).
+    // GATE: if a line still has NO rate in ANY mode (air/sea/courier) → auto-route to LG (PENDING_LG_RATE)
+    // FIRST so LG fills a rate before it reaches approval — no one has to click "backfill" for new docs.
     if (body.status === "PENDING_SCM_DECISION" || body.status === "PENDING_PC_DECISION") {
       await recomputePullAir(id).catch(() => {})
+      const [seaRows, courierRows] = await Promise.all([(prisma as any).pullFreightSea.findMany(), (prisma as any).pullFreightCourier.findMany()])
+      const its = await (prisma as any).pullMaterialItem.findMany({ where: { requestId: id }, select: { airFreightCost: true, weight: true, port: true, seaPort: true } })
+      const bu = before?.bu
+      if (its.some((i: any) => i.port && Number(i.weight) > 0 && !itemHasAnyRate(i, seaRows, courierRows, bu))) {
+        await (prisma as any).pullMaterialRequest.update({ where: { id }, data: { status: "PENDING_LG_RATE" } })
+        await notifyPullStage(id, "PENDING_LG_RATE").catch(() => {})
+        return NextResponse.json({ ok: true, status: "PENDING_LG_RATE", note: "no master rate → routed to LG" })
+      }
     }
 
     // Alert the owner(s) of the NEW stage (magic-link per person). Covers every forward transition:
