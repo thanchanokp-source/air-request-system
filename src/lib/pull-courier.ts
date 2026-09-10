@@ -5,15 +5,15 @@ export const EXCHANGE_RATE = 32
 // Destination by requesting BU (same rule as air): NYG/GW → BKK, EA → VTE, TRM → LAOS.
 export const destForBu = (bu: any) => (({ NYG: "BKK", GW: "BKK", EA: "VTE", TRM: "LAOS" } as Record<string, string>)[String(bu || "").toUpperCase()] || "BKK")
 
-// Sea freight (USD) from the SEA master (long rows: one per port+container). Compare uses the CHEAPEST
-// container available at the discharge port. Sea master rates are already USD (no /32).
+// Sea freight (USD) from the SEA master — use the LCL rate only (per-shipment, comparable to air/courier;
+// FCL 40'/20' container rates are ignored). Sea master rates are already USD (no /32).
 export function seaUsd(rows: any[], seaPort: string): { cost: number; container: string } | null {
   if (!seaPort) return null
   const P = String(seaPort || "").toUpperCase()
-  const matches = (rows || []).filter(x => String(x.port || "").toUpperCase() === P && Number(x.rate) > 0)
+  const matches = (rows || []).filter(x => String(x.port || "").toUpperCase() === P && Number(x.rate) > 0 && String(x.container || "").toUpperCase().includes("LCL"))
   if (!matches.length) return null
   const best = matches.reduce((a, b) => (Number(b.rate) < Number(a.rate) ? b : a))
-  return { cost: Number(best.rate), container: String(best.container || "") }
+  return { cost: Number(best.rate), container: String(best.container || "LCL") }
 }
 
 // Courier weight tiers (kg, ascending) — the price column is the TOTAL for a shipment up to that tier.
