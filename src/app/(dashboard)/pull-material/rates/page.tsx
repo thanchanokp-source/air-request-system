@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { MAROON, fmt } from "../_StageWork"
+import { EXCHANGE_RATE } from "@/lib/pull-courier"
 
 const AIR_BREAKS = ["M", "N", "Q45", "Q100", "Q250", "Q300", "Q500", "Q1000", "Q2000", "Q8000"]
 const SEA_CT = ["40GP", "20GP", "LCL"]
@@ -331,6 +332,12 @@ export default function PullRatesPage() {
       <input value={q} onChange={e => setQ(e.target.value)} placeholder={tab === "air" ? "🔍 Search origin / airline / fwd…" : "🔍 Search country / port…"}
         className="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
 
+      {tab === "courier" && (
+        <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 w-fit">
+          💱 ค่าในตารางแสดงเป็น <b>USD</b> แล้ว · default exchange rate = <b>{EXCHANGE_RATE}</b> (ต้นทางเป็น THB → หารด้วย {EXCHANGE_RATE})
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border overflow-x-auto">
         {tab === "sea" ? (
           <table className="w-full text-xs">
@@ -406,7 +413,7 @@ export default function PullRatesPage() {
                   <td className="px-3 py-1.5 font-semibold text-gray-800">{r.origin}</td>
                   <td className="px-3 py-1.5">{r.destination}</td>
                   <td className="px-3 py-1.5 font-medium whitespace-nowrap" style={{ color: MAROON }}>{r.carrier || "-"}</td>
-                  {COURIER_KG.map(b => <td key={b} className="px-2 py-1 text-right">{r.rates?.[kgKey(b)] != null ? fmt(r.rates[kgKey(b)]) : "-"}</td>)}
+                  {COURIER_KG.map(b => <td key={b} className="px-2 py-1 text-right">{r.rates?.[kgKey(b)] != null ? fmt(Number(r.rates[kgKey(b)]) / EXCHANGE_RATE) : "-"}</td>)}
                 </tr>
               ))}
               {courierRows.length === 0 && <tr><td colSpan={4 + COURIER_KG.length} className="px-3 py-10 text-center text-gray-400">No courier rates {courier.length === 0 && "— Import Excel ที่มีชีท COURIER"}</td></tr>}
