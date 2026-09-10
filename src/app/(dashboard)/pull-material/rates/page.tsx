@@ -54,6 +54,11 @@ export default function PullRatesPage() {
     setAir(airRows); setSea(seaRows); setEdits({})
   }
   useEffect(() => { load() }, []) // eslint-disable-line
+  // Deep-link from the compare box "no master" link → open the right tab + prefill the search with the port.
+  useEffect(() => {
+    const t = params.get("tab"); if (t === "air" || t === "sea" || t === "courier") setTab(t)
+    const port = params.get("port"); if (port) setQ(port)
+  }, []) // eslint-disable-line
 
   const reload = async (which: "air" | "sea") => {
     if (!confirm(`⚠ Reload ${which.toUpperCase()} rates from the bundled Rate_LG data?\nThis REPLACES the current ${which} master — any rows/rates added by LG will be LOST.\nClick "⬇ Backup (Excel)" first if you want to keep them. Continue?`)) return
