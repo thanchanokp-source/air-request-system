@@ -1222,18 +1222,20 @@ export default function RequestDetailPage() {
   }
   // Current position + next required position (with factory / branch context).
   const myFwdRow = myClaimFwdRow
-  const gwCurrentPos = role === "CLAIM_NEXT_APPROVER" ? (myFwdRow?.position ?? 0) : 0
+  // Use the position from the ClaimForward addressed to me — works whether I clicked the magic link
+  // (role=CLAIM_NEXT_APPROVER) OR logged in with my real role (VP_MER etc.) but hold the forward.
+  const gwCurrentPos = actingAsClaimNext ? (myFwdRow?.position ?? 0) : 0
   const gwBranch: string | null = myFwdRow?.branch || null
   const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos) : true
   const gwNeedsBranch = gwFwdCanonicalDept ? positionHasBranch(gwFwdCanonicalDept, gwCurrentPos) : false
   // Last position in the chain (e.g. Commercial VP MER) has nothing after it → no forward.
   // Skip the "Send to next / Done" popup and finish directly.
   useEffect(() => {
-    if (role === "CLAIM_NEXT_APPROVER" && gwIsLastPos && nextInitialModal) {
+    if (actingAsClaimNext && gwIsLastPos && nextInitialModal) {
       setNextInitialModal(false)
       setNextIntent("done")
     }
-  }, [role, gwIsLastPos, nextInitialModal])
+  }, [actingAsClaimNext, gwIsLastPos, nextInitialModal])
   const gwFactory = (gwFwdItems.find((i: any) => claimSelIds.includes(i.id)) || gwFwdItems[0])?.factory
   // Procurement Purchasing (branch step): choose "Sourcing" (→ pos 1) or "Self" (skip to
   // VP, pos 2). Other positions just advance by one. gwBranchChoice holds the route.
