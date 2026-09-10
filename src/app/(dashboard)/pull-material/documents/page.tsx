@@ -214,9 +214,11 @@ export default function Page() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-gray-900">{rq.documentNo}</span>
-                          {done
-                            ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✓ Actual entered</span>
-                            : <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">รอกรอก Actual</span>}
+                          {rq.status === "PENDING_LG_RATE"
+                            ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold border border-red-200">⚠️ รอเติม Air rate (ยังไม่ส่ง approval)</span>
+                            : done
+                              ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✓ Actual entered</span>
+                              : <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">รอกรอก Actual</span>}
                           <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">Est {fmt(estTotal)} USD</span>
                         </div>
                         <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · PO {pos || "-"}</div>
