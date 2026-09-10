@@ -14,6 +14,7 @@ const STAGE_ROLES: Record<string, string[]> = {
   PENDING_PURCHASING: ["PURCHASING"], PENDING_SCM_DECISION: ["SCM_PULL"], PENDING_PC_DECISION: ["PURCHASING"],
   PENDING_DVM_SCM: ["PULL_DVM_SCM"], PENDING_VP_SCM: ["VP_SCM"], PENDING_FINAL: ["PULL_PRESIDENT"],
   PENDING_DVM_PUR: ["DVM_PUR"], PENDING_VP_PUR: ["VP_PUR"], APPROVED: ["LOGISTICS_IMPORT"],
+  PENDING_LG_RATE: ["LOGISTICS_IMPORT"], // no air master rate on submit → LG fills the rate before approval
 }
 
 // TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
@@ -36,6 +37,7 @@ async function pullTestRecipient(id: string): Promise<string | null> {
 const PULL_FLOW = [
   "PENDING_PURCHASING",
   "PENDING_LOGISTICS",
+  "PENDING_LG_RATE", // LG fills a missing air master rate before the doc goes to approval
   // SCM branch
   "PENDING_SCM_DECISION",
   "PENDING_DVM_SCM",
@@ -139,6 +141,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const isStop = body.status === "RECALLED" || body.status === "REJECTED"
     // The stage the doc is on BEFORE this change (lost after the update) — used to alert the current owner on recall.
     const before = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { status: true, bu: true } })
+
+    // GATE: LG forwarding out of PENDING_LG_RATE → must have EVERY line's air rate filled first.
+    if (before?.status === "PENDING_LG_RATE" && !isStop) {
+      await recomputePullAir(id).catch(() => {})
+      const its = await (prisma as any).pullMaterialItem.findMany({ where: { requestId: id }, select: { airFreightCost: true, weight: true, port: true } })
+      const stillMissing = its.some((i: any) => i.port && Number(i.weight) > 0 && i.airFreightCost == null)
+      if (stillMissing) return NextResponse.json({ error: "ยังมี port ที่ไม่มี Air rate ใน master — เพิ่ม rate ให้ครบก่อนส่งต่อ Approval" }, { status: 400 })
+    }
 
     if (isStop) {
       const reason = String((body.status === "REJECTED" ? body.rejectReason : body.recallReason) || "").trim()

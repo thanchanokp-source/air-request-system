@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
-import { courierUsd, destForBu, EXCHANGE_RATE } from "@/lib/pull-courier"
+import { courierUsd, destForBu, EXCHANGE_RATE, seaUsd } from "@/lib/pull-courier"
 
 export default function Page() {
   const { data: session, status: auth } = useSession()
@@ -24,7 +24,11 @@ export default function Page() {
   const [uploading, setUploading] = useState("")
   const [exporting, setExporting] = useState(false)
   const [courierRates, setCourierRates] = useState<any[]>([])
-  useEffect(() => { fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {}) }, [])
+  const [seaRates, setSeaRates] = useState<any[]>([])
+  useEffect(() => {
+    fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {})
+    fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRates(d.rows || [])).catch(() => {})
+  }, [])
   const [recomputing, setRecomputing] = useState(false)
   const recompute = async (rq: any) => {
     setRecomputing(true)
@@ -33,6 +37,18 @@ export default function Page() {
       if (r.ok) await load()
       else { const d = await r.json().catch(() => ({})); alert(d.error || "recompute failed") }
     } finally { setRecomputing(false) }
+  }
+
+  // Forward a PENDING_LG_RATE doc to approval (server re-checks every line has an air rate).
+  const forwardApproval = async (rq: any) => {
+    if (!confirm(`ส่งต่อ ${rq.documentNo} ไป Approval?\nระบบจะเช็คว่า Air rate ครบทุก port ก่อน`)) return
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/pull-material/${rq.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "PENDING_VP_PUR" }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) { setOpenId(null); await load(); alert("✅ ส่งต่อ Approval แล้ว") }
+      else alert(d.error || "ส่งต่อไม่สำเร็จ")
+    } finally { setBusy(false) }
   }
 
   // LG attaches supporting files (HAWB / INV / docs) to the document.
@@ -54,7 +70,7 @@ export default function Page() {
       const bus = bu === "ALL" ? BUS : [bu]
       const results = await Promise.all(bus.map(b => fetch(`/api/pull-material?bu=${b}`).then(r => r.json()).catch(() => ({}))))
       const all = results.flatMap((d: any) => d.requests || [])
-      setReqs(all.filter((r: any) => r.status === "APPROVED" || r.status === "COMPLETED"))
+      setReqs(all.filter((r: any) => r.status === "APPROVED" || r.status === "COMPLETED" || r.status === "PENDING_LG_RATE"))
     } finally { setLoading(false) }
   }
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
@@ -228,7 +244,8 @@ export default function Page() {
         const dimStr = (d0.boxW || d0.boxL || d0.boxH) ? `${d0.boxW || "-"}×${d0.boxL || "-"}×${d0.boxH || "-"} cm` : ""
         const totalOrigin = its.reduce((s: number, it: any) => s + (Number(it.originCost) || 0), 0)
         const totalFreight = estTotal - totalOrigin
-        const seaFreight = its.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (d0.estSea ? Number(d0.estSea) : 0)
+        const seaM = seaUsd(seaRates, d0.seaPort || d0.port)
+        const seaFreight = seaM ? seaM.cost : (its.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (d0.estSea ? Number(d0.estSea) : 0)) || null
         const earliest = (arr: any[]) => { const t = arr.map(v => (v ? new Date(v).getTime() : NaN)).filter(n => !isNaN(n)); return t.length ? new Date(Math.min(...t)) : null }
         const localCh = raw(rq, "localChargeTh") === "" ? null : Number(raw(rq, "localChargeTh")) || null
         return (
@@ -238,8 +255,13 @@ export default function Page() {
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold text-gray-900">{rq.documentNo}</h1>
                 <span className="text-xs text-gray-400">by {rq.requesterName} · {fmtDate(rq.createdAt)}</span>
+                {rq.status === "PENDING_LG_RATE" && <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-semibold border border-amber-300">⚠️ รอ LG เติม Air rate</span>}
               </div>
               <div className="flex gap-2 shrink-0">
+                {rq.status === "PENDING_LG_RATE" && (
+                  <button onClick={() => forwardApproval(rq)} disabled={busy} title="เติม rate ครบแล้ว → ส่งต่อ Approval"
+                    className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#16a34a" }}>{busy ? "…" : "🚀 ส่งต่อ Approval"}</button>
+                )}
                 <button onClick={() => recompute(rq)} disabled={recomputing} title="คำนวณ freight ใหม่ (dest by BU + origin cost)"
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-50">{recomputing ? "…" : "🔄 Recompute"}</button>
                 <button onClick={() => openPreview(rq)} disabled={pdfing}
@@ -303,7 +325,7 @@ export default function Page() {
                     const rlink = (tab: string, port: any) => `/pull-material/rates?tab=${tab}&port=${encodeURIComponent(port || "")}&country=${encodeURIComponent(d0.country || "")}`
                     const modes = [
                       { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: estTotal || null, lt: d0.leadTimeAir || null, actual: actTotal || null, local: localCh, accent: "#6b1a1a", link: rlink("air", d0.port) },
-                      { key: "sea", label: "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: rlink("sea", d0.seaPort || d0.port) },
+                      { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: rlink("sea", d0.seaPort || d0.port) },
                       { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: rlink("courier", d0.port), over: cwt > 30 },
                       { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed", link: rlink("courier", d0.port), over: cwt > 30 },
                     ]

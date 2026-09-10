@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
 import { pcApprover } from "@/lib/pull-approvers"
-import { courierUsd, destForBu, EXCHANGE_RATE } from "@/lib/pull-courier"
+import { courierUsd, destForBu, EXCHANGE_RATE, seaUsd } from "@/lib/pull-courier"
 import SignatureModal from "@/components/signature-modal"
 
 // Approver stages: which role owns each, and where Approve / Send-back go.
@@ -62,7 +62,11 @@ export default function Page() {
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
   const [courierRates, setCourierRates] = useState<any[]>([])
-  useEffect(() => { fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {}) }, [])
+  const [seaRates, setSeaRates] = useState<any[]>([])
+  useEffect(() => {
+    fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {})
+    fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRates(d.rows || [])).catch(() => {})
+  }, [])
   // role → approver names (for the stepper)
   const [roleNames, setRoleNames] = useState<Record<string, string[]>>({})
   useEffect(() => {
@@ -261,14 +265,15 @@ export default function Page() {
 
                         {/* Shipping mode comparison — Freight / Incoterm / Total Freight / L/T per transport type */}
                         {(() => {
-                          const seaFreight = items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)
+                          const seaM = seaUsd(seaRates, s0.seaPort || s0.port)
+                          const seaFreight = seaM ? seaM.cost : (items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)) || null
                           const cdest = destForBu(openReq.bu), cwt = Number(s0.weight) || 0
                           const dhl = courierUsd(courierRates, s0.port, cdest, cwt, "DHL")
                           const fedex = courierUsd(courierRates, s0.port, cdest, cwt, "FEDEX")
                           const rlink = (tab: string, port: any) => `/pull-material/rates?tab=${tab}&port=${encodeURIComponent(port || "")}&country=${encodeURIComponent(s0.country || "")}`
                           const modes = [
                             { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: total || null, lt: s0.leadTimeAir || null, actual: openReq.actualAir ?? null, local: openReq.localChargeTh ?? null, accent: "#6b1a1a", link: rlink("air", s0.port) },
-                            { key: "sea", label: "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: s0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: rlink("sea", s0.seaPort || s0.port) },
+                            { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: s0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: rlink("sea", s0.seaPort || s0.port) },
                             { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: rlink("courier", s0.port), over: cwt > 30 },
                             { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed", link: rlink("courier", s0.port), over: cwt > 30 },
                           ]

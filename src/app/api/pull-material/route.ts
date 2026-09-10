@@ -130,7 +130,17 @@ export async function POST(req: NextRequest) {
   })
 
   // PC requests already carry Country/Port/Incoterm/Weight → auto-compute Est Air before the DPM sees it.
-  if (requestType === "PURCHASING") await recomputePullAir(created.id).catch(() => {})
+  if (requestType === "PURCHASING") {
+    await recomputePullAir(created.id).catch(() => {})
+    // GATE: if any line still has NO air master rate (port not in master) → route to LG to fill the rate
+    // BEFORE approval, so the approver always sees complete freight. LG adds the rate then forwards.
+    const its = await (prisma as any).pullMaterialItem.findMany({ where: { requestId: created.id }, select: { airFreightCost: true, weight: true, port: true } })
+    const missingRate = its.some((i: any) => i.port && Number(i.weight) > 0 && (i.airFreightCost == null))
+    if (missingRate) {
+      await (prisma as any).pullMaterialRequest.update({ where: { id: created.id }, data: { status: "PENDING_LG_RATE" } })
+      created.status = "PENDING_LG_RATE"
+    }
+  }
 
   // Alert the owner(s) of the landing stage: SCM → the Purchasing pool; PC → the DPM approver (by BU).
   console.log(`[pull-create] ${created.documentNo} type=${requestType} → status=${created.status} · notifying`)
