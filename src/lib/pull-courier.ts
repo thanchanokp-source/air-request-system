@@ -41,9 +41,11 @@ export function itemHasAnyRate(item: any, seaRows: any[], courierRows: any[], bu
 }
 
 // Courier weight tiers (kg, ascending) — the price column is the TOTAL for a shipment up to that tier.
-const TIERS = [0.5, 1, 2, 3, 5, 10, 15, 20, 25, 30, 35, 40, 45]
+// Matches the courier master columns: 29 / 30 / 40 / 45 / 50 / 75 / 100 KG (smallest tier ≥ weight is used,
+// so a ≤29 kg parcel is priced at the 29KG column).
+const TIERS = [29, 30, 40, 45, 50, 75, 100]
 // Courier is offered up to this weight; anything heavier is NOT priced by courier at all.
-export const COURIER_MAX_KG = 45
+export const COURIER_MAX_KG = 100
 
 // Look up the courier price (USD) for a carrier at origin PORT + DEST for the given weight.
 // Courier only covers parcels ≤ COURIER_MAX_KG (45 kg) — heavier shipments return null.

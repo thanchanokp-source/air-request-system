@@ -8,7 +8,7 @@ import { EXCHANGE_RATE } from "@/lib/pull-courier"
 
 const AIR_BREAKS = ["M", "N", "Q45", "Q100", "Q250", "Q300", "Q500", "Q1000", "Q2000", "Q8000"]
 const SEA_CT = ["40GP", "20GP", "LCL"]
-const COURIER_KG = ["0.5KG", "1KG", "2KG", "3KG", "5KG", "10KG", "15KG", "20KG", "25KG", "30KG", "35KG", "40KG", "45KG"]
+const COURIER_KG = ["29KG", "30KG", "40KG", "45KG", "50KG", "75KG", "100KG"]
 const kgKey = (b: string) => b.replace(/KG$/i, "").trim() // "0.5KG" → "0.5"
 
 export default function PullRatesPage() {
