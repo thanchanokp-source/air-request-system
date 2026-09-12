@@ -27,6 +27,8 @@ export default function PurchasePage() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
   const [soQ, setSoQ] = useState("") // filter list by SO / document no
+  const [pcTab, setPcTab] = useState<"queue" | "revise" | "stats">("queue")
+  const [uploadingPL, setUploadingPL] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -34,7 +36,7 @@ export default function PurchasePage() {
       const bus = bu === "ALL" ? BUS : [bu]
       const results = await Promise.all(bus.map(b => fetch(`/api/pull-material?bu=${b}`).then(r => r.json()).catch(() => ({}))))
       const all = results.flatMap((d: any) => d.requests || [])
-      setReqs(all.filter((r: any) => r.status === "PENDING_PURCHASING"))
+      setReqs(all.filter((r: any) => r.status === "PENDING_PURCHASING" || r.status === "PC_REVISE"))
     } finally { setLoading(false) }
   }
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
@@ -59,6 +61,23 @@ export default function PurchasePage() {
   const setDocMode = async (rqId: string, m: "REGULAR" | "IRREGULAR") => {
     setReqs(prev => prev.map(r => (r.id === rqId ? { ...r, mode: m } : r)))
     await fetch(`/api/pull-material/${rqId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: m }) }).catch(() => {})
+  }
+
+  // Purchase attaches the packing list (and any supporting file) → sent along to LG.
+  const uploadPackingList = async (rq: any, files: FileList) => {
+    setUploadingPL(rq.id)
+    try {
+      let firstName = ""
+      for (const f of Array.from(files)) {
+        if (!firstName) firstName = f.name
+        const fd = new FormData(); fd.append("file", f)
+        await fetch(`/api/pull-material/${rq.id}/attachments`, { method: "POST", body: fd }).catch(() => {})
+      }
+      // Record the packing-list filename (informational, shown to LG).
+      if (firstName) await fetch(`/api/pull-material/${rq.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ packingListName: firstName }) }).catch(() => {})
+      await load()
+      alert("📎 แนบ Packing List แล้ว")
+    } finally { setUploadingPL(null) }
   }
 
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
@@ -131,7 +150,8 @@ export default function PurchasePage() {
       }))
       // No manual Logistics step anymore: server auto-computes Est Air + Air L/T, then goes straight to
       // the air decision (SCM or PC). LG only enters ACTUAL later, after approval.
-      const next = rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION"
+      // A RETURNED doc (PC_REVISE) goes STRAIGHT back to LG (APPROVED) — no re-approval — per the flow.
+      const next = rq.status === "PC_REVISE" ? "APPROVED" : (rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION")
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemUpdates, status: next, otherPorts }),
@@ -278,6 +298,18 @@ export default function PurchasePage() {
       <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Purchase</h1>
         <p className="text-sm text-gray-400 mt-0.5">Pick Country → choose Air / Sea port, Incoterm &amp; Weight → send to Logistics</p></div>
 
+      <div className="flex gap-2 border-b border-gray-200">
+        {([["queue", "📋 งานจัดซื้อ", reqs.filter(r => r.status === "PENDING_PURCHASING").length], ["revise", "↩️ ตีกลับให้แก้", reqs.filter(r => r.status === "PC_REVISE").length], ["stats", "📊 สถิติ Revise", -1]] as const).map(([v, label, n]) => (
+          <button key={v} onClick={() => { setPcTab(v); setOpenId(null) }}
+            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${pcTab === v ? "" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+            style={pcTab === v ? { color: v === "revise" ? "#b91c1c" : MAROON, borderColor: v === "revise" ? "#b91c1c" : MAROON } : undefined}>
+            {label}{n >= 0 && <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[11px] ${v === "revise" && n > 0 ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-500"}`}>{n}</span>}
+          </button>
+        ))}
+      </div>
+
+      {pcTab === "stats" ? <ReviseStats reqs={reqs} /> : (
+      <>
       <div className="flex gap-1.5">{["ALL", ...BUS].map(b => (
         <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${bu === b ? "text-white border-transparent shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: b === "ALL" ? MAROON : buColor(b) } : undefined}>{b === "ALL" ? "ALL BU" : b}</button>
       ))}</div>
@@ -308,14 +340,30 @@ export default function PurchasePage() {
                   <label className="px-3 py-2.5 rounded-xl text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">⬆ Import
                     <input type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
                   </label>
+                  <label className="px-3 py-2.5 rounded-xl text-sm font-medium border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 cursor-pointer">
+                    {uploadingPL === openReq.id ? "กำลังแนบ…" : "📎 แนบ Packing List"}
+                    <input type="file" multiple className="hidden" disabled={uploadingPL === openReq.id}
+                      onChange={e => { const fs = e.target.files; e.target.value = ""; if (fs?.length) uploadPackingList(openReq, fs) }} />
+                  </label>
                   <button onClick={() => save(openReq)} disabled={busy === openReq.id || !allReady}
                     className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition" style={{ background: MAROON }}>
-                    {busy === openReq.id ? "Saving…" : "Save → Send to Logistics"}
+                    {busy === openReq.id ? "Saving…" : (openReq.status === "PC_REVISE" ? "Save → ส่งกลับ LG" : "Save → Send to Logistics")}
                   </button>
                 </div>
                 {!allReady && <span className="text-[11px] text-amber-600">Fill Country, Port, Incoterm &amp; Weight for every item</span>}
               </div>
             </div>
+
+            {openReq.status === "PC_REVISE" && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm">
+                <div className="font-semibold text-red-700">↩️ เอกสารถูกตีกลับจาก LG (Revise ครั้งที่ {openReq.reviseCount || 1})</div>
+                <div className="text-red-600 mt-0.5">เหตุผล: {openReq.lastReturnReason || "-"}</div>
+                <div className="text-[11px] text-red-500 mt-1">แก้ไข/แนบไฟล์ให้ถูกต้อง แล้วกด “Save → ส่งกลับ LG” (ไม่ต้องผ่าน approver ใหม่)</div>
+              </div>
+            )}
+            {(openReq.attachments || []).length > 0 && (
+              <div className="text-[11px] text-gray-500">📎 ไฟล์แนบ: {(openReq.attachments || []).map((a: any) => a.filename || a.name).filter(Boolean).join(", ")}</div>
+            )}
 
             {/* Excel-like horizontal rows: grey = reference (from BOM/PC), green = fields to fill in */}
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
@@ -455,11 +503,13 @@ export default function PurchasePage() {
           </div>
         ) : (() => {
           const term = soQ.trim().toLowerCase()
+          const wantStatus = pcTab === "revise" ? "PC_REVISE" : "PENDING_PURCHASING"
+          const base = reqs.filter(rq => rq.status === wantStatus)
           const shown = term
-            ? reqs.filter(rq =>
+            ? base.filter(rq =>
                 String(rq.documentNo || "").toLowerCase().includes(term) ||
                 rq.items.some((i: any) => String(i.soNoDoc || "").toLowerCase().includes(term)))
-            : reqs
+            : base
           return (
             <div className="space-y-3">
               <div className="relative max-w-md">
@@ -467,19 +517,21 @@ export default function PurchasePage() {
                   className="w-full border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
                 {soQ && <button onClick={() => setSoQ("")} className="absolute right-2.5 top-2 text-gray-300 hover:text-gray-500">✕</button>}
               </div>
-              {reqs.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">No documents at this stage</div> :
+              {base.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">{pcTab === "revise" ? "ไม่มีเอกสารที่ถูกตีกลับ 🎉" : "No documents at this stage"}</div> :
                 shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400">ไม่พบเอกสารที่ตรงกับ “{soQ}”</div> :
                 <div className="space-y-2.5">
                   {shown.map(rq => (
                     <button key={rq.id} onClick={() => setOpenId(rq.id)}
-                      className="w-full flex items-center justify-between gap-3 px-5 py-4 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition text-left">
+                      className={`w-full flex items-center justify-between gap-3 px-5 py-4 bg-white rounded-2xl border shadow-sm hover:shadow-md transition text-left ${rq.status === "PC_REVISE" ? "border-red-200" : "border-gray-100 hover:border-gray-200"}`}>
                       <div>
                         <div className="font-semibold text-gray-900 flex items-center gap-2">{rq.documentNo}
+                          {rq.status === "PC_REVISE" && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">↩️ REVISE #{rq.reviseCount || 1}</span>}
                           {rq.mode === "REGULAR"
                             ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">🟢 REGULAR</span>
                             : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">🟠 IRREGULAR</span>}
                         </div>
                         <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items.length} items · {[...new Set(rq.items.map((i: any) => i.soNoDoc))].join(", ")}</div>
+                        {rq.status === "PC_REVISE" && rq.lastReturnReason && <div className="text-[11px] text-red-600 mt-1">เหตุผลตีกลับ: {rq.lastReturnReason}</div>}
                       </div>
                       <span className="text-gray-300 text-lg">›</span>
                     </button>
@@ -488,6 +540,60 @@ export default function PurchasePage() {
             </div>
           )
         })()}
+      </>
+      )}
+    </div>
+  )
+}
+
+// Revise tracking — count how many times each purchaser's docs were returned (sum of reviseCount),
+// most-revised first. Fetches EVERY doc (all statuses / all BU) so revised docs that already moved on
+// still count. Visible to Purchasing + Admin (this whole page is already gated to them).
+function ReviseStats({ reqs: _ }: { reqs: any[] }) {
+  const [all, setAll] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    (async () => {
+      try {
+        const results = await Promise.all(BUS.map(b => fetch(`/api/pull-material?bu=${b}`).then(r => r.json()).catch(() => ({}))))
+        setAll(results.flatMap((d: any) => d.requests || []))
+      } finally { setLoading(false) }
+    })()
+  }, [])
+  const byPerson: Record<string, { name: string; revises: number; docs: number }> = {}
+  for (const r of all) {
+    const key = r.purchaserName || r.purchaserEmail || r.requesterName || "(ไม่ระบุ)"
+    const e = (byPerson[key] ??= { name: key, revises: 0, docs: 0 })
+    e.revises += Number(r.reviseCount) || 0
+    if (Number(r.reviseCount) > 0) e.docs += 1
+  }
+  const rows = Object.values(byPerson).filter(p => p.revises > 0).sort((a, b) => b.revises - a.revises)
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-500">นับจากจำนวนครั้งที่เอกสารถูก LG ตีกลับให้แก้ (revise) — เรียงจากมากไปน้อย · ใช้ประกอบการประเมิน</p>
+      {loading ? <p className="text-sm text-gray-400">Loading…</p> :
+        rows.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">ยังไม่มีการตีกลับ 🎉</div> :
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-500"><tr>
+              <th className="px-4 py-2.5 text-left font-medium">#</th>
+              <th className="px-4 py-2.5 text-left font-medium">จัดซื้อ</th>
+              <th className="px-4 py-2.5 text-right font-medium">จำนวนครั้งที่ถูกตีกลับ</th>
+              <th className="px-4 py-2.5 text-right font-medium">จำนวนเอกสาร</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {rows.map((p, i) => (
+                <tr key={p.name} className={i === 0 ? "bg-red-50/40" : ""}>
+                  <td className="px-4 py-2.5 text-gray-400">{i + 1}</td>
+                  <td className="px-4 py-2.5 font-medium text-gray-800">{p.name}{i === 0 && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold">สูงสุด</span>}</td>
+                  <td className="px-4 py-2.5 text-right font-bold" style={{ color: MAROON }}>{p.revises}</td>
+                  <td className="px-4 py-2.5 text-right text-gray-500">{p.docs}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>}
+      <p className="text-[11px] text-gray-400">* นับจากทุกเอกสารทุก BU ทุกสถานะ (รวมที่ผ่านขั้นตอนไปแล้ว)</p>
     </div>
   )
 }

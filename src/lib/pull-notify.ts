@@ -4,10 +4,11 @@ import { runWithTestMail } from "@/lib/test-ctx"
 import { magicLoginFor } from "@/lib/notify"
 import { pcApprover } from "@/lib/pull-approvers"
 
-// Extra LG recipients to always alert on LG stages (fill Master rate / actual air), on top of every
-// LOGISTICS_IMPORT user. Shared worklist: whoever fills the rate/actual first, the doc drops for the others.
-const LG_ALERT_EXTRA = ["krittamet.h@nanyangtextile.com"]
-const LG_STAGES = new Set(["PENDING_LG_RATE", "PENDING_LOGISTICS", "APPROVED"])
+// LG alert routing (explicit people, not the whole LOGISTICS_IMPORT role):
+//  • No-Master (fill Master rate) → wanna + krittamet
+//  • Approved (enter actual air)   → nuttawut
+const LG_NOMASTER_TO = ["wanna.p@nanyangtextile.com", "krittamet.h@nanyangtextile.com"]
+const LG_ACTUAL_TO = ["nuttawut.t@nanyangtextile.com"]
 const APP_URL = process.env.APP_URL || process.env.NEXTAUTH_URL || ""
 
 // Per-stage recipient config for the Pull Material flow. Each entry = who to alert when a doc REACHES
@@ -120,34 +121,31 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
         <p style="color:#888;font-size:12px">PO: ${pos || "-"}</p></div>`
       await runWithTestMail(testTo, () => sendMail([rq.requesterEmail], `[Pull Material] Approved — ${rq.documentNo}`, html)).catch(() => {})
     }
-    // 2) Logistics alert (fill the actual air freight) — magic link to the LG page.
-    const lgUsers = await (prisma.user as any).findMany({
-      where: { isActive: true, OR: [{ role: "LOGISTICS_IMPORT" }, { roles: { has: "LOGISTICS_IMPORT" } }, { email: { in: LG_ALERT_EXTRA, mode: "insensitive" } }] },
-      select: { id: true, email: true },
-    })
-    const seenLg = new Set<string>()
-    const lg = lgUsers.filter((u: any) => u.email && !seenLg.has(u.email.toLowerCase()) && seenLg.add(u.email.toLowerCase()))
-    console.log(`[pull-notify] ${rq.documentNo} APPROVED → alert LG recips=${lg.length}`)
-    await runWithTestMail(testTo, async () => {
-      for (const u of lg) {
-        const link = await magicLoginFor(u.id, "/pull-material/documents")   // actual entry lives on the Logistics DOCUMENT page
-        const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText: "Approved · Logistics — enter actual air freight", fields: docFields, cta: "Open Logistics Document", link })
-        await sendMail([u.email], `[Pull Material] Approved · enter actual — ${rq.documentNo}`, html).catch(() => {})
-      }
-      // Extra LG emails not matched to a registered user → plain login link.
-      await sendExtraLgAlerts(seenLg, rq, docFields, "Approved · Logistics — enter actual air freight", "Open Logistics Document")
-    }).catch(() => {})
+    // 2) Logistics alert (enter the actual air freight) → nuttawut.
+    console.log(`[pull-notify] ${rq.documentNo} APPROVED → alert LG actual=${LG_ACTUAL_TO.join(",")}`)
+    await runWithTestMail(testTo, () =>
+      alertLgList(LG_ACTUAL_TO, rq, docFields, "Approved · Logistics — enter actual air freight", "Open Logistics Document", "/pull-material/documents")
+    ).catch(() => {})
+    return
+  }
+
+  // No-Master (fill Master rate) → wanna + krittamet only (not the whole LG role).
+  if (status === "PENDING_LG_RATE") {
+    const c = STAGE[status]
+    console.log(`[pull-notify] ${rq.documentNo} PENDING_LG_RATE → alert ${LG_NOMASTER_TO.join(",")}`)
+    await runWithTestMail(testTo, () =>
+      alertLgList(LG_NOMASTER_TO, rq, docFields, PULL_STATUS_LABEL[status] || "รอ LG เติม Air rate", c.cta, c.redirect)
+    ).catch(() => {})
     return
   }
 
   if (!cfg) { console.log(`[pull-notify] no STAGE config for status=${status} (${rq.documentNo})`); return }
   // PC approval (PENDING_VP_PUR) = a SINGLE approver routed by BU → email only that person.
   const pcTo = status === "PENDING_VP_PUR" ? pcApprover(rq.bu) : null
-  const withExtra = !pcTo && LG_STAGES.has(status)
   const users = await (prisma.user as any).findMany({
     where: pcTo
       ? { isActive: true, email: { equals: pcTo, mode: "insensitive" } }
-      : { isActive: true, OR: [{ role: { in: cfg.roles } }, { roles: { hasSome: cfg.roles } }, ...(withExtra ? [{ email: { in: LG_ALERT_EXTRA, mode: "insensitive" } }] : [])] },
+      : { isActive: true, OR: [{ role: { in: cfg.roles } }, { roles: { hasSome: cfg.roles } }] },
     select: { id: true, email: true },
   })
   const seen = new Set<string>()
@@ -163,22 +161,70 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
       const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText, fields: docFields, cta: cfg.cta, link })
       await sendMail([u.email], `[Pull Material] ${statusText} — ${rq.documentNo}`, html).catch(() => {})
     }
-    if (withExtra) await sendExtraLgAlerts(seen, rq, docFields, statusText, cfg.cta, cfg.redirect)
   }).catch(() => {})
 }
 
-// Send the LG alert to any LG_ALERT_EXTRA email NOT already covered by a registered recipient
-// (i.e. not yet a user → no magic link). Point them at /login (with a ?next= back to the page) so they
-// must sign in as THEMSELVES — never at the page directly, which would ride whatever session is already
-// in that browser (that is why a non-user opening the link once appeared logged in as someone else).
-async function sendExtraLgAlerts(seen: Set<string>, rq: any, docFields: any[], statusText: string, cta: string, redirect = "/pull-material/documents"): Promise<void> {
-  const link = APP_URL ? `${APP_URL}/login?next=${encodeURIComponent(redirect)}` : "/login"
-  for (const email of LG_ALERT_EXTRA) {
-    if (seen.has(email.toLowerCase())) continue
-    seen.add(email.toLowerCase())
+// Alert a fixed list of LG people by email: a registered user gets a personal magic link; anyone not yet
+// a user gets a /login link (never a direct page link — that would ride whatever session is in the browser).
+async function alertLgList(emails: string[], rq: any, docFields: any[], statusText: string, cta: string, redirect: string): Promise<void> {
+  const users = await (prisma.user as any).findMany({
+    where: { isActive: true, email: { in: emails, mode: "insensitive" } },
+    select: { id: true, email: true },
+  })
+  const byEmail = new Map<string, any>(users.map((u: any) => [String(u.email).toLowerCase(), u]))
+  for (const email of emails) {
+    const u = byEmail.get(email.toLowerCase())
+    const link = u ? await magicLoginFor(u.id, redirect) : (APP_URL ? `${APP_URL}/login?next=${encodeURIComponent(redirect)}` : "/login")
     const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText, fields: docFields, cta, link })
     await sendMail([email], `[Pull Material] ${statusText} — ${rq.documentNo}`, html).catch(() => {})
   }
+}
+
+// LG returned a doc to Purchasing (wrong attachment). Alert the purchaser who owns it (fallback: the
+// creator, then the whole Purchasing pool) with the reason and the running revise count.
+export async function notifyPullReturn(reqId: string, reviseCount: number, reason: string): Promise<void> {
+  const rq = await (prisma as any).pullMaterialRequest.findUnique({
+    where: { id: reqId },
+    select: { documentNo: true, bu: true, isTest: true, createdById: true, requesterEmail: true, purchaserEmail: true, remark: true,
+      items: { select: { poNoDoc: true, country: true, port: true, seaPort: true } } },
+  }).catch(() => null)
+  if (!rq) return
+  let testTo: string | null = null
+  if (rq.isTest && rq.createdById) {
+    const cu = await (prisma.user as any).findUnique({ where: { id: rq.createdById }, select: { email: true } }).catch(() => null)
+    testTo = cu?.email || rq.requesterEmail || null
+  }
+  // Recipient list: the owning purchaser, else creator, else every Purchasing user.
+  let recips: { id?: string; email: string }[] = []
+  if (rq.purchaserEmail) {
+    const u = await (prisma.user as any).findUnique({ where: { email: rq.purchaserEmail }, select: { id: true, email: true } }).catch(() => null)
+    recips = u?.email ? [u] : [{ email: rq.purchaserEmail }]
+  }
+  if (!recips.length && rq.createdById) {
+    const u = await (prisma.user as any).findUnique({ where: { id: rq.createdById }, select: { id: true, email: true } }).catch(() => null)
+    if (u?.email) recips = [u]
+  }
+  if (!recips.length) {
+    const us = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "PURCHASING" }, { roles: { has: "PURCHASING" } }] }, select: { id: true, email: true } })
+    recips = us.filter((u: any) => u.email)
+  }
+  const pos = [...new Set((rq.items || []).map((i: any) => i.poNoDoc).filter(Boolean))].join(", ")
+  const s0 = (rq.items || [])[0] || {}
+  const fields = [
+    { label: "PO", value: pos },
+    { label: "Country / Port", value: [s0.country, s0.port || s0.seaPort].filter(Boolean).join(" · ") },
+    { label: "ตีกลับครั้งที่ (Revise #)", value: String(reviseCount) },
+    { label: "เหตุผล (Reason)", value: reason || "-" },
+    { label: "Remark", value: rq.remark || "" },
+  ]
+  const statusText = `⚠️ ตีกลับให้แก้ไข · Revise ครั้งที่ ${reviseCount}`
+  await runWithTestMail(testTo, async () => {
+    for (const u of recips) {
+      const link = u.id ? await magicLoginFor(u.id, "/pull-material/purchase") : (APP_URL ? `${APP_URL}/login?next=${encodeURIComponent("/pull-material/purchase")}` : "/login")
+      const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText, fields, cta: "แก้ไขเอกสาร (Open Purchase)", link })
+      await sendMail([u.email], `[Pull Material] ตีกลับให้แก้ไข (Revise #${reviseCount}) — ${rq.documentNo}`, html).catch(() => {})
+    }
+  }).catch(() => {})
 }
 
 // Back-compat: the old LG-only helper now delegates to the generic stage notifier.

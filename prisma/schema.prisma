@@ -353,6 +353,13 @@ model PullMaterialRequest {
   vendorContact  String?
   vendorTel      String?
   localChargeTh  Float?             // LG-entered local charge at Thailand (USD)
+  preCost        Float?             // LG pre-cost (USD) — negotiated with supplier, saved as draft before actual
+  // Return-to-Purchase (LG bounces a doc back because attached files are wrong).
+  reviseCount    Int      @default(0) // how many times LG has returned this doc to Purchasing
+  lastReturnReason String?          // reason of the most recent LG return
+  purchaserEmail String?            // purchase user who owns/last-submitted this doc (for revise tracking)
+  purchaserName  String?
+  packingListName String?           // Purchase-attached packing list filename (informational)
   // DVM Purchase approval signature snapshot (base64 PNG data URI), stamped in the PDF.
   approverSignature String?
   approverName      String?

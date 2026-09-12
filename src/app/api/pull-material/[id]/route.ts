@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
-import { notifyPullStage } from "@/lib/pull-notify"
+import { notifyPullStage, notifyPullReturn } from "@/lib/pull-notify"
 import { recomputePullAir } from "@/lib/pull-freight"
 import { itemHasAnyRate } from "@/lib/pull-courier"
 import { magicLoginFor } from "@/lib/notify"
@@ -16,6 +16,7 @@ const STAGE_ROLES: Record<string, string[]> = {
   PENDING_DVM_SCM: ["PULL_DVM_SCM"], PENDING_VP_SCM: ["VP_SCM"], PENDING_FINAL: ["PULL_PRESIDENT"],
   PENDING_DVM_PUR: ["DVM_PUR"], PENDING_VP_PUR: ["VP_PUR"], APPROVED: ["LOGISTICS_IMPORT"],
   PENDING_LG_RATE: ["LOGISTICS_IMPORT"], // no air master rate on submit → LG fills the rate before approval
+  PC_REVISE: ["PURCHASING"], // LG returned the doc — Purchasing must fix files/data then send back
 }
 
 // TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
@@ -50,6 +51,7 @@ const PULL_FLOW = [
   "PENDING_VP_PUR",
   // legacy single approval step (older docs) + terminal
   "PENDING_APPROVAL",
+  "PC_REVISE", // LG returned to Purchasing to fix wrong attachment (bounces straight back, no re-approval)
   "APPROVED",
   "COMPLETED",
 ] as const
@@ -103,25 +105,39 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const actorEmail = (session.user as any).email as string | undefined
+  const actorName = ((session.user as any).name || (session.user as any).title || "") as string
+
+  // LG returns the doc to Purchasing (wrong attachment / files). Bounce straight to PC_REVISE — no approval
+  // re-run — bump the revise counter, keep the reason, and alert the purchaser ("Revise #N").
+  if (body.returnToPurchase) {
+    const cur = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { reviseCount: true } })
+    const n = (cur?.reviseCount || 0) + 1
+    await (prisma as any).pullMaterialRequest.update({
+      where: { id }, data: { status: "PC_REVISE", lastReturnReason: String(body.returnReason || "").trim() || null, reviseCount: n },
+    })
+    await notifyPullReturn(id, n, String(body.returnReason || "").trim()).catch(() => {})
+    return NextResponse.json({ ok: true, status: "PC_REVISE", reviseCount: n })
+  }
 
   // Toggle Regular / Irregular mode per doc (no status change needed).
   if (body.mode === "REGULAR" || body.mode === "IRREGULAR") {
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data: { mode: body.mode } })
   }
 
-  // Edit (recalled doc): packages / remark at request level.
-  if ("packages" in body || "remark" in body) {
+  // Edit (recalled doc): packages / remark at request level; Purchase packing-list filename.
+  if ("packages" in body || "remark" in body || "packingListName" in body) {
     await (prisma as any).pullMaterialRequest.update({
       where: { id },
       data: {
         ...("packages" in body ? { packages: Array.isArray(body.packages) && body.packages.length ? body.packages : undefined } : {}),
         ...("remark" in body ? { remark: body.remark || null } : {}),
+        ...("packingListName" in body ? { packingListName: body.packingListName || null } : {}),
       },
     })
   }
 
   // LG closes the doc ONCE (1 shipment / 1 doc): actual air freight + INV + HAWB at request level.
-  if ("actualAir" in body || "invoiceNo" in body || "hawbNo" in body || "mawbNo" in body || "flightEtd" in body || "flightEta" in body || "poInvoices" in body || "localChargeTh" in body) {
+  if ("actualAir" in body || "invoiceNo" in body || "hawbNo" in body || "mawbNo" in body || "flightEtd" in body || "flightEta" in body || "poInvoices" in body || "localChargeTh" in body || "preCost" in body) {
     await (prisma as any).pullMaterialRequest.update({
       where: { id },
       data: {
@@ -133,6 +149,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...("flightEta" in body ? { flightEta: dt(body.flightEta) } : {}),
         ...("poInvoices" in body ? { poInvoices: body.poInvoices && typeof body.poInvoices === "object" ? body.poInvoices : undefined } : {}),
         ...("localChargeTh" in body ? { localChargeTh: num(body.localChargeTh) } : {}),
+        ...("preCost" in body ? { preCost: num(body.preCost) } : {}),
       },
     })
   }
@@ -142,6 +159,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const isStop = body.status === "RECALLED" || body.status === "REJECTED"
     // The stage the doc is on BEFORE this change (lost after the update) — used to alert the current owner on recall.
     const before = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { status: true, bu: true } })
+
+    // Attribute the doc to the purchaser when Purchasing submits it forward or re-submits after a return —
+    // powers the "who gets revised most" tracking.
+    if ((before?.status === "PENDING_PURCHASING" || before?.status === "PC_REVISE") && actorEmail) {
+      data.purchaserEmail = actorEmail
+      data.purchaserName = actorName || actorEmail
+    }
 
     // GATE: LG forwarding out of PENDING_LG_RATE → every line must have a rate in at least one mode
     // (air OR sea OR courier) before it can go to approval.
