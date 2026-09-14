@@ -353,7 +353,8 @@ model PullMaterialRequest {
   vendorContact  String?
   vendorTel      String?
   localChargeTh  Float?             // LG-entered local charge at Thailand (USD)
-  preCost        Float?             // LG pre-cost (USD) — negotiated with supplier, saved as draft before actual
+  preCost        Float?             // LG pre-cost (USD) — auto from Air master by weight; editable per doc
+  preCostFwd     String?            // which forwarder (FWD) the pre-cost was taken from (LG can switch per doc)
   // Return-to-Purchase (LG bounces a doc back because attached files are wrong).
   reviseCount    Int      @default(0) // how many times LG has returned this doc to Purchasing
   lastReturnReason String?          // reason of the most recent LG return

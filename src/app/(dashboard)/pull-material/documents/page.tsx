@@ -5,6 +5,30 @@ import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
 import { courierUsd, destForBu, EXCHANGE_RATE, seaUsd } from "@/lib/pull-courier"
 
+// Pre cost from the AIR master (same formula as EST: rate at weight-break × weight + origin cost),
+// but broken out PER FORWARDER so LG can pick which FWD this doc actually shipped with.
+const PC_BREAKS = [45, 100, 250, 300, 500, 1000, 2000, 8000]
+const pcBreakKey = (w: number) => { let b = 45; for (const x of PC_BREAKS) if (x <= w) b = x; return "Q" + b }
+const pcLaos = (x: string) => x === "LAOS" || x === "VTE" || x === "VIENTIANE"
+const pcDestMatch = (a: any, b: any) => { const A = String(a || "BKK").toUpperCase(), B = String(b || "BKK").toUpperCase(); return A === B || (pcLaos(A) && pcLaos(B)) }
+function airPreCostOptions(airRows: any[], port: any, dest: string, weight: any, incoterm: any): { fwd: string; airline: string; cost: number }[] {
+  const w = Number(weight) || 0
+  if (!w || !port) return []
+  const bk = pcBreakKey(w)
+  const inc = String(incoterm || "").toUpperCase()
+  const P = String(port).toUpperCase()
+  const opts = (airRows || []).map((r: any) => {
+    if (String(r.origin || "").toUpperCase() !== P || !pcDestMatch(dest, r.destination)) return null
+    const rate = Number((r.rates || {})[bk])
+    if (!rate || isNaN(rate)) return null
+    const add = inc === "EX-WORK" ? (Number(r.origCostExw) || 0) : inc === "FCA" ? (Number(r.origCostFca) || 0) : 0
+    return { fwd: r.fwd || "-", airline: r.airline || "", cost: Math.round((rate * w + add) * 100) / 100 }
+  }).filter(Boolean) as { fwd: string; airline: string; cost: number }[]
+  // De-dupe by FWD+airline, keep the row as-is (a port can list a FWD once per airline).
+  const seen = new Set<string>()
+  return opts.filter(o => { const k = `${o.fwd}|${o.airline}`; if (seen.has(k)) return false; seen.add(k); return true })
+}
+
 export default function Page() {
   const { data: session, status: auth } = useSession()
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
@@ -34,9 +58,12 @@ export default function Page() {
   const [exporting, setExporting] = useState(false)
   const [courierRates, setCourierRates] = useState<any[]>([])
   const [seaRates, setSeaRates] = useState<any[]>([])
+  const [airRates, setAirRates] = useState<any[]>([])
+  const [editFwd, setEditFwd] = useState(false) // toggle the FWD picker for Pre cost
   useEffect(() => {
     fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRates(d.rows || [])).catch(() => {})
+    fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRates(d.rows || [])).catch(() => {})
   }, [])
   const [recomputing, setRecomputing] = useState(false)
   const [backfilling, setBackfilling] = useState(false)
@@ -113,6 +140,21 @@ export default function Page() {
   }
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
 
+  // On opening a doc: auto-fill Pre cost from the AIR master (by weight), unless it's already set/edited.
+  useEffect(() => {
+    if (!openId || !airRates.length) { setEditFwd(false); return }
+    const rq = reqs.find(r => r.id === openId)
+    if (!rq || rq.status === "PENDING_LG_RATE") return
+    if (rq.preCost != null || edits[openId]?.preCost !== undefined) { setEditFwd(false); return }
+    const its = rq.items || []
+    const d0 = its.find((x: any) => x.airFreightCost != null) || its[0] || {}
+    const opts = airPreCostOptions(airRates, d0.port, destForBu(rq.bu), d0.weight, d0.incoterm)
+    if (!opts.length) { setEditFwd(false); return }
+    const def = rq.preCostFwd ? (opts.find(o => o.fwd === rq.preCostFwd) || opts[0]) : opts.reduce((a, b) => (b.cost > a.cost ? b : a))
+    setEdits(p => ({ ...p, [openId]: { ...(p[openId] || {}), preCost: String(def.cost), preCostFwd: def.fwd } }))
+    setEditFwd(false)
+  }, [openId, airRates]) // eslint-disable-line
+
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
   const raw = (rq: any, k: string) => edits[rq.id]?.[k] ?? (rq[k] != null ? String(rq[k]) : "")
   // Date fields → normalize to YYYY-MM-DD for <input type=date>.
@@ -137,6 +179,7 @@ export default function Page() {
           flightEta: rawDate(rq, "flightEta") || null,
           poInvoices: buildPoInvoices(rq),
           preCost: raw(rq, "preCost") === "" ? null : raw(rq, "preCost"),
+          preCostFwd: raw(rq, "preCostFwd") || null,
           actualAir: raw(rq, "actualAir") === "" ? null : raw(rq, "actualAir"),
           localChargeTh: raw(rq, "localChargeTh") === "" ? null : raw(rq, "localChargeTh"),
           status: "COMPLETED",
@@ -162,6 +205,7 @@ export default function Page() {
           flightEta: rawDate(rq, "flightEta") || null,
           poInvoices: buildPoInvoices(rq),
           preCost: raw(rq, "preCost") === "" ? null : raw(rq, "preCost"),
+          preCostFwd: raw(rq, "preCostFwd") || null,
           actualAir: raw(rq, "actualAir") === "" ? null : raw(rq, "actualAir"),
           localChargeTh: raw(rq, "localChargeTh") === "" ? null : raw(rq, "localChargeTh"),
         }),
@@ -578,7 +622,10 @@ export default function Page() {
 
               {/* LG entry — HAWB / INV / Actual (once per doc). LOCKED (grey) while No Master: LG must fill
                   the rate + Save (→ Approval) first; actual is entered later after the doc is approved. */}
-              {(() => { const locked = rq.status === "PENDING_LG_RATE"; return (
+              {(() => { const locked = rq.status === "PENDING_LG_RATE"
+                const pcOpts = airPreCostOptions(airRates, d0.port, destForBu(rq.bu), d0.weight, d0.incoterm)
+                const pcFwd = raw(rq, "preCostFwd")
+                return (
               <div className="space-y-4">
                 <div className={`bg-white rounded-2xl border shadow-sm p-5 ${locked ? "border-gray-200 bg-gray-50" : "border-gray-100"}`}>
                   <div className="flex items-center justify-between mb-3">
@@ -596,8 +643,20 @@ export default function Page() {
                       <div><label className="text-[11px] font-semibold text-green-700 block mb-1">FLIGHT ETA</label>
                         <input disabled={locked} type="date" value={rawDate(rq, "flightEta")} onChange={e => setVal(rq.id, "flightEta", e.target.value)} className={inp} /></div>
                     </div>
-                    <div><label className="text-[11px] font-semibold text-amber-700 block mb-1">PRE COST (USD) <span className="font-normal text-gray-400">· ประมาณการจากคุยกับ supplier</span></label>
-                      <input disabled={locked} type="number" value={raw(rq, "preCost")} onChange={e => setVal(rq.id, "preCost", e.target.value)} placeholder="0" className={inp} /></div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-semibold text-amber-700">PRE COST (USD) <span className="font-normal text-gray-400">· auto จาก Air master (ตามน้ำหนัก){pcFwd ? ` · FWD ${pcFwd}` : ""}</span></label>
+                        {pcOpts.length > 0 && <button type="button" onClick={() => setEditFwd(v => !v)} className="text-[11px] text-amber-700 underline hover:text-amber-800">{editFwd ? "ปิด" : "✏️ แก้ไข FWD"}</button>}
+                      </div>
+                      <input disabled={locked} type="number" value={raw(rq, "preCost")} onChange={e => setVal(rq.id, "preCost", e.target.value)} placeholder="0" className={inp} />
+                      {editFwd && pcOpts.length > 0 && (
+                        <select disabled={locked} value={pcFwd} onChange={e => { const o = pcOpts.find(x => x.fwd === e.target.value); if (o) { setVal(rq.id, "preCostFwd", o.fwd); setVal(rq.id, "preCost", String(o.cost)) } }}
+                          className={inp + " mt-1.5"}>
+                          {!pcOpts.some(o => o.fwd === pcFwd) && <option value={pcFwd}>{pcFwd || "— เลือก FWD —"}</option>}
+                          {pcOpts.map(o => <option key={`${o.fwd}|${o.airline}`} value={o.fwd}>{o.fwd}{o.airline ? ` (${o.airline})` : ""} — {fmt(o.cost)} USD</option>)}
+                        </select>
+                      )}
+                    </div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">ACTUAL AIR FREIGHT <span className="text-red-500">*</span></label>
                       <input disabled={locked} type="number" value={raw(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">LOCAL CHARGE (TH)</label>

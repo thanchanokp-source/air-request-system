@@ -151,6 +151,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...("poInvoices" in body ? { poInvoices: body.poInvoices && typeof body.poInvoices === "object" ? body.poInvoices : undefined } : {}),
         ...("localChargeTh" in body ? { localChargeTh: num(body.localChargeTh) } : {}),
         ...("preCost" in body ? { preCost: num(body.preCost) } : {}),
+        ...("preCostFwd" in body ? { preCostFwd: body.preCostFwd || null } : {}),
       },
     })
   }
