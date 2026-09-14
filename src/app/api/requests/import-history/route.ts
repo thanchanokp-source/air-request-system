@@ -16,16 +16,18 @@ const normYear = (y: number): number => {
   if (y >= 2400 && y <= 2600) return y - 543
   return y
 }
+// Date-only → UTC noon so no timezone shifts it across a day (was landing 1 day early).
+const utcNoon = (y: number, mo1: number, d: number): Date | null => { const dt = new Date(Date.UTC(y, mo1 - 1, d, 12, 0, 0)); return isNaN(dt.getTime()) ? null : dt }
 const parseDate = (val: any): Date | null => {
   if (val == null || val === "") return null
-  if (val instanceof Date) return isNaN(val.getTime()) ? null : val
-  if (typeof val === "number") { const d = new Date(Math.round((val - 25569) * 86400 * 1000)); return isNaN(d.getTime()) ? null : d }
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : utcNoon(val.getFullYear(), val.getMonth() + 1, val.getDate())
+  if (typeof val === "number") { const base = new Date(Math.round((val - 25569) * 86400 * 1000)); return isNaN(base.getTime()) ? null : utcNoon(base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate()) }
   const s = String(val).trim(); if (!s) return null
   let m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/)
-  if (m) { const d = new Date(normYear(+m[1]), +m[2] - 1, +m[3]); return isNaN(d.getTime()) ? null : d }
+  if (m) return utcNoon(normYear(+m[1]), +m[2], +m[3])
   m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/)
-  if (m) { let a = +m[1], b = +m[2]; const year = normYear(+m[3]); let dd: number, mm: number; if (a > 12 && b <= 12) { dd = a; mm = b } else if (b > 12 && a <= 12) { mm = a; dd = b } else { dd = a; mm = b } const d = new Date(year, mm - 1, dd); return isNaN(d.getTime()) ? null : d }
-  const d = new Date(s); return isNaN(d.getTime()) ? null : d
+  if (m) { const a = +m[1], b = +m[2]; const year = normYear(+m[3]); let dd: number, mm: number; if (a > 12 && b <= 12) { dd = a; mm = b } else if (b > 12 && a <= 12) { mm = a; dd = b } else { dd = a; mm = b } return utcNoon(year, mm, dd) }
+  const d = new Date(s); return isNaN(d.getTime()) ? null : utcNoon(d.getFullYear(), d.getMonth() + 1, d.getDate())
 }
 const col = (item: any, key: string) => {
   const k = Object.keys(item).find(k => k.toLowerCase() === key.toLowerCase()) ?? key

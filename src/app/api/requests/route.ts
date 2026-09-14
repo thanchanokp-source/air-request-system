@@ -21,41 +21,42 @@ const normYear = (y: number): number => {
 
 // Accepts many user date formats: Excel Date/serial, DD/MM/YY(YY), YYYY-MM-DD,
 // separators / - . , 2-digit or Buddhist years, and month-name strings.
+// Date-only values → UTC NOON so no timezone (±12h) shifts them across a day (was landing 1 day early).
+const utcNoon = (y: number, mo1: number, d: number): Date | null => {
+  const dt = new Date(Date.UTC(y, mo1 - 1, d, 12, 0, 0))
+  return isNaN(dt.getTime()) ? null : dt
+}
 const parseDate = (val: any): Date | null => {
   if (val == null || val === "") return null
-  // Real Excel date (cellDates:true) → already a Date object
-  if (val instanceof Date) return isNaN(val.getTime()) ? null : val
-  // Excel serial number
+  // Real Excel date (cellDates:true) → a Date object; take its local calendar parts, re-anchor to UTC noon.
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : utcNoon(val.getFullYear(), val.getMonth() + 1, val.getDate())
+  // Excel serial number → UTC midnight of that day, then re-anchor to UTC noon.
   if (typeof val === "number") {
-    const d = new Date(Math.round((val - 25569) * 86400 * 1000))
-    return isNaN(d.getTime()) ? null : d
+    const base = new Date(Math.round((val - 25569) * 86400 * 1000))
+    return isNaN(base.getTime()) ? null : utcNoon(base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate())
   }
   const s = String(val).trim()
   if (!s) return null
 
   // ISO-like: YYYY-MM-DD / YYYY/MM/DD
   let m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/)
-  if (m) {
-    const d = new Date(normYear(+m[1]), +m[2] - 1, +m[3])
-    return isNaN(d.getTime()) ? null : d
-  }
+  if (m) return utcNoon(normYear(+m[1]), +m[2], +m[3])
 
   // Numeric with separators: a/b/year  (Thai default = DD/MM, auto-detect if a or b > 12)
   m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/)
   if (m) {
-    let a = +m[1], b = +m[2]
+    const a = +m[1], b = +m[2]
     const year = normYear(+m[3])
     let dd: number, mm: number
     if (a > 12 && b <= 12) { dd = a; mm = b }        // clearly DD/MM
     else if (b > 12 && a <= 12) { mm = a; dd = b }   // clearly MM/DD
     else { dd = a; mm = b }                           // ambiguous → DD/MM (Thai)
-    const d = new Date(year, mm - 1, dd)
-    return isNaN(d.getTime()) ? null : d
+    return utcNoon(year, mm, dd)
   }
 
   // Month-name formats (e.g. "13 Feb 2026", "Feb 13, 2026")
   const d = new Date(s)
-  return isNaN(d.getTime()) ? null : d
+  return isNaN(d.getTime()) ? null : utcNoon(d.getFullYear(), d.getMonth() + 1, d.getDate())
 }
 
 export async function GET(req: NextRequest) {

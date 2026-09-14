@@ -20,17 +20,24 @@ const normYear = (y: number): number => {
   return y
 }
 
+// Date-only values are anchored to UTC NOON so no timezone (±12h) can shift them across a day boundary
+// (an Excel "10-12-26" was landing on 09-Dec because midnight-local got stored back a day in UTC).
+const utcNoon = (y: number, mo1: number, d: number): Date | null => {
+  const dt = new Date(Date.UTC(y, mo1 - 1, d, 12, 0, 0))
+  return isNaN(dt.getTime()) ? null : dt
+}
 const parseDate = (val: any): Date | null => {
   if (val == null || val === "") return null
-  if (val instanceof Date) return isNaN(val.getTime()) ? null : val
+  // A Date object (e.g. SheetJS cellDates) — take its LOCAL calendar parts, re-anchor to UTC noon.
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : utcNoon(val.getFullYear(), val.getMonth() + 1, val.getDate())
   if (typeof val === "number") {
-    const d = new Date(Math.round((val - 25569) * 86400 * 1000))
-    return isNaN(d.getTime()) ? null : d
+    const base = new Date(Math.round((val - 25569) * 86400 * 1000)) // Excel serial → UTC midnight of that day
+    return isNaN(base.getTime()) ? null : utcNoon(base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate())
   }
   const s = String(val).trim()
   if (!s) return null
   let m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/)
-  if (m) { const d = new Date(normYear(+m[1]), +m[2] - 1, +m[3]); return isNaN(d.getTime()) ? null : d }
+  if (m) return utcNoon(normYear(+m[1]), +m[2], +m[3])
   m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/)
   if (m) {
     const a = +m[1], b = +m[2]; const year = normYear(+m[3])
@@ -38,10 +45,10 @@ const parseDate = (val: any): Date | null => {
     if (a > 12 && b <= 12) { dd = a; mm = b }
     else if (b > 12 && a <= 12) { mm = a; dd = b }
     else { dd = a; mm = b }
-    const d = new Date(year, mm - 1, dd); return isNaN(d.getTime()) ? null : d
+    return utcNoon(year, mm, dd)
   }
   const d = new Date(s)
-  return isNaN(d.getTime()) ? null : d
+  return isNaN(d.getTime()) ? null : utcNoon(d.getFullYear(), d.getMonth() + 1, d.getDate())
 }
 
 const col = (item: any, key: string) => {

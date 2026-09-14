@@ -27,10 +27,13 @@ const colLike = (item: any, ...subs: string[]) => {
   const k = Object.keys(item).find(k => { const lk = k.toLowerCase(); return subs.every(s => lk.includes(s.toLowerCase())) })
   return k ? item[k] : ""
 }
+// Date-only → UTC noon so no timezone shifts it across a day.
+const utcNoon = (y: number, mo1: number, d: number): Date | null => { const dt = new Date(Date.UTC(y, mo1 - 1, d, 12, 0, 0)); return isNaN(dt.getTime()) ? null : dt }
 const parseDate = (v: any): Date | null => {
   if (v == null || v === "") return null
-  if (typeof v === "number") { const d = new Date(Math.round((v - 25569) * 86400 * 1000)); return isNaN(d.getTime()) ? null : d }
-  const d = new Date(String(v)); return isNaN(d.getTime()) ? null : d
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : utcNoon(v.getFullYear(), v.getMonth() + 1, v.getDate())
+  if (typeof v === "number") { const base = new Date(Math.round((v - 25569) * 86400 * 1000)); return isNaN(base.getTime()) ? null : utcNoon(base.getUTCFullYear(), base.getUTCMonth() + 1, base.getUTCDate()) }
+  const d = new Date(String(v)); return isNaN(d.getTime()) ? null : utcNoon(d.getFullYear(), d.getMonth() + 1, d.getDate())
 }
 const normGwDept = (raw: string) => { const u = String(raw || "").trim().toUpperCase(); return u === "NYK" ? "SCM NYK" : u === "NYG" ? "SCM NYG" : String(raw || "").trim() }
 
