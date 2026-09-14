@@ -648,7 +648,7 @@ export default function Page() {
                         <label className="text-[11px] font-semibold text-amber-700">PRE COST (USD) <span className="font-normal text-gray-400">· auto จาก Air master (ตามน้ำหนัก){pcFwd ? ` · FWD ${pcFwd}` : ""}</span></label>
                         {pcOpts.length > 0 && <button type="button" onClick={() => setEditFwd(v => !v)} className="text-[11px] text-amber-700 underline hover:text-amber-800">{editFwd ? "ปิด" : "✏️ แก้ไข FWD"}</button>}
                       </div>
-                      <input disabled={locked} type="number" value={raw(rq, "preCost")} onChange={e => setVal(rq.id, "preCost", e.target.value)} placeholder="0" className={inp} />
+                      <input disabled={locked} type="number" value={raw(rq, "preCost")} onChange={e => setVal(rq.id, "preCost", e.target.value)} placeholder="0" className={inp + " bg-sky-50 border-sky-200 focus:ring-sky-200"} />
                       {editFwd && pcOpts.length > 0 && (
                         <select disabled={locked} value={pcFwd} onChange={e => { const o = pcOpts.find(x => x.fwd === e.target.value); if (o) { setVal(rq.id, "preCostFwd", o.fwd); setVal(rq.id, "preCost", String(o.cost)) } }}
                           className={inp + " mt-1.5"}>
