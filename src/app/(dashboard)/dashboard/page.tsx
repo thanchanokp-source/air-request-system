@@ -868,6 +868,7 @@ export default function DashboardPage() {
         "REASON":         ([...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))].join(" · ")),
         "DETAIL":         ([...new Set(getSplits(row).map((s:any)=>s.detail).filter(Boolean))].join(" · ")),
         "STATUS":         soStage(row), // by-position status incl. PENDING_LG_BOOKING/CLAIM (matches the table)
+        "อยู่ที่ใคร":       (Array.isArray(row.request.pendingWith) ? row.request.pendingWith.join(", ") : ""),
       }
     })
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -1060,12 +1061,12 @@ export default function DashboardPage() {
         <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
-              <tr style={{background:"#c87070"}}>{["DOC NO","SO","PO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON"].map(h=>
+              <tr style={{background:"#c87070"}}>{["DOC NO","SO","PO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON","อยู่ที่ใคร"].map(h=>
                 <th key={h} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && <tr><td colSpan={24} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+              {loading && <tr><td colSpan={25} className="text-center py-10 text-gray-400">Loading...</td></tr>}
               {!loading && filtered.map((row,i)=>{
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
                 return (
@@ -1096,6 +1097,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const sp=getSplits(row);return sp.length?sp.map((s:any)=>deptLabel(s.dept)).join(" · "):(row.claimDepartment||"-")})()}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const sp=getSplits(row);return sp.length?sp.map((s:any)=>s.pct!=null?`${s.pct}%`:"-").join(" · "):"-"})()}</td>
                     <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const rs=[...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))];const txt=rs.length?rs.join(" · "):"-";return <span className="truncate block" title={txt}>{txt}</span>})()}</td>
+                    <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const pw=Array.isArray(row.request.pendingWith)?row.request.pendingWith:[];const txt=pw.length?pw.join(", "):"-";return <span className="truncate block font-medium text-gray-700" title={txt}>{txt}</span>})()}</td>
                   </tr>
                 )
               })}

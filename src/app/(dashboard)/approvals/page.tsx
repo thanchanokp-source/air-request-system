@@ -33,6 +33,9 @@ export default function ApprovalsPage() {
   const [stageF, setStageF] = useState<string[]>([])
   const [personQ, setPersonQ] = useState("")
   const [buApprovalView, setBuApprovalView] = useState<string>("ALL")
+  // Admin who is ALSO an approver (e.g. jariya.t is Admin + CLAIM_PROCUREMENT): toggle between the
+  // all-docs monitor and just "my queue" (the docs actually pending THEIR action).
+  const [myOnly, setMyOnly] = useState(false)
   // Doc-level stage label (for the Stage filter). SCM + VP SCM share PENDING_SCM; LG ∥ Claim shared.
   const docStageLabel = (r: any): string => {
     const s = r.status
@@ -233,7 +236,9 @@ export default function ApprovalsPage() {
   // claim SO via any held role, or they're the current forward recipient.
   // EXCEPTION: ADMIN sees EVERY in-flight document (oversight) — Approvals doubles as an
   // all-docs monitor for admin, not just their personal action queue.
-  const isAdminViewer = role === "ADMIN"
+  const isAdminRole = role === "ADMIN"
+  // "My queue" toggle collapses the admin all-docs view down to the personal approver queue.
+  const isAdminViewer = isAdminRole && !myOnly
   const TERMINAL_ST = ["COMPLETED", "REJECTED", "DRAFT"]
   const myRequests = isAdminViewer
     ? requests.filter(r => !TERMINAL_ST.includes(r.status) && (r.items || []).some((i: any) => i.itemStatus !== "REJECTED"))
@@ -408,6 +413,12 @@ export default function ApprovalsPage() {
             <h1 className="text-2xl font-bold text-gray-900">APPROVALS</h1>
             <p className="text-xs text-gray-400 mt-0.5">{docGroups.length} document(s) {isAdminViewer ? "in progress (admin view — all pending docs)" : "pending your action"}</p>
           </div>
+          {isAdminRole && (
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold self-start">
+              <button onClick={() => setMyOnly(false)} className={`px-3 py-1.5 transition-colors ${!myOnly ? "bg-gray-700 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>ทั้งหมด (Admin)</button>
+              <button onClick={() => setMyOnly(true)} className={`px-3 py-1.5 transition-colors ${myOnly ? "bg-gray-700 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}>งานของฉัน</button>
+            </div>
+          )}
           {showBuToggle && (
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold self-start">
               {["ALL", ...buTabs].map(bu => (

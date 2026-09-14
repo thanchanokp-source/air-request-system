@@ -9,6 +9,7 @@ import { canonCountry } from "@/lib/freight"
 import { attachGarmentPo } from "@/lib/bom"
 import { normalizeSo } from "@/lib/so"
 import { forceImportReason } from "@/lib/claim"
+import { pendingApproverNames } from "@/lib/pending-approvers"
 import { soCurrency } from "@/lib/currency"
 import crypto from "crypto"
 
@@ -94,6 +95,9 @@ export async function GET(req: NextRequest) {
   // for GW/SUPPLIER users. The client (approvals page) scopes correctly via getSplits.
   // Attach the garment PO(s) from the Bill of Material (RPA reference) for recheck at claim.
   await attachGarmentPo(requests as any)
+  // "อยู่ที่ใคร" — current approver name(s) per doc (dashboard column). Directory loaded once.
+  const dir = await (prisma.user as any).findMany({ where: { isActive: true }, select: { email: true, name: true, role: true, roles: true, bu: true } })
+  for (const r of requests as any[]) { try { r.pendingWith = pendingApproverNames(r, dir) } catch { r.pendingWith = [] } }
   return NextResponse.json(requests)
 }
 
