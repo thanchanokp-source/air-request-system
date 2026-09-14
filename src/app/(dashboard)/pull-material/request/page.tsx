@@ -568,19 +568,22 @@ export default function ScmRequestPage() {
         </div>
       )}
       <div>
-        <h1 className="text-xl font-bold" style={{ color: MAROON }}>SCM — Pull Material</h1>
+        <h1 className="text-xl font-bold" style={{ color: MAROON }}>{reqType === "PURCHASING" ? "Purchasing req air" : "SCM — RM REQ AIR"}</h1>
       </div>
 
-      {/* Sub-tabs */}
+      {/* Sub-tabs — Purchasing req air is a direct request (no SCM "Send Approve" step). */}
       <div className="flex gap-1 border-b border-gray-200">
-        {([["request", "1 · Request"], ["approve", "2 · Send Approve"]] as const).map(([k, label]) => (
+        {(reqType === "PURCHASING"
+          ? ([["request", "1 · Request"]] as const)
+          : ([["request", "1 · Request"], ["approve", "2 · Send Approve"]] as const)
+        ).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === k ? "border-current" : "border-transparent text-gray-400 hover:text-gray-600"}`}
             style={tab === k ? { color: MAROON, borderColor: MAROON } : undefined}>{label}</button>
         ))}
       </div>
 
-      {tab === "approve" ? (
+      {tab === "approve" && reqType !== "PURCHASING" ? (
         <>
           {/* Decision branch is derived from the signed-in role (no manual toggle):
               SCM_PULL → SCM decision · PURCHASING → PC decision. Admin tests via "View as". */}
