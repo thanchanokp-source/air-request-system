@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       vendorEmail: body.vendorEmail || null,
       vendorContact: body.vendorContact || null,
       vendorTel: body.vendorTel || null,
+      factory: body.factory || null,
       createdById: userId,
       requestType,
       mode,

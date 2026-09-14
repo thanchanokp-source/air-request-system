@@ -94,6 +94,7 @@ export default function ScmRequestPage() {
   // PC interactive: pick vendor → select some POs → one total weight → pull all materials.
   const [pcCities, setPcCities] = useState<any[]>([])
   const [pcCityId, setPcCityId] = useState("")
+  const [pcFactory, setPcFactory] = useState("") // destination factory (EA/TRM fixed by BU; NYG/GW → G1..G4/GW)
   const [pcVendors, setPcVendors] = useState<string[]>([])
   const [pcUoms, setPcUoms] = useState<string[]>([])
   const [pcVend, setPcVend] = useState("")
@@ -234,6 +235,9 @@ export default function ScmRequestPage() {
     fetch("/api/pull-material/cities").then(r => r.json()).then(d => setPcCities(d.rows || [])).catch(() => {})
   }, [reqType])
   const pcCity = pcCities.find((c: any) => c.id === pcCityId) || null
+  // Destination factory options by BU (EA/TRM fixed; NYG & GW pick a G-factory). Default when BU changes.
+  const factoryOptions = bu === "EA" ? ["EA"] : bu === "TRM" ? ["TRM"] : ["G1", "G2", "G3", "G4", "GW"]
+  useEffect(() => { setPcFactory(bu === "EA" ? "EA" : bu === "TRM" ? "TRM" : "") }, [bu])
   // Freight master (air/sea) for the Country → Port cascade + live Est Air preview.
   useEffect(() => {
     if (reqType !== "PURCHASING") return
@@ -495,6 +499,7 @@ export default function ScmRequestPage() {
       if (!c.trim()) return stop("เลือก / พิมพ์ Country")
       if (!p.trim() && !sp.trim()) return stop("เลือก Air Port หรือ Sea Port")
       if (!pcPur.incoterm) return stop("เลือก Incoterm")
+      if (!pcFactory.trim()) return stop("เลือก Factory (โรงงานปลายทาง)")
       if (!pcPur.needDate) return stop("เลือก Need date (in-house)")
       if (!pcPur.etc) return stop("เลือก ETC")
       if (NEEDS_ADDRESS.includes(pcPur.incoterm) && !pcPur.pickup.trim()) return stop(`${pcPur.incoterm} ต้องระบุ Pickup address`)
@@ -515,7 +520,7 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())), vendorEmail: vendorInfo.email, vendorContact: vendorInfo.contactName, vendorTel: vendorInfo.tel }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode, factory: pcFactory || null, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())), vendorEmail: vendorInfo.email, vendorContact: vendorInfo.contactName, vendorTel: vendorInfo.tel }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) {
@@ -531,6 +536,7 @@ export default function ScmRequestPage() {
         }
         showToast(`✓ ส่งคำขอแล้ว: ${d.request?.documentNo}${files.length ? ` · แนบไฟล์ ${files.length - upFail}/${files.length}` : ""}`, true)
         setCart([]); setRemark(""); setIsTest(false); setModeTouched(false); setFiles([])
+        setPcFactory(bu === "EA" ? "EA" : bu === "TRM" ? "TRM" : "")
         setPcPur({ country: "", port: "", seaPort: "", incoterm: "", pickup: "", needDate: "", etc: "", pkg: "", boxW: "", boxL: "", boxH: "" })
         setPcCityId(""); setPcSelMats([]); setPcSelPos(new Set()); setPcPullQty({}); setPcWeight(""); setPcPkgs([{ uom: "", qty: "" }]); setPickupEditing(false); setPoInvMap({}); setInvMsg(""); setVendorInfo({ email: "", contactName: "", tel: "" })
       }
@@ -1041,7 +1047,14 @@ export default function ScmRequestPage() {
                   </select>
                 </div>
                 <div>
-                  <label className={lab}>เมือง / City <span className="text-gray-300">(auto เติม Country/Port)</span></label>
+                  <label className={lab}>Factory <span className="text-red-500">*</span> <span className="text-gray-300">(โรงงานปลายทาง)</span></label>
+                  <select value={pcFactory} onChange={e => setPcFactory(e.target.value)} className={box}>
+                    {factoryOptions.length > 1 && <option value="">— เลือกโรงงาน —</option>}
+                    {factoryOptions.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={lab}>เมือง / City <span className="text-gray-300">{pcPur.country ? "(เฉพาะประเทศที่เลือก)" : "(auto เติม Country/Port)"}</span></label>
                   <select value={pcCityId} className={box}
                     onChange={e => {
                       const id = e.target.value; setPcCityId(id)
@@ -1050,7 +1063,10 @@ export default function ScmRequestPage() {
                       if (c) setPcPur(p => ({ ...p, country: c.country || p.country, port: c.port || p.port, seaPort: "" }))
                     }}>
                     <option value="">— เลือกเมือง —</option>
-                    {pcCities.map((c: any) => <option key={c.id} value={c.id}>{c.city}{c.port ? ` · ${c.port}` : ""}{c.country ? ` · ${c.country}` : ""}</option>)}
+                    {/* City is LINKED to Country: once a country is picked, only its cities show. */}
+                    {pcCities
+                      .filter((c: any) => !pcPur.country || String(c.country || "").trim().toUpperCase() === String(pcPur.country).trim().toUpperCase())
+                      .map((c: any) => <option key={c.id} value={c.id}>{c.city}{c.port ? ` · ${c.port}` : ""}{c.country ? ` · ${c.country}` : ""}</option>)}
                   </select>
                 </div>
                 <div>
