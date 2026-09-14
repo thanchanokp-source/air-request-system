@@ -80,6 +80,15 @@ export default function PurchasePage() {
     } finally { setUploadingPL(null) }
   }
 
+  // Destination factory (feeds the port→factory transport cost on the compare detail).
+  // EA/TRM are fixed to their BU; NYG & GW pick G1/G2/G3/G4/GW.
+  const factoryDefault = (rq: any) => rq.factory || (rq.bu === "EA" ? "EA" : rq.bu === "TRM" ? "TRM" : "")
+  const factoryOptions = (rq: any) => (rq.bu === "EA" ? ["EA"] : rq.bu === "TRM" ? ["TRM"] : ["G1", "G2", "G3", "G4", "GW"])
+  const setFactory = async (rqId: string, f: string) => {
+    setReqs(prev => prev.map(r => (r.id === rqId ? { ...r, factory: f } : r)))
+    await fetch(`/api/pull-material/${rqId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ factory: f }) }).catch(() => {})
+  }
+
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
   const valOf = (it: any, k: string) => {
     if (edits[it.id]?.[k] !== undefined) return edits[it.id][k]
@@ -322,7 +331,7 @@ export default function PurchasePage() {
               <div>
                 <div className="font-bold text-lg text-gray-900">{openReq.documentNo}</div>
                 <div className="text-xs text-gray-400">{openReq.requesterName} · {openReq.items.length} items</div>
-                <div className="mt-2 flex items-center gap-1.5">
+                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                   <span className="text-[11px] text-gray-500 font-medium">Mode:</span>
                   {(["REGULAR", "IRREGULAR"] as const).map(m => (
                     <button key={m} onClick={() => setDocMode(openReq.id, m)}
@@ -331,6 +340,12 @@ export default function PurchasePage() {
                       {m === "REGULAR" ? "🟢 Regular" : "🟠 Irregular"}
                     </button>
                   ))}
+                  <span className="text-[11px] text-gray-500 font-medium ml-2">Factory:</span>
+                  <select value={factoryDefault(openReq)} onChange={e => setFactory(openReq.id, e.target.value)}
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-[11px] font-bold bg-white focus:outline-none focus:ring-2 focus:ring-red-200">
+                    {factoryDefault(openReq) === "" && <option value="">— เลือกโรงงาน —</option>}
+                    {factoryOptions(openReq).map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1">

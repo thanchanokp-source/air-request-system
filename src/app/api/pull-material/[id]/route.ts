@@ -125,13 +125,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   // Edit (recalled doc): packages / remark at request level; Purchase packing-list filename.
-  if ("packages" in body || "remark" in body || "packingListName" in body) {
+  if ("packages" in body || "remark" in body || "packingListName" in body || "factory" in body) {
     await (prisma as any).pullMaterialRequest.update({
       where: { id },
       data: {
         ...("packages" in body ? { packages: Array.isArray(body.packages) && body.packages.length ? body.packages : undefined } : {}),
         ...("remark" in body ? { remark: body.remark || null } : {}),
         ...("packingListName" in body ? { packingListName: body.packingListName || null } : {}),
+        ...("factory" in body ? { factory: body.factory || null } : {}),
       },
     })
   }

@@ -352,7 +352,9 @@ function ClaimStatusBoard({ req }: { req: any }) {
 
 // NYG/EA/TRM claim departments. "SCM NYG" = single-step approval by Saji (VP_SCM).
 const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION", "SCM NYG"]
-const CLAIM_DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK", NYG: "SCM NYG" }
+// Excel LABEL → internal dept CODE. Only NYK differs (label "SCM NYK" → code "NYK"). "SCM NYG" is ALREADY
+// the canonical dept string in claim.ts (do NOT map it to "NYG", or the import stores the wrong dept).
+const CLAIM_DEPT_LABEL: Record<string, string> = { NYK: "SCM NYK" }
 
 // Avatar colour derived from the name so each person is visually distinct.
 const AVATAR_COLORS = [

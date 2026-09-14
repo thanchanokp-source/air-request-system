@@ -360,6 +360,7 @@ model PullMaterialRequest {
   purchaserEmail String?            // purchase user who owns/last-submitted this doc (for revise tracking)
   purchaserName  String?
   packingListName String?           // Purchase-attached packing list filename (informational)
+  factory        String?            // Destination factory (EA/TRM default by BU; NYG/GW → G1/G2/G3/G4/GW) for port→factory transport cost
   // DVM Purchase approval signature snapshot (base64 PNG data URI), stamped in the PDF.
   approverSignature String?
   approverName      String?
