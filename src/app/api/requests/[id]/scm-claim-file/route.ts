@@ -10,7 +10,10 @@ export const runtime = "nodejs"
 // injected on every "CLAIM DEPT n" column, as a forced download named SCM_<documentNo>.xlsx.
 // Done server-side so reading Supabase storage isn't blocked by CORS and the browser downloads
 // (instead of opening the Office online viewer with the raw storage filename).
-const CLAIM_DEPTS = ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION"]
+// Claim-dept dropdown per BU — must include "SCM NYG" (Saji single-step) for every CLAIM DEPT column.
+const claimDeptsFor = (bu: string) => bu === "GW"
+  ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
+  : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION", "SCM NYG"]
 const LG_CATS = ["INV", "AWB", "EXPENSE", "COMBINE"]
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,6 +49,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     ws.getRow(1).eachCell((cell: any, col: number) => {
       if (String(cell.value ?? "").trim().toUpperCase().startsWith("CLAIM DEPT")) claimCols.push(col)
     })
+    const CLAIM_DEPTS = claimDeptsFor(reqDoc.bu || "NYG")
     const listFormula = `"${CLAIM_DEPTS.join(",")}"`
     const lastRow = Math.max(ws.rowCount, 1) + 100
     for (const c of claimCols) {

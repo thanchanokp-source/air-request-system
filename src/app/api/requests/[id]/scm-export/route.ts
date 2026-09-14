@@ -28,7 +28,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const codeList = codes.map(c => c.code)
   // Only NUMBERED definitions (2.1, 3.4 …) — drop header lines like "- PO issued but ...".
   const defList = [...new Set(codes.flatMap(c => (c.definitions || []).filter((d: string) => /^\s*\d/.test(d))))]
-  const CLAIM_DEPTS = ["COMMERCIAL", "PRODUCTION", "PROCUREMENT", "NYK"]
+  // Claim-dept dropdown list — must include "SCM NYG" (Saji single-step) for every dept column (1/2/3).
+  const CLAIM_DEPTS = req.bu === "GW"
+    ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
+    : ["COMMERCIAL", "PRODUCTION", "PROCUREMENT", "NYK", "SCM NYG"]
 
   const ExcelJS = (await import("exceljs")).default
   const wb = new ExcelJS.Workbook()
