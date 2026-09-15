@@ -315,11 +315,11 @@ export default function LgBookingPage() {
                           </tbody>
                         </table>
                       </div>
-                      {/* No air — send back the ticked SOs of THIS document */}
+                      {/* No air — CANCEL only the ticked SOs of THIS document (doc stays for air SOs) */}
                       <div className="px-4 py-2 border-t border-gray-100 flex justify-end">
                         <button onClick={() => openNoAir(req, docIds)}
                           className="text-xs text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 font-medium">
-                          ✕ No air — send back selected SOs
+                          ✕ No air — ยกเลิกเฉพาะ SO ที่เลือก
                         </button>
                       </div>
                     </div>
@@ -346,9 +346,9 @@ export default function LgBookingPage() {
       {noAir && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="bg-red-600 text-white px-5 py-3 font-semibold text-sm">No air — send back {noAir.ids.length} SO(s)</div>
+            <div className="bg-red-600 text-white px-5 py-3 font-semibold text-sm">No air — ยกเลิก {noAir.ids.length} SO</div>
             <div className="p-5 space-y-3">
-              <p className="text-xs text-gray-500">{noAir.docNo} · {noAir.ids.length} selected SO(s) — confirm these had no air? They will be sent back before claim (notifies MER/SCM)</p>
+              <p className="text-xs text-gray-500">{noAir.docNo} · เลือก {noAir.ids.length} SO — ยืนยันว่าไม่ได้ออก air? <b>เฉพาะ SO ที่เลือกจะถูกยกเลิก</b> (เอกสารยังอยู่ให้กรอก actual ต่อสำหรับ SO ที่ออก air)</p>
               <textarea value={noAirReason} onChange={e => setNoAirReason(e.target.value)} rows={3} placeholder="Reason (e.g. No air / not shipped by air)"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400" />
               <div className="flex gap-2">

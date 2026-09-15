@@ -219,7 +219,7 @@ export default function Page() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500">
                 <tr>
-                  {["Document", "PO", "Progress", "Status", "Files", ""].map((h, i) =>
+                  {["Document", "PO", "Progress", "Status", ""].map((h, i) =>
                     <th key={i} className="px-4 py-2.5 font-medium whitespace-nowrap text-left">{h}</th>)}
                 </tr>
               </thead>
@@ -277,24 +277,6 @@ export default function Page() {
                           className={`text-xs px-2.5 py-1 rounded-full font-medium ${rq.status === "RECALLED" || rq.status === "REJECTED" ? "bg-orange-100 text-orange-700" : rq.status === "COMPLETED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
                           {pullStatus(rq)}
                         </span>
-                      </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap">
-                        {(rq.attachments || []).length === 0 ? <span className="text-xs text-gray-300">—</span> : (
-                          <div className="relative inline-block group">
-                            <span className="inline-flex items-center gap-1 text-[11px] text-sky-700 border border-sky-200 bg-sky-50 rounded-full px-2 py-0.5 cursor-default"
-                              title={(rq.attachments || []).map((a: any) => a.fileName).join("\n")}>
-                              📎 {(rq.attachments || []).length}
-                            </span>
-                            <div className="absolute z-30 left-0 top-full mt-1 hidden group-hover:flex flex-col gap-1 bg-white border border-gray-200 rounded-lg shadow-xl p-2 min-w-[200px] max-w-[280px]">
-                              {(rq.attachments || []).map((a: any) => (
-                                <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] text-sky-700 hover:underline truncate" title={a.fileName}>
-                                  📎 <span className="truncate">{a.fileName}</span>
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <button onClick={() => setViewRq(rq)} title="View document (read-only)"

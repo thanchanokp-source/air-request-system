@@ -521,17 +521,31 @@ export default function Page() {
                     <Info label="Brand Name" value={[...new Set(its.map((i: any) => i.brand).filter(Boolean))].join(", ")} />
                     <Info label="Supplier Name" value={[...new Set(its.map((i: any) => i.vendorName).filter(Boolean))].join(", ") || rq.vendorContact} />
                   </div>
-                  {(rq.attachments || []).length > 0 && (
-                    <div className="mt-4 pt-3 border-t border-gray-100">
-                      <div className="text-[11px] font-semibold text-gray-500 uppercase mb-2">แนบไฟล์ ({rq.attachments.length})</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {rq.attachments.map((a: any) => (
-                          <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] bg-sky-50 border border-sky-200 text-sky-800 rounded-full px-2.5 py-1 hover:bg-sky-100">📎 <span className="max-w-[220px] truncate" title={a.fileName}>{a.fileName}</span></a>
-                        ))}
+                  {(rq.attachments || []).length > 0 && (() => {
+                    const CATL: Record<string, string> = { INV: "INV", PACKING: "Packing", AWB: "AWB", CUSTOMS: "ใบขน", COMBINED: "รวม" }
+                    const grp = (s: string) => (rq.attachments || []).filter((a: any) => a.source === s || (!a.source && s === "PC"))
+                    return (
+                      <div className="mt-4 pt-3 border-t border-gray-100">
+                        <div className="text-[11px] font-semibold text-gray-500 uppercase mb-2">แนบไฟล์ ({rq.attachments.length})</div>
+                        <div className="space-y-2">
+                          {([["PC", "📄 จัดซื้อ (PC)"], ["LG", "🚚 Logistics (LG)"]] as const).map(([s, label]) => {
+                            const g = grp(s); if (!g.length) return null
+                            return (
+                              <div key={s}>
+                                <div className="text-[10px] text-gray-400 font-semibold mb-1">{label}</div>
+                                <div className="flex flex-wrap gap-1.5">{g.map((a: any) => (
+                                  <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-[11px] bg-sky-50 border border-sky-200 text-sky-800 rounded-full px-2.5 py-1 hover:bg-sky-100">
+                                    {a.category && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-200 text-sky-800">{CATL[a.category] || a.category}</span>}
+                                    📎 <span className="max-w-[200px] truncate" title={a.fileName}>{a.fileName}</span></a>
+                                ))}</div>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
                 </div>
 
                 {/* Items summary (like DVM Purchase) */}

@@ -91,7 +91,7 @@ export default function Page() {
   return (
     <div className="p-5 md:p-8 max-w-[1100px] mx-auto space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>คลังไฟล์แนบ — Pull Material</h1>
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Attach Files — Pull Material</h1>
         <p className="text-sm text-gray-400 mt-0.5">แนบ INV / Packing (จัดซื้อ) · AWB / ใบขน (LG) — ย้อนหลังได้ทุกเมื่อ · เลือก "รวม" ถ้าไฟล์เดียวมีหลายอย่าง</p>
       </div>
 

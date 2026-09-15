@@ -1372,12 +1372,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // Only on first entry into the reject state — avoid one email per SO.
       if (request.status !== "PENDING_CLAIM_REJECT_GW") await notifyStatusChange(id, "CLAIM_REJECTED_GW").catch(() => {})
     } else {
-      // NYG: the claim split is assigned by SCM → reset the SO and send it back to SCM (before claim).
-      await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "PENDING", claimDepartment: null, claimDepts: null, itemComment: comment } as any })
-      await prisma.approvalLog.create({ data: { requestId: id, userId, action: "LG_REJECT_SO", fromStatus: request.status, toStatus: "PENDING_SCM", comment: `SO: ${item.so} — Logistics rejected (back before claim): ${comment}` } })
+      // NYG / EA / TRM: CANCEL only the selected SO (no air) → mark it REJECTED so it drops out of the
+      // air-freight flow. recalcDocStatus ignores REJECTED, so the doc STAYS in the LG queue for the
+      // remaining SOs that DID go by air — the whole document does NOT get pulled back.
+      await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "REJECTED", claimDepartment: null, claimDepts: null, itemComment: comment } as any })
+      await prisma.approvalLog.create({ data: { requestId: id, userId, action: "LG_REJECT_SO", fromStatus: request.status, toStatus: request.status, comment: `SO: ${item.so} — Logistics cancelled (no air): ${comment}` } })
       const nextDocStatus = await recalcDocStatus(id)
-      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-      if (nextDocStatus === "PENDING_SCM") await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
+      if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
     }
     // FYI: alert every approver who already passed this document.
     await notifyLgRejectFyi(id, item.so, comment, session.user?.name || session.user?.email || undefined).catch(() => {})
