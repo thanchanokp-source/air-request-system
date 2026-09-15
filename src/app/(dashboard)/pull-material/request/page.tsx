@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { buColor } from "../_StageWork"
-import { seaUsd, courierUsd, destForBu, EXCHANGE_RATE } from "@/lib/pull-courier"
+import { seaUsd, courierUsd, destForBu, EXCHANGE_RATE, truckTransportUsd } from "@/lib/pull-courier"
 
 const MAROON = "#6b1a1a"
 const GOLD = "#b08d2e"      // luxury accent
@@ -132,6 +132,7 @@ export default function ScmRequestPage() {
   const [airRows, setAirRows] = useState<any[]>([])
   const [seaRows, setSeaRows] = useState<any[]>([])
   const [courierRows, setCourierRows] = useState<any[]>([])
+  const [truckRows, setTruckRows] = useState<any[]>([])
   // Excel import staging: found (VEND, PO) rows → fill ONE total weight on-screen, then Add.
   const [pcStaged, setPcStaged] = useState<{ vend: string; po: string; mats: Bom[] }[]>([])
   const [pcStageWeight, setPcStageWeight] = useState("")
@@ -250,6 +251,7 @@ export default function ScmRequestPage() {
     fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRows(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRows(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRows(d.rows || [])).catch(() => {})
+    fetch("/api/pull-material/truck-rates").then(r => r.json()).then(d => setTruckRows(d.rows || [])).catch(() => {})
   }, [reqType])
   const { countries, airByCountry, seaByCountry, seaLtByPort } = useMemo(() => {
     const airByCountry: Record<string, Set<string>> = {}, seaByCountry: Record<string, Set<string>> = {}
@@ -287,7 +289,7 @@ export default function ScmRequestPage() {
       const freight = r2(pcEstAir.est - pcEstAir.add), fca = r2(pcEstAir.add)
       const local = isNyg ? r2((LOCAL_AIR_BAHT_KG * w) / R) : 0
       const store = isNyg ? r2((STORE_AIR_BAHT_KG * w) / R) : 0
-      const transport = 0 // TODO: from Truck master (BKK Airport → factory)
+      const transport = isNyg ? (truckTransportUsd(truckRows, pcFactory, "air", w) || 0) : 0
       return { freight, fca, clear, local, store, transport, total: r2(freight + fca + clear + local + store + transport) }
     })() : null
     // COURIER (DHL) — freight only.
@@ -300,11 +302,11 @@ export default function ScmRequestPage() {
       const freight = r2(seaM.cost * cbm)
       const local = isNyg ? r2((LOCAL_SEA_BAHT_CBM * cbm) / R) : 0
       const store = isNyg ? r2(STORE_SEA_BAHT / R) : 0
-      const transport = 0 // TODO: from Truck master (Bangkok Port → factory)
+      const transport = isNyg ? (truckTransportUsd(truckRows, pcFactory, "sea", w) || 0) : 0
       return { freight, fca: 0, clear, local, store, transport, total: r2(freight + clear + local + store + transport), cbm }
     })() : null
     return { air, courier, sea, over: w > 100, isNyg }
-  }, [pcWeight, pcPur.port, pcPur.seaPort, pcPur.country, pcPur.incoterm, bu, airRows, seaRows, courierRows, pcEstAir])
+  }, [pcWeight, pcPur.port, pcPur.seaPort, pcPur.country, pcPur.incoterm, bu, pcFactory, airRows, seaRows, courierRows, truckRows, pcEstAir])
 
   // Include the PO — the same SO/item can appear under several POs; keying by SO+item alone would
   // collapse them and make one PO "disappear" from the summary.
@@ -1092,7 +1094,7 @@ export default function ScmRequestPage() {
                         </tr>
                       </tbody>
                     </table>
-                    <div className="text-[10px] text-gray-400 mt-1.5">* Transport (ค่ารถ→โรงงาน) รอเชื่อม Truck master · Market price กรอกทีหลัง</div>
+                    <div className="text-[10px] text-gray-400 mt-1.5">* Transport = ค่ารถ→โรงงาน จาก Truck master (ตาม Factory + น้ำหนัก) · Market price กรอกทีหลัง</div>
                   </div>
                 )
               })()}

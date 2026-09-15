@@ -16,10 +16,11 @@ export default function PullRatesPage() {
   // Admin + Logistics Import can edit rates (LOGISTICS_IMPORT adds new port rates flagged by Purchase).
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const isAdmin = roles.includes("ADMIN") || roles.includes("LOGISTICS_IMPORT")
-  const [tab, setTab] = useState<"air" | "sea" | "courier">("air")
+  const [tab, setTab] = useState<"air" | "sea" | "courier" | "truck">("air")
   const [air, setAir] = useState<any[]>([])
   const [sea, setSea] = useState<any[]>([])
   const [courier, setCourier] = useState<any[]>([])
+  const [truck, setTruck] = useState<any[]>([])
   const [q, setQ] = useState("")
   const [busy, setBusy] = useState(false)
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
@@ -30,11 +31,13 @@ export default function PullRatesPage() {
   const params = useSearchParams()
   const prefilled = useRef(false)
   const load = async () => {
-    const [a, s, c] = await Promise.all([
+    const [a, s, c, t] = await Promise.all([
       fetch("/api/pull-material/air-rates").then(r => r.json()).catch(() => ({})),
       fetch("/api/pull-material/sea-rates").then(r => r.json()).catch(() => ({})),
       fetch("/api/pull-material/courier-rates").then(r => r.json()).catch(() => ({})),
+      fetch("/api/pull-material/truck-rates").then(r => r.json()).catch(() => ({})),
     ])
+    setTruck(t.rows || [])
     let airRows = a.rows || [], seaRows = s.rows || [], courierRows = c.rows || []
     if (!prefilled.current) {
       const raw = params.get("prefill")
@@ -204,11 +207,48 @@ export default function PullRatesPage() {
       return { rows, breaks, extras: [], hasId: iPort >= 0 }
     }
 
+    // TRUCK sheet ("IMPORT TRUCK") = port/airport → factory. Section-header rows set the port group;
+    // data rows carry supplier / location / 20' / 40' / LCL 4-wheel / LCL 6-wheel.
+    const parseTruck = (): { rows: any[] } | null => {
+      const sheetName = sheetByName("IMPORT TRUCK") || sheetByName("TRUCK")
+      if (!sheetName) return null
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: "" }) as any[][]
+      const hIdx = aoa.findIndex(row => row.some(c => norm(c).includes("LCL")) || row.some(c => norm(c).includes("SUPPLIER")))
+      if (hIdx < 0) return { rows: [] }
+      const H = aoa[hIdx].map(norm)
+      const first = (...tests: ((h: string) => boolean)[]) => { for (const t of tests) { const i = H.findIndex(t); if (i >= 0) return i } return -1 }
+      const iSup = first(h => h.includes("SUPPLIER"))
+      const iLoc = first(h => h.includes("LOCATION"))
+      const iR20 = first(h => h.includes("20"))
+      const iR40 = first(h => h.includes("40"))
+      const iL1 = first(h => (h.includes("4") && (h.includes("ล้อ") || h.includes("LCL"))) || (h.includes("<1") || h.includes("< 1")))
+      const iL2 = first(h => (h.includes("6") && (h.includes("ล้อ") || h.includes("LCL"))) || (h.includes(">1") || h.includes("> 1")))
+      const iUpd = first(h => h.includes("UPDATE"))
+      const groupOf = (s: string) => { const u = String(s || "").toUpperCase(); if (u.includes("AIRPORT") || u.includes("สนามบิน")) return "BKK_AIRPORT"; if (u.includes("LAEM") || u.includes("แหลมฉบัง")) return "LAEM_CHABANG"; if (u.includes("BANGKOK") || u.includes("กรุงเทพ") || u.includes("ท่าเรือ")) return "BANGKOK_PORT"; return "" }
+      const clean = (v: any) => { const n = Number(String(v ?? "").replace(/[^0-9.\-]/g, "")); return (v === "" || v == null || isNaN(n)) ? null : n }
+      const rows: any[] = []
+      let group = ""
+      for (let r = hIdx + 1; r < aoa.length; r++) {
+        const row = aoa[r]; if (!row) continue
+        const line = row.map((c: any) => String(c ?? "")).join(" ")
+        const g = groupOf(line)
+        const sup = iSup >= 0 ? String(row[iSup] ?? "").trim() : ""
+        const loc = iLoc >= 0 ? String(row[iLoc] ?? "").trim() : ""
+        // A section header names a port group but has no supplier/location data.
+        if (g && !sup && !loc) { group = g; continue }
+        if (g && !group) group = g
+        if (!loc || !group) continue
+        rows.push({ portGroup: group, supplier: sup || null, location: loc, rate20: clean(row[iR20]), rate40: clean(row[iR40]), rateLcl1: clean(row[iL1]), rateLcl2: clean(row[iL2]), updated: iUpd >= 0 ? String(row[iUpd] ?? "").trim() : null })
+      }
+      return { rows }
+    }
+
     let seaDbg = ""
     const air = parse(sheetByName("AIR RATE"), true)
     const sea = parseSeaLong()
     const cour = parseCourier()
-    if (!air && !sea && !cour) return alert('ไม่พบชีท "AIR RATE" / "SEA RATE" / "COURIER" ในไฟล์')
+    const truck = parseTruck()
+    if (!air && !sea && !cour && !truck) return alert('ไม่พบชีท "AIR RATE" / "SEA RATE" / "COURIER" / "IMPORT TRUCK" ในไฟล์')
 
     // A side is SAFE to replace only if it found the ID column AND ≥1 rate column AND ≥1 data row.
     // (Guards against a renamed header silently wiping the master with empty/garbage data.)
@@ -220,18 +260,20 @@ export default function PullRatesPage() {
       if (!p.rows.length) return `⚠ ${name}: 0 แถว → ข้าม (กันเขียนทับด้วยข้อมูลว่าง)`
       return `✓ ${name}: ${p.rows.length} แถว · ราคา ${p.breaks.join(",")}${p.extras.length ? `\n   คอลัมน์ที่ไม่ได้ใช้ (ข้าม): ${p.extras.join(", ")}` : ""}`
     }
-    const willAir = ok(air), willSea = ok(sea), willCour = ok(cour)
-    if (!willAir && !willSea && !willCour) return alert(`ไม่ได้แทนที่อะไรเลย — ตรวจหัวคอลัมน์ในไฟล์:\n\n${report("AIR", air)}\n${report("SEA", sea)}\n${report("COURIER", cour)}`)
+    const willAir = ok(air), willSea = ok(sea), willCour = ok(cour), willTruck = !!truck && truck.rows.length > 0
+    if (!willAir && !willSea && !willCour && !willTruck) return alert(`ไม่ได้แทนที่อะไรเลย — ตรวจหัวคอลัมน์ในไฟล์:\n\n${report("AIR", air)}\n${report("SEA", sea)}\n${report("COURIER", cour)}`)
 
     const seaDebugMsg = !willSea && seaDbg ? `\n\n🔍 DEBUG SEA:\n${seaDbg}` : ""
-    const summary = `${report("AIR", air)}\n${report("SEA", sea)}\n${report("COURIER", cour)}${seaDebugMsg}\n\nจะ “แทนที่” เฉพาะชีทที่ ✓ (ค่าเดิมของชีทนั้นถูกเขียนทับ)\nกด Backup ไว้ก่อนถ้าต้องการ · ดำเนินการต่อ?`
+    const truckMsg = truck ? `TRUCK: ${truck.rows.length} แถว` : "TRUCK: — ไม่มีชีท"
+    const summary = `${report("AIR", air)}\n${report("SEA", sea)}\n${report("COURIER", cour)}\n${truckMsg}${seaDebugMsg}\n\nจะ “แทนที่” เฉพาะชีทที่ ✓ (ค่าเดิมของชีทนั้นถูกเขียนทับ)\nกด Backup ไว้ก่อนถ้าต้องการ · ดำเนินการต่อ?`
     if (!confirm(summary)) return
     setBusy(true)
     try {
       if (willAir) await fetch("/api/pull-material/air-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: air!.rows }) })
       if (willSea) await fetch("/api/pull-material/sea-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: sea!.rows }) })
       if (willCour) await fetch("/api/pull-material/courier-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: cour!.rows }) })
-      alert(`นำเข้าเสร็จ:\n${willAir ? report("AIR", air) + "\n" : ""}${willSea ? report("SEA", sea) + "\n" : ""}${willCour ? report("COURIER", cour) : ""}`)
+      if (willTruck) await fetch("/api/pull-material/truck-rates", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: truck!.rows }) })
+      alert(`นำเข้าเสร็จ:\n${willAir ? report("AIR", air) + "\n" : ""}${willSea ? report("SEA", sea) + "\n" : ""}${willCour ? report("COURIER", cour) + "\n" : ""}${willTruck ? truckMsg : ""}`)
       await load()
     } finally { setBusy(false) }
   }
@@ -364,13 +406,13 @@ export default function PullRatesPage() {
               <input type="file" accept=".xlsx,.xls" className="hidden" disabled={busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
             </label>
             <button onClick={exportBackup} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white disabled:opacity-50">⬇ Backup (Excel)</button>
-            <button onClick={() => { if (tab !== "courier") reload(tab) }} disabled={busy || tab === "courier"} title={tab === "courier" ? "courier ไม่มี seed — ใช้ Import Excel" : ""} className="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 disabled:opacity-50">↻ Reload from seed</button>
+            <button onClick={() => { if (tab === "air" || tab === "sea") reload(tab) }} disabled={busy || tab === "courier" || tab === "truck"} title={tab === "courier" || tab === "truck" ? "ไม่มี seed — ใช้ Import Excel" : ""} className="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 disabled:opacity-50">↻ Reload from seed</button>
           </div>
         )}
       </div>
 
       <div className="flex gap-1 border-b border-gray-200">
-        {([["air", `Air Rate (${air.length})`], ["sea", `Sea Rate (${sea.length})`], ["courier", `Courier (${courier.length})`]] as const).map(([k, label]) => (
+        {([["air", `Air Rate (${air.length})`], ["sea", `Sea Rate (${sea.length})`], ["courier", `Courier (${courier.length})`], ["truck", `Truck (${truck.length})`]] as const).map(([k, label]) => (
           <button key={k} onClick={() => { if (editCount && !confirm("Discard unsaved edits?")) return; setTab(k); setEdits({}) }}
             className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === k ? "border-current" : "border-transparent text-gray-400 hover:text-gray-600"}`}
             style={tab === k ? { color: MAROON, borderColor: MAROON } : undefined}>{label}</button>
@@ -474,7 +516,7 @@ export default function PullRatesPage() {
               {airRows.length === 0 && <tr><td colSpan={8 + AIR_BREAKS.length} className="px-3 py-10 text-center text-gray-400">No air rates {air.length === 0 && "— click Import / Reload to load"}</td></tr>}
             </tbody>
           </table>
-        ) : (
+        ) : tab === "courier" ? (
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500"><tr>
               {["ORIGIN", "ORIGIN COUNTRY", "DEST", "BY COURIER"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
@@ -503,6 +545,28 @@ export default function PullRatesPage() {
                 </tr>
               ))}
               {courierRows.length === 0 && <tr><td colSpan={4 + COURIER_KG.length} className="px-3 py-10 text-center text-gray-400">No courier rates {courier.length === 0 && "— กด ➕ เพิ่มแถว หรือ Import Excel ที่มีชีท COURIER"}</td></tr>}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 text-gray-500"><tr>
+              {["PORT GROUP", "SUPPLIER", "LOCATION", "20' <8T", "40' >8.1T", "LCL 4ล้อ <1T", "LCL 6ล้อ >1T", "UPDATED"].map((h, i) =>
+                <th key={h} className={`px-3 py-2 font-medium whitespace-nowrap ${i >= 3 && i <= 6 ? "text-right" : "text-left"}`}>{h}</th>)}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {truck.filter((r: any) => !qq || `${r.portGroup} ${r.supplier} ${r.location}`.toLowerCase().includes(qq)).map((r: any) => (
+                <tr key={r.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{r.portGroup}</span></td>
+                  <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.supplier || "-"}</td>
+                  <td className="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">{r.location}</td>
+                  <td className="px-3 py-1.5 text-right">{r.rate20 != null ? fmt(r.rate20) : "-"}</td>
+                  <td className="px-3 py-1.5 text-right">{r.rate40 != null ? fmt(r.rate40) : "-"}</td>
+                  <td className="px-3 py-1.5 text-right font-medium" style={{ color: MAROON }}>{r.rateLcl1 != null ? fmt(r.rateLcl1) : "-"}</td>
+                  <td className="px-3 py-1.5 text-right font-medium" style={{ color: MAROON }}>{r.rateLcl2 != null ? fmt(r.rateLcl2) : "-"}</td>
+                  <td className="px-3 py-1.5 text-gray-400 whitespace-nowrap">{r.updated || "-"}</td>
+                </tr>
+              ))}
+              {truck.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">No truck rates — Import Excel ที่มีชีท "IMPORT TRUCK"</td></tr>}
             </tbody>
           </table>
         )}

@@ -40,6 +40,20 @@ export function itemHasAnyRate(item: any, seaRows: any[], courierRows: any[], bu
   return false
 }
 
+// Transport (port/airport → factory) from the TRUCK master, in USD (rate is THB → ÷ EXCHANGE_RATE).
+// AIR ships via BKK Airport, SEA via Bangkok Port. Factory (G1-G4) matched by "contains" on location.
+// Weight < 1 ton (1000kg) → LCL 4-wheel rate; ≥ 1 ton → LCL 6-wheel rate.
+export function truckTransportUsd(rows: any[], factory: string, mode: "air" | "sea", weightKg: number): number | null {
+  const f = String(factory || "").trim().toUpperCase()
+  if (!f || !rows?.length) return null
+  const group = mode === "air" ? "BKK_AIRPORT" : "BANGKOK_PORT"
+  const match = rows.find((r: any) => String(r.portGroup) === group && String(r.location || "").toUpperCase().includes(f))
+  if (!match) return null
+  const thb = Number(weightKg < 1000 ? match.rateLcl1 : match.rateLcl2)
+  if (!thb || isNaN(thb)) return null
+  return Math.round((thb / EXCHANGE_RATE) * 100) / 100
+}
+
 // Courier weight tiers (kg, ascending) — the price column is the TOTAL for a shipment up to that tier.
 // Matches the courier master columns: 29 / 30 / 40 / 45 / 50 / 75 / 100 KG (smallest tier ≥ weight is used,
 // so a ≤29 kg parcel is priced at the 29KG column).

@@ -506,6 +506,24 @@ model PullFreightCourier {
   @@index([origin])
 }
 
+// Pull RM TRUCK master — port/airport → factory transport cost (IMPORT TRUCK sheet).
+// portGroup: BANGKOK_PORT (sea) | LAEM_CHABANG (sea) | BKK_AIRPORT (air). location carries the G-code
+// (matched by contains, e.g. "เพชรเกษม G1"). Rates are THB; converted to USD at compute time.
+model PullFreightTruck {
+  id          String   @id @default(cuid())
+  portGroup   String   // BANGKOK_PORT | LAEM_CHABANG | BKK_AIRPORT
+  supplier    String?
+  location    String   // factory location text (contains G1/G2/G3/G4)
+  rate20      Float?   // 20' < 8T
+  rate40      Float?   // 40' > 8.1T
+  rateLcl1    Float?   // LCL 4 ล้อ (< 1T)
+  rateLcl2    Float?   // LCL 6 ล้อ (> 1T)
+  updated     String?
+  createdAt   DateTime @default(now())
+
+  @@index([portGroup])
+}
+
 // Pull RM "Master Purchase" — Country / Port / City. Purchasing picks a City on the request; its
 // Country + Port carry onto the pulled items. Maintained by Admin + Purchasing.
 model PullPurchaseCity {
