@@ -544,7 +544,7 @@ export default function ScmRequestPage() {
         let upFail = 0
         if (rid && files.length) {
           for (const f of files) {
-            const fd = new FormData(); fd.append("file", f)
+            const fd = new FormData(); fd.append("file", f); fd.append("category", "PACKING"); fd.append("source", "PC")
             const ur = await fetch(`/api/pull-material/${rid}/attachments`, { method: "POST", body: fd }).catch(() => null)
             if (!ur || !ur.ok) upFail++
           }
@@ -1037,8 +1037,7 @@ export default function ScmRequestPage() {
                 const modes = [
                   { key: "air", label: "✈️ Air", freight: pcCompare.air ? pcCompare.air.freight : null, inco: pcCompare.air ? pcCompare.air.inco : null, total: pcCompare.air ? pcCompare.air.total : null, accent: MAROON },
                   { key: "sea", label: pcCompare.sea ? `🚢 Sea (${pcCompare.sea.container})` : "🚢 Sea (LCL)", freight: pcCompare.sea ? pcCompare.sea.cost : null, inco: null, total: pcCompare.sea ? pcCompare.sea.cost : null, accent: "#0369a1" },
-                  { key: "dhl", label: "📦 DHL", freight: pcCompare.dhl, inco: null, total: pcCompare.dhl, accent: "#b45309", over: pcCompare.over },
-                  { key: "fedex", label: "📦 FedEx", freight: pcCompare.fedex, inco: null, total: pcCompare.fedex, accent: "#7c3aed", over: pcCompare.over },
+                  { key: "dhl", label: "📦 Courier (DHL)", freight: pcCompare.dhl, inco: null, total: pcCompare.dhl, accent: "#b45309", over: pcCompare.over },
                 ]
                 const totals = modes.map(m => m.total).filter((v): v is number => v != null && v > 0)
                 const cheapest = totals.length ? Math.min(...totals) : null
@@ -1049,7 +1048,7 @@ export default function ScmRequestPage() {
                       <span className="text-xs font-bold text-gray-600">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total) <span className="font-normal text-gray-400">· USD</span></span>
                       <span className="text-[10px] text-gray-400">Exchange {EXCHANGE_RATE} (Courier THB→USD)</span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {modes.map(m => {
                         const best = m.total != null && m.total === cheapest
                         return (
@@ -1266,14 +1265,22 @@ export default function ScmRequestPage() {
             className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
         </div>
 
-        {/* Attachments — staged now, uploaded when the request is created */}
+        {/* Attachments = PACKING LIST (staged now, uploaded when the request is created). */}
         <div className="mt-3">
-          <label className="text-xs font-semibold text-gray-600">แนบไฟล์ <span className="text-gray-400 font-normal">(PDF / Excel / รูป — แนบได้หลายไฟล์)</span></label>
+          {/* Checklist — เอกสารที่จัดซื้อต้องแนบ */}
+          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px]">
+            <span className="font-semibold text-amber-800">เอกสารที่ต้องแนบ:</span>
+            <span className={`ml-2 ${Object.values(poInvMap).some(v => v && v.trim()) ? "text-emerald-700" : "text-gray-500"}`}>{Object.values(poInvMap).some(v => v && v.trim()) ? "✓" : "○"} INV (ด้านบน · ระบบอ่านให้)</span>
+            <span className="mx-1.5 text-gray-300">·</span>
+            <span className={files.length ? "text-emerald-700" : "text-gray-500"}>{files.length ? "✓" : "○"} Packing List (ด้านล่าง)</span>
+            <span className="ml-2 text-gray-400">— AWB / ใบขน แนบทีหลังโดย LG ที่เมนู ATTACH FILES</span>
+          </div>
+          <label className="text-xs font-semibold text-gray-600">📦 Packing List (แนบไฟล์) <span className="text-gray-400 font-normal">(PDF / Excel / รูป — แนบได้หลายไฟล์)</span></label>
           <div className="mt-1 flex items-center gap-2 flex-wrap">
-            <label className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">📎 เลือกไฟล์
+            <label className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">📎 เลือกไฟล์ Packing List
               <input type="file" multiple className="hidden" onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ""; if (fs.length) setFiles(p => [...p, ...fs]) }} />
             </label>
-            {files.length === 0 && <span className="text-[11px] text-gray-400">ยังไม่ได้แนบไฟล์</span>}
+            {files.length === 0 && <span className="text-[11px] text-gray-400">ยังไม่ได้แนบ Packing List</span>}
           </div>
           {files.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">

@@ -269,13 +269,11 @@ export default function Page() {
                           const seaFreight = seaM ? seaM.cost : (items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)) || null
                           const cdest = destForBu(openReq.bu), cwt = Number(s0.weight) || 0
                           const dhl = courierUsd(courierRates, s0.port, cdest, cwt, "DHL")
-                          const fedex = courierUsd(courierRates, s0.port, cdest, cwt, "FEDEX")
                           const rlink = (tab: string, port: any) => `/pull-material/rates?tab=${tab}&port=${encodeURIComponent(port || "")}&country=${encodeURIComponent(s0.country || "")}`
                           const modes = [
                             { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: total || null, lt: s0.leadTimeAir || null, actual: openReq.actualAir ?? null, local: openReq.localChargeTh ?? null, accent: "#6b1a1a", link: rlink("air", s0.port) },
                             { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: s0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: rlink("sea", s0.seaPort || s0.port) },
                             { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: rlink("courier", s0.port), over: cwt > 100 },
-                            { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed", link: rlink("courier", s0.port), over: cwt > 100 },
                           ]
                           const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
                           const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
@@ -285,7 +283,7 @@ export default function Page() {
                                 <div className="text-xs font-bold text-gray-600">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total · Lead time) <span className="font-normal text-gray-400">· USD</span></div>
                                 <div className="text-[11px] text-gray-400">Exchange rate = {EXCHANGE_RATE} (Courier THB→USD)</div>
                               </div>
-                              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
                                 {modes.map(m => {
                                   const best = m.total && m.total === cheapest
                                   return (

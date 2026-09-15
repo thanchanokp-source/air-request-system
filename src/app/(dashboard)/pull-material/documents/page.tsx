@@ -572,7 +572,6 @@ export default function Page() {
                   {(() => {
                     const cdest = destForBu(rq.bu), cwt = Number(d0.weight) || 0
                     const dhl = courierUsd(courierRates, d0.port, cdest, cwt, "DHL")
-                    const fedex = courierUsd(courierRates, d0.port, cdest, cwt, "FEDEX")
                     const rlink = (tab: string, port: any) => `/pull-material/rates?tab=${tab}&port=${encodeURIComponent(port || "")}&country=${encodeURIComponent(d0.country || "")}`
                     // For "no master": deep-link that PRE-CREATES a draft row (port+country filled) → LG only fills the numbers.
                     const addLink = (type: "air" | "sea", port: any) => `/pull-material/rates?prefill=${encodeURIComponent(JSON.stringify([{ type, country: d0.country || "", port: port || "" }]))}`
@@ -581,7 +580,6 @@ export default function Page() {
                       { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: estTotal || null, lt: d0.leadTimeAir || null, actual: actTotal || null, local: localCh, accent: "#6b1a1a", link: addLink("air", d0.port) },
                       { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: addLink("sea", d0.seaPort || d0.port) },
                       { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: addCourier("DHL"), over: cwt > 100 },
-                      { key: "fedex", label: "📦 Courier · FedEx", freight: fedex, inco: null, total: fedex, lt: null, actual: null, local: null, accent: "#7c3aed", link: addCourier("FEDEX"), over: cwt > 100 },
                     ]
                     const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
                     const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
@@ -591,7 +589,7 @@ export default function Page() {
                           <div className="text-xs font-bold text-gray-600">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total · Lead time) <span className="font-normal text-gray-400">· USD</span></div>
                           <div className="text-[11px] text-gray-400">Exchange rate = {EXCHANGE_RATE} (Courier THB→USD)</div>
                         </div>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
                           {modes.map(m => {
                             const best = m.total && m.total === cheapest
                             return (
