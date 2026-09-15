@@ -18,7 +18,12 @@ export default function Page() {
   useEffect(() => {
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => {
       const seen = new Set<string>(); const list: { port: string; country: string }[] = []
-      ;(d.rows || []).forEach((r: any) => { const p = String(r.port || "").trim(); if (p && !seen.has(p.toUpperCase())) { seen.add(p.toUpperCase()); list.push({ port: p, country: String(r.country || "") }) } })
+      // Only LCL ports with a real rate — the compare uses LCL freight, so FCL-only ports would show "no master".
+      ;(d.rows || []).forEach((r: any) => {
+        const p = String(r.port || "").trim()
+        const isLcl = String(r.container || "").toUpperCase().includes("LCL") && Number(r.rate) > 0
+        if (p && isLcl && !seen.has(p.toUpperCase())) { seen.add(p.toUpperCase()); list.push({ port: p, country: String(r.country || "") }) }
+      })
       setSeaPorts(list.sort((a, b) => a.port.localeCompare(b.port)))
     }).catch(() => {})
   }, [])
