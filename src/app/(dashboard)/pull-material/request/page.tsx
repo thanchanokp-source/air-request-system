@@ -1112,6 +1112,23 @@ export default function ScmRequestPage() {
                     onChange={v => { setPcPur(p => ({ ...p, country: v, port: "", seaPort: "" })); setPcCityId("") }} />
                 </div>
                 <div>
+                  <label className={lab}>เมือง / City <span className="text-gray-300">{pcPur.country ? "(เฉพาะประเทศที่เลือก)" : "(auto เติม Country/Port)"}</span></label>
+                  <select value={pcCityId} className={box}
+                    onChange={e => {
+                      const id = e.target.value; setPcCityId(id)
+                      const c = pcCities.find((x: any) => x.id === id)
+                      // Picking a city AUTO-FILLS Country + Air Port + Sea Port (all from Master Purchase),
+                      // so Purchasing never picks the ports by hand. Sea Port falls back to "" if the city has none.
+                      if (c) setPcPur(p => ({ ...p, country: c.country || p.country, port: c.port || p.port, seaPort: c.seaPort || "" }))
+                    }}>
+                    <option value="">— เลือกเมือง —</option>
+                    {/* City is LINKED to Country: once a country is picked, only its cities show. */}
+                    {pcCities
+                      .filter((c: any) => !pcPur.country || String(c.country || "").trim().toUpperCase() === String(pcPur.country).trim().toUpperCase())
+                      .map((c: any) => <option key={c.id} value={c.id}>{c.city}{c.port ? ` · ${c.port}` : ""}{c.country ? ` · ${c.country}` : ""}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className={lab}>Air Port <span className="text-red-500">*</span></label>
                   <PcPick value={pcPur.port} list={airPorts} sel={box} disabled={!pcPur.country}
                     placeholder={pcPur.country ? (airPorts.length ? "— air port —" : "no air port") : "country ก่อน"}
@@ -1141,23 +1158,6 @@ export default function ScmRequestPage() {
                   <select value={pcFactory} onChange={e => setPcFactory(e.target.value)} className={box}>
                     {factoryOptions.length > 1 && <option value="">— เลือกโรงงาน —</option>}
                     {factoryOptions.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className={lab}>เมือง / City <span className="text-gray-300">{pcPur.country ? "(เฉพาะประเทศที่เลือก)" : "(auto เติม Country/Port)"}</span></label>
-                  <select value={pcCityId} className={box}
-                    onChange={e => {
-                      const id = e.target.value; setPcCityId(id)
-                      const c = pcCities.find((x: any) => x.id === id)
-                      // Picking a city AUTO-FILLS Country + Air Port + Sea Port (all from Master Purchase),
-                      // so Purchasing never picks the ports by hand. Sea Port falls back to "" if the city has none.
-                      if (c) setPcPur(p => ({ ...p, country: c.country || p.country, port: c.port || p.port, seaPort: c.seaPort || "" }))
-                    }}>
-                    <option value="">— เลือกเมือง —</option>
-                    {/* City is LINKED to Country: once a country is picked, only its cities show. */}
-                    {pcCities
-                      .filter((c: any) => !pcPur.country || String(c.country || "").trim().toUpperCase() === String(pcPur.country).trim().toUpperCase())
-                      .map((c: any) => <option key={c.id} value={c.id}>{c.city}{c.port ? ` · ${c.port}` : ""}{c.country ? ` · ${c.country}` : ""}</option>)}
                   </select>
                 </div>
                 <div>
