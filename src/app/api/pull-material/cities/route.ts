@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const b = await req.json()
   if (!b.city?.trim()) return NextResponse.json({ error: "city required" }, { status: 400 })
   const row = await (prisma as any).pullPurchaseCity.create({
-    data: { country: String(b.country || "").trim(), port: String(b.port || "").trim(), city: String(b.city).trim() },
+    data: { country: String(b.country || "").trim(), port: String(b.port || "").trim(), seaPort: b.seaPort ? String(b.seaPort).trim() : null, city: String(b.city).trim() },
   })
   return NextResponse.json({ ok: true, row })
 }
@@ -31,7 +31,7 @@ export async function PATCH(req: NextRequest) {
   if (!b.id) return NextResponse.json({ error: "id required" }, { status: 400 })
   const row = await (prisma as any).pullPurchaseCity.update({
     where: { id: b.id },
-    data: { country: String(b.country || "").trim(), port: String(b.port || "").trim(), city: String(b.city || "").trim() },
+    data: { country: String(b.country || "").trim(), port: String(b.port || "").trim(), seaPort: b.seaPort ? String(b.seaPort).trim() : null, city: String(b.city || "").trim() },
   })
   return NextResponse.json({ ok: true, row })
 }

@@ -11,8 +11,17 @@ export default function Page() {
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [q, setQ] = useState("")
-  const [nw, setNw] = useState({ country: "", port: "", city: "" })
-  const [edits, setEdits] = useState<Record<string, { country: string; port: string; city: string }>>({})
+  const [nw, setNw] = useState({ country: "", port: "", seaPort: "", city: "" })
+  const [edits, setEdits] = useState<Record<string, { country: string; port: string; seaPort: string; city: string }>>({})
+  // Real sea-master ports → power a datalist so LG/Purchasing pick an EXISTING sea port (guarantees the rate matches).
+  const [seaPorts, setSeaPorts] = useState<{ port: string; country: string }[]>([])
+  useEffect(() => {
+    fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => {
+      const seen = new Set<string>(); const list: { port: string; country: string }[] = []
+      ;(d.rows || []).forEach((r: any) => { const p = String(r.port || "").trim(); if (p && !seen.has(p.toUpperCase())) { seen.add(p.toUpperCase()); list.push({ port: p, country: String(r.country || "") }) } })
+      setSeaPorts(list.sort((a, b) => a.port.localeCompare(b.port)))
+    }).catch(() => {})
+  }, [])
   const [busy, setBusy] = useState(false)
 
   const load = async () => { setLoading(true); try { const d = await fetch("/api/pull-material/cities").then(r => r.json()); setRows(d.rows || []) } finally { setLoading(false) } }
@@ -65,7 +74,7 @@ export default function Page() {
   const add = async () => {
     if (!nw.city.trim()) return alert("กรอก City")
     setBusy(true)
-    try { const r = await fetch("/api/pull-material/cities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nw) }); if (r.ok) { setNw({ country: "", port: "", city: "" }); await load() } else alert("Error") } finally { setBusy(false) }
+    try { const r = await fetch("/api/pull-material/cities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nw) }); if (r.ok) { setNw({ country: "", port: "", seaPort: "", city: "" }); await load() } else alert("Error") } finally { setBusy(false) }
   }
   const save = async (id: string) => {
     const e = edits[id]; if (!e) return
@@ -77,9 +86,9 @@ export default function Page() {
     setBusy(true)
     try { const r = await fetch(`/api/pull-material/cities?id=${id}`, { method: "DELETE" }); if (r.ok) await load(); else alert("Error") } finally { setBusy(false) }
   }
-  const val = (r: any, k: "country" | "port" | "city") => edits[r.id]?.[k] ?? r[k] ?? ""
+  const val = (r: any, k: "country" | "port" | "seaPort" | "city") => edits[r.id]?.[k] ?? r[k] ?? ""
   const setVal = (r: any, k: string, v: string) => setEdits(p => {
-    const base = p[r.id] || { country: r.country, port: r.port, city: r.city }
+    const base = p[r.id] || { country: r.country, port: r.port, seaPort: r.seaPort || "", city: r.city }
     return { ...p, [r.id]: { ...base, [k]: v } }
   })
 
@@ -117,28 +126,33 @@ export default function Page() {
       {/* Add row */}
       <div className="bg-white rounded-xl border p-4">
         <p className="text-xs font-semibold text-gray-500 uppercase mb-2">เพิ่มเมือง</p>
-        <div className="grid sm:grid-cols-4 gap-2">
+        <div className="grid sm:grid-cols-5 gap-2">
           <input value={nw.country} onChange={e => setNw(p => ({ ...p, country: e.target.value }))} placeholder="Country" className={inp} />
-          <input value={nw.port} onChange={e => setNw(p => ({ ...p, port: e.target.value }))} placeholder="Port" className={inp} />
+          <input value={nw.port} onChange={e => setNw(p => ({ ...p, port: e.target.value }))} placeholder="Air Port" className={inp} />
+          <input list="seaports" value={nw.seaPort} onChange={e => setNw(p => ({ ...p, seaPort: e.target.value }))} placeholder="Sea Port" className={inp} />
           <input value={nw.city} onChange={e => setNw(p => ({ ...p, city: e.target.value }))} placeholder="City *" className={inp} />
           <button onClick={add} disabled={busy} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>+ เพิ่ม</button>
         </div>
       </div>
+
+      {/* Sea-port suggestions come from the LIVE sea Master Rate → picking one guarantees the freight matches. */}
+      <datalist id="seaports">{seaPorts.map(s => <option key={s.port} value={s.port}>{s.country ? `${s.port} · ${s.country}` : s.port}</option>)}</datalist>
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหา country / port / city…" className="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
 
       <div className="bg-white rounded-xl border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500"><tr>
-            {["COUNTRY", "PORT", "CITY", "MAP RATE", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+            {["COUNTRY", "AIR PORT", "SEA PORT", "CITY", "MAP RATE", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
           </tr></thead>
           <tbody className="divide-y divide-gray-50">
-            {loading ? <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">Loading…</td></tr> :
-              shown.length === 0 ? <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-400">ยังไม่มีข้อมูล</td></tr> :
+            {loading ? <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">Loading…</td></tr> :
+              shown.length === 0 ? <tr><td colSpan={6} className="px-3 py-6 text-center text-gray-400">ยังไม่มีข้อมูล</td></tr> :
                 shown.map(r => (
                   <tr key={r.id} className={`hover:bg-gray-50 ${edits[r.id] ? "bg-green-50" : ""}`}>
                     <td className="px-3 py-1.5"><input value={val(r, "country")} onChange={e => setVal(r, "country", e.target.value)} className={inp} /></td>
                     <td className="px-3 py-1.5"><input value={val(r, "port")} onChange={e => setVal(r, "port", e.target.value)} className={inp} /></td>
+                    <td className="px-3 py-1.5"><input list="seaports" value={val(r, "seaPort")} onChange={e => setVal(r, "seaPort", e.target.value)} placeholder="—" className={inp} /></td>
                     <td className="px-3 py-1.5"><input value={val(r, "city")} onChange={e => setVal(r, "city", e.target.value)} className={inp} /></td>
                     <td className="px-3 py-1.5 whitespace-nowrap">
                       {!r.port ? <span className="text-gray-300 text-xs">—</span>

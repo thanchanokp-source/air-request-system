@@ -530,6 +530,7 @@ model PullPurchaseCity {
   id        String   @id @default(cuid())
   country   String
   port      String
+  seaPort   String? // sea port for this city (optional) — auto-fills the request Sea Port on city pick
   city      String
   createdAt DateTime @default(now())
 

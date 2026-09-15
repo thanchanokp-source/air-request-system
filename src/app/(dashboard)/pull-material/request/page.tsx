@@ -1116,9 +1116,10 @@ export default function ScmRequestPage() {
                   <PcPick value={pcPur.port} list={airPorts} sel={box} disabled={!pcPur.country}
                     placeholder={pcPur.country ? (airPorts.length ? "— air port —" : "no air port") : "country ก่อน"}
                     onChange={v => {
-                      setPcPur(p => ({ ...p, port: v }))
-                      // Picking a Port syncs the City (from Master Purchase) to the one with that port.
+                      // Picking an Air Port syncs the City (from Master Purchase) AND auto-fills the Sea Port
+                      // paired with that city — so either dropdown (City or Air Port) fills both ports.
                       const c = pcCities.find((x: any) => String(x.port || "").toUpperCase() === String(v || "").toUpperCase())
+                      setPcPur(p => ({ ...p, port: v, ...(c?.seaPort ? { seaPort: c.seaPort } : {}) }))
                       setPcCityId(c ? c.id : "")
                     }} />
                 </div>
@@ -1148,8 +1149,9 @@ export default function ScmRequestPage() {
                     onChange={e => {
                       const id = e.target.value; setPcCityId(id)
                       const c = pcCities.find((x: any) => x.id === id)
-                      // Picking a city fills Country + Port (the port code maps to the LG master rate).
-                      if (c) setPcPur(p => ({ ...p, country: c.country || p.country, port: c.port || p.port, seaPort: "" }))
+                      // Picking a city AUTO-FILLS Country + Air Port + Sea Port (all from Master Purchase),
+                      // so Purchasing never picks the ports by hand. Sea Port falls back to "" if the city has none.
+                      if (c) setPcPur(p => ({ ...p, country: c.country || p.country, port: c.port || p.port, seaPort: c.seaPort || "" }))
                     }}>
                     <option value="">— เลือกเมือง —</option>
                     {/* City is LINKED to Country: once a country is picked, only its cities show. */}
