@@ -1038,7 +1038,6 @@ export default function ScmRequestPage() {
         {/* PC purchase info — filled here (no separate Purchase stage); stamped on every item at submit */}
         {reqType === "PURCHASING" && cart.length > 0 && (() => {
           const airPorts = [...(airByCountry[pcPur.country] || [])].sort()
-          const seaPorts = [...(seaByCountry[pcPur.country] || [])].sort()
           const lab = "text-[11px] font-semibold text-gray-600 block mb-1"
           const box = "w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200 disabled:bg-gray-50 disabled:text-gray-400"
           const dimc = "w-16 border border-gray-200 rounded-lg px-1.5 py-1.5 text-sm text-center bg-white focus:outline-none focus:ring-2 focus:ring-red-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -1129,22 +1128,16 @@ export default function ScmRequestPage() {
                   </select>
                 </div>
                 <div>
-                  <label className={lab}>Air Port <span className="text-red-500">*</span></label>
+                  <label className={lab}>Port of Loading <span className="text-red-500">*</span></label>
                   <PcPick value={pcPur.port} list={airPorts} sel={box} disabled={!pcPur.country}
-                    placeholder={pcPur.country ? (airPorts.length ? "— air port —" : "no air port") : "country ก่อน"}
+                    placeholder={pcPur.country ? (airPorts.length ? "— port of loading —" : "no port") : "country ก่อน"}
                     onChange={v => {
-                      // Picking an Air Port syncs the City (from Master Purchase) AND auto-fills the Sea Port
-                      // paired with that city — so either dropdown (City or Air Port) fills both ports.
+                      // Picking the Port of Loading syncs the City (from Master Purchase) AND auto-fills the Sea
+                      // Port paired with that city — so either dropdown (City or Port of Loading) fills both ports.
                       const c = pcCities.find((x: any) => String(x.port || "").toUpperCase() === String(v || "").toUpperCase())
                       setPcPur(p => ({ ...p, port: v, ...(c?.seaPort ? { seaPort: c.seaPort } : {}) }))
                       setPcCityId(c ? c.id : "")
                     }} />
-                </div>
-                <div>
-                  <label className={lab}>Sea Port <span className="text-gray-300">(optional)</span></label>
-                  <PcPick value={pcPur.seaPort} list={seaPorts} sel={box} disabled={!pcPur.country}
-                    placeholder={pcPur.country ? (seaPorts.length ? "— sea port —" : "no sea port") : "country ก่อน"}
-                    onChange={v => setPcPur(p => ({ ...p, seaPort: v }))} />
                 </div>
                 <div>
                   <label className={lab}>Incoterm <span className="text-red-500">*</span></label>
