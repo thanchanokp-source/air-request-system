@@ -138,7 +138,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   // LG closes the doc ONCE (1 shipment / 1 doc): actual air freight + INV + HAWB at request level.
-  if ("actualAir" in body || "invoiceNo" in body || "hawbNo" in body || "mawbNo" in body || "flightEtd" in body || "flightEta" in body || "poInvoices" in body || "localChargeTh" in body || "preCost" in body) {
+  if ("actualAir" in body || "invoiceNo" in body || "hawbNo" in body || "mawbNo" in body || "flightEtd" in body || "flightEta" in body || "cfmInHouseDate" in body || "poInvoices" in body || "localChargeTh" in body || "preCost" in body) {
     await (prisma as any).pullMaterialRequest.update({
       where: { id },
       data: {
@@ -148,6 +148,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...("mawbNo" in body ? { mawbNo: body.mawbNo || null } : {}),
         ...("flightEtd" in body ? { flightEtd: dt(body.flightEtd) } : {}),
         ...("flightEta" in body ? { flightEta: dt(body.flightEta) } : {}),
+        ...("cfmInHouseDate" in body ? { cfmInHouseDate: dt(body.cfmInHouseDate) } : {}),
         ...("poInvoices" in body ? { poInvoices: body.poInvoices && typeof body.poInvoices === "object" ? body.poInvoices : undefined } : {}),
         ...("localChargeTh" in body ? { localChargeTh: num(body.localChargeTh) } : {}),
         ...("preCost" in body ? { preCost: num(body.preCost) } : {}),

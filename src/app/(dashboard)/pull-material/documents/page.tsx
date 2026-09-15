@@ -120,12 +120,14 @@ export default function Page() {
   }
 
   // LG attaches supporting files (HAWB / INV / docs) to the document.
-  const uploadAtt = async (rq: any, files: FileList | null) => {
+  const uploadAtt = async (rq: any, files: FileList | null, category = "", source = "LG") => {
     if (!files || !files.length) return
     setUploading(rq.id)
     try {
       for (const f of Array.from(files)) {
         const fd = new FormData(); fd.append("file", f)
+        if (category) fd.append("category", category)
+        if (source) fd.append("source", source)
         await fetch(`/api/pull-material/${rq.id}/attachments`, { method: "POST", body: fd }).catch(() => {})
       }
       await load()
@@ -180,6 +182,7 @@ export default function Page() {
           invoiceNo: raw(rq, "invoiceNo") || null,
           flightEtd: rawDate(rq, "flightEtd") || null,
           flightEta: rawDate(rq, "flightEta") || null,
+          cfmInHouseDate: rawDate(rq, "cfmInHouseDate") || null,
           poInvoices: buildPoInvoices(rq),
           preCost: raw(rq, "preCost") === "" ? null : raw(rq, "preCost"),
           preCostFwd: raw(rq, "preCostFwd") || null,
@@ -206,6 +209,7 @@ export default function Page() {
           mawbNo: raw(rq, "mawbNo") || null,
           flightEtd: rawDate(rq, "flightEtd") || null,
           flightEta: rawDate(rq, "flightEta") || null,
+          cfmInHouseDate: rawDate(rq, "cfmInHouseDate") || null,
           poInvoices: buildPoInvoices(rq),
           preCost: raw(rq, "preCost") === "" ? null : raw(rq, "preCost"),
           preCostFwd: raw(rq, "preCostFwd") || null,
@@ -647,6 +651,8 @@ export default function Page() {
                         </select>
                       )}
                     </div>
+                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">CFM IN-HOUSE DATE <span className="font-normal text-gray-400">(วันยืนยันเข้าโรงงาน)</span></label>
+                      <input disabled={locked} type="date" value={rawDate(rq, "cfmInHouseDate")} onChange={e => setVal(rq.id, "cfmInHouseDate", e.target.value)} className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">ACTUAL AIR FREIGHT <span className="text-red-500">*</span></label>
                       <input disabled={locked} type="number" value={raw(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">LOCAL CHARGE (TH)</label>
@@ -657,13 +663,19 @@ export default function Page() {
                     {actTotal > 0 && <span className={`px-2 py-0.5 rounded-full font-medium ${diff > 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{diff > 0 ? "▲" : "▼"} {fmt(Math.abs(diff))}</span>}
                   </div>
                   <div className={`mt-3 pt-3 border-t border-gray-100 ${locked ? "opacity-50 pointer-events-none select-none" : ""}`}>
-                    <label className="text-[11px] font-semibold text-green-700 block mb-1">แนบไฟล์ (HAWB / INV / เอกสาร — แนบได้หลายไฟล์)</label>
-                    <input type="file" multiple disabled={locked || uploading === rq.id}
-                      onChange={e => { uploadAtt(rq, e.target.files); e.currentTarget.value = "" }}
-                      className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100 disabled:opacity-50" />
+                    <label className="text-[11px] font-semibold text-green-700 block mb-1.5">แนบไฟล์ (LG) — เลือกประเภท</label>
+                    <div className="flex flex-wrap gap-2">
+                      {([["AWB", "＋ AWB"], ["CUSTOMS", "＋ ใบขน"], ["COMBINED", "＋ รวม (ไฟล์เดียวหลายเอกสาร)"]] as const).map(([cat, label]) => (
+                        <label key={cat} className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 ${locked || uploading === rq.id ? "opacity-50 pointer-events-none" : ""}`}>
+                          {label}
+                          <input type="file" multiple hidden disabled={locked || uploading === rq.id}
+                            onChange={e => { uploadAtt(rq, e.target.files, cat, "LG"); e.currentTarget.value = "" }} />
+                        </label>
+                      ))}
+                    </div>
                     {uploading === rq.id
-                      ? <p className="text-[11px] text-gray-400 mt-1">กำลังอัปโหลด…</p>
-                      : (rq.attachments || []).length > 0 && <p className="text-[11px] text-gray-400 mt-1">แนบแล้ว {rq.attachments.length} ไฟล์ (ดูรายการด้านบน)</p>}
+                      ? <p className="text-[11px] text-gray-400 mt-1.5">กำลังอัปโหลด…</p>
+                      : <p className="text-[11px] text-gray-400 mt-1.5">INV / Packing แนบจากฝั่งจัดซื้อ · AWB / ใบขน แนบที่นี่ (ย้อนหลังได้) · ถ้าเอกสารมารวมเป็นไฟล์เดียว เลือก “รวม” — ดูไฟล์ที่แนบด้านบน</p>}
                   </div>
                   <p className="mt-2 text-[11px] text-gray-400">{locked ? "🔒 เอกสารนี้ยังไม่มี rate — เติม Master Rate แล้วกด 💾 Save (มุมขวาบน) เพื่อเด้งไป Approval ก่อน แล้วจึงกลับมากรอก Actual ทีหลัง" : "กรอกครั้งเดียวต่อเอกสาร · Save แล้วกด “Preview PDF” เพื่อออกเอกสาร"}</p>
                 </div>

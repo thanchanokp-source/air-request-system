@@ -23,6 +23,11 @@ export default function Page() {
     }).catch(() => {})
   }, [])
   const [busy, setBusy] = useState(false)
+  // Sea ports grouped by country (normalized) so each row's SEA PORT list shows only that country's ports.
+  const ck = (s: any) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "")
+  const seaByCountry: Record<string, { port: string; country: string }[]> = {}
+  seaPorts.forEach(s => { const k = ck(s.country); if (k) (seaByCountry[k] ||= []).push(s) })
+  const seaListId = (country: string) => { const k = ck(country); return k && seaByCountry[k] ? `sea-${k}` : "sea-all" }
 
   const load = async () => { setLoading(true); try { const d = await fetch("/api/pull-material/cities").then(r => r.json()); setRows(d.rows || []) } finally { setLoading(false) } }
   useEffect(() => { load() }, [])
@@ -129,14 +134,18 @@ export default function Page() {
         <div className="grid sm:grid-cols-5 gap-2">
           <input value={nw.country} onChange={e => setNw(p => ({ ...p, country: e.target.value }))} placeholder="Country" className={inp} />
           <input value={nw.port} onChange={e => setNw(p => ({ ...p, port: e.target.value }))} placeholder="Air Port" className={inp} />
-          <input list="seaports" value={nw.seaPort} onChange={e => setNw(p => ({ ...p, seaPort: e.target.value }))} placeholder="Sea Port" className={inp} />
+          <input list={seaListId(nw.country)} value={nw.seaPort} onChange={e => setNw(p => ({ ...p, seaPort: e.target.value }))} placeholder="Sea Port" className={inp} />
           <input value={nw.city} onChange={e => setNw(p => ({ ...p, city: e.target.value }))} placeholder="City *" className={inp} />
           <button onClick={add} disabled={busy} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>+ เพิ่ม</button>
         </div>
       </div>
 
-      {/* Sea-port suggestions come from the LIVE sea Master Rate → picking one guarantees the freight matches. */}
-      <datalist id="seaports">{seaPorts.map(s => <option key={s.port} value={s.port}>{s.country ? `${s.port} · ${s.country}` : s.port}</option>)}</datalist>
+      {/* Sea-port suggestions from the LIVE sea Master Rate — one datalist PER COUNTRY so each row only sees
+          its own country's ports (e.g. a CHINA row lists just CHINA sea ports). "sea-all" is the fallback. */}
+      {Object.entries(seaByCountry).map(([k, list]) => (
+        <datalist id={`sea-${k}`} key={k}>{list.map(s => <option key={s.port} value={s.port}>{s.port}</option>)}</datalist>
+      ))}
+      <datalist id="sea-all">{seaPorts.map(s => <option key={s.port} value={s.port}>{s.country ? `${s.port} · ${s.country}` : s.port}</option>)}</datalist>
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหา country / port / city…" className="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
 
@@ -152,7 +161,7 @@ export default function Page() {
                   <tr key={r.id} className={`hover:bg-gray-50 ${edits[r.id] ? "bg-green-50" : ""}`}>
                     <td className="px-3 py-1.5"><input value={val(r, "country")} onChange={e => setVal(r, "country", e.target.value)} className={inp} /></td>
                     <td className="px-3 py-1.5"><input value={val(r, "port")} onChange={e => setVal(r, "port", e.target.value)} className={inp} /></td>
-                    <td className="px-3 py-1.5"><input list="seaports" value={val(r, "seaPort")} onChange={e => setVal(r, "seaPort", e.target.value)} placeholder="—" className={inp} /></td>
+                    <td className="px-3 py-1.5"><input list={seaListId(val(r, "country"))} value={val(r, "seaPort")} onChange={e => setVal(r, "seaPort", e.target.value)} placeholder="—" className={inp} /></td>
                     <td className="px-3 py-1.5"><input value={val(r, "city")} onChange={e => setVal(r, "city", e.target.value)} className={inp} /></td>
                     <td className="px-3 py-1.5 whitespace-nowrap">
                       {!r.port ? <span className="text-gray-300 text-xs">—</span>

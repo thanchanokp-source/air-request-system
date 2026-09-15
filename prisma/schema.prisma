@@ -348,6 +348,7 @@ model PullMaterialRequest {
   mawbNo         String?
   flightEtd      DateTime?          // LG: flight estimated time of departure
   flightEta      DateTime?          // LG: flight estimated time of arrival
+  cfmInHouseDate DateTime?          // LG: confirmed in-house date (entered before Actual Air)
   poInvoices     Json?              // LG: per-PO invoice map { "<poNo>": "<invoiceNo>" } (from OCR/manual)
   vendorEmail    String?            // vendor contact (auto-filled from dc_vendor / typed by PC)
   vendorContact  String?

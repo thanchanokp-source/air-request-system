@@ -24,7 +24,8 @@ export function seaUsd(rows: any[], seaPort: string, country?: string): { cost: 
     return false
   })
   if (!matches.length) return null
-  const best = matches.reduce((a, b) => (Number(b.rate) < Number(a.rate) ? b : a))
+  // Multiple LCL rows can match one port/country → take the MAX freight (worst-case, same rule as air).
+  const best = matches.reduce((a, b) => (Number(b.rate) > Number(a.rate) ? b : a))
   return { cost: Number(best.rate), container: String(best.container || "LCL") }
 }
 
