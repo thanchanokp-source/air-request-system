@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { buColor } from "../_StageWork"
+import { seaUsd, courierUsd, destForBu, EXCHANGE_RATE } from "@/lib/pull-courier"
 
 const MAROON = "#6b1a1a"
 const GOLD = "#b08d2e"      // luxury accent
@@ -126,6 +127,7 @@ export default function ScmRequestPage() {
   const [pcPkgs, setPcPkgs] = useState<{ uom: string; qty: string }[]>([{ uom: "", qty: "" }])
   const [airRows, setAirRows] = useState<any[]>([])
   const [seaRows, setSeaRows] = useState<any[]>([])
+  const [courierRows, setCourierRows] = useState<any[]>([])
   // Excel import staging: found (VEND, PO) rows → fill ONE total weight on-screen, then Add.
   const [pcStaged, setPcStaged] = useState<{ vend: string; po: string; mats: Bom[] }[]>([])
   const [pcStageWeight, setPcStageWeight] = useState("")
@@ -243,6 +245,7 @@ export default function ScmRequestPage() {
     if (reqType !== "PURCHASING") return
     fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRows(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRows(d.rows || [])).catch(() => {})
+    fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRows(d.rows || [])).catch(() => {})
   }, [reqType])
   const { countries, airByCountry, seaByCountry, seaLtByPort } = useMemo(() => {
     const airByCountry: Record<string, Set<string>> = {}, seaByCountry: Record<string, Set<string>> = {}
@@ -266,6 +269,18 @@ export default function ScmRequestPage() {
     const add = inc === "EX-WORK" ? best.exw : inc === "FCA" ? best.fca : 0
     return { est: Math.round((best.rate * w + add) * 100) / 100, add, inc }
   }, [pcWeight, pcPur.port, pcPur.incoterm, airRows])
+
+  // Live shipping-mode COMPARE (Air / Sea / Courier) from the masters — same rule as Logistics/Approval,
+  // so จัดซื้อ sees every option's Est cost while filling the form.
+  const pcCompare = useMemo(() => {
+    const w = Number(pcWeight) || 0, port = pcPur.port, dest = destForBu(bu)
+    if (!w || (!port && !pcPur.seaPort)) return null
+    const air = pcEstAir ? { freight: pcEstAir.est - pcEstAir.add, inco: pcEstAir.add, total: pcEstAir.est } : null
+    const seaM = seaUsd(seaRows, pcPur.seaPort || port, pcPur.country)
+    const dhl = courierUsd(courierRows, port, dest, w, "DHL")
+    const fedex = courierUsd(courierRows, port, dest, w, "FEDEX")
+    return { air, sea: seaM, dhl, fedex, over: w > 100 }
+  }, [pcWeight, pcPur.port, pcPur.seaPort, pcPur.country, pcPur.incoterm, bu, airRows, seaRows, courierRows, pcEstAir])
 
   // Include the PO — the same SO/item can appear under several POs; keying by SO+item alone would
   // collapse them and make one PO "disappear" from the summary.
@@ -1016,6 +1031,43 @@ export default function ScmRequestPage() {
                   className="w-40 border-2 border-red-300 rounded-xl px-4 py-2 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" style={{ color: MAROON }} />
                 <span className="text-xs text-gray-500">รวมทั้งใบ ({new Set(cart.map(c => c.poNoDoc || "-")).size} PO) — ใช้คิด Est Air</span>
               </div>
+
+              {/* Live shipping-mode compare (Air / Sea / Courier) from the masters */}
+              {pcCompare && (() => {
+                const modes = [
+                  { key: "air", label: "✈️ Air", freight: pcCompare.air ? pcCompare.air.freight : null, inco: pcCompare.air ? pcCompare.air.inco : null, total: pcCompare.air ? pcCompare.air.total : null, accent: MAROON },
+                  { key: "sea", label: pcCompare.sea ? `🚢 Sea (${pcCompare.sea.container})` : "🚢 Sea (LCL)", freight: pcCompare.sea ? pcCompare.sea.cost : null, inco: null, total: pcCompare.sea ? pcCompare.sea.cost : null, accent: "#0369a1" },
+                  { key: "dhl", label: "📦 DHL", freight: pcCompare.dhl, inco: null, total: pcCompare.dhl, accent: "#b45309", over: pcCompare.over },
+                  { key: "fedex", label: "📦 FedEx", freight: pcCompare.fedex, inco: null, total: pcCompare.fedex, accent: "#7c3aed", over: pcCompare.over },
+                ]
+                const totals = modes.map(m => m.total).filter((v): v is number => v != null && v > 0)
+                const cheapest = totals.length ? Math.min(...totals) : null
+                const money = (v: number | null) => v != null ? fmt(v) : <span className="text-gray-300">–</span>
+                return (
+                  <div className="rounded-xl border border-gray-200 bg-white p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-gray-600">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total) <span className="font-normal text-gray-400">· USD</span></span>
+                      <span className="text-[10px] text-gray-400">Exchange {EXCHANGE_RATE} (Courier THB→USD)</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {modes.map(m => {
+                        const best = m.total != null && m.total === cheapest
+                        return (
+                          <div key={m.key} className={`rounded-lg border p-2.5 ${best ? "ring-2 ring-emerald-300 border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
+                            <div className="text-[11px] font-semibold mb-1" style={{ color: m.accent }}>{m.label}{best && <span className="ml-1 text-[9px] text-emerald-600">ถูกสุด</span>}</div>
+                            <div className="space-y-0.5 text-[11px]">
+                              <div className="flex justify-between"><span className="text-gray-400">Freight</span><span className="font-medium text-gray-700">{money(m.freight)}</span></div>
+                              <div className="flex justify-between"><span className="text-gray-400">Incoterm</span><span className="font-medium text-gray-700">{money(m.inco)}</span></div>
+                              <div className="flex justify-between border-t border-gray-100 pt-0.5"><span className="text-gray-500 font-semibold">Total</span>{m.total != null ? <span className="font-bold text-gray-900">{fmt(m.total)}</span> : (m as any).over ? <span className="text-gray-400 text-[10px]">&gt; 100kg</span> : <span className="text-amber-600 text-[10px]">no master</span>}</div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+
               <div className="grid sm:grid-cols-3 gap-3">
                 <div>
                   <label className={lab}>Country <span className="text-red-500">*</span></label>
