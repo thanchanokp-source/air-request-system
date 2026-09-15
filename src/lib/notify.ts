@@ -1650,7 +1650,23 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
       // NOT the whole department. Track which depts are already forwarded so we don't also ping
       // the entry-role people (they've already handed it on).
       const forwardedDepts = new Set<string>()
-      for (const f of (doc.claimForwards || [])) if (pendingDepts.has(f.dept) && f.nextEmail && (!Array.isArray(f.itemIds) || f.itemIds.length)) { addE(f.nextEmail); forwardedDepts.add(f.dept) }
+      // The CURRENT holder for an SO is the FRONTIER forward — the one with the highest position that
+      // still covers that SO. A dept's chain (e.g. entry → amphron → sahaphat → rushan) leaves older
+      // forwards behind; emailing every forward's nextEmail would ping people who already handed it on
+      // (that's the rushan-too-early bug). So, per pending SO, keep only the max-position forward —
+      // matching ApprovalChain.pendingWhoFor.
+      const pendingSoByDept = new Map<string, Set<string>>()
+      for (const it of (doc.items || [])) for (const s of getSplits(it)) {
+        const dep = s.dept
+        if (dep && pendingDepts.has(dep)) { if (!pendingSoByDept.has(dep)) pendingSoByDept.set(dep, new Set()); pendingSoByDept.get(dep)!.add(it.id) }
+      }
+      for (const [dep, soIds] of pendingSoByDept) for (const soId of soIds) {
+        const rows = (doc.claimForwards || []).filter((f: any) => f.dept === dep &&
+          (!Array.isArray(f.itemIds) || f.itemIds.length === 0 || f.itemIds.includes(soId)))
+        if (!rows.length) continue
+        const latest = rows.sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0) || (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))[0]
+        if (latest?.nextEmail) { addE(latest.nextEmail); forwardedDepts.add(dep) }
+      }
       const roleSet = new Set<string>()
       for (const d of pendingDepts) {
         if (forwardedDepts.has(d)) continue // already forwarded → only the current holder above

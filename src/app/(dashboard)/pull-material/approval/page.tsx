@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
 import { pcApprover } from "@/lib/pull-approvers"
-import { courierUsd, destForBu, EXCHANGE_RATE, seaUsd } from "@/lib/pull-courier"
+import LandedCostCompare from "@/components/pull/LandedCostCompare"
 import SignatureModal from "@/components/signature-modal"
 
 // Approver stages: which role owns each, and where Approve / Send-back go.
@@ -63,9 +63,13 @@ export default function Page() {
   const [rejectReason, setRejectReason] = useState("")
   const [courierRates, setCourierRates] = useState<any[]>([])
   const [seaRates, setSeaRates] = useState<any[]>([])
+  const [airRates, setAirRates] = useState<any[]>([])
+  const [truckRates, setTruckRates] = useState<any[]>([])
   useEffect(() => {
     fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRates(d.rows || [])).catch(() => {})
+    fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRates(d.rows || [])).catch(() => {})
+    fetch("/api/pull-material/truck-rates").then(r => r.json()).then(d => setTruckRates(d.rows || [])).catch(() => {})
   }, [])
   // role → approver names (for the stepper)
   const [roleNames, setRoleNames] = useState<Record<string, string[]>>({})
@@ -237,9 +241,6 @@ export default function Page() {
                     const byPo: Record<string, { qty: number; uoms: Set<string>; freight: number; origin: number }> = {}
                     items.forEach((it: any) => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set(), freight: 0, origin: 0 }); const tot = Number(it.airFreightCost) || 0; const org = Number(it.originCost) || 0; g.qty += Number(it.pullMaterialQty) || 0; g.freight += tot - org; g.origin += org; if (it.bomUom) g.uoms.add(it.bomUom) })
                     const docMawb = openReq.mawbNo || "-", docHawb = openReq.hawbNo || "-"
-                    // Est Air = freight only (no incoterm); EXW = origin cost; Total Air = freight + origin.
-                    const totalOrigin = items.reduce((s: number, it: any) => s + (Number(it.originCost) || 0), 0)
-                    const totalFreight = total - totalOrigin
                     const totalQty = items.reduce((s: number, it: any) => s + (Number(it.pullMaterialQty) || 0), 0)
                     const pkgs = Array.isArray(openReq.packages) ? openReq.packages : []
                     const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (s0.cartons ? String(fmt(s0.cartons)) : "")
@@ -263,47 +264,11 @@ export default function Page() {
                           {s0.pickupAddress && <div className="col-span-2 sm:col-span-4"><Info label="Supplier / Pickup address" value={s0.pickupAddress} /></div>}
                         </div>
 
-                        {/* Shipping mode comparison — Freight / Incoterm / Total Freight / L/T per transport type */}
-                        {(() => {
-                          const seaM = seaUsd(seaRates, s0.seaPort || s0.port, s0.country)
-                          const seaFreight = seaM ? seaM.cost : (items.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (s0.estSea ? Number(s0.estSea) : 0)) || null
-                          const cdest = destForBu(openReq.bu), cwt = Number(s0.weight) || 0
-                          const dhl = courierUsd(courierRates, s0.port, cdest, cwt, "DHL")
-                          const rlink = (tab: string, port: any) => `/pull-material/rates?tab=${tab}&port=${encodeURIComponent(port || "")}&country=${encodeURIComponent(s0.country || "")}`
-                          const modes = [
-                            { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: total || null, lt: s0.leadTimeAir || null, actual: openReq.actualAir ?? null, local: openReq.localChargeTh ?? null, accent: "#6b1a1a", link: rlink("air", s0.port) },
-                            { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: s0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: rlink("sea", s0.seaPort || s0.port) },
-                            { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: rlink("courier", s0.port), over: cwt > 100 },
-                          ]
-                          const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
-                          const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
-                          return (
-                            <div className="mb-4">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="text-xs font-bold text-gray-600">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total · Lead time) <span className="font-normal text-gray-400">· USD</span></div>
-                                <div className="text-[11px] text-gray-400">Exchange rate = {EXCHANGE_RATE} (Courier THB→USD)</div>
-                              </div>
-                              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-                                {modes.map(m => {
-                                  const best = m.total && m.total === cheapest
-                                  return (
-                                    <div key={m.key} className={`rounded-xl border p-3 ${best ? "ring-2 ring-emerald-300 border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
-                                      <div className="text-xs font-semibold mb-1.5" style={{ color: m.accent }}>{m.label}{best && <span className="ml-1 text-[10px] text-emerald-600">ถูกสุด</span>}</div>
-                                      <div className="space-y-1 text-[11px]">
-                                        <div className="flex justify-between"><span className="text-gray-400">Freight</span><span className="font-medium text-gray-700">{money(m.freight)}</span></div>
-                                        <div className="flex justify-between"><span className="text-gray-400">Incoterm</span><span className="font-medium text-gray-700">{money(m.inco)}</span></div>
-                                        <div className="flex justify-between border-t border-gray-100 pt-1"><span className="text-gray-500 font-semibold">Total Freight</span>{m.total != null ? <span className="font-bold text-gray-900">{fmt(m.total)}</span> : (m as any).over ? <span className="text-gray-400 text-[10px]">&gt; 100kg</span> : <a href={m.link} className="text-amber-600 text-[10px] font-semibold underline hover:text-amber-700" title="ไปเพิ่ม rate ในหน้า Master Rate">no master → เพิ่ม</a>}</div>
-                                        <div className="flex justify-between"><span className="text-gray-400">L/T</span><span className="font-medium text-gray-700">{m.lt || <span className="text-gray-300">–</span>}</span></div>
-                                        <div className="flex justify-between"><span className="text-gray-400">Actual Air</span><span className="font-medium text-gray-700">{money(m.actual)}</span></div>
-                                        <div className="flex justify-between"><span className="text-gray-400">Local Charge (TH)</span><span className="font-medium text-gray-700">{money(m.local)}</span></div>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )
-                        })()}
+                        {/* Full LANDED-COST compare (Air / Courier / Sea + Market) — all USD, shared with request & LG */}
+                        <div className="mb-4">
+                          <LandedCostCompare airRows={airRates} seaRows={seaRates} courierRows={courierRates} truckRows={truckRates}
+                            port={s0.port} seaPort={s0.seaPort} country={s0.country} weight={s0.weight} incoterm={s0.incoterm} bu={openReq.bu} factory={openReq.factory || s0.factory} />
+                        </div>
 
                         <div className="overflow-x-auto border rounded-xl">
                           <table className="w-full text-xs">

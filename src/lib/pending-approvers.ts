@@ -45,10 +45,18 @@ export function pendingApproverNames(doc: any, users: ApproverDir[]): string[] {
     for (const it of (doc.items || [])) for (const s of getSplits(it)) if (s.dept && !done.includes(String(s.status || "")) && !NO_APPROVAL.includes(s.dept)) pendingDepts.add(s.dept)
     const set = new Set<string>()
     const forwardedDepts = new Set<string>()
-    for (const f of (doc.claimForwards || [])) {
-      if (pendingDepts.has(f.dept) && (f.nextName || f.nextEmail) && (!Array.isArray(f.itemIds) || f.itemIds.length)) {
-        const n = f.nextName || nameOfEmail(f.nextEmail); if (n) set.add(n); forwardedDepts.add(f.dept)
-      }
+    // Current holder per SO = FRONTIER forward (max position covering that SO), not every forward —
+    // older forwards in a chain (amphron → sahaphat → rushan) have already handed the SO on.
+    const pendingSoByDept = new Map<string, Set<string>>()
+    for (const it of (doc.items || [])) for (const s of getSplits(it)) {
+      if (s.dept && pendingDepts.has(s.dept)) { if (!pendingSoByDept.has(s.dept)) pendingSoByDept.set(s.dept, new Set()); pendingSoByDept.get(s.dept)!.add(it.id) }
+    }
+    for (const [dep, soIds] of pendingSoByDept) for (const soId of soIds) {
+      const rows = (doc.claimForwards || []).filter((f: any) => f.dept === dep &&
+        (!Array.isArray(f.itemIds) || f.itemIds.length === 0 || f.itemIds.includes(soId)))
+      if (!rows.length) continue
+      const latest = rows.sort((a: any, b: any) => (b.position ?? 0) - (a.position ?? 0) || (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))[0]
+      const n = latest?.nextName || nameOfEmail(latest?.nextEmail); if (n) { set.add(n); forwardedDepts.add(dep) }
     }
     const roleSet = new Set<string>()
     for (const d of pendingDepts) {

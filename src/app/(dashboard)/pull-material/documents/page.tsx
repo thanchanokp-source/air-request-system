@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
-import { courierUsd, destForBu, EXCHANGE_RATE, seaUsd } from "@/lib/pull-courier"
+import { courierUsd, destForBu, seaUsd } from "@/lib/pull-courier"
+import LandedCostCompare from "@/components/pull/LandedCostCompare"
 
 // Pre cost from the AIR master (same formula as EST: rate at weight-break × weight + origin cost),
 // but broken out PER FORWARDER so LG can pick which FWD this doc actually shipped with.
@@ -59,11 +60,13 @@ export default function Page() {
   const [courierRates, setCourierRates] = useState<any[]>([])
   const [seaRates, setSeaRates] = useState<any[]>([])
   const [airRates, setAirRates] = useState<any[]>([])
+  const [truckRates, setTruckRates] = useState<any[]>([])
   const [editFwd, setEditFwd] = useState(false) // toggle the FWD picker for Pre cost
   useEffect(() => {
     fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRates(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRates(d.rows || [])).catch(() => {})
+    fetch("/api/pull-material/truck-rates").then(r => r.json()).then(d => setTruckRates(d.rows || [])).catch(() => {})
   }, [])
   const [recomputing, setRecomputing] = useState(false)
   const [backfilling, setBackfilling] = useState(false)
@@ -471,12 +474,8 @@ export default function Page() {
         const pkgs = Array.isArray(rq.packages) ? rq.packages : []
         const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (d0.cartons ? String(fmt(d0.cartons)) : "")
         const dimStr = (d0.boxW || d0.boxL || d0.boxH) ? `${d0.boxW || "-"}×${d0.boxL || "-"}×${d0.boxH || "-"} cm` : ""
-        const totalOrigin = its.reduce((s: number, it: any) => s + (Number(it.originCost) || 0), 0)
-        const totalFreight = estTotal - totalOrigin
         const seaM = seaUsd(seaRates, d0.seaPort || d0.port, d0.country)
-        const seaFreight = seaM ? seaM.cost : (its.reduce((a: number, it: any) => a + (Number(it.seaFreightCost) || 0), 0) || (d0.estSea ? Number(d0.estSea) : 0)) || null
         const earliest = (arr: any[]) => { const t = arr.map(v => (v ? new Date(v).getTime() : NaN)).filter(n => !isNaN(n)); return t.length ? new Date(Math.min(...t)) : null }
-        const localCh = raw(rq, "localChargeTh") === "" ? null : Number(raw(rq, "localChargeTh")) || null
         return (
           <div className="space-y-5">
             <button onClick={() => setOpenId(null)} className="text-sm text-gray-400 hover:text-gray-700 flex items-center gap-1">← Back</button>
@@ -568,45 +567,24 @@ export default function Page() {
                     {d0.pickupAddress && <div className="col-span-2 sm:col-span-4"><Info label="Supplier / Pickup address" value={d0.pickupAddress} /></div>}
                   </div>
 
-                  {/* Shipping mode comparison (same as approval) */}
+                  {/* Full LANDED-COST compare (Air / Courier / Sea + Market) — all USD, shared with request & approval.
+                      "no master" rows still deep-link to the rate page so LG can add the missing rate. */}
                   {(() => {
-                    const cdest = destForBu(rq.bu), cwt = Number(d0.weight) || 0
-                    const dhl = courierUsd(courierRates, d0.port, cdest, cwt, "DHL")
-                    const rlink = (tab: string, port: any) => `/pull-material/rates?tab=${tab}&port=${encodeURIComponent(port || "")}&country=${encodeURIComponent(d0.country || "")}`
-                    // For "no master": deep-link that PRE-CREATES a draft row (port+country filled) → LG only fills the numbers.
+                    const cwt = Number(d0.weight) || 0
+                    const noAir = !airRates.some((r: any) => String(r.origin || "").toUpperCase() === String(d0.port || "").toUpperCase())
                     const addLink = (type: "air" | "sea", port: any) => `/pull-material/rates?prefill=${encodeURIComponent(JSON.stringify([{ type, country: d0.country || "", port: port || "" }]))}`
                     const addCourier = (carrier: string) => `/pull-material/rates?prefill=${encodeURIComponent(JSON.stringify([{ type: "courier", country: d0.country || "", port: d0.port || "", carrier }]))}`
-                    const modes = [
-                      { key: "air", label: "✈️ Air", freight: totalFreight || null, inco: totalOrigin || null, total: estTotal || null, lt: d0.leadTimeAir || null, actual: actTotal || null, local: localCh, accent: "#6b1a1a", link: addLink("air", d0.port) },
-                      { key: "sea", label: seaM ? `🚢 Sea (${seaM.container})` : "🚢 Sea", freight: seaFreight || null, inco: null, total: seaFreight || null, lt: d0.leadTimeSea || null, actual: null, local: null, accent: "#0369a1", link: addLink("sea", d0.seaPort || d0.port) },
-                      { key: "dhl", label: "📦 Courier · DHL", freight: dhl, inco: null, total: dhl, lt: null, actual: null, local: null, accent: "#b45309", link: addCourier("DHL"), over: cwt > 100 },
-                    ]
-                    const cheapest = Math.min(...modes.filter(m => m.total).map(m => m.total as number))
-                    const money = (v: number | null) => v != null ? `${fmt(v)}` : <span className="text-gray-300">–</span>
                     return (
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="text-xs font-bold text-gray-600">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total · Lead time) <span className="font-normal text-gray-400">· USD</span></div>
-                          <div className="text-[11px] text-gray-400">Exchange rate = {EXCHANGE_RATE} (Courier THB→USD)</div>
-                        </div>
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-                          {modes.map(m => {
-                            const best = m.total && m.total === cheapest
-                            return (
-                              <div key={m.key} className={`rounded-xl border p-3 ${best ? "ring-2 ring-emerald-300 border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
-                                <div className="text-xs font-semibold mb-1.5" style={{ color: m.accent }}>{m.label}{best && <span className="ml-1 text-[10px] text-emerald-600">ถูกสุด</span>}</div>
-                                <div className="space-y-1 text-[11px]">
-                                  <div className="flex justify-between"><span className="text-gray-400">Freight</span><span className="font-medium text-gray-700">{money(m.freight)}</span></div>
-                                  <div className="flex justify-between"><span className="text-gray-400">Incoterm</span><span className="font-medium text-gray-700">{money(m.inco)}</span></div>
-                                  <div className="flex justify-between border-t border-gray-100 pt-1"><span className="text-gray-500 font-semibold">Total Freight</span>{m.total != null ? <span className="font-bold text-gray-900">{fmt(m.total)}</span> : (m as any).over ? <span className="text-gray-400 text-[10px]">&gt; 100kg</span> : <a href={m.link} className="text-amber-600 text-[10px] font-semibold underline hover:text-amber-700" title="ไปเพิ่ม rate ในหน้า Master Rate">no master → เพิ่ม</a>}</div>
-                                  <div className="flex justify-between"><span className="text-gray-400">L/T</span><span className="font-medium text-gray-700">{m.lt || <span className="text-gray-300">–</span>}</span></div>
-                                  <div className="flex justify-between"><span className="text-gray-400">Actual Air</span><span className="font-medium text-gray-700">{money(m.actual)}</span></div>
-                                  <div className="flex justify-between"><span className="text-gray-400">Local Charge (TH)</span><span className="font-medium text-gray-700">{money(m.local)}</span></div>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
+                      <div className="mb-4 space-y-2">
+                        <LandedCostCompare airRows={airRates} seaRows={seaRates} courierRows={courierRates} truckRows={truckRates}
+                          port={d0.port} seaPort={d0.seaPort} country={d0.country} weight={d0.weight} incoterm={d0.incoterm} bu={rq.bu} factory={raw(rq, "factory") || d0.factory} />
+                        {(noAir || !seaM || (cwt > 0 && cwt <= 100 && !courierUsd(courierRates, d0.port, destForBu(rq.bu), cwt, "DHL"))) && (
+                          <div className="flex flex-wrap gap-3 text-[11px]">
+                            {noAir && <a href={addLink("air", d0.port)} className="text-amber-600 font-semibold underline hover:text-amber-700">✈️ เพิ่ม Air rate</a>}
+                            {!seaM && <a href={addLink("sea", d0.seaPort || d0.port)} className="text-amber-600 font-semibold underline hover:text-amber-700">🚢 เพิ่ม Sea rate</a>}
+                            {cwt > 0 && cwt <= 100 && !courierUsd(courierRates, d0.port, destForBu(rq.bu), cwt, "DHL") && <a href={addCourier("DHL")} className="text-amber-600 font-semibold underline hover:text-amber-700">📦 เพิ่ม Courier rate</a>}
+                          </div>
+                        )}
                       </div>
                     )
                   })()}

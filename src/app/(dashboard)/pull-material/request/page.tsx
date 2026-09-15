@@ -1089,8 +1089,8 @@ export default function ScmRequestPage() {
                           </tr>
                         ))}
                         <tr className="border-t border-gray-200 font-bold">
-                          <td className="text-gray-800 py-1.5">Total</td>
-                          {cols.map(c => { const best = c.d?.total != null && c.d.total === cheapest; return <td key={c.key} className={`text-right py-1.5 px-2 tabular-nums ${best ? "text-emerald-700" : "text-gray-900"}`}>{c.market ? <span className="text-gray-300 font-normal">รอ</span> : c.d?.total != null ? fmt(c.d.total) : (c.over ? <span className="text-[10px] text-gray-400 font-normal">&gt;100kg</span> : <span className="text-amber-600 text-[10px] font-normal">no master</span>)}</td> })}
+                          <td className="text-gray-800 py-1.5">Total <span className="text-[9px] font-normal text-gray-400">USD</span></td>
+                          {cols.map(c => { const best = c.d?.total != null && c.d.total === cheapest; return <td key={c.key} className={`text-right py-1.5 px-2 tabular-nums ${best ? "text-emerald-700" : "text-gray-900"}`}>{c.market ? <span className="text-gray-300 font-normal">รอ</span> : c.d?.total != null ? <>{fmt(c.d.total)} <span className="text-[9px] font-normal text-gray-400">USD</span></> : (c.over ? <span className="text-[10px] text-gray-400 font-normal">&gt;100kg</span> : <span className="text-amber-600 text-[10px] font-normal">no master</span>)}</td> })}
                         </tr>
                       </tbody>
                     </table>
