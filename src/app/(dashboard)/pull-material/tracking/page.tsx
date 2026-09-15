@@ -112,23 +112,6 @@ export default function Page() {
   const downloadPdf = () => { if (!previewUrl) return; const a = document.createElement("a"); a.href = previewUrl; a.download = previewName; document.body.appendChild(a); a.click(); document.body.removeChild(a) }
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
-
-  // Attach a file to a doc with a category (INV/PACKING/AWB/CUSTOMS/COMBINED) + source (PC/LG) — retroactive.
-  const uploadFile = async (rq: any, category: string, source: string, files: FileList | null) => {
-    if (!files || !files.length) return
-    setBusy(rq.id + category)
-    try {
-      for (const f of Array.from(files)) {
-        const fd = new FormData(); fd.append("file", f); fd.append("category", category); fd.append("source", source)
-        await fetch(`/api/pull-material/${rq.id}/attachments`, { method: "POST", body: fd }).catch(() => {})
-      }
-      await load()
-    } finally { setBusy(null) }
-  }
-  // Files of one side (PC = INV/PACKING/COMBINED-from-PC · LG = AWB/CUSTOMS/COMBINED-from-LG).
-  const filesOf = (rq: any, source: string) => (rq.attachments || []).filter((a: any) =>
-    a.source === source || (!a.source && source === "PC")) // legacy uploads (no source) shown under PC
-  const CAT_LABEL: Record<string, string> = { INV: "INV", PACKING: "Packing", AWB: "AWB", CUSTOMS: "ใบขน", COMBINED: "รวม" }
   useEffect(() => { if (canUse) load() }, [bu, canUse]) // eslint-disable-line
 
   // Creator (or admin) can RECALL a document that hasn't been approved yet — withdraws it
@@ -236,7 +219,7 @@ export default function Page() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500">
                 <tr>
-                  {["Document", "PO", "Progress", "Status", "PC Files", "LG Files", ""].map((h, i) =>
+                  {["Document", "PO", "Progress", "Status", "Files", ""].map((h, i) =>
                     <th key={i} className="px-4 py-2.5 font-medium whitespace-nowrap text-left">{h}</th>)}
                 </tr>
               </thead>
@@ -295,34 +278,24 @@ export default function Page() {
                           {pullStatus(rq)}
                         </span>
                       </td>
-                      {(["PC", "LG"] as const).map(side => {
-                        const list = filesOf(rq, side)
-                        const cats = side === "PC" ? [["INV", "PC"], ["PACKING", "PC"], ["COMBINED", "PC"]] : [["AWB", "LG"], ["CUSTOMS", "LG"], ["COMBINED", "LG"]]
-                        const canUp = isAdmin || rq.createdById === userId || (side === "LG" && roles.includes("LOGISTICS_IMPORT")) || (side === "PC" && roles.includes("PURCHASING"))
-                        return (
-                          <td key={side} className="px-4 py-2.5 align-top">
-                            <div className="flex flex-col gap-1 min-w-[150px]">
-                              {list.length === 0 ? <span className="text-xs text-gray-300">—</span> : list.map((a: any) => (
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        {(rq.attachments || []).length === 0 ? <span className="text-xs text-gray-300">—</span> : (
+                          <div className="relative inline-block group">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-sky-700 border border-sky-200 bg-sky-50 rounded-full px-2 py-0.5 cursor-default"
+                              title={(rq.attachments || []).map((a: any) => a.fileName).join("\n")}>
+                              📎 {(rq.attachments || []).length}
+                            </span>
+                            <div className="absolute z-30 left-0 top-full mt-1 hidden group-hover:flex flex-col gap-1 bg-white border border-gray-200 rounded-lg shadow-xl p-2 min-w-[200px] max-w-[280px]">
+                              {(rq.attachments || []).map((a: any) => (
                                 <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
                                   className="inline-flex items-center gap-1 text-[11px] text-sky-700 hover:underline truncate" title={a.fileName}>
-                                  <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">{CAT_LABEL[a.category] || "ไฟล์"}</span>
-                                  <span className="truncate">{a.fileName}</span>
+                                  📎 <span className="truncate">{a.fileName}</span>
                                 </a>
                               ))}
-                              {canUp && (
-                                <div className="flex flex-wrap gap-1 mt-0.5">
-                                  {cats.map(([cat, src]) => (
-                                    <label key={cat} className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 hover:border-emerald-300 hover:text-emerald-700 cursor-pointer">
-                                      {busy === rq.id + cat ? "…" : `＋${CAT_LABEL[cat]}`}
-                                      <input type="file" multiple className="hidden" onChange={e => { uploadFile(rq, cat, src, e.target.files); e.currentTarget.value = "" }} />
-                                    </label>
-                                  ))}
-                                </div>
-                              )}
                             </div>
-                          </td>
-                        )
-                      })}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <button onClick={() => setViewRq(rq)} title="View document (read-only)"
                           className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:text-red-800 hover:border-red-300 mr-1">👁 View</button>
