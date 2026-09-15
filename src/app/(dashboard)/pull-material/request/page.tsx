@@ -10,6 +10,10 @@ const MAROON = "#6b1a1a"
 const GOLD = "#b08d2e"      // luxury accent
 const GOLD_SOFT = "#c9a94e"
 const BUS = ["NYG", "EA", "TRM", "GW"]
+// Landed-cost constants (Thailand-side, baht) — converted to USD via EXCHANGE_RATE at compute time.
+const SHIP_CLEAR_BAHT = 1000, LOCAL_AIR_BAHT_KG = 2, STORE_AIR_BAHT_KG = 4.5, STORE_SEA_BAHT = 1500
+// CBM by shipment weight (sea): <500kg=1, ≤700=2, ≤1000=3, >1000=4.
+const cbmOf = (w: number) => (w < 500 ? 1 : w <= 700 ? 2 : w <= 1000 ? 3 : 4)
 
 type Bom = {
   soNoDoc: string; customerName?: string; customerPo?: string; vendorName?: string
@@ -270,16 +274,35 @@ export default function ScmRequestPage() {
     return { est: Math.round((best.rate * w + add) * 100) / 100, add, inc }
   }, [pcWeight, pcPur.port, pcPur.incoterm, airRows])
 
-  // Live shipping-mode COMPARE (Air / Sea / Courier) from the masters — same rule as Logistics/Approval,
-  // so จัดซื้อ sees every option's Est cost while filling the form.
+  // Full LANDED-COST compare (Air / Courier / Sea) — every line in USD (baht ÷ EXCHANGE_RATE 32.5).
+  // Thailand-side charges (local / store / transport) apply to NYG only; GW/EA/TRM ship abroad.
   const pcCompare = useMemo(() => {
     const w = Number(pcWeight) || 0, port = pcPur.port, dest = destForBu(bu)
     if (!w || (!port && !pcPur.seaPort)) return null
-    const air = pcEstAir ? { freight: pcEstAir.est - pcEstAir.add, inco: pcEstAir.add, total: pcEstAir.est } : null
-    const seaM = seaUsd(seaRows, pcPur.seaPort || port, pcPur.country)
+    const R = EXCHANGE_RATE, r2 = (v: number) => Math.round(v * 100) / 100
+    const isNyg = bu === "NYG"
+    const clear = r2(SHIP_CLEAR_BAHT / R)
+    // AIR — freight (USD, from master) + FCA/EXWORK origin cost; + TH charges (NYG).
+    const air = pcEstAir ? (() => {
+      const freight = r2(pcEstAir.est - pcEstAir.add), fca = r2(pcEstAir.add)
+      const local = isNyg ? r2((LOCAL_AIR_BAHT_KG * w) / R) : 0
+      const store = isNyg ? r2((STORE_AIR_BAHT_KG * w) / R) : 0
+      const transport = 0 // TODO: from Truck master (BKK Airport → factory)
+      return { freight, fca, clear, local, store, transport, total: r2(freight + fca + clear + local + store + transport) }
+    })() : null
+    // COURIER (DHL) — freight only.
     const dhl = courierUsd(courierRows, port, dest, w, "DHL")
-    const fedex = courierUsd(courierRows, port, dest, w, "FEDEX")
-    return { air, sea: seaM, dhl, fedex, over: w > 100 }
+    const courier = dhl != null ? { freight: dhl, fca: 0, clear: 0, local: 0, store: 0, transport: 0, total: dhl } : null
+    // SEA — LCL rate (USD/CBM) × cbm; + Store (NYG). (Sea local charge rule pending confirm.)
+    const seaM = seaUsd(seaRows, pcPur.seaPort || port, pcPur.country)
+    const cbm = cbmOf(w)
+    const sea = seaM ? (() => {
+      const freight = r2(seaM.cost * cbm)
+      const store = isNyg ? r2(STORE_SEA_BAHT / R) : 0
+      const transport = 0 // TODO: from Truck master (Port → factory)
+      return { freight, fca: 0, clear, local: 0, store, transport, total: r2(freight + clear + store + transport), cbm }
+    })() : null
+    return { air, courier, sea, over: w > 100, isNyg }
   }, [pcWeight, pcPur.port, pcPur.seaPort, pcPur.country, pcPur.incoterm, bu, airRows, seaRows, courierRows, pcEstAir])
 
   // Include the PO — the same SO/item can appear under several POs; keying by SO+item alone would
@@ -1032,37 +1055,43 @@ export default function ScmRequestPage() {
                 <span className="text-xs text-gray-500">รวมทั้งใบ ({new Set(cart.map(c => c.poNoDoc || "-")).size} PO) — ใช้คิด Est Air</span>
               </div>
 
-              {/* Live shipping-mode compare (Air / Sea / Courier) from the masters */}
+              {/* Live LANDED-COST compare (Air / Courier / Sea + Market price) — all USD */}
               {pcCompare && (() => {
-                const modes = [
-                  { key: "air", label: "✈️ Air", freight: pcCompare.air ? pcCompare.air.freight : null, inco: pcCompare.air ? pcCompare.air.inco : null, total: pcCompare.air ? pcCompare.air.total : null, accent: MAROON },
-                  { key: "sea", label: pcCompare.sea ? `🚢 Sea (${pcCompare.sea.container})` : "🚢 Sea (LCL)", freight: pcCompare.sea ? pcCompare.sea.cost : null, inco: null, total: pcCompare.sea ? pcCompare.sea.cost : null, accent: "#0369a1" },
-                  { key: "dhl", label: "📦 Courier (DHL)", freight: pcCompare.dhl, inco: null, total: pcCompare.dhl, accent: "#b45309", over: pcCompare.over },
+                const cols: any[] = [
+                  { key: "air", label: "✈️ Air", d: pcCompare.air, accent: MAROON },
+                  { key: "courier", label: "📦 Courier (DHL)", d: pcCompare.courier, accent: "#b45309", over: pcCompare.over },
+                  { key: "sea", label: `🚢 Sea (LCL${pcCompare.sea?.cbm ? ` · ${pcCompare.sea.cbm} cbm` : ""})`, d: pcCompare.sea, accent: "#0369a1" },
+                  { key: "market", label: "📈 Market (Air)", d: null, accent: "#7c3aed", market: true },
                 ]
-                const totals = modes.map(m => m.total).filter((v): v is number => v != null && v > 0)
+                const rows: [string, string][] = [["Freight", "freight"], ["FCA / EX-WORK", "fca"], ["Shipping clear", "clear"], ["Local charge TH", "local"], ["Store / DO", "store"], ["Transport", "transport"]]
+                const totals = cols.map(c => c.d?.total).filter((v): v is number => v != null && v > 0)
                 const cheapest = totals.length ? Math.min(...totals) : null
-                const money = (v: number | null) => v != null ? fmt(v) : <span className="text-gray-300">–</span>
+                const cell = (c: any, f: string) => { if (c.market) return <span className="text-gray-300">รอ</span>; const v = c.d ? c.d[f] : null; if (v == null) return c.over ? <span className="text-[10px] text-gray-400">&gt;100kg</span> : <span className="text-amber-600 text-[10px]">no master</span>; return v > 0 ? fmt(v) : <span className="text-gray-300">–</span> }
                 return (
-                  <div className="rounded-xl border border-gray-200 bg-white p-3">
+                  <div className="rounded-xl border border-gray-200 bg-white p-3 overflow-x-auto">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold text-gray-600">เปรียบเทียบวิธีขนส่ง (Freight · Incoterm · Total) <span className="font-normal text-gray-400">· USD</span></span>
-                      <span className="text-[10px] text-gray-400">Exchange {EXCHANGE_RATE} (Courier THB→USD)</span>
+                      <span className="text-xs font-bold text-gray-600">เปรียบเทียบต้นทุนขนส่ง (Landed cost) <span className="font-normal text-gray-400">· USD</span></span>
+                      <span className="text-[10px] text-gray-400">Rate {EXCHANGE_RATE} · TH charge เฉพาะ NYG</span>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {modes.map(m => {
-                        const best = m.total != null && m.total === cheapest
-                        return (
-                          <div key={m.key} className={`rounded-lg border p-2.5 ${best ? "ring-2 ring-emerald-300 border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
-                            <div className="text-[11px] font-semibold mb-1" style={{ color: m.accent }}>{m.label}{best && <span className="ml-1 text-[9px] text-emerald-600">ถูกสุด</span>}</div>
-                            <div className="space-y-0.5 text-[11px]">
-                              <div className="flex justify-between"><span className="text-gray-400">Freight</span><span className="font-medium text-gray-700">{money(m.freight)}</span></div>
-                              <div className="flex justify-between"><span className="text-gray-400">Incoterm</span><span className="font-medium text-gray-700">{money(m.inco)}</span></div>
-                              <div className="flex justify-between border-t border-gray-100 pt-0.5"><span className="text-gray-500 font-semibold">Total</span>{m.total != null ? <span className="font-bold text-gray-900">{fmt(m.total)}</span> : (m as any).over ? <span className="text-gray-400 text-[10px]">&gt; 100kg</span> : <span className="text-amber-600 text-[10px]">no master</span>}</div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
+                    <table className="w-full text-[11px] min-w-[440px]">
+                      <thead><tr className="text-gray-400">
+                        <th className="text-left font-medium py-1"></th>
+                        {cols.map(c => { const best = c.d?.total != null && c.d.total === cheapest; return <th key={c.key} className="text-right font-semibold py-1 px-2" style={{ color: c.accent }}>{c.label}{best && <span className="ml-1 text-[9px] text-emerald-600">ถูกสุด</span>}</th> })}
+                      </tr></thead>
+                      <tbody>
+                        {rows.map(([label, f]) => (
+                          <tr key={f} className="border-t border-gray-50">
+                            <td className="text-gray-500 py-1">{label}</td>
+                            {cols.map(c => <td key={c.key} className="text-right py-1 px-2 text-gray-700 tabular-nums">{cell(c, f)}</td>)}
+                          </tr>
+                        ))}
+                        <tr className="border-t border-gray-200 font-bold">
+                          <td className="text-gray-800 py-1.5">Total</td>
+                          {cols.map(c => { const best = c.d?.total != null && c.d.total === cheapest; return <td key={c.key} className={`text-right py-1.5 px-2 tabular-nums ${best ? "text-emerald-700" : "text-gray-900"}`}>{c.market ? <span className="text-gray-300 font-normal">รอ</span> : c.d?.total != null ? fmt(c.d.total) : (c.over ? <span className="text-[10px] text-gray-400 font-normal">&gt;100kg</span> : <span className="text-amber-600 text-[10px] font-normal">no master</span>)}</td> })}
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div className="text-[10px] text-gray-400 mt-1.5">* Transport (ค่ารถ→โรงงาน) รอเชื่อม Truck master · Market price กรอกทีหลัง</div>
                   </div>
                 )
               })()}

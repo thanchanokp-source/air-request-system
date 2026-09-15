@@ -1,6 +1,6 @@
 // Client-safe courier helpers (no prisma import) for the shipping-mode compare box.
 // Courier master rates are in THB per weight tier → divide by EXCHANGE_RATE to show USD.
-export const EXCHANGE_RATE = 32
+export const EXCHANGE_RATE = 32.5
 
 // Destination by requesting BU (same rule as air): NYG/GW → BKK, EA → VTE, TRM → LAOS.
 export const destForBu = (bu: any) => (({ NYG: "BKK", GW: "BKK", EA: "VTE", TRM: "LAOS" } as Record<string, string>)[String(bu || "").toUpperCase()] || "BKK")
