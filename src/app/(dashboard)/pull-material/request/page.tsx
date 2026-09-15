@@ -11,7 +11,7 @@ const GOLD = "#b08d2e"      // luxury accent
 const GOLD_SOFT = "#c9a94e"
 const BUS = ["NYG", "EA", "TRM", "GW"]
 // Landed-cost constants (Thailand-side, baht) — converted to USD via EXCHANGE_RATE at compute time.
-const SHIP_CLEAR_BAHT = 1000, LOCAL_AIR_BAHT_KG = 2, STORE_AIR_BAHT_KG = 4.5, STORE_SEA_BAHT = 1500
+const SHIP_CLEAR_BAHT = 1000, LOCAL_AIR_BAHT_KG = 2, STORE_AIR_BAHT_KG = 4.5, STORE_SEA_BAHT = 1500, LOCAL_SEA_BAHT_CBM = 2500
 // CBM by shipment weight (sea): <500kg=1, ≤700=2, ≤1000=3, >1000=4.
 const cbmOf = (w: number) => (w < 500 ? 1 : w <= 700 ? 2 : w <= 1000 ? 3 : 4)
 
@@ -298,9 +298,10 @@ export default function ScmRequestPage() {
     const cbm = cbmOf(w)
     const sea = seaM ? (() => {
       const freight = r2(seaM.cost * cbm)
+      const local = isNyg ? r2((LOCAL_SEA_BAHT_CBM * cbm) / R) : 0
       const store = isNyg ? r2(STORE_SEA_BAHT / R) : 0
-      const transport = 0 // TODO: from Truck master (Port → factory)
-      return { freight, fca: 0, clear, local: 0, store, transport, total: r2(freight + clear + store + transport), cbm }
+      const transport = 0 // TODO: from Truck master (Bangkok Port → factory)
+      return { freight, fca: 0, clear, local, store, transport, total: r2(freight + clear + local + store + transport), cbm }
     })() : null
     return { air, courier, sea, over: w > 100, isNyg }
   }, [pcWeight, pcPur.port, pcPur.seaPort, pcPur.country, pcPur.incoterm, bu, airRows, seaRows, courierRows, pcEstAir])
