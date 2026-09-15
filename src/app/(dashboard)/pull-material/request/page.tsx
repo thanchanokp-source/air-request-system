@@ -236,7 +236,7 @@ export default function ScmRequestPage() {
   }, [reqType])
   const pcCity = pcCities.find((c: any) => c.id === pcCityId) || null
   // Destination factory options by BU (EA/TRM fixed; NYG & GW pick a G-factory). Default when BU changes.
-  const factoryOptions = bu === "EA" ? ["EA"] : bu === "TRM" ? ["TRM"] : ["G1", "G2", "G3", "G4", "GW"]
+  const factoryOptions = bu === "EA" ? ["EA"] : bu === "TRM" ? ["TRM"] : ["G1", "G2", "G3", "G4", "GW", "EA", "TRM"]
   useEffect(() => { setPcFactory(bu === "EA" ? "EA" : bu === "TRM" ? "TRM" : "") }, [bu])
   // Freight master (air/sea) for the Country → Port cascade + live Est Air preview.
   useEffect(() => {

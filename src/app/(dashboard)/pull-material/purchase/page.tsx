@@ -83,7 +83,7 @@ export default function PurchasePage() {
   // Destination factory (feeds the port→factory transport cost on the compare detail).
   // EA/TRM are fixed to their BU; NYG & GW pick G1/G2/G3/G4/GW.
   const factoryDefault = (rq: any) => rq.factory || (rq.bu === "EA" ? "EA" : rq.bu === "TRM" ? "TRM" : "")
-  const factoryOptions = (rq: any) => (rq.bu === "EA" ? ["EA"] : rq.bu === "TRM" ? ["TRM"] : ["G1", "G2", "G3", "G4", "GW"])
+  const factoryOptions = (rq: any) => (rq.bu === "EA" ? ["EA"] : rq.bu === "TRM" ? ["TRM"] : ["G1", "G2", "G3", "G4", "GW", "EA", "TRM"])
   const setFactory = async (rqId: string, f: string) => {
     setReqs(prev => prev.map(r => (r.id === rqId ? { ...r, factory: f } : r)))
     await fetch(`/api/pull-material/${rqId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ factory: f }) }).catch(() => {})
