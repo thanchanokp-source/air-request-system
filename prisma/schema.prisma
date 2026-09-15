@@ -527,6 +527,8 @@ model PullMaterialAttachment {
   filePath     String              // Supabase storage path
   fileSize     Int
   mimeType     String
+  category     String?             // INV | PACKING | AWB | CUSTOMS | COMBINED
+  source       String?             // PC (จัดซื้อ) | LG (logistics)
   createdAt    DateTime            @default(now())
   request      PullMaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 

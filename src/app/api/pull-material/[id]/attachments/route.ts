@@ -26,6 +26,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const form = await req.formData()
   const file = form.get("file") as File
   if (!file) return NextResponse.json({ error: "No file" }, { status: 400 })
+  const category = (form.get("category") as string) || null   // INV | PACKING | AWB | CUSTOMS | COMBINED
+  const source = (form.get("source") as string) || null       // PC | LG
 
   const ext = file.name.split(".").pop() || "bin"
   const storagePath = `pm/${id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
@@ -41,6 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       requestId: id, uploadedById: userId || null,
       fileName: file.name, filePath: storagePath,
       fileSize: buffer.length, mimeType: file.type || "application/octet-stream",
+      category, source,
     },
   })
   return NextResponse.json(row)
