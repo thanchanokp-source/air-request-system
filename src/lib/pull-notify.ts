@@ -76,6 +76,17 @@ function pullEmailCard(o: { documentNo: string; bu: string; statusText: string; 
 </body>`
 }
 
+// POUSERNAME ("JUTHALAK POUKNOI") → the purchaser's login email ("juthalak.p@nanyangtextile.com"):
+// first name + "." + first letter of the surname, lowercased. One word → just the first name.
+export function poUsernameToEmail(name: any): string | null {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return null
+  const first = parts[0].toLowerCase().replace(/[^a-z0-9]/g, "")
+  if (!first) return null
+  const initial = parts.length > 1 ? parts[1][0].toLowerCase().replace(/[^a-z0-9]/g, "") : ""
+  return `${first}${initial ? "." + initial : ""}@nanyangtextile.com`
+}
+
 export async function notifyPullStage(reqId: string, status: string): Promise<void> {
   const cfg = STAGE[status]
   // NOTE: PullMaterialRequest has createdById but NO `createdBy` relation — selecting it here made the
@@ -83,7 +94,7 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
   const rq = await (prisma as any).pullMaterialRequest.findUnique({
     where: { id: reqId },
     select: { documentNo: true, bu: true, requesterName: true, requesterEmail: true, isTest: true, status: true, createdById: true, remark: true,
-      items: { select: { soNoDoc: true, poNoDoc: true, country: true, port: true, seaPort: true, incoterm: true, city: true, pullMaterialQty: true, airFreightCost: true, leadTimeAir: true, weight: true } } },
+      items: { select: { soNoDoc: true, poNoDoc: true, poUsername: true, country: true, port: true, seaPort: true, incoterm: true, city: true, pullMaterialQty: true, airFreightCost: true, leadTimeAir: true, weight: true } } },
   }).catch((e: any) => { console.log(`[pull-notify] load failed for ${reqId}: ${String(e).slice(0, 160)}`); return null })
   if (!rq) return
   // Test docs reroute to the creator; look up their email by id (no relation available).
@@ -137,6 +148,19 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
       alertLgList(LG_NOMASTER_TO, rq, docFields, PULL_STATUS_LABEL[status] || "รอ LG เติม Air rate", c.cta, c.redirect)
     ).catch(() => {})
     return
+  }
+
+  // SCM req landed at Purchasing → alert ONLY the specific purchaser(s) that own the PO (from POUSERNAME),
+  // not the whole Purchasing pool. Multiple POs → multiple owners. Fall back to the pool if none derivable.
+  if (status === "PENDING_PURCHASING") {
+    const c = STAGE[status]
+    const emails = [...new Set(items.map((i: any) => poUsernameToEmail(i.poUsername)).filter(Boolean) as string[])]
+    if (emails.length) {
+      console.log(`[pull-notify] ${rq.documentNo} PENDING_PURCHASING → owner(s) ${emails.join(",")}`)
+      await runWithTestMail(testTo, () => alertLgList(emails, rq, docFields, PULL_STATUS_LABEL[status] || "Pending Purchasing", c.cta, c.redirect)).catch(() => {})
+      return
+    }
+    console.log(`[pull-notify] ${rq.documentNo} PENDING_PURCHASING → no POUSERNAME → fallback to PURCHASING pool`)
   }
 
   if (!cfg) { console.log(`[pull-notify] no STAGE config for status=${status} (${rq.documentNo})`); return }
