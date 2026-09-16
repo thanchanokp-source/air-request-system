@@ -46,8 +46,8 @@ export default function Page() {
   }
   const filesOf = (rq: any, side: string) => (rq.attachments || []).filter((a: any) => a.source === side || (!a.source && side === "PC"))
   const canUp = (rq: any, side: string) => isAdmin || (side === "PC" && isPc && rq.createdById === userId) || (side === "LG" && isLg)
-  // Delete a file — admin (any file) or the person who uploaded it.
-  const canDel = (a: any) => isAdmin || (a.uploadedById && a.uploadedById === userId)
+  // Delete a file — the document owner (request creator) sees the ✕ on their own docs; admin sees it on ALL.
+  const canDel = (rq: any) => isAdmin || (!!userId && rq.createdById === userId)
   const delFile = async (a: any) => {
     if (!confirm(`ลบไฟล์ "${a.fileName}"?`)) return
     setBusy("del" + a.id)
@@ -83,7 +83,7 @@ export default function Page() {
                 <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">{CAT_LABEL[a.category] || "ไฟล์"}</span>
                 <span className="truncate">{a.fileName}</span>
               </a>
-              {canDel(a) && (
+              {canDel(rq) && (
                 <button onClick={() => delFile(a)} disabled={busy === "del" + a.id} title="ลบไฟล์"
                   className="shrink-0 text-gray-300 hover:text-red-600 text-xs px-1 disabled:opacity-40">{busy === "del" + a.id ? "…" : "✕"}</button>
               )}

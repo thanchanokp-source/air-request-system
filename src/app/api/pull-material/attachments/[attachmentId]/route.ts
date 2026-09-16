@@ -37,9 +37,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const isAdmin = u.role === "ADMIN" || (Array.isArray(u.roles) && u.roles.includes("ADMIN"))
   const { attachmentId } = await params
 
-  const att = await (prisma as any).pullMaterialAttachment.findUnique({ where: { id: attachmentId } })
+  const att = await (prisma as any).pullMaterialAttachment.findUnique({ where: { id: attachmentId }, include: { request: { select: { createdById: true } } } })
   if (!att) return NextResponse.json({ error: "Not found" }, { status: 404 })
-  if (!isAdmin && att.uploadedById && att.uploadedById !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  // Only the DOCUMENT OWNER (request creator) may delete files on it — or admin, or the uploader.
+  const isOwner = att.request?.createdById && att.request.createdById === userId
+  if (!isAdmin && !isOwner && att.uploadedById && att.uploadedById !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
   await supabase.storage.from(BUCKET).remove([att.filePath]).catch(() => {})
   await (prisma as any).pullMaterialAttachment.delete({ where: { id: attachmentId } })
