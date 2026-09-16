@@ -1298,22 +1298,23 @@ export default function ScmRequestPage() {
             className="w-full mt-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
         </div>
 
-        {/* Attachments = PACKING LIST (staged now, uploaded when the request is created). */}
+        {/* Attachments — Purchasing req = Packing List (with INV checklist); SCM req = a plain file attach. */}
         <div className="mt-3">
-          {/* Checklist — เอกสารที่จัดซื้อต้องแนบ */}
-          <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px]">
-            <span className="font-semibold text-amber-800">เอกสารที่ต้องแนบ:</span>
-            <span className={`ml-2 ${Object.values(poInvMap).some(v => v && v.trim()) ? "text-emerald-700" : "text-gray-500"}`}>{Object.values(poInvMap).some(v => v && v.trim()) ? "✓" : "○"} INV (ด้านบน · ระบบอ่านให้)</span>
-            <span className="mx-1.5 text-gray-300">·</span>
-            <span className={files.length ? "text-emerald-700" : "text-gray-500"}>{files.length ? "✓" : "○"} Packing List (ด้านล่าง)</span>
-            <span className="ml-2 text-gray-400">— AWB / ใบขน แนบทีหลังโดย LG ที่เมนู ATTACH FILES</span>
-          </div>
-          <label className="text-xs font-semibold text-gray-600">📦 Packing List (แนบไฟล์) <span className="text-gray-400 font-normal">(PDF / Excel / รูป — แนบได้หลายไฟล์)</span></label>
+          {reqType === "PURCHASING" && (
+            <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px]">
+              <span className="font-semibold text-amber-800">เอกสารที่ต้องแนบ:</span>
+              <span className={`ml-2 ${Object.values(poInvMap).some(v => v && v.trim()) ? "text-emerald-700" : "text-gray-500"}`}>{Object.values(poInvMap).some(v => v && v.trim()) ? "✓" : "○"} INV (ด้านบน · ระบบอ่านให้)</span>
+              <span className="mx-1.5 text-gray-300">·</span>
+              <span className={files.length ? "text-emerald-700" : "text-gray-500"}>{files.length ? "✓" : "○"} Packing List (ด้านล่าง)</span>
+              <span className="ml-2 text-gray-400">— AWB / ใบขน แนบทีหลังโดย LG ที่เมนู ATTACH FILES</span>
+            </div>
+          )}
+          <label className="text-xs font-semibold text-gray-600">{reqType === "PURCHASING" ? "📦 Packing List (แนบไฟล์)" : "📎 แนบไฟล์"} <span className="text-gray-400 font-normal">(PDF / Excel / รูป — แนบได้หลายไฟล์)</span></label>
           <div className="mt-1 flex items-center gap-2 flex-wrap">
-            <label className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">📎 เลือกไฟล์ Packing List
+            <label className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">📎 {reqType === "PURCHASING" ? "เลือกไฟล์ Packing List" : "เลือกไฟล์"}
               <input type="file" multiple className="hidden" onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ""; if (fs.length) setFiles(p => [...p, ...fs]) }} />
             </label>
-            {files.length === 0 && <span className="text-[11px] text-gray-400">ยังไม่ได้แนบ Packing List</span>}
+            {files.length === 0 && <span className="text-[11px] text-gray-400">{reqType === "PURCHASING" ? "ยังไม่ได้แนบ Packing List" : "ยังไม่ได้แนบไฟล์"}</span>}
           </div>
           {files.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1327,7 +1328,8 @@ export default function ScmRequestPage() {
             </div>
           )}
         </div>
-        {/* Regular / Irregular mode — per document. Regular = fast-track (no wait for approval). */}
+        {/* Regular / Irregular mode — Purchasing req only. SCM req: hidden (mode auto-decided downstream). */}
+        {reqType === "PURCHASING" && (
         <div className="mt-3 rounded-xl border border-gray-200 p-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-semibold text-gray-600">Mode เอกสาร:</span>
@@ -1346,6 +1348,7 @@ export default function ScmRequestPage() {
             Regular = SO ขึ้นต้น <b>02</b> (ทุก port) · หรือ SO <b>01</b> จาก port <b>ฮ่องกง</b> · หรือ SO <b>01</b> น้ำหนัก <b>&lt; 45 kg</b> — ระบบแนะนำให้จาก SO แต่แก้เองได้
           </p>
         </div>
+        )}
 
         <div className="mt-3 flex items-center justify-end gap-3 flex-wrap">
           {isAdmin && (
