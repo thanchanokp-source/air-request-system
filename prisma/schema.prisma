@@ -414,6 +414,7 @@ model PullMaterialItem {
   // SCM input
   pullGarment     Float?
   pullMaterialQty Float?
+  poPullQty       Float? // PO PULL qty entered by Purchasing (per PO line, from BOM PULL reference)
   airDecision     String?
   inHouseAirDate  DateTime?
   inHouseSeaDate  DateTime?

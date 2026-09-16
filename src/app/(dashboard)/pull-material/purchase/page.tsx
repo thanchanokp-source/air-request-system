@@ -189,7 +189,7 @@ export default function PurchasePage() {
         needDate: pf("needDate"), etc: pf("etc"),
         boxW: pf("boxW"), boxL: pf("boxL"), boxH: pf("boxH"),
       }
-      const itemUpdates = rq.items.map((it: any, i: number) => ({ id: it.id, ...shared, weight: i === 0 ? pf("weight") : "" }))
+      const itemUpdates = rq.items.map((it: any, i: number) => ({ id: it.id, ...shared, weight: i === 0 ? pf("weight") : "", poPullQty: valOf(it, "poPullQty") }))
       // No manual Logistics step anymore: server auto-computes Est Air + Air L/T, then goes straight to
       // the air decision (SCM or PC). LG only enters ACTUAL later, after approval.
       // A RETURNED doc (PC_REVISE) goes STRAIGHT back to LG (APPROVED) — no re-approval — per the flow.
@@ -473,15 +473,28 @@ export default function PurchasePage() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead className="bg-gray-50 text-gray-500"><tr>
-                          {["SO", "PO No", "Material", "PULL", "MRD"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">SO</th>
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">PO No</th>
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Material</th>
+                          <th className="px-3 py-2 text-right font-medium whitespace-nowrap">จำนวน PO</th>
+                          <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Cons.</th>
+                          <th className="px-3 py-2 text-right font-medium whitespace-nowrap">PULL (ระบบ)</th>
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap bg-emerald-50 text-emerald-700">PO PULL <span className="text-red-500">*</span></th>
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">MRD</th>
                         </tr></thead>
                         <tbody className="divide-y divide-gray-50">
                           {openReq.items.map((it: any) => (
                             <tr key={it.id} className="hover:bg-gray-50">
                               <td className="px-3 py-1.5"><span className="text-[11px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: MAROON }}>{it.soNoDoc}</span></td>
                               <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{it.poNoDoc || "-"}</td>
-                              <td className="px-3 py-1.5 text-gray-700 max-w-[280px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || "-"}</td>
-                              <td className="px-3 py-1.5 text-right whitespace-nowrap">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
+                              <td className="px-3 py-1.5 text-gray-700 max-w-[240px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || "-"}</td>
+                              <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-600">{it.orderQty != null ? fmt(it.orderQty) : "-"}</td>
+                              <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-600">{it.consumption != null ? fmt(it.consumption) : "-"}</td>
+                              <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-700 font-medium">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
+                              <td className="px-3 py-1.5 min-w-[120px]" onClick={e => e.stopPropagation()}>
+                                <input type="number" value={valOf(it, "poPullQty")} onChange={e => setVal(it.id, "poPullQty", e.target.value)} placeholder={it.pullMaterialQty != null ? String(it.pullMaterialQty) : "0"}
+                                  className="w-28 border border-emerald-300 bg-emerald-50/40 rounded-lg px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-emerald-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              </td>
                               <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{mrdOf(it)}</td>
                             </tr>
                           ))}
