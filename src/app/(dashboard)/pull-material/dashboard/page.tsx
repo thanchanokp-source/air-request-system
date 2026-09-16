@@ -76,6 +76,32 @@ export default function Page() {
   const maxBuEst = Math.max(1, ...buRows.map(([, v]) => v.est))
   const dstr = (v: any) => (v ? new Date(v).toLocaleDateString("en-GB") : "-")
   const TABLE_COLS = ["Doc No", "BU", "สาย", "จัดซื้อ", "PO", "Country", "Port", "Incoterm", "Wt(kg)", "Factory", "ETC", "Est USD", "MAWB", "HAWB", "ETD", "ETA", "Pre cost", "Actual", "Local", "CFM in-house", "Status"]
+  const tableRow = (r: any): any[] => {
+    const its = r.items || []
+    const d0 = its.find((i: any) => i.airFreightCost != null) || its[0] || {}
+    const est = its.reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
+    const po = [...new Set(its.map((i: any) => i.poNoDoc).filter(Boolean))].join(", ")
+    return [r.documentNo, r.bu, reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : "SCM", r.requesterName || "", po,
+      d0.country || "", d0.port || d0.seaPort || "", d0.incoterm || "", d0.weight != null ? Number(d0.weight) : "",
+      r.factory || d0.factory || "", dstr(d0.etc), est ? Math.round(est) : "",
+      r.mawbNo || "", r.hawbNo || "", dstr(r.flightEtd), dstr(r.flightEta),
+      r.preCost != null ? Number(r.preCost) : "", r.actualAir != null ? Number(r.actualAir) : "", r.localChargeTh != null ? Number(r.localChargeTh) : "",
+      dstr(r.cfmInHouseDate), STATUS_LABEL[r.status] || r.status]
+  }
+  const exportTable = async () => {
+    try {
+      const ExcelJS: any = (await import("exceljs")).default
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet("Pull RM")
+      ws.addRow(TABLE_COLS); ws.getRow(1).font = { bold: true }
+      fReqs.forEach((r: any) => ws.addRow(tableRow(r)))
+      ws.columns.forEach((c: any) => { c.width = 14 })
+      const buf = await wb.xlsx.writeBuffer()
+      const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }))
+      const a = document.createElement("a"); a.href = url; a.download = `PullRM_Dashboard_${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch (e) { alert("Export ไม่สำเร็จ: " + String((e as any)?.message || e).slice(0, 160)) }
+  }
 
   // OVER BUDGET (Actual > Est) attributed to brand / vendor. A doc's Actual is per-doc, so it's split
   // across its lines by each line's Est share, then summed per brand & per vendor. Only docs with both
@@ -255,7 +281,10 @@ export default function Page() {
 
           {/* E · Data table — every field entered by SCM / จัดซื้อ / LG (one row per document) */}
           <div className="bg-white rounded-xl border p-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-3">ตารางข้อมูลทั้งหมด (SCM · จัดซื้อ · LG) — {fReqs.length} เอกสาร</p>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase">ตารางข้อมูลทั้งหมด (SCM · จัดซื้อ · LG) — {fReqs.length} เอกสาร</p>
+              <button onClick={exportTable} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50">📊 Export Excel</button>
+            </div>
             <div className="overflow-x-auto">
               <table className="text-xs whitespace-nowrap min-w-[1500px] w-full">
                 <thead className="text-gray-500 border-b border-gray-200">
@@ -273,7 +302,7 @@ export default function Page() {
                         <td className="px-2 py-1.5">{r.bu}</td>
                         <td className="px-2 py-1.5">{reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : "SCM"}</td>
                         <td className="px-2 py-1.5">{r.requesterName || "-"}</td>
-                        <td className="px-2 py-1.5 max-w-[160px] truncate" title={po}>{po || "-"}</td>
+                        <td className="px-2 py-1.5" title={po}>{po || "-"}</td>
                         <td className="px-2 py-1.5">{d0.country || "-"}</td>
                         <td className="px-2 py-1.5">{d0.port || d0.seaPort || "-"}</td>
                         <td className="px-2 py-1.5">{d0.incoterm || "-"}</td>
