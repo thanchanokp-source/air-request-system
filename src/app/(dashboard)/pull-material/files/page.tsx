@@ -178,7 +178,7 @@ export default function Page() {
               const pos = [...new Set((rq.items || []).map((i: any) => i.poNoDoc).filter(Boolean))].join(", ")
               const n = (rq.attachments || []).length
               return (
-                <div key={rq.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                <div key={rq.id} className={`rounded-2xl border shadow-sm p-4 ${reqTypeOf(rq) === "PURCHASING" ? "bg-orange-50/40 border-orange-100" : reqTypeOf(rq) === "SAMPLE" ? "bg-teal-50/40 border-teal-100" : "bg-violet-50/40 border-violet-100"}`}>
                   <div className="flex items-center gap-2 flex-wrap mb-3">
                     <span className="font-bold text-gray-900">{rq.documentNo}</span>
                     {reqTypeOf(rq) === "PURCHASING"
