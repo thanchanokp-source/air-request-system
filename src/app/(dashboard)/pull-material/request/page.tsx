@@ -615,20 +615,19 @@ export default function ScmRequestPage() {
         </div>
       )}
       <div>
-        <h1 className="text-xl font-bold" style={{ color: MAROON }}>{reqType === "PURCHASING" ? "Purchasing req air" : "SCM — RM REQ AIR"}</h1>
+        <h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>{reqType === "PURCHASING" ? "PURCHASING REQUEST AIR" : "SCM — RM REQ AIR"}</h1>
       </div>
 
-      {/* Sub-tabs — Purchasing req air is a direct request (no SCM "Send Approve" step). */}
+      {/* Sub-tabs — only SCM has a "Send Approve" step; Purchasing req is a single direct form (no tabs). */}
+      {reqType !== "PURCHASING" && (
       <div className="flex gap-1 border-b border-gray-200">
-        {(reqType === "PURCHASING"
-          ? ([["request", "1 · Request"]] as const)
-          : ([["request", "1 · Request"], ["approve", "2 · Send Approve"]] as const)
-        ).map(([k, label]) => (
+        {([["request", "1 · Request"], ["approve", "2 · Send Approve"]] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${tab === k ? "border-current" : "border-transparent text-gray-400 hover:text-gray-600"}`}
             style={tab === k ? { color: MAROON, borderColor: MAROON } : undefined}>{label}</button>
         ))}
       </div>
+      )}
 
       {tab === "approve" && reqType !== "PURCHASING" ? (
         <>
@@ -671,11 +670,6 @@ export default function ScmRequestPage() {
       {reqType === "PURCHASING" ? (
         /* ── PC (Purchasing): pick vendor → select some POs → one total weight → pull every material ── */
         <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: "linear-gradient(180deg,#fffdf8 0%,#ffffff 60%)", border: `1px solid ${GOLD_SOFT}55` }}>
-          <div className="flex items-center gap-3">
-            <span className="h-8 w-1 rounded-full" style={{ background: `linear-gradient(${GOLD},${MAROON})` }} />
-            <h2 className="text-lg font-bold tracking-tight" style={{ color: MAROON }}>Purchasing <span style={{ color: GOLD }}>·</span> Pull Material</h2>
-          </div>
-
 
           {/* 1 · Vendor picker (type-ahead from this BU's vendors) */}
           <div className="relative max-w-lg">

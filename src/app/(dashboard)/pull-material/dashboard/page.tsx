@@ -176,8 +176,7 @@ export default function Page() {
 
   return (
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">
-      <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Dashboard — Pull Material</h1>
-        <p className="text-sm text-gray-500">มูลค่า / สถิติการดึงวัสดุทางอากาศ · freight = USD</p></div>
+      <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>DASHBOARD</h1></div>
       <div className="flex gap-1.5">{BUS.map(b => (
         <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
