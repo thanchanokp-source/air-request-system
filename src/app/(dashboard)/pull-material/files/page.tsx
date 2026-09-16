@@ -121,14 +121,17 @@ export default function Page() {
             {cats.map(([cat, src]) => {
               const done = cat !== "COMBINED" ? has(cat) : hasCombined
               return (
-                <label key={cat} title={done ? "แนบแล้ว — คลิกเพื่อเพิ่มอีก" : "ยังไม่แนบ"}
+                <label key={cat} title={done ? `${CAT_LABEL[cat]} — คลิก หรือ ลากไฟล์มาวางที่ปุ่มนี้` : `ลากไฟล์มาวาง หรือคลิก → ${CAT_LABEL[cat]}`}
+                  onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add("ring-2", "ring-emerald-400") }}
+                  onDragLeave={e => e.currentTarget.classList.remove("ring-2", "ring-emerald-400")}
+                  onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove("ring-2", "ring-emerald-400"); const fs = e.dataTransfer.files; if (fs?.length) uploadFile(rq, cat, src, fs) }}
                   className={`text-[11px] px-2.5 py-1 rounded-lg border cursor-pointer ${done ? "border-emerald-300 bg-emerald-50 text-emerald-700 font-semibold" : "border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-700"}`}>
                   {busy === rq.id + cat ? "…" : `${done ? "✓" : "＋"} ${CAT_LABEL[cat]}`}
                   <input type="file" multiple className="hidden" onChange={e => { uploadFile(rq, cat, src, e.target.files); e.currentTarget.value = "" }} />
                 </label>
               )
             })}
-            <span className="text-[10px] text-gray-400 self-center ml-1">หรือลากไฟล์มาวาง → “รวม”</span>
+            <span className="text-[10px] text-gray-400 self-center ml-1">ลากไฟล์วางบนปุ่ม = หมวดนั้น · วางในกรอบ = “รวม”</span>
           </div>
         ) : <div className="text-[11px] text-gray-300 mt-2">แนบไม่ได้ (ไม่ใช่เจ้าของ/สิทธิ์)</div>}
       </div>
