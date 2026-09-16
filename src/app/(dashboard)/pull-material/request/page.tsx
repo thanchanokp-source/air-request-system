@@ -766,7 +766,9 @@ export default function ScmRequestPage() {
           </div>
 
           <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
-            <label className="flex items-center gap-2 text-xs text-gray-500"><input type="checkbox" checked={isTest} onChange={e => setIsTest(e.target.checked)} className="w-4 h-4 accent-red-700" /> Test (เมลเด้งกลับหาคุณ ไม่ส่ง LG จริง)</label>
+            {isRealAdmin
+              ? <label className="flex items-center gap-2 text-xs text-gray-500"><input type="checkbox" checked={isTest} onChange={e => setIsTest(e.target.checked)} className="w-4 h-4 accent-red-700" /> Test (เมลเด้งกลับหาคุณ ไม่ส่ง LG จริง)</label>
+              : <span />}
             <button onClick={submit} disabled={submitting || smpLines.length === 0}
               className="px-6 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-40" style={{ background: MAROON }}>{submitting ? "…" : "✦ SUBMIT"}</button>
           </div>
