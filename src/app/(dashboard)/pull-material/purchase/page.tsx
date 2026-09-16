@@ -28,6 +28,10 @@ export default function PurchasePage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
+  // Fill-once form: one set of purchase fields applied to EVERY SO/PO in the doc (like Purchasing req).
+  const [pForm, setPForm] = useState<Record<string, string>>({})
+  const pf = (k: string) => pForm[k] ?? ""
+  const setPf = (k: string, v: string) => setPForm(p => ({ ...p, [k]: v }))
   const [soQ, setSoQ] = useState("") // filter list by SO / document no
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
@@ -50,6 +54,21 @@ export default function PurchasePage() {
     fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRows(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRows(d.rows || [])).catch(() => {})
   }, [])
+
+  // On opening a doc: seed the fill-once form from item[0]'s current values (so a re-opened / returned doc
+  // shows what was entered before). Weight = the doc's total (stored on item[0]).
+  useEffect(() => {
+    if (!openId) { setPForm({}); return }
+    const rq = reqs.find(r => r.id === openId); if (!rq) return
+    const it0 = (rq.items || []).find((i: any) => i.weight != null) || (rq.items || [])[0] || {}
+    const dstr = (v: any) => (v ? String(v).slice(0, 10) : "")
+    setPForm({
+      country: it0.country || "", city: it0.city || "", port: it0.port || "", seaPort: it0.seaPort || "",
+      incoterm: it0.incoterm || "", weight: it0.weight != null ? String(it0.weight) : "",
+      needDate: dstr(it0.needDate), etc: dstr(it0.etc), pickupAddress: it0.pickupAddress || "",
+      boxW: it0.boxW != null ? String(it0.boxW) : "", boxL: it0.boxL != null ? String(it0.boxL) : "", boxH: it0.boxH != null ? String(it0.boxH) : "",
+    })
+  }, [openId]) // eslint-disable-line
 
   // country → air ports / sea ports (cascade) + sea port → lead time (from the sheet)
   const { countries, airByCountry, seaByCountry, seaLtByPort } = useMemo(() => {
@@ -130,38 +149,47 @@ export default function PurchasePage() {
     const add = inc === "EX-WORK" ? best.exw : inc === "FCA" ? best.fca : 0
     return { est: Math.round((best.rate * w + add) * 100) / 100, tt: best.tt || "-", bk, add }
   }
+  // Est Air preview for the fill-once form (total weight + Port of Loading + Incoterm).
+  const pcEst = () => {
+    const w = Number(pf("weight")) || 0, port = clean(pf("port"))
+    const routes = airRows.filter(r => r.origin === port)
+    if (!port || !w || !routes.length) return null
+    const bk = breakKey(w)
+    const cand = routes.map(r => ({ rate: Number(r.rates?.[bk]), exw: Number(r.origCostExw) || 0, fca: Number(r.origCostFca) || 0 })).filter(x => x.rate && !isNaN(x.rate))
+    if (!cand.length) return null
+    const best = cand.reduce((a, b) => (b.rate > a.rate ? b : a))
+    const inc = String(pf("incoterm") || "").toUpperCase()
+    const add = inc === "EX-WORK" ? best.exw : inc === "FCA" ? best.fca : 0
+    return { est: Math.round((best.rate * w + add) * 100) / 100, add }
+  }
 
   const save = async (rq: any) => {
-    for (const it of rq.items) {
-      if (!filled(valOf(it, "country"))) return alert(`Select or type a Country for SO ${it.soNoDoc}.`)
-      if (!filled(valOf(it, "port")) && !filled(valOf(it, "seaPort"))) return alert(`Select or type an Air Port or Sea Port for SO ${it.soNoDoc}.`)
-      if (!valOf(it, "incoterm")) return alert(`Select an Incoterm for SO ${it.soNoDoc}.`)
-      if (NEEDS_ADDRESS.includes(valOf(it, "incoterm")) && !valOf(it, "pickupAddress").trim())
-        return alert(`${valOf(it, "incoterm")} needs a Pickup address for SO ${it.soNoDoc}.`)
-      if (!valOf(it, "weight")) return alert(`Enter the Weight for SO ${it.soNoDoc}.`)
-    }
-    // Values PC typed as "Other" (not in the freight master) → LG must add their rate.
-    const otherPorts = rq.items.map((it: any) => {
-      const cc = valOf(it, "country"), pp = valOf(it, "port"), sp = valOf(it, "seaPort")
-      const oCountry = filled(cc) && !countries.includes(cc)
-      const oPort = filled(pp) && !(airByCountry[cc] || new Set()).has(pp)
-      const oSea = filled(sp) && !(seaByCountry[cc] || new Set()).has(sp)
-      return (oCountry || oPort || oSea)
-        ? { so: it.soNoDoc, country: cc, port: oPort ? pp : "", seaPort: oSea ? sp : "", newCountry: oCountry }
-        : null
-    }).filter(Boolean)
-
-    if (otherPorts.length && !confirm(`${otherPorts.length} item(s) use a port/country not in the master.\nLogistics will be emailed to add the rate.\n\nContinue and send to Logistics?`)) return
+    // Fill-once validation — one set of values for the whole document.
+    const cc = pf("country"), pp = pf("port"), sp = pf("seaPort"), inc = pf("incoterm")
+    if (!filled(cc)) return alert("เลือก / พิมพ์ Country")
+    if (!filled(pp) && !filled(sp)) return alert("เลือก Port of Loading (Air) หรือ Sea Port")
+    if (!inc) return alert("เลือก Incoterm")
+    if (NEEDS_ADDRESS.includes(inc) && !pf("pickupAddress").trim()) return alert(`${inc} ต้องระบุ Pickup address`)
+    if (!pf("weight") || !(Number(pf("weight")) > 0)) return alert("กรอกน้ำหนักรวม (kg)")
+    // Country / port typed but not in the freight master → LG will be emailed to add the rate.
+    const oCountry = filled(cc) && !countries.includes(cc)
+    const oPort = filled(pp) && !(airByCountry[cc] || new Set()).has(pp)
+    const oSea = filled(sp) && !(seaByCountry[cc] || new Set()).has(sp)
+    const otherPorts = (oCountry || oPort || oSea)
+      ? [{ so: rq.items[0]?.soNoDoc || "", country: cc, port: oPort ? pp : "", seaPort: oSea ? sp : "", newCountry: oCountry }]
+      : []
+    if (otherPorts.length && !confirm(`Port/Country นี้ไม่มีใน master — Logistics จะได้รับอีเมลให้เพิ่ม rate\n\nส่งต่อ Logistics เลยไหม?`)) return
 
     setBusy(rq.id)
     try {
-      const itemUpdates = rq.items.map((it: any) => ({
-        id: it.id, country: clean(valOf(it, "country")), port: clean(valOf(it, "port")), seaPort: clean(valOf(it, "seaPort")),
-        incoterm: valOf(it, "incoterm"), weight: valOf(it, "weight"), shipmentDate: valOf(it, "shipmentDate"),
-        pickupAddress: NEEDS_ADDRESS.includes(valOf(it, "incoterm")) ? valOf(it, "pickupAddress") : "",
-        needDate: valOf(it, "needDate"), etc: valOf(it, "etc"), cartons: valOf(it, "cartons"),
-        boxW: valOf(it, "boxW"), boxL: valOf(it, "boxL"), boxH: valOf(it, "boxH"),
-      }))
+      // Apply the ONE set to every item; total weight goes on item[0] only (recomputePullAir reads it).
+      const shared = {
+        country: clean(cc), port: clean(pp), seaPort: clean(sp), incoterm: inc,
+        pickupAddress: NEEDS_ADDRESS.includes(inc) ? pf("pickupAddress") : "",
+        needDate: pf("needDate"), etc: pf("etc"),
+        boxW: pf("boxW"), boxL: pf("boxL"), boxH: pf("boxH"),
+      }
+      const itemUpdates = rq.items.map((it: any, i: number) => ({ id: it.id, ...shared, weight: i === 0 ? pf("weight") : "" }))
       // No manual Logistics step anymore: server auto-computes Est Air + Air L/T, then goes straight to
       // the air decision (SCM or PC). LG only enters ACTUAL later, after approval.
       // A RETURNED doc (PC_REVISE) goes STRAIGHT back to LG (APPROVED) — no re-approval — per the flow.
@@ -184,9 +212,8 @@ export default function PurchasePage() {
   // Number inputs (weight / cartons): full width, spinner arrows hidden so long numbers stay visible.
   const numc = selc + " [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
   const openReq = reqs.find(r => r.id === openId)
-  const itemReady = (it: any) => filled(valOf(it, "country")) && (filled(valOf(it, "port")) || filled(valOf(it, "seaPort"))) && !!valOf(it, "incoterm") && !!valOf(it, "weight")
-    && (!NEEDS_ADDRESS.includes(valOf(it, "incoterm")) || !!valOf(it, "pickupAddress").trim())
-  const allReady = openReq ? openReq.items.every(itemReady) : false
+  const allReady = !!(filled(pf("country")) && (filled(pf("port")) || filled(pf("seaPort"))) && pf("incoterm") && Number(pf("weight")) > 0
+    && (!NEEDS_ADDRESS.includes(pf("incoterm")) || pf("pickupAddress").trim()))
 
   // Export the open doc's items to a styled workbook. Sheet "Purchase" = fill-in; the Country cell is a
   // dropdown validated against sheet "Countries" (master names) so imports always match the master.
@@ -355,11 +382,6 @@ export default function PurchasePage() {
               </div>
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-2">
-                  <button onClick={exportXlsx}
-                    className="px-3 py-2.5 rounded-xl text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50">⬇ Export Excel</button>
-                  <label className="px-3 py-2.5 rounded-xl text-sm font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">⬆ Import
-                    <input type="file" accept=".xlsx,.xls" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importXlsx(f) }} />
-                  </label>
                   <label className="px-3 py-2.5 rounded-xl text-sm font-medium border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 cursor-pointer">
                     {uploadingPL === openReq.id ? "กำลังแนบ…" : "📎 แนบ Packing List"}
                     <input type="file" multiple className="hidden" disabled={uploadingPL === openReq.id}
@@ -370,7 +392,7 @@ export default function PurchasePage() {
                     {busy === openReq.id ? "Saving…" : (openReq.status === "PC_REVISE" ? "Save → ส่งกลับ LG" : "Save → Send to Logistics")}
                   </button>
                 </div>
-                {!allReady && <span className="text-[11px] text-amber-600">Fill Country, Port, Incoterm &amp; Weight for every item</span>}
+                {!allReady && <span className="text-[11px] text-amber-600">กรอก Country · Port · Incoterm · Weight (ครั้งเดียวใช้ทั้งใบ)</span>}
               </div>
             </div>
 
@@ -385,141 +407,91 @@ export default function PurchasePage() {
               <div className="text-[11px] text-gray-500">📎 ไฟล์แนบ: {(openReq.attachments || []).map((a: any) => a.filename || a.name).filter(Boolean).join(", ")}</div>
             )}
 
-            {/* Excel-like horizontal rows: grey = reference (from BOM/PC), green = fields to fill in */}
-            <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-500">
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-300" /> จัดซื้อกรอก</span>
-              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-sky-100 border border-sky-300" /> 🔒 คำนวณอัตโนมัติจาก Master Rate (อ่านอย่างเดียว)</span>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-              <table className="text-sm border-collapse min-w-[1720px] w-full">
-                <thead>
-                  <tr className="text-[11px] text-gray-500 uppercase tracking-wide">
-                    <th className="px-2 py-2 text-left font-semibold sticky left-0 bg-gray-100 z-10 border-b border-gray-200">SO</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">PO No</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Customer</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Cust PO</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Style</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">OU</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200">Material</th>
-                    <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">PULL</th>
-                    <th className="px-2 py-2 text-right font-semibold bg-gray-100 border-b border-gray-200">Cons.</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-gray-100 border-b border-gray-200" title="เร็วที่สุดจาก Shipment / MRD dates">MRD</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Country *</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Air Port</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Sea Port</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Incoterm *</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Weight(kg) *</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Need Date</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Cartons</th>
-                    <th className="px-2 py-2 text-center font-semibold bg-emerald-50 border-b border-emerald-200" title="กว้าง × ยาว × สูง (cm) — ไม่บังคับ">Dim W×L×H (cm)</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">Ship Date</th>
-                    <th className="px-2 py-2 text-left font-semibold bg-emerald-50 border-b border-emerald-200">ETC</th>
-                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700" title="คำนวณอัตโนมัติจาก Master Rate">🔒 Air L/T</th>
-                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700" title="คำนวณอัตโนมัติจาก Master Rate">🔒 Est Air</th>
-                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Sea L/T</th>
-                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Est Sea</th>
-                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Est FedEx</th>
-                    <th className="px-2 py-2 text-right font-semibold bg-sky-50 border-b border-sky-200 text-sky-700">🔒 Est DHL</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {openReq.items.map((it: any, idx: number) => {
-                    const c = valOf(it, "country")
-                    const airPorts = [...(airByCountry[c] || [])].sort()
-                    const seaPorts = [...(seaByCountry[c] || [])].sort()
-                    const rowBg = idx % 2 ? "bg-gray-50/40" : "bg-white"
-                    return [
-                      <tr key={it.id} className={`${rowBg} align-top border-b border-gray-100`}>
-                        <td className={`px-2 py-1.5 sticky left-0 z-10 ${rowBg}`}>
-                          <span className="text-[11px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: MAROON }}>{it.soNoDoc}</span>
-                        </td>
-                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.poNoDoc || "-"}</td>
-                        <td className="px-2 py-1.5 text-gray-600 max-w-[140px] truncate" title={it.customerName || ""}>{it.customerName || "-"}</td>
-                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.customerPo || "-"}</td>
-                        <td className="px-2 py-1.5 text-gray-600 whitespace-nowrap">{it.style || "-"}</td>
-                        <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap font-medium">{it.ou || "-"}</td>
-                        <td className="px-2 py-1.5 text-gray-700 max-w-[180px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || "-"}</td>
-                        <td className="px-2 py-1.5 text-right text-gray-700 whitespace-nowrap">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
-                        <td className="px-2 py-1.5 text-right text-gray-600 whitespace-nowrap">{fmt(it.consumption)}</td>
-                        <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap font-medium" title="MRD (เร็วที่สุด)">{mrdOf(it)}</td>
-                        <td className="px-2 py-1.5 min-w-[150px]">
-                          <Picker value={c} list={countries} sel={selc} placeholder="— country —"
-                            onChange={v => { setVal(it.id, "country", v); setVal(it.id, "port", ""); setVal(it.id, "seaPort", "") }}
-                            typePlaceholder="Type → notify LG" />
-                        </td>
-                        <td className="px-2 py-1.5 min-w-[140px]">
-                          <Picker value={valOf(it, "port")} list={airPorts} sel={selc} disabled={!c}
-                            placeholder={c ? (airPorts.length ? "— air —" : "no air port") : "country first"}
-                            onChange={v => setVal(it.id, "port", v)} typePlaceholder="Type → notify LG" />
-                        </td>
-                        <td className="px-2 py-1.5 min-w-[140px]">
-                          <Picker value={valOf(it, "seaPort")} list={seaPorts} sel={selc} disabled={!c}
-                            placeholder={c ? (seaPorts.length ? "— sea —" : "no sea port") : "country first"}
-                            onChange={v => setVal(it.id, "seaPort", v)} typePlaceholder="Type → notify LG" />
-                        </td>
-                        <td className="px-2 py-1.5 min-w-[110px]">
-                          <select value={valOf(it, "incoterm")} onChange={e => setVal(it.id, "incoterm", e.target.value)} className={selc}>
-                            <option value="">—</option>
-                            {INCOTERMS.map(t => <option key={t} value={t}>{t}</option>)}
-                          </select>
-                        </td>
-                        <td className="px-2 py-1.5 min-w-[100px]">
-                          <input type="number" value={valOf(it, "weight")} onChange={e => setVal(it.id, "weight", e.target.value)} placeholder="0" className={numc} />
-                        </td>
-                        <td className="px-2 py-1.5 min-w-[130px]">
-                          <input type="date" value={valOf(it, "needDate")} onChange={e => setVal(it.id, "needDate", e.target.value)} className={selc} title="ต้องการของเมื่อไหร่" />
-                        </td>
-                        <td className="px-2 py-1.5 min-w-[110px]">
-                          <input type="number" value={valOf(it, "cartons")} onChange={e => setVal(it.id, "cartons", e.target.value)} placeholder="0" className={numc} />
-                        </td>
-                        <td className="px-2 py-1.5 min-w-[200px]">
-                          <div className="flex items-center gap-1">
-                            <input type="number" value={valOf(it, "boxW")} onChange={e => setVal(it.id, "boxW", e.target.value)} placeholder="ก" className={`${dimc}`} />
-                            <span className="text-gray-300">×</span>
-                            <input type="number" value={valOf(it, "boxL")} onChange={e => setVal(it.id, "boxL", e.target.value)} placeholder="ย" className={`${dimc}`} />
-                            <span className="text-gray-300">×</span>
-                            <input type="number" value={valOf(it, "boxH")} onChange={e => setVal(it.id, "boxH", e.target.value)} placeholder="ส" className={`${dimc}`} />
-                          </div>
-                        </td>
-                        <td className="px-2 py-1.5 min-w-[130px]">
-                          <input type="date" value={valOf(it, "shipmentDate")} onChange={e => setVal(it.id, "shipmentDate", e.target.value)} className={selc} />
-                        </td>
-                        <td className="px-2 py-1.5 min-w-[130px]">
-                          <input type="date" value={valOf(it, "etc")} onChange={e => setVal(it.id, "etc", e.target.value)} className={selc} title="ETC" />
-                        </td>
-                        {(() => {
-                          const a = airAuto(it)
-                          const airPort = clean(valOf(it, "port"))
-                          const seaLt = seaLtByPort[clean(valOf(it, "seaPort"))]
-                          const cell = "px-2 py-1.5 text-right bg-sky-50/50 whitespace-nowrap"
-                          return <>
-                            <td className={`${cell} text-sky-800`}>{airPort ? "3 days" : <span className="text-gray-300">—</span>}</td>
-                            <td className={`${cell} font-semibold text-sky-800`} title={a?.add ? `รวม origin cost ${valOf(it, "incoterm")} +${fmt(a.add)}` : ""}>{a ? <>{fmt(a.est)}{a.add ? <span className="text-[9px] text-amber-600 ml-0.5">+{valOf(it, "incoterm") === "FCA" ? "FCA" : "EXW"}</span> : null}</> : <span className="text-gray-300">รอกรอก</span>}</td>
-                            <td className={`${cell} text-sky-800`}>{seaLt || <span className="text-gray-300">—</span>}</td>
-                            <td className={`${cell} text-gray-400`} title="Sea เป็นค่าต่อ container — รอสูตร/มาสเตอร์จาก LG">รอ master</td>
-                            <td className={`${cell} text-gray-400`} title="ยังไม่มี master FedEx — รอ data จาก LG">รอ master</td>
-                            <td className={`${cell} text-gray-400`} title="ยังไม่มี master DHL — รอ data จาก LG">รอ master</td>
-                          </>
-                        })()}
-                      </tr>,
-                      NEEDS_ADDRESS.includes(valOf(it, "incoterm")) && (
-                        <tr key={`${it.id}-addr`} className={rowBg}>
-                          <td className={`px-2 pb-2 sticky left-0 z-10 ${rowBg}`} />
-                          <td colSpan={25} className="px-2 pb-2">
-                            <div className="flex items-start gap-2">
-                              <span className="text-[11px] font-semibold text-amber-700 whitespace-nowrap mt-1.5">📍 {valOf(it, "incoterm")} Pickup address *</span>
-                              <textarea value={valOf(it, "pickupAddress")} onChange={e => setVal(it.id, "pickupAddress", e.target.value)} rows={2}
-                                placeholder="ที่อยู่รับสินค้า / supplier address (บังคับสำหรับ EX-WORK / FCA)"
-                                className="flex-1 border border-amber-300 bg-amber-50 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
-                            </div>
-                          </td>
-                        </tr>
-                      ),
-                    ]
-                  }).flat().filter(Boolean)}
-                </tbody>
-              </table>
-            </div>
+            {/* Fill-once form — one set of values for the whole document (like Purchasing req) */}
+            {(() => {
+              const c = pf("country")
+              const airPorts = [...(airByCountry[c] || [])].sort()
+              const seaPorts = [...(seaByCountry[c] || [])].sort()
+              const est = pcEst()
+              const poList = [...new Set(openReq.items.map((i: any) => i.poNoDoc).filter(Boolean))]
+              const lab = "text-[11px] font-semibold text-gray-600 block mb-1"
+              return (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="text-sm font-bold text-gray-800 flex items-center gap-2"><span className="w-1 h-4 rounded inline-block" style={{ background: MAROON }} />ข้อมูลจัดซื้อ <span className="text-[11px] font-normal text-gray-400">(ใช้ทั้งใบ · {openReq.items.length} SO · {poList.length} PO)</span></div>
+                    {est && <span className="text-xs font-semibold text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-2.5 py-1">🔒 Est Air ≈ {fmt(est.est)} USD{est.add ? <span className="text-amber-600"> (+{pf("incoterm")})</span> : null}</span>}
+                  </div>
+
+                  <div>
+                    <label className={lab}>น้ำหนักรวม (kg) <span className="text-red-500">*</span></label>
+                    <input type="number" value={pf("weight")} onChange={e => setPf("weight", e.target.value)} placeholder="0"
+                      className="w-40 border-2 border-red-300 rounded-xl px-4 py-2 text-lg font-bold text-center focus:outline-none focus:ring-2 focus:ring-red-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" style={{ color: MAROON }} />
+                    <span className="ml-2 text-xs text-gray-500">รวมทั้งใบ ({poList.length} PO) — ใช้คิด Est Air</span>
+                  </div>
+
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <div><label className={lab}>Country <span className="text-red-500">*</span></label>
+                      <Picker value={pf("country")} list={countries} sel={sel} placeholder="— country —"
+                        onChange={v => { setPf("country", v); setPf("port", ""); setPf("seaPort", "") }} typePlaceholder="Type → notify LG" /></div>
+                    <div><label className={lab}>Port of Loading (Air) <span className="text-red-500">*</span></label>
+                      <Picker value={pf("port")} list={airPorts} sel={sel} disabled={!c}
+                        placeholder={c ? (airPorts.length ? "— port of loading —" : "no air port") : "country first"}
+                        onChange={v => setPf("port", v)} typePlaceholder="Type → notify LG" /></div>
+                    <div><label className={lab}>Sea Port <span className="text-gray-300">(optional)</span></label>
+                      <Picker value={pf("seaPort")} list={seaPorts} sel={sel} disabled={!c}
+                        placeholder={c ? (seaPorts.length ? "— sea port —" : "no sea port") : "country first"}
+                        onChange={v => setPf("seaPort", v)} typePlaceholder="Type → notify LG" /></div>
+                    <div><label className={lab}>Incoterm <span className="text-red-500">*</span></label>
+                      <select value={pf("incoterm")} onChange={e => setPf("incoterm", e.target.value)} className={sel}>
+                        <option value="">—</option>{INCOTERMS.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select></div>
+                    <div><label className={lab}>Need date (in-house) <span className="text-red-500">*</span></label>
+                      <input type="date" value={pf("needDate")} onChange={e => setPf("needDate", e.target.value)} className={sel} /></div>
+                    <div><label className={lab}>ETC <span className="text-red-500">*</span></label>
+                      <input type="date" value={pf("etc")} onChange={e => setPf("etc", e.target.value)} className={sel} /></div>
+                    <div className="sm:col-span-3"><label className={lab}>Dimension ก×ย×ส (cm) <span className="text-gray-300">— ไม่บังคับ</span></label>
+                      <div className="flex items-center gap-1.5">
+                        <input type="number" value={pf("boxW")} onChange={e => setPf("boxW", e.target.value)} placeholder="ก" className={dimc} />
+                        <span className="text-gray-300">×</span>
+                        <input type="number" value={pf("boxL")} onChange={e => setPf("boxL", e.target.value)} placeholder="ย" className={dimc} />
+                        <span className="text-gray-300">×</span>
+                        <input type="number" value={pf("boxH")} onChange={e => setPf("boxH", e.target.value)} placeholder="ส" className={dimc} />
+                      </div></div>
+                  </div>
+
+                  {NEEDS_ADDRESS.includes(pf("incoterm")) && (
+                    <div>
+                      <label className="text-[11px] font-semibold text-amber-700 block mb-1">📍 {pf("incoterm")} Pickup address <span className="text-red-500">*</span></label>
+                      <textarea value={pf("pickupAddress")} onChange={e => setPf("pickupAddress", e.target.value)} rows={2}
+                        placeholder="ที่อยู่รับสินค้า / supplier address (บังคับสำหรับ EX-WORK / FCA)"
+                        className="w-full border border-amber-300 bg-amber-50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
+                    </div>
+                  )}
+
+                  <details className="border border-gray-200 rounded-xl">
+                    <summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-50 rounded-t-xl select-none">📋 ดู SO / PO ในเอกสาร ({openReq.items.length} รายการ)</summary>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50 text-gray-500"><tr>
+                          {["SO", "PO No", "Material", "PULL", "MRD"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+                        </tr></thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {openReq.items.map((it: any) => (
+                            <tr key={it.id} className="hover:bg-gray-50">
+                              <td className="px-3 py-1.5"><span className="text-[11px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: MAROON }}>{it.soNoDoc}</span></td>
+                              <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{it.poNoDoc || "-"}</td>
+                              <td className="px-3 py-1.5 text-gray-700 max-w-[280px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || "-"}</td>
+                              <td className="px-3 py-1.5 text-right whitespace-nowrap">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
+                              <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{mrdOf(it)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                </div>
+              )
+            })()}
           </div>
         ) : (() => {
           const term = soQ.trim().toLowerCase()
