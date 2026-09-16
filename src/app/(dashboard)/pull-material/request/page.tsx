@@ -561,7 +561,7 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode, factory: pcFactory || null, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())), vendorEmail: vendorInfo.email, vendorContact: vendorInfo.contactName, vendorTel: vendorInfo.tel }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode: reqType === "PURCHASING" ? mode : "IRREGULAR", factory: pcFactory || null, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())), vendorEmail: vendorInfo.email, vendorContact: vendorInfo.contactName, vendorTel: vendorInfo.tel }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) {

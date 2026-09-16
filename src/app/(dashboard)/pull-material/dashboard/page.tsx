@@ -52,17 +52,28 @@ export default function Page() {
   }
   const topBrand = topBy("brand"), topVendor = topBy("vendorName"), topCountry = topBy("country")
 
-  // Monthly trend (docs + est)
-  const byMonth: Record<string, { docs: number; est: number }> = {}
+  // Monthly trend (docs + Est + Actual)
+  const byMonth: Record<string, { docs: number; est: number; act: number }> = {}
   fReqs.forEach((r: any) => {
     const d = new Date(r.createdAt); if (isNaN(d.getTime())) return
     const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-    if (!byMonth[k]) byMonth[k] = { docs: 0, est: 0 }
+    if (!byMonth[k]) byMonth[k] = { docs: 0, est: 0, act: 0 }
     byMonth[k].docs++
     byMonth[k].est += (r.items || []).reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
+    byMonth[k].act += Number(r.actualAir) || 0
   })
   const monthly = Object.entries(byMonth).sort()
-  const maxMonthEst = Math.max(1, ...monthly.map(([, v]) => v.est))
+  const maxMonthEst = Math.max(1, ...monthly.flatMap(([, v]) => [v.est, v.act]))
+
+  // Spend by BU (Est + Actual) for the BU-split bars.
+  const byBu: Record<string, { est: number; act: number }> = {}
+  fReqs.forEach((r: any) => {
+    const b = r.bu || "NYG"; const e = (byBu[b] ||= { est: 0, act: 0 })
+    e.est += (r.items || []).reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
+    e.act += Number(r.actualAir) || 0
+  })
+  const buRows = Object.entries(byBu).sort((a, b) => b[1].est - a[1].est)
+  const maxBuEst = Math.max(1, ...buRows.map(([, v]) => v.est))
 
   // OVER BUDGET (Actual > Est) attributed to brand / vendor. A doc's Actual is per-doc, so it's split
   // across its lines by each line's Est share, then summed per brand & per vendor. Only docs with both
@@ -192,6 +203,47 @@ export default function Page() {
             )
           })()}
 
+          {/* A · Actual vs Est monthly + spend by BU (the Control-Tower core) */}
+          <div className="grid lg:grid-cols-3 gap-3">
+            <div className="bg-white rounded-xl border p-4 lg:col-span-2">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase">Actual vs Est — รายเดือน (USD)</p>
+                <div className="flex gap-3 text-[11px] text-gray-500">
+                  <span className="flex items-center gap-1"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#c99aa2" }} />Est</span>
+                  <span className="flex items-center gap-1"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: MAROON }} />Actual</span>
+                </div>
+              </div>
+              {monthly.length === 0 ? <p className="text-sm text-gray-300">No data</p> : (
+                <div className="flex items-end gap-4 h-44 overflow-x-auto pb-1">
+                  {monthly.map(([m, v]) => (
+                    <div key={m} className="flex flex-col items-center gap-1 shrink-0" style={{ width: 60 }}>
+                      <div className="flex items-end gap-1 h-32">
+                        <div className="w-5 rounded-t" title={`Est ${fmt(Math.round(v.est))}`} style={{ height: `${(v.est / maxMonthEst) * 100}%`, minHeight: 3, background: "#c99aa2" }} />
+                        <div className="w-5 rounded-t" title={`Actual ${fmt(Math.round(v.act))}`} style={{ height: `${(v.act / maxMonthEst) * 100}%`, minHeight: v.act > 0 ? 3 : 0, background: MAROON }} />
+                      </div>
+                      <span className="text-[10px] text-gray-400">{m.slice(2)}</span>
+                      <span className="text-[10px] text-blue-600 font-medium">{v.docs} doc</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-white rounded-xl border p-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase mb-3">ต้นทุนตาม BU (Est · USD)</p>
+              {buRows.length === 0 ? <p className="text-sm text-gray-300">No data</p> : (
+                <div className="space-y-2.5">
+                  {buRows.map(([b, v]) => (
+                    <div key={b} className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-gray-700 w-10">{b}</span>
+                      <Bar pct={(v.est / maxBuEst) * 100} color={MAROON} />
+                      <span className="text-xs font-semibold text-gray-700 w-16 text-right tabular-nums">{fmt(Math.round(v.est))}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="grid lg:grid-cols-2 gap-3">
             {/* C · By status funnel */}
             <div className="bg-white rounded-xl border p-4">
@@ -242,22 +294,6 @@ export default function Page() {
             <TopCard title="Top country — by Est Air (USD)" rows={topCountry as [string, number][]} />
           </div>
 
-          {/* D · Monthly trend */}
-          <div className="bg-white rounded-xl border p-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Monthly — documents &amp; Est Air (USD)</p>
-            {monthly.length === 0 ? <p className="text-sm text-gray-300">No data</p> : (
-              <div className="flex items-end gap-3 h-40 overflow-x-auto pb-1">
-                {monthly.map(([m, v]) => (
-                  <div key={m} className="flex flex-col items-center gap-1 shrink-0" style={{ width: 56 }}>
-                    <span className="text-[10px] text-gray-500 tabular-nums">{fmt(Math.round(v.est))}</span>
-                    <div className="w-8 rounded-t" style={{ height: `${(v.est / maxMonthEst) * 100}%`, minHeight: 4, background: MAROON }} />
-                    <span className="text-[10px] text-gray-400">{m.slice(2)}</span>
-                    <span className="text-[10px] text-blue-600 font-medium">{v.docs} doc</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </>
       )}
     </div>
