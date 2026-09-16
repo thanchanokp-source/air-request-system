@@ -25,6 +25,7 @@ export default function Page() {
   const [busy, setBusy] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const [onlyMissing, setOnlyMissing] = useState(false)
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
 
   const load = async () => {
     setLoading(true)
@@ -57,15 +58,18 @@ export default function Page() {
     } finally { setBusy(null) }
   }
 
+  // A doc's branch: requestType, falling back to the documentNo prefix (SCM_… vs PULL_…) for older docs.
+  const reqTypeOf = (r: any) => (r.requestType === "PURCHASING" || String(r.documentNo || "").toUpperCase().startsWith("PULL")) ? "PURCHASING" : "SCM"
   const shown = useMemo(() => {
     const term = q.trim().toLowerCase()
     return reqs.filter(r => {
+      if (typeF !== "ALL" && reqTypeOf(r) !== typeF) return false
       if (onlyMissing && (r.attachments || []).length > 0) return false
       if (!term) return true
       return String(r.documentNo || "").toLowerCase().includes(term)
         || (r.items || []).some((i: any) => String(i.poNoDoc || "").toLowerCase().includes(term))
     })
-  }, [reqs, q, onlyMissing])
+  }, [reqs, q, onlyMissing, typeF]) // eslint-disable-line
 
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Purchasing / Logistics / Admin only</p></div>
 
@@ -126,6 +130,20 @@ export default function Page() {
         <p className="text-sm text-gray-400 mt-0.5">แนบ INV / Packing (จัดซื้อ) · AWB / ใบขน (LG) — ย้อนหลังได้ทุกเมื่อ · เลือก "รวม" ถ้าไฟล์เดียวมีหลายอย่าง</p>
       </div>
 
+      {/* Branch filter — separate SCM requests from Purchasing requests */}
+      <div className="flex gap-2 border-b border-gray-200">
+        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM req"], ["PURCHASING", "🛒 Purchase req"]] as const).map(([v, label]) => {
+          const n = v === "ALL" ? reqs.length : reqs.filter(r => reqTypeOf(r) === v).length
+          return (
+            <button key={v} onClick={() => setTypeF(v)}
+              className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${typeF === v ? "" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+              style={typeF === v ? { color: MAROON, borderColor: MAROON } : undefined}>
+              {label}<span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-500">{n}</span>
+            </button>
+          )
+        })}
+      </div>
+
       <div className="flex gap-1.5 flex-wrap">
         {BUS.map(b => (
           <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-full text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
@@ -150,6 +168,9 @@ export default function Page() {
                 <div key={rq.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
                   <div className="flex items-center gap-2 flex-wrap mb-3">
                     <span className="font-bold text-gray-900">{rq.documentNo}</span>
+                    {reqTypeOf(rq) === "PURCHASING"
+                      ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">Purchase req</span>
+                      : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">SCM req</span>}
                     <span className="text-xs text-gray-400">{rq.requesterName} · PO {pos || "-"}</span>
                     <span className={`ml-auto text-[11px] px-2 py-0.5 rounded-full ${n ? "bg-sky-50 text-sky-700" : "bg-gray-100 text-gray-400"}`}>📎 {n} ไฟล์</span>
                   </div>

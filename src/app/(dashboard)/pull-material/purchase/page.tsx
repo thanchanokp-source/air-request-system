@@ -308,7 +308,7 @@ export default function PurchasePage() {
         <p className="text-sm text-gray-400 mt-0.5">Pick Country → choose Air / Sea port, Incoterm &amp; Weight → send to Logistics</p></div>
 
       <div className="flex gap-2 border-b border-gray-200">
-        {([["queue", "📋 งานจัดซื้อ", reqs.filter(r => r.status === "PENDING_PURCHASING").length], ["revise", "↩️ ตีกลับให้แก้", reqs.filter(r => r.status === "PC_REVISE").length], ["stats", "📊 สถิติ Revise", -1]] as const).map(([v, label, n]) => (
+        {([["queue", "📋 งานจัดซื้อ", reqs.filter(r => r.status === "PENDING_PURCHASING").length], ["revise", "↩️ ตีกลับให้แก้", reqs.filter(r => r.status === "PC_REVISE").length]] as const).map(([v, label, n]) => (
           <button key={v} onClick={() => { setPcTab(v); setOpenId(null) }}
             className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${pcTab === v ? "" : "border-transparent text-gray-400 hover:text-gray-600"}`}
             style={pcTab === v ? { color: v === "revise" ? "#b91c1c" : MAROON, borderColor: v === "revise" ? "#b91c1c" : MAROON } : undefined}>
@@ -317,7 +317,7 @@ export default function PurchasePage() {
         ))}
       </div>
 
-      {pcTab === "stats" ? <ReviseStats reqs={reqs} /> : (
+      {(
       <>
       <div className="flex gap-1.5">{["ALL", ...BUS].map(b => (
         <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition ${bu === b ? "text-white border-transparent shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: b === "ALL" ? MAROON : buColor(b) } : undefined}>{b === "ALL" ? "ALL BU" : b}</button>
@@ -561,57 +561,7 @@ export default function PurchasePage() {
   )
 }
 
-// Revise tracking — count how many times each purchaser's docs were returned (sum of reviseCount),
-// most-revised first. Fetches EVERY doc (all statuses / all BU) so revised docs that already moved on
-// still count. Visible to Purchasing + Admin (this whole page is already gated to them).
-function ReviseStats({ reqs: _ }: { reqs: any[] }) {
-  const [all, setAll] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    (async () => {
-      try {
-        const results = await Promise.all(BUS.map(b => fetch(`/api/pull-material?bu=${b}`).then(r => r.json()).catch(() => ({}))))
-        setAll(results.flatMap((d: any) => d.requests || []))
-      } finally { setLoading(false) }
-    })()
-  }, [])
-  const byPerson: Record<string, { name: string; revises: number; docs: number }> = {}
-  for (const r of all) {
-    const key = r.purchaserName || r.purchaserEmail || r.requesterName || "(ไม่ระบุ)"
-    const e = (byPerson[key] ??= { name: key, revises: 0, docs: 0 })
-    e.revises += Number(r.reviseCount) || 0
-    if (Number(r.reviseCount) > 0) e.docs += 1
-  }
-  const rows = Object.values(byPerson).filter(p => p.revises > 0).sort((a, b) => b.revises - a.revises)
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-gray-500">นับจากจำนวนครั้งที่เอกสารถูก LG ตีกลับให้แก้ (revise) — เรียงจากมากไปน้อย · ใช้ประกอบการประเมิน</p>
-      {loading ? <p className="text-sm text-gray-400">Loading…</p> :
-        rows.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">ยังไม่มีการตีกลับ 🎉</div> :
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-500"><tr>
-              <th className="px-4 py-2.5 text-left font-medium">#</th>
-              <th className="px-4 py-2.5 text-left font-medium">จัดซื้อ</th>
-              <th className="px-4 py-2.5 text-right font-medium">จำนวนครั้งที่ถูกตีกลับ</th>
-              <th className="px-4 py-2.5 text-right font-medium">จำนวนเอกสาร</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-50">
-              {rows.map((p, i) => (
-                <tr key={p.name} className={i === 0 ? "bg-red-50/40" : ""}>
-                  <td className="px-4 py-2.5 text-gray-400">{i + 1}</td>
-                  <td className="px-4 py-2.5 font-medium text-gray-800">{p.name}{i === 0 && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold">สูงสุด</span>}</td>
-                  <td className="px-4 py-2.5 text-right font-bold" style={{ color: MAROON }}>{p.revises}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-500">{p.docs}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>}
-      <p className="text-[11px] text-gray-400">* นับจากทุกเอกสารทุก BU ทุกสถานะ (รวมที่ผ่านขั้นตอนไปแล้ว)</p>
-    </div>
-  )
-}
+// Revise stats moved to its own page: /pull-material/revise-stats
 
 function Chip({ label, value }: { label: string; value: any }) {
   return (
