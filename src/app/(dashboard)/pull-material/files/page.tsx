@@ -91,7 +91,10 @@ export default function Page() {
     const missing = required.filter(c => !has(c))
     const complete = missing.length === 0
     return (
-      <div className="flex-1 min-w-[240px]">
+      <div className={`flex-1 min-w-[240px] rounded-lg transition-colors ${allow ? "border border-dashed border-transparent hover:border-emerald-200" : ""}`}
+        onDragOver={allow ? (e => { e.preventDefault(); e.currentTarget.classList.add("bg-emerald-50/50", "border-emerald-300") }) : undefined}
+        onDragLeave={allow ? (e => e.currentTarget.classList.remove("bg-emerald-50/50", "border-emerald-300")) : undefined}
+        onDrop={allow ? (e => { e.preventDefault(); e.currentTarget.classList.remove("bg-emerald-50/50", "border-emerald-300"); const fs = e.dataTransfer.files; if (fs?.length) uploadFile(rq, "COMBINED", s, fs) }) : undefined}>
         <div className="flex items-center gap-2 mb-1.5">
           <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{name}</span>
           {complete
@@ -125,6 +128,7 @@ export default function Page() {
                 </label>
               )
             })}
+            <span className="text-[10px] text-gray-400 self-center ml-1">หรือลากไฟล์มาวาง → “รวม”</span>
           </div>
         ) : <div className="text-[11px] text-gray-300 mt-2">แนบไม่ได้ (ไม่ใช่เจ้าของ/สิทธิ์)</div>}
       </div>
@@ -134,7 +138,7 @@ export default function Page() {
   return (
     <div className="p-5 md:p-8 max-w-[1100px] mx-auto space-y-4">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>Attach Files</h1>
+        <h1 className="text-xl font-bold tracking-tight" style={{ color: MAROON }}>Attach Files</h1>
       </div>
 
       {/* Branch filter — separate SCM requests from Purchasing requests */}
