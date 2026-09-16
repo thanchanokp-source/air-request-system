@@ -336,18 +336,7 @@ export default function PurchasePage() {
 
   return (
     <div className="p-5 md:p-8 max-w-[1000px] mx-auto space-y-5">
-      <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>รอจัดซื้อกรอก <span className="text-base font-normal text-gray-400">(งานจาก SCM)</span></h1>
-        <p className="text-sm text-gray-400 mt-0.5">SCM ส่งมา → จัดซื้อกรอก Country / Air-Sea port / Incoterm / Weight → ส่งต่อ Logistics</p></div>
-
-      <div className="flex gap-2 border-b border-gray-200">
-        {([["queue", "📋 งานจัดซื้อ", reqs.filter(r => r.status === "PENDING_PURCHASING").length], ["revise", "↩️ ตีกลับให้แก้", reqs.filter(r => r.status === "PC_REVISE").length]] as const).map(([v, label, n]) => (
-          <button key={v} onClick={() => { setPcTab(v); setOpenId(null) }}
-            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${pcTab === v ? "" : "border-transparent text-gray-400 hover:text-gray-600"}`}
-            style={pcTab === v ? { color: v === "revise" ? "#b91c1c" : MAROON, borderColor: v === "revise" ? "#b91c1c" : MAROON } : undefined}>
-            {label}{n >= 0 && <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[11px] ${v === "revise" && n > 0 ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-500"}`}>{n}</span>}
-          </button>
-        ))}
-      </div>
+      <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>รอจัดซื้อกรอก <span className="text-base font-normal text-gray-400">(งานจาก SCM)</span></h1></div>
 
       {(
       <>
@@ -508,8 +497,8 @@ export default function PurchasePage() {
           </div>
         ) : (() => {
           const term = soQ.trim().toLowerCase()
-          const wantStatus = pcTab === "revise" ? "PC_REVISE" : "PENDING_PURCHASING"
-          const base = reqs.filter(rq => rq.status === wantStatus)
+          // One list — both new work (PENDING_PURCHASING) and returned docs (PC_REVISE, shown with a REVISE badge).
+          const base = reqs.filter(rq => rq.status === "PENDING_PURCHASING" || rq.status === "PC_REVISE")
           const { options: reqOptions, displayOf } = buildRequesters(base)
           const docNos = [...new Set(base.map(r => r.documentNo).filter(Boolean))].sort()
           const pos = [...new Set(base.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort()
@@ -532,7 +521,7 @@ export default function PurchasePage() {
                   {soQ && <button onClick={() => setSoQ("")} className="absolute right-2.5 top-2 text-gray-300 hover:text-gray-500">✕</button>}
                 </div>
               </div>
-              {base.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">{pcTab === "revise" ? "ไม่มีเอกสารที่ถูกตีกลับ 🎉" : "No documents at this stage"}</div> :
+              {base.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">No documents at this stage</div> :
                 shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400">ไม่พบเอกสารที่ตรงกับ “{soQ}”</div> :
                 <div className="space-y-2.5">
                   {shown.map(rq => (
