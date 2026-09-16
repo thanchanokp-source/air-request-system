@@ -72,9 +72,20 @@ export default function Page() {
   const side = (rq: any, name: string, s: string, cats: [string, string][]) => {
     const list = filesOf(rq, s)
     const allow = canUp(rq, s)
+    // Checklist: which required doc types are attached. A COMBINED file covers everything on that side.
+    const required = cats.filter(([c]) => c !== "COMBINED").map(([c]) => c)
+    const hasCombined = list.some((a: any) => a.category === "COMBINED")
+    const has = (c: string) => hasCombined || list.some((a: any) => a.category === c)
+    const missing = required.filter(c => !has(c))
+    const complete = missing.length === 0
     return (
       <div className="flex-1 min-w-[240px]">
-        <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">{name}</div>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{name}</span>
+          {complete
+            ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">✓ ครบ</span>
+            : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">ยังขาด: {missing.map(c => CAT_LABEL[c] || c).join(" · ")}</span>}
+        </div>
         <div className="flex flex-col gap-1">
           {list.length === 0 ? <span className="text-xs text-gray-300">— ยังไม่มีไฟล์ —</span> : list.map((a: any) => (
             <div key={a.id} className="flex items-center gap-1.5 group">
@@ -92,12 +103,16 @@ export default function Page() {
         </div>
         {allow ? (
           <div className="flex flex-wrap gap-1.5 mt-2">
-            {cats.map(([cat, src]) => (
-              <label key={cat} className="text-[11px] px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-700 cursor-pointer">
-                {busy === rq.id + cat ? "…" : `＋ ${CAT_LABEL[cat]}`}
-                <input type="file" multiple className="hidden" onChange={e => { uploadFile(rq, cat, src, e.target.files); e.currentTarget.value = "" }} />
-              </label>
-            ))}
+            {cats.map(([cat, src]) => {
+              const done = cat !== "COMBINED" ? has(cat) : hasCombined
+              return (
+                <label key={cat} title={done ? "แนบแล้ว — คลิกเพื่อเพิ่มอีก" : "ยังไม่แนบ"}
+                  className={`text-[11px] px-2.5 py-1 rounded-lg border cursor-pointer ${done ? "border-emerald-300 bg-emerald-50 text-emerald-700 font-semibold" : "border-gray-200 text-gray-600 hover:border-emerald-300 hover:text-emerald-700"}`}>
+                  {busy === rq.id + cat ? "…" : `${done ? "✓" : "＋"} ${CAT_LABEL[cat]}`}
+                  <input type="file" multiple className="hidden" onChange={e => { uploadFile(rq, cat, src, e.target.files); e.currentTarget.value = "" }} />
+                </label>
+              )
+            })}
           </div>
         ) : <div className="text-[11px] text-gray-300 mt-2">แนบไม่ได้ (ไม่ใช่เจ้าของ/สิทธิ์)</div>}
       </div>
