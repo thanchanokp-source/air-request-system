@@ -141,6 +141,10 @@ export default function ScmRequestPage() {
   const [pcStageWeight, setPcStageWeight] = useState("")
   const [remark, setRemark] = useState("")
   const [files, setFiles] = useState<File[]>([])   // attachments staged in the form → uploaded after create
+  // MER Sample form: Brand / Supplier / Item desc (dropdown-search from BOM) + Qty + Remark → many lines.
+  const [smpOpts, setSmpOpts] = useState<{ brands: string[]; suppliers: string[]; items: string[] }>({ brands: [], suppliers: [], items: [] })
+  const [smpNew, setSmpNew] = useState({ brand: "", supplier: "", item: "", qty: "", remark: "" })
+  const [smpLines, setSmpLines] = useState<{ brand: string; supplier: string; item: string; qty: string; remark: string }[]>([])
   const [isTest, setIsTest] = useState(false)
   // Regular (fast-track) vs Irregular (full approval), per doc. Auto-suggested from SO prefix "02";
   // (the Hong-Kong-port / weight<45kg parts are only known after Purchase, so those refine later).
@@ -238,6 +242,11 @@ export default function ScmRequestPage() {
     setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPcVendQ("")
     fetch(`/api/bom?bu=${bu}&vendors=1`).then(r => r.json()).then(d => setPcVendors(d.vendors || [])).catch(() => {})
     fetch(`/api/bom?bu=${bu}&uoms=1`).then(r => r.json()).then(d => setPcUoms(d.uoms || [])).catch(() => {})
+  }, [bu, reqType])
+  // Sample (MER) dropdown options — distinct Brand / Supplier / Item desc from the BOM of this BU.
+  useEffect(() => {
+    if (reqType !== "SAMPLE") return
+    fetch(`/api/bom?bu=${bu}&sampleOpts=1`).then(r => r.json()).then(d => setSmpOpts({ brands: d.brands || [], suppliers: d.suppliers || [], items: d.items || [] })).catch(() => {})
   }, [bu, reqType])
   // Master Purchase cities (Country/Port/City) for the PC City dropdown.
   useEffect(() => {
@@ -531,6 +540,29 @@ export default function ScmRequestPage() {
   const submit = async () => {
     const stop = (m: string) => { showToast(`⚠ ${m}`, false); return undefined }
     if (!requesterName.trim()) return stop("No signed-in user found.")
+
+    // SAMPLE (MER): items come from the Brand/Supplier/Item lines (no BOM/SO). Submit → auto-approve flow.
+    if (reqType === "SAMPLE") {
+      if (smpLines.length === 0) return stop("เพิ่มรายการ Sample อย่างน้อย 1 บรรทัด (Brand / Supplier / Item)")
+      const sampleItems = smpLines.map(l => ({
+        soNoDoc: "", brand: l.brand || null, vendorName: l.supplier || null, itemName: l.item || null,
+        partDesc: l.remark || null, pullMaterialQty: l.qty ? Number(l.qty) : null,
+      }))
+      setSubmitting(true)
+      try {
+        const r = await fetch("/api/pull-material", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark: remark || null, items: sampleItems, requestType: "SAMPLE", isTest }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) return stop(d.error || "ส่ง Sample ไม่สำเร็จ")
+        for (const f of files) { const fd = new FormData(); fd.append("file", f); fd.append("source", "MER"); await fetch(`/api/pull-material/${d.request.id}/attachments`, { method: "POST", body: fd }).catch(() => {}) }
+        showToast(`✓ ส่ง Sample แล้ว: ${d.request?.documentNo}${files.length ? ` · แนบ ${files.length} ไฟล์` : ""}`, true)
+        setSmpLines([]); setSmpNew({ brand: "", supplier: "", item: "", qty: "", remark: "" }); setRemark(""); setFiles([])
+      } finally { setSubmitting(false) }
+      return
+    }
+
     if (cart.length === 0) return stop("ยังไม่มีรายการ — เลือก vendor / PO ก่อน")
 
     // PC requests carry the purchase info here (no separate Purchase stage) → validate + stamp on items.
@@ -670,7 +702,81 @@ export default function ScmRequestPage() {
         )}
       </div>
 
-      {reqType === "PURCHASING" ? (
+      {reqType === "SAMPLE" ? (
+        /* ── MER SAMPLE: pick Brand / Supplier / Item desc (search from BOM) + Qty + Remark → many lines ── */
+        (() => {
+          const sInp = "w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200"
+          const lab = "text-[11px] font-semibold text-gray-600 block mb-1"
+          const addLine = () => {
+            if (!smpNew.brand.trim() && !smpNew.supplier.trim() && !smpNew.item.trim()) return showToast("⚠ กรอก Brand / Supplier / Item อย่างน้อย 1 ช่อง", false)
+            setSmpLines(p => [...p, { ...smpNew }]); setSmpNew({ brand: "", supplier: "", item: "", qty: "", remark: "" })
+          }
+          return (
+        <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: "linear-gradient(180deg,#fffdf8 0%,#ffffff 60%)", border: `1px solid ${GOLD_SOFT}55` }}>
+          <datalist id="smp-brands">{smpOpts.brands.map(b => <option key={b} value={b} />)}</datalist>
+          <datalist id="smp-suppliers">{smpOpts.suppliers.map(s => <option key={s} value={s} />)}</datalist>
+          <datalist id="smp-items">{smpOpts.items.slice(0, 3000).map(i => <option key={i} value={i} />)}</datalist>
+
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">เพิ่มรายการ Sample <span className="font-normal text-gray-400">— พิมพ์ค้นหาจาก BOM หรือพิมพ์เองได้</span></p>
+            <div className="grid md:grid-cols-6 gap-2 items-end">
+              <div className="md:col-span-1"><label className={lab}>Brand</label><input list="smp-brands" value={smpNew.brand} onChange={e => setSmpNew(p => ({ ...p, brand: e.target.value }))} placeholder="Brand" className={sInp} /></div>
+              <div className="md:col-span-1"><label className={lab}>Supplier</label><input list="smp-suppliers" value={smpNew.supplier} onChange={e => setSmpNew(p => ({ ...p, supplier: e.target.value }))} placeholder="Supplier" className={sInp} /></div>
+              <div className="md:col-span-2"><label className={lab}>Item Desc</label><input list="smp-items" value={smpNew.item} onChange={e => setSmpNew(p => ({ ...p, item: e.target.value }))} placeholder="Item description" className={sInp} /></div>
+              <div><label className={lab}>Qty</label><input type="number" value={smpNew.qty} onChange={e => setSmpNew(p => ({ ...p, qty: e.target.value }))} placeholder="0" className={sInp} /></div>
+              <div className="flex gap-1.5">
+                <input value={smpNew.remark} onChange={e => setSmpNew(p => ({ ...p, remark: e.target.value }))} placeholder="Remark" className={sInp} />
+                <button type="button" onClick={addLine} className="shrink-0 px-3 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>+ เพิ่ม</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="border border-gray-100 rounded-xl overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500"><tr>{["Brand", "Supplier", "Item Desc", "Qty", "Remark", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
+              <tbody className="divide-y divide-gray-50">
+                {smpLines.length === 0 ? <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">ยังไม่มีรายการ — กรอกด้านบนแล้วกด “+ เพิ่ม”</td></tr> :
+                  smpLines.map((l, i) => (
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="px-3 py-1.5">{l.brand || "-"}</td>
+                      <td className="px-3 py-1.5">{l.supplier || "-"}</td>
+                      <td className="px-3 py-1.5 max-w-[260px] truncate" title={l.item}>{l.item || "-"}</td>
+                      <td className="px-3 py-1.5">{l.qty || "-"}</td>
+                      <td className="px-3 py-1.5 text-gray-500">{l.remark || "-"}</td>
+                      <td className="px-3 py-1.5 text-right"><button type="button" onClick={() => setSmpLines(p => p.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-600 px-1">✕</button></td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div>
+            <label className={lab}>Remark รวม (ทั้งใบ) <span className="text-gray-300">— ไม่บังคับ</span></label>
+            <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="หมายเหตุรวมของ Sample นี้…" className={sInp} />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">📎 แนบไฟล์ <span className="text-gray-400 font-normal">(PDF / Excel / รูป — ได้หลายไฟล์)</span></label>
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 cursor-pointer">📎 เลือกไฟล์
+                <input type="file" multiple className="hidden" onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ""; if (fs.length) setFiles(p => [...p, ...fs]) }} />
+              </label>
+              {files.length === 0 ? <span className="text-[11px] text-gray-400">ยังไม่ได้แนบไฟล์</span> :
+                <div className="flex flex-wrap gap-1.5">{files.map((f, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 text-[11px] bg-gray-100 rounded-full pl-2.5 pr-1 py-1">📄 <span className="max-w-[160px] truncate">{f.name}</span><button onClick={() => setFiles(p => p.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-600 px-1">✕</button></span>
+                ))}</div>}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+            <label className="flex items-center gap-2 text-xs text-gray-500"><input type="checkbox" checked={isTest} onChange={e => setIsTest(e.target.checked)} className="w-4 h-4 accent-red-700" /> Test (เมลเด้งกลับหาคุณ ไม่ส่ง LG จริง)</label>
+            <button onClick={submit} disabled={submitting || smpLines.length === 0}
+              className="px-6 py-3 rounded-xl text-white text-sm font-bold disabled:opacity-40" style={{ background: MAROON }}>{submitting ? "…" : "✦ SUBMIT"}</button>
+          </div>
+        </div>
+          )
+        })()
+      ) : reqType === "PURCHASING" ? (
         /* ── PC (Purchasing): pick vendor → select some POs → one total weight → pull every material ── */
         <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: "linear-gradient(180deg,#fffdf8 0%,#ffffff 60%)", border: `1px solid ${GOLD_SOFT}55` }}>
 

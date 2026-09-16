@@ -59,6 +59,20 @@ export async function GET(req: NextRequest) {
     } catch (e: any) { return NextResponse.json({ error: e?.message || "vendors failed", vendors: [] }, { status: 500 }) }
   }
 
+  // Sample options mode: distinct Brand / Supplier / Item description for the MER Sample dropdowns.
+  if (sp.get("sampleOpts")) {
+    const out: any = { brands: [], suppliers: [], items: [] }
+    const distinct = async (col: string, cap = 8000) =>
+      (await prisma.$queryRawUnsafe<any[]>(`SELECT DISTINCT ${col} AS v FROM ${SRC} WHERE ${col} IS NOT NULL AND ${col} <> '' ORDER BY ${col} LIMIT ${cap}`)).map(r => r.v)
+    try {
+      if (has("brand_name")) out.brands = await distinct("brand_name")
+      if (has("vend_name")) out.suppliers = await distinct("vend_name")
+      const itemCol = has("item_name") ? "item_name" : has("part_desc") ? "part_desc" : null
+      if (itemCol) out.items = await distinct(itemCol)
+    } catch (e: any) { return NextResponse.json({ ...out, error: e?.message || "sampleOpts failed" }) }
+    return NextResponse.json(out)
+  }
+
   // Vendor address mode: look up dc_vendor by vendor_name (CONTAIN match) and concat its address
   // (address_line1..4 + city + county + country) → prefill the Pickup/Vendor address on the PC form.
   const vendorAddr = (sp.get("vendorAddr") || "").trim()
