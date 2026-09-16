@@ -304,8 +304,8 @@ export default function PurchasePage() {
 
   return (
     <div className="p-5 md:p-8 max-w-[1000px] mx-auto space-y-5">
-      <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Purchase</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Pick Country → choose Air / Sea port, Incoterm &amp; Weight → send to Logistics</p></div>
+      <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>รอจัดซื้อกรอก <span className="text-base font-normal text-gray-400">(งานจาก SCM)</span></h1>
+        <p className="text-sm text-gray-400 mt-0.5">SCM ส่งมา → จัดซื้อกรอก Country / Air-Sea port / Incoterm / Weight → ส่งต่อ Logistics</p></div>
 
       <div className="flex gap-2 border-b border-gray-200">
         {([["queue", "📋 งานจัดซื้อ", reqs.filter(r => r.status === "PENDING_PURCHASING").length], ["revise", "↩️ ตีกลับให้แก้", reqs.filter(r => r.status === "PC_REVISE").length]] as const).map(([v, label, n]) => (
