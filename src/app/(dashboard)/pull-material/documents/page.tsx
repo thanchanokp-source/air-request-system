@@ -155,7 +155,9 @@ export default function Page() {
     const d0 = its.find((x: any) => x.airFreightCost != null) || its[0] || {}
     const opts = airPreCostOptions(airRates, d0.port, destForBu(rq.bu), d0.weight, d0.incoterm)
     if (!opts.length) { setEditFwd(false); return }
-    const def = rq.preCostFwd ? (opts.find(o => o.fwd === rq.preCostFwd) || opts[0]) : opts.reduce((a, b) => (b.cost > a.cost ? b : a))
+    // Default Pre cost = the FWD from the master route as captured in the sheet (each origin+dest has one
+    // main FWD → opts[0]). LG can still switch via "แก้ไข FWD". Honours a previously-saved FWD choice.
+    const def = rq.preCostFwd ? (opts.find(o => o.fwd === rq.preCostFwd) || opts[0]) : opts[0]
     setEdits(p => ({ ...p, [openId]: { ...(p[openId] || {}), preCost: String(def.cost), preCostFwd: def.fwd } }))
     setEditFwd(false)
   }, [openId, airRates]) // eslint-disable-line
