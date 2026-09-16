@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { buColor } from "../_StageWork"
 import { seaUsd, courierUsd, destForBu, EXCHANGE_RATE, truckTransportUsd } from "@/lib/pull-courier"
+import ComboBox from "@/components/pull/ComboBox"
 
 const MAROON = "#6b1a1a"
 const GOLD = "#b08d2e"      // luxury accent
@@ -713,16 +714,12 @@ export default function ScmRequestPage() {
           }
           return (
         <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: "linear-gradient(180deg,#fffdf8 0%,#ffffff 60%)", border: `1px solid ${GOLD_SOFT}55` }}>
-          <datalist id="smp-brands">{smpOpts.brands.map(b => <option key={b} value={b} />)}</datalist>
-          <datalist id="smp-suppliers">{smpOpts.suppliers.map(s => <option key={s} value={s} />)}</datalist>
-          <datalist id="smp-items">{smpOpts.items.slice(0, 3000).map(i => <option key={i} value={i} />)}</datalist>
-
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase mb-2">เพิ่มรายการ Sample <span className="font-normal text-gray-400">— พิมพ์ค้นหาจาก BOM หรือพิมพ์เองได้</span></p>
             <div className="grid md:grid-cols-6 gap-2 items-end">
-              <div className="md:col-span-1"><label className={lab}>Brand</label><input list="smp-brands" value={smpNew.brand} onChange={e => setSmpNew(p => ({ ...p, brand: e.target.value }))} placeholder="Brand" className={sInp} /></div>
-              <div className="md:col-span-1"><label className={lab}>Supplier</label><input list="smp-suppliers" value={smpNew.supplier} onChange={e => setSmpNew(p => ({ ...p, supplier: e.target.value }))} placeholder="Supplier" className={sInp} /></div>
-              <div className="md:col-span-2"><label className={lab}>Item Desc</label><input list="smp-items" value={smpNew.item} onChange={e => setSmpNew(p => ({ ...p, item: e.target.value }))} placeholder="Item description" className={sInp} /></div>
+              <div className="md:col-span-1"><label className={lab}>Brand</label><ComboBox value={smpNew.brand} onChange={v => setSmpNew(p => ({ ...p, brand: v }))} options={smpOpts.brands} placeholder="ค้นหา Brand" /></div>
+              <div className="md:col-span-1"><label className={lab}>Supplier</label><ComboBox value={smpNew.supplier} onChange={v => setSmpNew(p => ({ ...p, supplier: v }))} options={smpOpts.suppliers} placeholder="ค้นหา Supplier" /></div>
+              <div className="md:col-span-2"><label className={lab}>Item Desc</label><ComboBox value={smpNew.item} onChange={v => setSmpNew(p => ({ ...p, item: v }))} options={smpOpts.items} placeholder="ค้นหา Item" /></div>
               <div><label className={lab}>Qty</label><input type="number" value={smpNew.qty} onChange={e => setSmpNew(p => ({ ...p, qty: e.target.value }))} placeholder="0" className={sInp} /></div>
               <div className="flex gap-1.5">
                 <input value={smpNew.remark} onChange={e => setSmpNew(p => ({ ...p, remark: e.target.value }))} placeholder="Remark" className={sInp} />
