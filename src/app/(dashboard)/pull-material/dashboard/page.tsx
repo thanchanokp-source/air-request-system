@@ -74,6 +74,8 @@ export default function Page() {
   })
   const buRows = Object.entries(byBu).sort((a, b) => b[1].est - a[1].est)
   const maxBuEst = Math.max(1, ...buRows.map(([, v]) => v.est))
+  const dstr = (v: any) => (v ? new Date(v).toLocaleDateString("en-GB") : "-")
+  const TABLE_COLS = ["Doc No", "BU", "สาย", "จัดซื้อ", "PO", "Country", "Port", "Incoterm", "Wt(kg)", "Factory", "ETC", "Est USD", "MAWB", "HAWB", "ETD", "ETA", "Pre cost", "Actual", "Local", "CFM in-house", "Status"]
 
   // OVER BUDGET (Actual > Est) attributed to brand / vendor. A doc's Actual is per-doc, so it's split
   // across its lines by each line's Est share, then summed per brand & per vendor. Only docs with both
@@ -244,54 +246,56 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-3">
-            {/* C · By status funnel */}
-            <div className="bg-white rounded-xl border p-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Pipeline — by status</p>
-              {Object.keys(byStatus).length === 0 ? <p className="text-sm text-gray-400">No data</p> : (
-                <div className="space-y-2">
-                  {Object.entries(byStatus).sort((a, b) => b[1] - a[1]).map(([s, n]) => (
-                    <div key={s} className="flex items-center gap-2">
-                      <span className="text-xs text-gray-600 w-44 truncate" title={STATUS_LABEL[s] || s}>{STATUS_LABEL[s] || s}</span>
-                      <Bar pct={(n / totalDocs) * 100} color={MAROON} />
-                      <span className="text-xs font-semibold text-gray-700 w-8 text-right">{n}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* C · Mode + Air/Sea */}
-            <div className="bg-white rounded-xl border p-4 space-y-4">
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Mode</p>
-                <div className="flex gap-2">
-                  <div className="flex-1 rounded-lg p-3 bg-green-50 border border-green-200">
-                    <div className="text-lg font-bold text-green-700">{regular}</div>
-                    <div className="text-[11px] text-green-700">🟢 Regular (ไม่ต้องรออนุมัติ)</div>
-                  </div>
-                  <div className="flex-1 rounded-lg p-3 bg-amber-50 border border-amber-200">
-                    <div className="text-lg font-bold text-amber-700">{irregular}</div>
-                    <div className="text-[11px] text-amber-700">🟠 Irregular (อนุมัติเต็ม)</div>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Air vs Sea decision (material lines)</p>
-                <div className="flex gap-2">
-                  <div className="flex-1 rounded-lg p-3 bg-sky-50 border border-sky-200"><div className="text-lg font-bold text-sky-700">{airLines}</div><div className="text-[11px] text-sky-700">✈ AIR</div></div>
-                  <div className="flex-1 rounded-lg p-3 bg-gray-50 border border-gray-200"><div className="text-lg font-bold text-gray-600">{noAirLines}</div><div className="text-[11px] text-gray-500">🚢 NO AIR</div></div>
-                  <div className="flex-1 rounded-lg p-3 bg-gray-50 border border-gray-200"><div className="text-lg font-bold text-gray-400">{undecided}</div><div className="text-[11px] text-gray-400">ยังไม่ตัดสิน</div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* B · Top by cost */}
           <div className="grid md:grid-cols-3 gap-3">
             <TopCard title="Top brand — by Est Air (USD)" rows={topBrand as [string, number][]} />
             <TopCard title="Top supplier — by Est Air (USD)" rows={topVendor as [string, number][]} />
             <TopCard title="Top country — by Est Air (USD)" rows={topCountry as [string, number][]} />
+          </div>
+
+          {/* E · Data table — every field entered by SCM / จัดซื้อ / LG (one row per document) */}
+          <div className="bg-white rounded-xl border p-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-3">ตารางข้อมูลทั้งหมด (SCM · จัดซื้อ · LG) — {fReqs.length} เอกสาร</p>
+            <div className="overflow-x-auto">
+              <table className="text-xs whitespace-nowrap min-w-[1500px] w-full">
+                <thead className="text-gray-500 border-b border-gray-200">
+                  <tr>{TABLE_COLS.map(h => <th key={h} className="px-2 py-2 text-left font-medium">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {fReqs.map((r: any) => {
+                    const its = r.items || []
+                    const d0 = its.find((i: any) => i.airFreightCost != null) || its[0] || {}
+                    const est = its.reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
+                    const po = [...new Set(its.map((i: any) => i.poNoDoc).filter(Boolean))].join(", ")
+                    return (
+                      <tr key={r.id} className="hover:bg-gray-50">
+                        <td className="px-2 py-1.5 font-semibold text-gray-800">{r.documentNo}</td>
+                        <td className="px-2 py-1.5">{r.bu}</td>
+                        <td className="px-2 py-1.5">{reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : "SCM"}</td>
+                        <td className="px-2 py-1.5">{r.requesterName || "-"}</td>
+                        <td className="px-2 py-1.5 max-w-[160px] truncate" title={po}>{po || "-"}</td>
+                        <td className="px-2 py-1.5">{d0.country || "-"}</td>
+                        <td className="px-2 py-1.5">{d0.port || d0.seaPort || "-"}</td>
+                        <td className="px-2 py-1.5">{d0.incoterm || "-"}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{d0.weight != null ? fmt(d0.weight) : "-"}</td>
+                        <td className="px-2 py-1.5">{r.factory || d0.factory || "-"}</td>
+                        <td className="px-2 py-1.5">{dstr(d0.etc)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums font-semibold" style={{ color: MAROON }}>{est ? fmt(Math.round(est)) : "-"}</td>
+                        <td className="px-2 py-1.5">{r.mawbNo || "-"}</td>
+                        <td className="px-2 py-1.5">{r.hawbNo || "-"}</td>
+                        <td className="px-2 py-1.5">{dstr(r.flightEtd)}</td>
+                        <td className="px-2 py-1.5">{dstr(r.flightEta)}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{r.preCost != null ? fmt(r.preCost) : "-"}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{r.actualAir != null ? fmt(r.actualAir) : "-"}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums">{r.localChargeTh != null ? fmt(r.localChargeTh) : "-"}</td>
+                        <td className="px-2 py-1.5">{dstr(r.cfmInHouseDate)}</td>
+                        <td className="px-2 py-1.5">{STATUS_LABEL[r.status] || r.status}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
         </>
