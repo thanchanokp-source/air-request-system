@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, buColor } from "../_StageWork"
+import { MultiSelect } from "@/components/ui/multi-select"
+import { buildRequesters } from "@/lib/pull-requesters"
 
 const INCOTERMS = ["FOB", "CIF", "EX-WORK", "FCA"]
 // Incoterms that require a pickup / supplier address (buyer arranges pickup at origin).
@@ -27,6 +29,9 @@ export default function PurchasePage() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
   const [soQ, setSoQ] = useState("") // filter list by SO / document no
+  const [docF, setDocF] = useState<string[]>([])
+  const [poF, setPoF] = useState<string[]>([])
+  const [reqF, setReqF] = useState<string[]>([])
   const [pcTab, setPcTab] = useState<"queue" | "revise" | "stats">("queue")
   const [uploadingPL, setUploadingPL] = useState<string | null>(null)
 
@@ -520,17 +525,27 @@ export default function PurchasePage() {
           const term = soQ.trim().toLowerCase()
           const wantStatus = pcTab === "revise" ? "PC_REVISE" : "PENDING_PURCHASING"
           const base = reqs.filter(rq => rq.status === wantStatus)
-          const shown = term
-            ? base.filter(rq =>
-                String(rq.documentNo || "").toLowerCase().includes(term) ||
-                rq.items.some((i: any) => String(i.soNoDoc || "").toLowerCase().includes(term)))
-            : base
+          const { options: reqOptions, displayOf } = buildRequesters(base)
+          const docNos = [...new Set(base.map(r => r.documentNo).filter(Boolean))].sort()
+          const pos = [...new Set(base.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort()
+          const shown = base.filter(rq => {
+            if (docF.length && !docF.includes(rq.documentNo)) return false
+            if (poF.length && !(rq.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
+            if (reqF.length && !reqF.includes(displayOf(rq))) return false
+            if (term && !(String(rq.documentNo || "").toLowerCase().includes(term) || rq.items.some((i: any) => String(i.soNoDoc || "").toLowerCase().includes(term)))) return false
+            return true
+          })
           return (
             <div className="space-y-3">
-              <div className="relative max-w-md">
-                <input value={soQ} onChange={e => setSoQ(e.target.value)} placeholder="🔎 ค้นหา SO / เลขเอกสาร…"
-                  className="w-full border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
-                {soQ && <button onClick={() => setSoQ("")} className="absolute right-2.5 top-2 text-gray-300 hover:text-gray-500">✕</button>}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="w-48"><MultiSelect label="Doc No…" options={docNos} value={docF} onChange={setDocF} /></div>
+                <div className="w-48"><MultiSelect label="PO…" options={pos} value={poF} onChange={setPoF} /></div>
+                <div className="w-48"><MultiSelect label="จัดซื้อ…" options={reqOptions} value={reqF} onChange={setReqF} /></div>
+                <div className="relative w-56">
+                  <input value={soQ} onChange={e => setSoQ(e.target.value)} placeholder="🔎 ค้นหา SO / เลขเอกสาร…"
+                    className="w-full border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+                  {soQ && <button onClick={() => setSoQ("")} className="absolute right-2.5 top-2 text-gray-300 hover:text-gray-500">✕</button>}
+                </div>
               </div>
               {base.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">{pcTab === "revise" ? "ไม่มีเอกสารที่ถูกตีกลับ 🎉" : "No documents at this stage"}</div> :
                 shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400">ไม่พบเอกสารที่ตรงกับ “{soQ}”</div> :

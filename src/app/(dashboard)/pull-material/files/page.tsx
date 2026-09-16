@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, buColor } from "../_StageWork"
+import { MultiSelect } from "@/components/ui/multi-select"
+import { buildRequesters } from "@/lib/pull-requesters"
 
 const CAT_LABEL: Record<string, string> = { INV: "INV", PACKING: "Packing", AWB: "AWB", CUSTOMS: "ใบขน", COMBINED: "รวม" }
 const PC_CATS: [string, string][] = [["INV", "PC"], ["PACKING", "PC"], ["COMBINED", "PC"]]
@@ -23,10 +25,11 @@ export default function Page() {
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
-  const [q, setQ] = useState("")
   const [onlyMissing, setOnlyMissing] = useState(false)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
-  const [reqF, setReqF] = useState("")
+  const [docF, setDocF] = useState<string[]>([])
+  const [poF, setPoF] = useState<string[]>([])
+  const [reqF, setReqF] = useState<string[]>([])
 
   const load = async () => {
     setLoading(true)
@@ -61,31 +64,20 @@ export default function Page() {
 
   // A doc's branch: requestType, falling back to the documentNo prefix (SCM_… vs PULL_…) for older docs.
   const reqTypeOf = (r: any) => (r.requestType === "PURCHASING" || String(r.documentNo || "").toUpperCase().startsWith("PULL")) ? "PURCHASING" : "SCM"
-  // Requester (จัดซื้อ) list — GROUP BY the real user id (createdById) so the same person merges even when
-  // their name was stored inconsistently ("sudarat" vs "sudarat.r"). Display = the most name-like value.
-  const rname = (s: any) => String(s || "").split("@")[0].trim()
-  const reqKey = (r: any) => r.createdById || rname(r.requesterName).toLowerCase()
-  const requesters = useMemo(() => {
-    const m = new Map<string, Set<string>>()
-    reqs.forEach(r => { const d = rname(r.requesterName); if (!d) return; const k = reqKey(r); if (!m.has(k)) m.set(k, new Set()); m.get(k)!.add(d) })
-    return [...m.entries()].map(([key, names]) => {
-      const arr = [...names]
-      const noDot = arr.filter(n => !n.includes(".")) // "sudarat" beats "sudarat.r"
-      const display = (noDot.length ? noDot : arr).sort((a, b) => a.length - b.length)[0]
-      return { key, display }
-    }).sort((a, b) => a.display.localeCompare(b.display))
-  }, [reqs])
+  // Tracking-style filters: Doc No / PO / Requester (all searchable multi-select). Requester merges by user id.
+  const { options: requesters, displayOf } = useMemo(() => buildRequesters(reqs), [reqs])
+  const docNos = useMemo(() => [...new Set(reqs.map(r => r.documentNo).filter(Boolean))].sort(), [reqs])
+  const pos = useMemo(() => [...new Set(reqs.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort(), [reqs])
   const shown = useMemo(() => {
-    const term = q.trim().toLowerCase()
     return reqs.filter(r => {
       if (typeF !== "ALL" && reqTypeOf(r) !== typeF) return false
-      if (reqF && reqKey(r) !== reqF) return false
+      if (docF.length && !docF.includes(r.documentNo)) return false
+      if (poF.length && !(r.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
+      if (reqF.length && !reqF.includes(displayOf(r))) return false
       if (onlyMissing && (r.attachments || []).length > 0) return false
-      if (!term) return true
-      return String(r.documentNo || "").toLowerCase().includes(term)
-        || (r.items || []).some((i: any) => String(i.poNoDoc || "").toLowerCase().includes(term))
+      return true
     })
-  }, [reqs, q, onlyMissing, typeF, reqF]) // eslint-disable-line
+  }, [reqs, onlyMissing, typeF, docF, poF, reqF, displayOf]) // eslint-disable-line
 
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Purchasing / Logistics / Admin only</p></div>
 
@@ -166,12 +158,10 @@ export default function Page() {
         ))}
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔎 ค้นหา เลขเอกสาร / PO…" className="w-full sm:w-72 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-        <select value={reqF} onChange={e => setReqF(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
-          <option value="">👤 จัดซื้อทั้งหมด</option>
-          {requesters.map(r => <option key={r.key} value={r.key}>{r.display}</option>)}
-        </select>
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="w-48"><MultiSelect label="Doc No…" options={docNos} value={docF} onChange={setDocF} /></div>
+        <div className="w-48"><MultiSelect label="PO…" options={pos} value={poF} onChange={setPoF} /></div>
+        <div className="w-48"><MultiSelect label="จัดซื้อ…" options={requesters} value={reqF} onChange={setReqF} /></div>
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input type="checkbox" checked={onlyMissing} onChange={e => setOnlyMissing(e.target.checked)} className="w-4 h-4 accent-red-700" /> เฉพาะที่ยังไม่มีไฟล์
         </label>

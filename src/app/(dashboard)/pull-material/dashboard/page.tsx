@@ -88,8 +88,6 @@ export default function Page() {
   const overTotal = overBrand.reduce((s, x) => s + x.diff, 0)
 
   const cards = [
-    { label: "Total documents", value: fmt(totalDocs), color: "#1e3a8a" },
-    { label: "Material lines", value: fmt(totalItems), color: "#6b1a1a" },
     { label: "Total Pull (garment)", value: fmt(totalPullGarment), color: "#a04020" },
     { label: "Est Air Freight (USD)", value: fmt(Math.round(est)), color: "#0369a1" },
     { label: "Actual Air Freight (USD)", value: fmt(Math.round(act)), color: "#16a34a" },
@@ -150,7 +148,7 @@ export default function Page() {
       ) : (
         <>
           {/* A · KPI cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {cards.map(c => (
               <div key={c.label} className="bg-white rounded-xl border p-4">
                 <div className="text-xl font-bold" style={{ color: c.color }}>{c.value}</div>

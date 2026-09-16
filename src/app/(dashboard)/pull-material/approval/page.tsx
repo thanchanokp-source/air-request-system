@@ -6,6 +6,8 @@ import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
 import { pcApprover } from "@/lib/pull-approvers"
 import LandedCostCompare from "@/components/pull/LandedCostCompare"
 import SignatureModal from "@/components/signature-modal"
+import { MultiSelect } from "@/components/ui/multi-select"
+import { buildRequesters } from "@/lib/pull-requesters"
 
 // Approver stages: which role owns each, and where Approve / Send-back go.
 const APPROVER: Record<string, { role: string; label: string; next: string; back: string; backLabel: string }> = {
@@ -54,6 +56,9 @@ export default function Page() {
   const [openId, setOpenId] = useState<string | null>(null)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
   const [poQ, setPoQ] = useState("")
+  const [docF, setDocF] = useState<string[]>([])
+  const [poF, setPoF] = useState<string[]>([])
+  const [reqF, setReqF] = useState<string[]>([])
   // Signature modal (like Air Claim): opens before an Approve, resolves the promise with the data URI.
   const [sigOpen, setSigOpen] = useState(false)
   const sigResolver = useRef<((v: string | undefined) => void) | null>(null)
@@ -156,13 +161,22 @@ export default function Page() {
               )
             })}
             <input value={poQ} onChange={e => setPoQ(e.target.value)} placeholder="🔍 ค้นหา PO / เลขเอกสาร…"
-              className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+              className="flex-1 min-w-[160px] border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap mb-3">
+            <div className="w-48"><MultiSelect label="Doc No…" options={[...new Set(reqs.map(r => r.documentNo).filter(Boolean))].sort()} value={docF} onChange={setDocF} /></div>
+            <div className="w-48"><MultiSelect label="PO…" options={[...new Set(reqs.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort()} value={poF} onChange={setPoF} /></div>
+            <div className="w-48"><MultiSelect label="จัดซื้อ…" options={buildRequesters(reqs).options} value={reqF} onChange={setReqF} /></div>
           </div>
 
           {(() => {
             const pq = poQ.trim().toLowerCase()
+            const displayOf = buildRequesters(reqs).displayOf
             const shown = reqs.filter(rq => {
               if (typeF !== "ALL" && (rq.requestType || "SCM") !== typeF) return false
+              if (docF.length && !docF.includes(rq.documentNo)) return false
+              if (poF.length && !(rq.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
+              if (reqF.length && !reqF.includes(displayOf(rq))) return false
               if (!pq) return true
               if (String(rq.documentNo || "").toLowerCase().includes(pq)) return true
               return (rq.items || []).some((i: any) => String(i.poNoDoc || "").toLowerCase().includes(pq) || String(i.soNoDoc || "").toLowerCase().includes(pq))
