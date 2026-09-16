@@ -146,6 +146,8 @@ export default function ScmRequestPage() {
   const [smpOpts, setSmpOpts] = useState<{ brands: string[]; suppliers: string[]; items: string[] }>({ brands: [], suppliers: [], items: [] })
   const [smpNew, setSmpNew] = useState({ brand: "", supplier: "", item: "", qty: "", remark: "" })
   const [smpLines, setSmpLines] = useState<{ brand: string; supplier: string; item: string; qty: string; remark: string }[]>([])
+  const [smpPurchasers, setSmpPurchasers] = useState<{ name: string; email: string }[]>([]) // registered Purchasing users to alert
+  const [smpPurEmail, setSmpPurEmail] = useState("")
   const [isTest, setIsTest] = useState(false)
   // Regular (fast-track) vs Irregular (full approval), per doc. Auto-suggested from SO prefix "02";
   // (the Hong-Kong-port / weight<45kg parts are only known after Purchase, so those refine later).
@@ -244,10 +246,14 @@ export default function ScmRequestPage() {
     fetch(`/api/bom?bu=${bu}&vendors=1`).then(r => r.json()).then(d => setPcVendors(d.vendors || [])).catch(() => {})
     fetch(`/api/bom?bu=${bu}&uoms=1`).then(r => r.json()).then(d => setPcUoms(d.uoms || [])).catch(() => {})
   }, [bu, reqType])
-  // Sample (MER) dropdown options — distinct Brand / Supplier / Item desc from the BOM of this BU.
+  // Sample (MER) dropdown options — distinct Brand / Supplier / Item desc from the BOM of this BU + purchasers.
   useEffect(() => {
     if (reqType !== "SAMPLE") return
     fetch(`/api/bom?bu=${bu}&sampleOpts=1`).then(r => r.json()).then(d => setSmpOpts({ brands: d.brands || [], suppliers: d.suppliers || [], items: d.items || [] })).catch(() => {})
+    fetch("/api/pull-material/approvers").then(r => r.json()).then(d => {
+      const purs = (d.users || []).filter((u: any) => [u.role, ...(u.roles || [])].includes("PURCHASING")).map((u: any) => ({ name: u.name || u.email, email: u.email }))
+      setSmpPurchasers(purs)
+    }).catch(() => {})
   }, [bu, reqType])
   // Master Purchase cities (Country/Port/City) for the PC City dropdown.
   useEffect(() => {
@@ -545,6 +551,8 @@ export default function ScmRequestPage() {
     // SAMPLE (MER): items come from the Brand/Supplier/Item lines (no BOM/SO). Submit → auto-approve flow.
     if (reqType === "SAMPLE") {
       if (smpLines.length === 0) return stop("เพิ่มรายการ Sample อย่างน้อย 1 บรรทัด (Brand / Supplier / Item)")
+      // Resolve the picked "Name · email@…" (or a free-typed email) to a plain purchaser email.
+      const purEmail = (() => { const s = smpPurEmail.trim(); const m = s.match(/[\w.+-]+@nanyangtextile\.com/i); return m ? m[0].toLowerCase() : "" })()
       const sampleItems = smpLines.map(l => ({
         soNoDoc: "", brand: l.brand || null, vendorName: l.supplier || null, itemName: l.item || null,
         partDesc: l.remark || null, pullMaterialQty: l.qty ? Number(l.qty) : null,
@@ -553,13 +561,13 @@ export default function ScmRequestPage() {
       try {
         const r = await fetch("/api/pull-material", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark: remark || null, items: sampleItems, requestType: "SAMPLE", isTest }),
+          body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark: remark || null, items: sampleItems, requestType: "SAMPLE", isTest, purchaserEmail: purEmail || null }),
         })
         const d = await r.json().catch(() => ({}))
         if (!r.ok) return stop(d.error || "ส่ง Sample ไม่สำเร็จ")
         for (const f of files) { const fd = new FormData(); fd.append("file", f); fd.append("source", "MER"); await fetch(`/api/pull-material/${d.request.id}/attachments`, { method: "POST", body: fd }).catch(() => {}) }
         showToast(`✓ ส่ง Sample แล้ว: ${d.request?.documentNo}${files.length ? ` · แนบ ${files.length} ไฟล์` : ""}`, true)
-        setSmpLines([]); setSmpNew({ brand: "", supplier: "", item: "", qty: "", remark: "" }); setRemark(""); setFiles([])
+        setSmpLines([]); setSmpNew({ brand: "", supplier: "", item: "", qty: "", remark: "" }); setRemark(""); setFiles([]); setSmpPurEmail("")
       } finally { setSubmitting(false) }
       return
     }
@@ -745,6 +753,12 @@ export default function ScmRequestPage() {
                   ))}
               </tbody>
             </table>
+          </div>
+
+          <div>
+            <label className={lab}>จัดซื้อที่จะแจ้ง (alert) <span className="text-red-500">*</span> <span className="text-gray-300">— คนที่จะกรอกข้อมูลต่อ</span></label>
+            <ComboBox value={smpPurEmail} onChange={setSmpPurEmail} options={smpPurchasers.map(p => `${p.name} · ${p.email}`)} placeholder="พิมพ์ค้นหาจัดซื้อ หรือใส่อีเมลเอง" />
+            <p className="text-[11px] text-gray-400 mt-1">เลือกจากจัดซื้อที่สมัครแล้ว หรือพิมพ์อีเมลเอง (…@nanyangtextile.com)</p>
           </div>
 
           <div>
@@ -1104,7 +1118,8 @@ export default function ScmRequestPage() {
       )}
       </>)}
 
-      {/* Cart */}
+      {/* Cart — SCM / Purchasing only (Sample has its own form above) */}
+      {reqType !== "SAMPLE" && (
       <div className="bg-white rounded-xl border p-4">
         <h2 className="font-semibold text-gray-800">Items to pull {reqType === "PURCHASING" ? `(${new Set(cart.map(c => c.poNoDoc || "-")).size} PO · ${cart.length} material)` : `(${cart.length})`}</h2>
         <p className="text-xs text-gray-500 mt-1">Requester: <span className="font-medium text-gray-700">{requesterName || "-"}</span></p>
@@ -1467,6 +1482,7 @@ export default function ScmRequestPage() {
           </button>
         </div>
       </div>
+      )}
       </>}
     </div>
   )

@@ -64,6 +64,8 @@ export async function POST(req: NextRequest) {
       vendorContact: body.vendorContact || null,
       vendorTel: body.vendorTel || null,
       factory: body.factory || null,
+      // Sample (MER): the specific purchaser to alert (they fill Country/Port next). Null → whole PC pool.
+      purchaserEmail: body.purchaserEmail || null,
       createdById: userId,
       requestType,
       mode,

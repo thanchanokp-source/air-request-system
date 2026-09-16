@@ -93,7 +93,7 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
   // whole query throw → notify returned silently → every Pull RM email was lost. Use createdById instead.
   const rq = await (prisma as any).pullMaterialRequest.findUnique({
     where: { id: reqId },
-    select: { documentNo: true, bu: true, requesterName: true, requesterEmail: true, isTest: true, status: true, createdById: true, remark: true,
+    select: { documentNo: true, bu: true, requesterName: true, requesterEmail: true, purchaserEmail: true, isTest: true, status: true, createdById: true, remark: true,
       items: { select: { soNoDoc: true, poNoDoc: true, poUsername: true, country: true, port: true, seaPort: true, incoterm: true, city: true, pullMaterialQty: true, airFreightCost: true, leadTimeAir: true, weight: true } } },
   }).catch((e: any) => { console.log(`[pull-notify] load failed for ${reqId}: ${String(e).slice(0, 160)}`); return null })
   if (!rq) return
@@ -154,7 +154,10 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
   // not the whole Purchasing pool. Multiple POs → multiple owners. Fall back to the pool if none derivable.
   if (status === "PENDING_PURCHASING") {
     const c = STAGE[status]
-    const emails = [...new Set(items.map((i: any) => poUsernameToEmail(i.poUsername)).filter(Boolean) as string[])]
+    // Sample (MER) carries the chosen purchaser email directly; SCM req derives it from each PO's POUSERNAME.
+    const emails = rq.purchaserEmail
+      ? [String(rq.purchaserEmail).toLowerCase()]
+      : [...new Set(items.map((i: any) => poUsernameToEmail(i.poUsername)).filter(Boolean) as string[])]
     if (emails.length) {
       console.log(`[pull-notify] ${rq.documentNo} PENDING_PURCHASING → owner(s) ${emails.join(",")}`)
       await runWithTestMail(testTo, () => alertLgList(emails, rq, docFields, PULL_STATUS_LABEL[status] || "Pending Purchasing", c.cta, c.redirect)).catch(() => {})
