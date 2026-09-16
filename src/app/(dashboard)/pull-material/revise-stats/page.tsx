@@ -9,7 +9,7 @@ import { MAROON, BUS } from "../_StageWork"
 export default function Page() {
   const { data: session } = useSession()
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
-  const canUse = roles.includes("ADMIN") || roles.includes("PURCHASING")
+  const canUse = ["ADMIN", "PURCHASING", "DVM_PUR", "VP_PUR"].some(r => roles.includes(r))
 
   const [all, setAll] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
