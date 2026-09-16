@@ -33,7 +33,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const userId = (session.user as any).id
-  const isAdmin = (session.user as any).role === "ADMIN"
+  const u: any = session.user
+  const isAdmin = u.role === "ADMIN" || (Array.isArray(u.roles) && u.roles.includes("ADMIN"))
   const { attachmentId } = await params
 
   const att = await (prisma as any).pullMaterialAttachment.findUnique({ where: { id: attachmentId } })

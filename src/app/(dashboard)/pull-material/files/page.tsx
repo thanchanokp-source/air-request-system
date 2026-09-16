@@ -46,6 +46,16 @@ export default function Page() {
   }
   const filesOf = (rq: any, side: string) => (rq.attachments || []).filter((a: any) => a.source === side || (!a.source && side === "PC"))
   const canUp = (rq: any, side: string) => isAdmin || (side === "PC" && isPc && rq.createdById === userId) || (side === "LG" && isLg)
+  // Delete a file — admin (any file) or the person who uploaded it.
+  const canDel = (a: any) => isAdmin || (a.uploadedById && a.uploadedById === userId)
+  const delFile = async (a: any) => {
+    if (!confirm(`ลบไฟล์ "${a.fileName}"?`)) return
+    setBusy("del" + a.id)
+    try {
+      const r = await fetch(`/api/pull-material/attachments/${a.id}`, { method: "DELETE" })
+      if (r.ok) await load(); else alert("ลบไม่สำเร็จ")
+    } finally { setBusy(null) }
+  }
 
   const shown = useMemo(() => {
     const term = q.trim().toLowerCase()
@@ -67,11 +77,17 @@ export default function Page() {
         <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">{name}</div>
         <div className="flex flex-col gap-1">
           {list.length === 0 ? <span className="text-xs text-gray-300">— ยังไม่มีไฟล์ —</span> : list.map((a: any) => (
-            <a key={a.id} href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-sky-700 hover:underline truncate" title={a.fileName}>
-              <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">{CAT_LABEL[a.category] || "ไฟล์"}</span>
-              <span className="truncate">{a.fileName}</span>
-            </a>
+            <div key={a.id} className="flex items-center gap-1.5 group">
+              <a href={`/api/pull-material/attachments/${a.id}`} target="_blank" rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-sky-700 hover:underline truncate min-w-0" title={a.fileName}>
+                <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">{CAT_LABEL[a.category] || "ไฟล์"}</span>
+                <span className="truncate">{a.fileName}</span>
+              </a>
+              {canDel(a) && (
+                <button onClick={() => delFile(a)} disabled={busy === "del" + a.id} title="ลบไฟล์"
+                  className="shrink-0 text-gray-300 hover:text-red-600 text-xs px-1 disabled:opacity-40">{busy === "del" + a.id ? "…" : "✕"}</button>
+              )}
+            </div>
           ))}
         </div>
         {allow ? (
