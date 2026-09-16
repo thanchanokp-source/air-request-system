@@ -394,10 +394,8 @@ export default function PullRatesPage() {
   return (
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">
       <div className="flex items-start justify-between flex-wrap gap-2">
-        <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Master Rate — Pull Material</h1>
-          <p className="text-sm text-gray-500">Freight rates by PORT (from Rate_LG). AIR = per kg by weight break · SEA = per container / CBM. {isAdmin
-            ? "Click a number to edit."
-            : <span className="text-amber-600">🔒 อ่านอย่างเดียว — แก้ไขได้เฉพาะ Admin / Logistics Import (ถ้ากำลัง View as อยู่ ให้กลับเป็น Admin หรือ View as “Logistics Import”)</span>}</p></div>
+        <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>MASTER RATE</h1>
+          {!isAdmin && <p className="text-sm text-amber-600 mt-0.5">🔒 อ่านอย่างเดียว — แก้ไขได้เฉพาะ Admin / Logistics Import</p>}</div>
         {isAdmin && (
           <div className="flex gap-2">
             {editCount > 0 && <button onClick={saveAll} disabled={busy} className="px-3 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50 bg-green-600">💾 Save {editCount} row(s)</button>}

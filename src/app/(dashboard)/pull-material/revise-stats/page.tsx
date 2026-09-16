@@ -37,8 +37,7 @@ export default function Page() {
   return (
     <div className="p-5 md:p-8 max-w-[900px] mx-auto space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>📊 สถิติ Revise</h1>
-        <p className="text-sm text-gray-500 mt-0.5">นับจากจำนวนครั้งที่เอกสารถูก LG ตีกลับให้แก้ (revise) — เรียงจากมากไปน้อย · ใช้ประกอบการประเมิน</p>
+        <h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>REVISE STATS</h1>
       </div>
       {loading ? <p className="text-sm text-gray-400">Loading…</p> :
         rows.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">ยังไม่มีการตีกลับ 🎉</div> :

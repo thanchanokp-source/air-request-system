@@ -64,8 +64,7 @@ export default function PullUsersPage() {
   return (
     <div className="p-5 max-w-[1100px] mx-auto space-y-4">
       <div className="flex items-start justify-between gap-2 flex-wrap">
-        <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>User Management — Pull Material</h1>
-          <p className="text-sm text-gray-500">Flag who takes part in the Pull Material flow (Pull RM = YES). They&apos;ll get stage alerts by their role.</p></div>
+        <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>USER MANAGEMENT</h1></div>
         <button onClick={() => setAdding(a => !a)} className="px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>+ Add user</button>
       </div>
 

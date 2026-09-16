@@ -112,8 +112,7 @@ export default function Page() {
   return (
     <div className="p-5 max-w-[900px] mx-auto space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Master Purchase — Country / Port / City</h1>
-          <p className="text-sm text-gray-500">Purchasing เลือก City ตอนสร้าง request → Country/Port ตามมา · <b>Port = รหัสสนามบิน</b> ที่ map กับ Master Rate (LG)</p></div>
+        <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>MASTER PURCHASE</h1></div>
         <button onClick={seedAirports} disabled={busy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50 whitespace-nowrap">✈ โหลดชุดสนามบิน (15)</button>
       </div>
 

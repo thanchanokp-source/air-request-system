@@ -336,7 +336,7 @@ export default function PurchasePage() {
 
   return (
     <div className="p-5 md:p-8 max-w-[1000px] mx-auto space-y-5">
-      <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>รอจัดซื้อกรอก <span className="text-base font-normal text-gray-400">(งานจาก SCM)</span></h1></div>
+      <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>รอจัดซื้อกรอก <span className="text-base font-normal text-gray-400">(งานจาก SCM)</span></h1></div>
 
       {(
       <>

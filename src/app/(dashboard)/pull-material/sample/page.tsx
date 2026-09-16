@@ -50,8 +50,7 @@ export default function Page() {
 
   return (
     <div className="p-5 max-w-[1000px] mx-auto space-y-4">
-      <div><h1 className="text-xl font-bold" style={{ color: MAROON }}>Sample</h1>
-        <p className="text-sm text-gray-500">บันทึกรายการตัวอย่าง — Brand · Supplier · Qty · Remark</p></div>
+      <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>SAMPLE</h1></div>
 
       {/* Add row */}
       <div className="bg-white rounded-xl border p-4">
