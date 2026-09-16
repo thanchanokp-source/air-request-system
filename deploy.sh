@@ -25,8 +25,12 @@ fi
 echo "==> [2/5] Back up current build"
 rm -rf .next.bak
 [ -d .next ] && cp -a .next .next.bak
+# CLEAN build: an incremental Turbopack build over a stale .next leaves mismatched SSR chunks
+# ("This page couldn't load" / ChunkLoadError). Remove .next so every deploy is a fresh build;
+# the .next.bak backup is restored below if the build fails, so a bad build never takes the site down.
+rm -rf .next
 
-echo "==> [3/5] Build new version (Turbopack) — app still serving old build"
+echo "==> [3/5] Build new version (Turbopack, clean) — app still serving old build in memory"
 if npm run build && [ -f .next/BUILD_ID ]; then
   echo "    build OK (BUILD_ID: $(cat .next/BUILD_ID))"
   rm -rf .next.bak
