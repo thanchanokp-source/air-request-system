@@ -64,6 +64,29 @@ export default function Page() {
   const monthly = Object.entries(byMonth).sort()
   const maxMonthEst = Math.max(1, ...monthly.map(([, v]) => v.est))
 
+  // OVER BUDGET (Actual > Est) attributed to brand / vendor. A doc's Actual is per-doc, so it's split
+  // across its lines by each line's Est share, then summed per brand & per vendor. Only docs with both
+  // Est and Actual entered count; only groups that ended up over budget are shown.
+  const overBy = (key: "brand" | "vendorName") => {
+    const m: Record<string, { est: number; act: number }> = {}
+    fReqs.forEach((r: any) => {
+      const its = r.items || []
+      const docEst = its.reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
+      const docAct = Number(r.actualAir) || 0
+      if (!docEst || !docAct) return
+      its.forEach((i: any) => {
+        const k = i[key]; if (!k) return
+        const e = Number(i.airFreightCost) || 0
+        const g = (m[k] ||= { est: 0, act: 0 })
+        g.est += e; g.act += docAct * (e / docEst)
+      })
+    })
+    return Object.entries(m).map(([name, v]) => ({ name, est: v.est, act: v.act, diff: v.act - v.est }))
+      .filter(x => x.diff > 0.5).sort((a, b) => b.diff - a.diff).slice(0, 6)
+  }
+  const overBrand = overBy("brand"), overVendor = overBy("vendorName")
+  const overTotal = overBrand.reduce((s, x) => s + x.diff, 0)
+
   const cards = [
     { label: "Total documents", value: fmt(totalDocs), color: "#1e3a8a" },
     { label: "Material lines", value: fmt(totalItems), color: "#6b1a1a" },
@@ -135,6 +158,41 @@ export default function Page() {
               </div>
             ))}
           </div>
+
+          {/* A · OVER BUDGET (Actual > Est) — by brand & vendor */}
+          {(overBrand.length > 0 || overVendor.length > 0) && (() => {
+            const OverList = ({ title, rows }: { title: string; rows: { name: string; est: number; act: number; diff: number }[] }) => (
+              <div className="flex-1 min-w-[260px]">
+                <p className="text-[11px] font-semibold text-gray-500 uppercase mb-2">{title}</p>
+                {rows.length === 0 ? <p className="text-sm text-gray-300">ไม่มีที่เกินงบ 🎉</p> : (
+                  <div className="space-y-1.5">
+                    {rows.map(x => {
+                      const pct = x.est > 0 ? (x.diff / x.est) * 100 : 0
+                      return (
+                        <div key={x.name} className="flex items-center justify-between gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                          <span className="text-sm text-gray-800 truncate" title={x.name}>{x.name}</span>
+                          <span className={`text-xs font-bold tabular-nums px-2 py-0.5 rounded-full shrink-0 ${pct >= 15 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>+${fmt(Math.round(x.diff))} (+{pct.toFixed(0)}%)</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+            return (
+              <div className="bg-white rounded-xl border p-4">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase">⚠ เกินงบ (Actual &gt; Est) — เจาะตามแบรนด์ / ผู้ขาย</p>
+                  <span className="text-xs font-bold text-red-700 tabular-nums">รวม +${fmt(Math.round(overTotal))}</span>
+                </div>
+                <div className="flex gap-6 flex-wrap">
+                  <OverList title="🏷️ ตามแบรนด์ (Brand)" rows={overBrand} />
+                  <OverList title="🏭 ตามผู้ขาย (Vendor)" rows={overVendor} />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-3">* Actual ต่อเอกสารถูกกระจายเข้าแต่ละบรรทัดตามสัดส่วน Est แล้วรวมตามแบรนด์/ผู้ขาย · นับเฉพาะเอกสารที่กรอก Actual แล้ว</p>
+              </div>
+            )
+          })()}
 
           <div className="grid lg:grid-cols-2 gap-3">
             {/* C · By status funnel */}

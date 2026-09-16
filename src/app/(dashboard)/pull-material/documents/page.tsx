@@ -68,16 +68,7 @@ export default function Page() {
     fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRates(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/truck-rates").then(r => r.json()).then(d => setTruckRates(d.rows || [])).catch(() => {})
   }, [])
-  const [recomputing, setRecomputing] = useState(false)
   const [backfilling, setBackfilling] = useState(false)
-  const recompute = async (rq: any) => {
-    setRecomputing(true)
-    try {
-      const r = await fetch(`/api/pull-material/${rq.id}/recompute`, { method: "POST" })
-      if (r.ok) await load()
-      else { const d = await r.json().catch(() => ({})); alert(d.error || "recompute failed") }
-    } finally { setRecomputing(false) }
-  }
 
   // LG returns the doc to Purchasing (wrong attachment). Requires a reason; bumps the revise counter.
   const returnToPurchase = async (rq: any) => {
@@ -161,6 +152,15 @@ export default function Page() {
     setEdits(p => ({ ...p, [openId]: { ...(p[openId] || {}), preCost: String(def.cost), preCostFwd: def.fwd } }))
     setEditFwd(false)
   }, [openId, airRates]) // eslint-disable-line
+
+  // No-Master flow: when LG opens a PENDING_LG_RATE doc, AUTO-recompute freight from the master (in case LG
+  // just added the missing rate) — so Est refreshes on its own, no "Recompute" button needed.
+  useEffect(() => {
+    if (!openId) return
+    const rq = reqs.find(r => r.id === openId)
+    if (!rq || rq.status !== "PENDING_LG_RATE") return
+    fetch(`/api/pull-material/${openId}/recompute`, { method: "POST" }).then(r => { if (r.ok) load() }).catch(() => {})
+  }, [openId]) // eslint-disable-line
 
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
   const raw = (rq: any, k: string) => edits[rq.id]?.[k] ?? (rq[k] != null ? String(rq[k]) : "")
@@ -286,31 +286,21 @@ export default function Page() {
     } catch (e) { alert("Export Excel ไม่สำเร็จ: " + String((e as any)?.message || e).slice(0, 160)) } finally { setExporting(false) }
   }
 
-  // #4 bulk fill: apply the shared LG values to every selected doc at once. complete=true also closes them.
-  const bulkApply = async (complete: boolean) => {
+  // #4 bulk fill: only the MAWB NO is shared across many docs (one master AWB per consolidation) —
+  // HAWB / Pre cost / Actual / Local charge differ per document, so bulk only applies the MAWB.
+  const bulkApply = async () => {
     const ids = [...selectedIds]
     if (!ids.length) return alert("เลือกเอกสารก่อน")
-    const g = (k: string) => (bulk[k] ?? "").trim()
-    if (complete && !g("actualAir")) return alert("กรอก Actual Air Freight ก่อนปิดงาน")
-    const anyVal = ["mawbNo", "hawbNo", "flightEtd", "flightEta", "preCost", "actualAir", "localChargeTh"].some(k => g(k) !== "")
-    if (!anyVal) return alert("ยังไม่ได้กรอกค่าที่จะใส่")
-    if (!confirm(`${complete ? "บันทึก + ปิดงาน" : "บันทึก draft"} ${ids.length} เอกสาร ด้วยค่าชุดเดียวกัน?`)) return
+    const mawb = (bulk["mawbNo"] ?? "").trim()
+    if (!mawb) return alert("กรอกเลข MAWB ก่อน")
+    if (!confirm(`ใส่ MAWB "${mawb}" ให้ ${ids.length} เอกสารที่เลือก?`)) return
     setBulkBusy(true)
     try {
       for (const id of ids) {
-        const body: any = {}
-        if (g("mawbNo") !== "") body.mawbNo = g("mawbNo")
-        if (g("hawbNo") !== "") body.hawbNo = g("hawbNo")
-        if (g("flightEtd") !== "") body.flightEtd = g("flightEtd")
-        if (g("flightEta") !== "") body.flightEta = g("flightEta")
-        if (g("preCost") !== "") body.preCost = g("preCost")
-        if (g("actualAir") !== "") body.actualAir = g("actualAir")
-        if (g("localChargeTh") !== "") body.localChargeTh = g("localChargeTh")
-        if (complete) body.status = "COMPLETED"
-        await fetch(`/api/pull-material/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {})
+        await fetch(`/api/pull-material/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mawbNo: mawb }) }).catch(() => {})
       }
       setBulkOpen(false); setBulk({}); setSelectedIds(new Set()); await load()
-      alert(`✅ ${complete ? "ปิดงาน" : "บันทึก draft"} ${ids.length} เอกสารแล้ว`)
+      alert(`✅ ใส่ MAWB ให้ ${ids.length} เอกสารแล้ว`)
     } finally { setBulkBusy(false) }
   }
 
@@ -350,8 +340,7 @@ export default function Page() {
   return (
     <div className="p-5 md:p-8 max-w-[1100px] mx-auto space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Logistics Document — Pull Material</h1>
-          <p className="text-sm text-gray-400 mt-0.5">เอกสารที่อนุมัติแล้ว — LG กรอก Actual Air / INV / HAWB ครั้งเดียวต่อเอกสาร แล้ว Save + ดาวน์โหลด PDF</p></div>
+        <div><h1 className="text-2xl font-bold tracking-tight" style={{ color: MAROON }}>Logistics Document — Pull Material</h1></div>
         {isAdmin && !openReq && (
           <button onClick={backfill} disabled={backfilling}
             className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
@@ -496,8 +485,6 @@ export default function Page() {
                   <button onClick={() => forwardApproval(rq)} disabled={busy} title="เติม rate ครบแล้ว → Save แล้วเด้งไป Approval"
                     className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#16a34a" }}>{busy ? "…" : "💾 Save"}</button>
                 )}
-                <button onClick={() => recompute(rq)} disabled={recomputing} title="คำนวณ freight ใหม่ (dest by BU + origin cost)"
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-50">{recomputing ? "…" : "🔄 Recompute"}</button>
                 <button onClick={() => openPreview(rq)} disabled={pdfing}
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">{pdfing ? "…" : "🔍 Preview PDF"}</button>
                 {rq.status !== "PENDING_LG_RATE" && rq.status !== "COMPLETED" && (
@@ -693,24 +680,20 @@ export default function Page() {
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => !bulkBusy && setBulkOpen(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900">กรอก {selectedIds.size} เอกสารพร้อมกัน</h3>
+              <h3 className="font-bold text-gray-900">ใส่ MAWB ให้ {selectedIds.size} เอกสาร</h3>
               <button onClick={() => setBulkOpen(false)} className="text-gray-400 hover:text-gray-700">✕</button>
             </div>
-            <p className="text-[11px] text-gray-400">ค่าที่กรอกจะใส่ให้ทุกเอกสารที่เลือก (เว้นว่าง = ไม่แตะ field นั้น) — เหมาะกับ port + ETC เดียวกัน rate เท่ากัน</p>
-            <div className="space-y-2.5">
-              {([["mawbNo", "MAWB NO", "text"], ["hawbNo", "HAWB NO", "text"], ["flightEtd", "FLIGHT ETD", "date"], ["flightEta", "FLIGHT ETA", "date"], ["preCost", "PRE COST (USD)", "number"], ["actualAir", "ACTUAL AIR FREIGHT", "number"], ["localChargeTh", "LOCAL CHARGE (TH)", "number"]] as const).map(([k, label, type]) => (
-                <div key={k}>
-                  <label className="text-[11px] font-semibold text-gray-600 block mb-1">{label}</label>
-                  <input type={type} value={bulk[k] || ""} onChange={e => setBulk(p => ({ ...p, [k]: e.target.value }))}
-                    className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-red-200" />
-                </div>
-              ))}
+            <p className="text-[11px] text-gray-400">เฉพาะเลข <b>MAWB</b> เท่านั้นที่ใช้ร่วมกันได้หลายเอกสาร (master AWB ต่อ 1 เที่ยวบิน) — HAWB / Pre cost / Actual / Local charge ต่างกันต่อเอกสาร ให้กรอกในแต่ละเอกสารเอง</p>
+            <div>
+              <label className="text-[11px] font-semibold text-gray-600 block mb-1">MAWB NO</label>
+              <input type="text" value={bulk["mawbNo"] || ""} onChange={e => setBulk(p => ({ ...p, mawbNo: e.target.value }))} placeholder="เช่น 618-12345678"
+                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-red-200" />
             </div>
             <div className="flex gap-2 pt-2">
-              <button onClick={() => bulkApply(false)} disabled={bulkBusy}
-                className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">{bulkBusy ? "…" : "📝 บันทึก draft"}</button>
-              <button onClick={() => bulkApply(true)} disabled={bulkBusy}
-                className="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>{bulkBusy ? "…" : "💾 บันทึก + ปิดงาน"}</button>
+              <button onClick={() => setBulkOpen(false)} disabled={bulkBusy}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">ยกเลิก</button>
+              <button onClick={() => bulkApply()} disabled={bulkBusy}
+                className="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>{bulkBusy ? "…" : "💾 ใส่ MAWB ให้ทุกเอกสาร"}</button>
             </div>
           </div>
         </div>

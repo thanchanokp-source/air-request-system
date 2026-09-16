@@ -26,6 +26,7 @@ export default function Page() {
   const [q, setQ] = useState("")
   const [onlyMissing, setOnlyMissing] = useState(false)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [reqF, setReqF] = useState("")
 
   const load = async () => {
     setLoading(true)
@@ -60,16 +61,24 @@ export default function Page() {
 
   // A doc's branch: requestType, falling back to the documentNo prefix (SCM_… vs PULL_…) for older docs.
   const reqTypeOf = (r: any) => (r.requestType === "PURCHASING" || String(r.documentNo || "").toUpperCase().startsWith("PULL")) ? "PURCHASING" : "SCM"
+  // Requester (จัดซื้อ) list — normalise emails to the local-part + de-dupe, so the filter is clean.
+  const rname = (s: any) => String(s || "").split("@")[0].trim()
+  const requesters = useMemo(() => {
+    const m = new Map<string, string>()
+    reqs.forEach(r => { const d = rname(r.requesterName); if (d && !m.has(d.toLowerCase())) m.set(d.toLowerCase(), d) })
+    return [...m.values()].sort()
+  }, [reqs])
   const shown = useMemo(() => {
     const term = q.trim().toLowerCase()
     return reqs.filter(r => {
       if (typeF !== "ALL" && reqTypeOf(r) !== typeF) return false
+      if (reqF && rname(r.requesterName).toLowerCase() !== reqF.toLowerCase()) return false
       if (onlyMissing && (r.attachments || []).length > 0) return false
       if (!term) return true
       return String(r.documentNo || "").toLowerCase().includes(term)
         || (r.items || []).some((i: any) => String(i.poNoDoc || "").toLowerCase().includes(term))
     })
-  }, [reqs, q, onlyMissing, typeF]) // eslint-disable-line
+  }, [reqs, q, onlyMissing, typeF, reqF]) // eslint-disable-line
 
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Purchasing / Logistics / Admin only</p></div>
 
@@ -151,7 +160,11 @@ export default function Page() {
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔎 ค้นหา เลขเอกสาร / PO…" className="w-full sm:w-80 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔎 ค้นหา เลขเอกสาร / PO…" className="w-full sm:w-72 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        <select value={reqF} onChange={e => setReqF(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="">👤 จัดซื้อทั้งหมด</option>
+          {requesters.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input type="checkbox" checked={onlyMissing} onChange={e => setOnlyMissing(e.target.checked)} className="w-4 h-4 accent-red-700" /> เฉพาะที่ยังไม่มีไฟล์
         </label>
