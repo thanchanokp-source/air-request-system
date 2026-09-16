@@ -8,6 +8,7 @@ const POSITIONS = [
   { value: "MER", label: "Merchandise" },
   { value: "DPM_MER", label: "DPM Merchandise" }, // same role/behaviour as Merchandise (MER)
   { value: "ACCOUNTING", label: "ACCOUNTING" },
+  { value: "MER_PULL", label: "Merchandise (Pull RM)" }, // Pull Material — Merchandise keys Sample requests
   { value: "PURCHASING", label: "Purchase (Pull RM)" }, // Pull Material — Purchase stage
   { value: "SCM_PULL", label: "SCM (Pull RM)" }, // Pull Material — SCM request / decision stage
   { value: "LOGISTICS_IMPORT", label: "Logistics Import (Pull RM)" }, // Pull Material — Logistics stage
