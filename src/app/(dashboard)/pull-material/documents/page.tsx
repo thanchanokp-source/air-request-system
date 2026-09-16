@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
 import { courierUsd, destForBu, seaUsd } from "@/lib/pull-courier"
+import { pullReqType } from "@/lib/pull-reqtype"
 import LandedCostCompare from "@/components/pull/LandedCostCompare"
 
 // Pre cost from the AIR master (same formula as EST: rate at weight-break × weight + origin cost),
@@ -43,7 +44,7 @@ export default function Page() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewName, setPreviewName] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
-  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE">("ALL")
   const [lgTab, setLgTab] = useState<"actual" | "nomaster">("actual")
   // #4 batch fill: filter by port + ETC range, multi-select docs, fill actual across many at once.
   const [portF, setPortF] = useState("ALL")
@@ -331,7 +332,7 @@ export default function Page() {
     const es = docEtcs(r); if (!es.length) return false
     return es.some(e => (!etcFrom || e >= etcFrom) && (!etcTo || e <= etcTo))
   }
-  const shown = reqs.filter(r => inTab(r) && (typeF === "ALL" || (r.requestType || "SCM") === typeF) && matchPort(r) && matchEtc(r))
+  const shown = reqs.filter(r => inTab(r) && (typeF === "ALL" || pullReqType(r) === typeF) && matchPort(r) && matchEtc(r))
   const selectableShown = shown.filter(r => r.status !== "COMPLETED") // can't bulk-fill an already-closed doc
   const allSelected = selectableShown.length > 0 && selectableShown.every(r => selectedIds.has(r.id))
   const toggleSel = (id: string) => setSelectedIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -365,8 +366,8 @@ export default function Page() {
             <button key={b} onClick={() => { setBu(b); setOpenId(null) }} className={`px-4 py-1.5 rounded-full text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: b === "ALL" ? MAROON : buColor(b) } : undefined}>{b === "ALL" ? "ALL BU" : b}</button>
           ))}</div>
           <div className="flex gap-1.5">
-            {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "PC request"]] as const).map(([v, label]) => {
-              const n = reqs.filter(r => inTab(r) && (v === "ALL" || (r.requestType || "SCM") === v)).length
+            {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "PC request"], ["SAMPLE", "🧪 Sample"]] as const).map(([v, label]) => {
+              const n = reqs.filter(r => inTab(r) && (v === "ALL" || pullReqType(r) === v)).length
               return (
                 <button key={v} onClick={() => setTypeF(v)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${typeF === v ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}

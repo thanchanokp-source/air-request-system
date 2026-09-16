@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, STATUS_LABEL, buColor, fmtDate, fmt } from "../_StageWork"
 import { pcApprover } from "@/lib/pull-approvers"
+import { pullReqType } from "@/lib/pull-reqtype"
 import { MultiSelect } from "@/components/ui/multi-select"
 
 // Pipeline steps branch by request type. Each status maps to the CURRENT (in-progress) step index;
@@ -48,7 +49,7 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [statusF, setStatusF] = useState("")
-  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE">("ALL")
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
@@ -163,9 +164,9 @@ export default function Page() {
   if (!canUse) return <div className="p-10 text-center"><div className="text-4xl">🔒</div><p className="mt-2 text-sm text-gray-500">Pull RM / Admin only</p></div>
 
   // Non-admin single-role users are locked to their own request type; only "canSeeBoth" uses the tab.
-  const effType: "ALL" | "SCM" | "PURCHASING" = canSeeBoth ? typeF : (isPurchasing ? "PURCHASING" : isScmPull ? "SCM" : "ALL")
+  const effType: "ALL" | "SCM" | "PURCHASING" | "SAMPLE" = canSeeBoth ? typeF : (isPurchasing ? "PURCHASING" : isScmPull ? "SCM" : "ALL")
   // Filter option lists (from the loaded docs, respecting the type tab).
-  const scopeReqs = reqs.filter(rq => effType === "ALL" || (rq.requestType || "SCM") === effType)
+  const scopeReqs = reqs.filter(rq => effType === "ALL" || pullReqType(rq) === effType)
   const docNos = [...new Set(scopeReqs.map(r => r.documentNo).filter(Boolean))].sort()
   const pos = [...new Set(scopeReqs.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort()
   // Requester filter: normalise the raw requesterName (some docs store a full email) to the local-part,
@@ -193,8 +194,8 @@ export default function Page() {
       {/* Request type tab — only for admin / LG / dual-role. Pure SCM or PC users are auto-locked. */}
       {canSeeBoth && (
       <div className="flex gap-1.5">
-        {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "Purchasing request"]] as const).map(([v, label]) => {
-          const n = v === "ALL" ? reqs.length : reqs.filter(r => (r.requestType || "SCM") === v).length
+        {([["ALL", "ทั้งหมด"], ["SCM", "SCM request"], ["PURCHASING", "Purchasing request"], ["SAMPLE", "🧪 Sample"]] as const).map(([v, label]) => {
+          const n = v === "ALL" ? reqs.length : reqs.filter(r => pullReqType(r) === v).length
           return (
             <button key={v} onClick={() => setTypeF(v)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${typeF === v ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}

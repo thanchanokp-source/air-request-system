@@ -5,18 +5,18 @@ import { useSession } from "next-auth/react"
 import { MAROON, BUS, STATUS_LABEL, fmt, buColor } from "../_StageWork"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { buildRequesters } from "@/lib/pull-requesters"
+import { pullReqType } from "@/lib/pull-reqtype"
 
 export default function Page() {
   const { data: session, status: auth } = useSession()
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE">("ALL")
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
-  // Branch of a doc: requestType, falling back to the documentNo prefix (PULL_… = Purchasing, else SCM).
-  const reqTypeOf = (r: any) => (r.requestType === "PURCHASING" || String(r.documentNo || "").toUpperCase().startsWith("PULL")) ? "PURCHASING" : "SCM"
+  const reqTypeOf = pullReqType
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { load() }, [bu]) // eslint-disable-line
@@ -95,7 +95,7 @@ export default function Page() {
     const d0 = its.find((i: any) => i.airFreightCost != null) || its[0] || {}
     const est = its.reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
     const po = [...new Set(its.map((i: any) => i.poNoDoc).filter(Boolean))].join(", ")
-    return [r.documentNo, r.bu, reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : "SCM", r.requesterName || "", po,
+    return [r.documentNo, r.bu, reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : reqTypeOf(r) === "SAMPLE" ? "Sample" : "SCM", r.requesterName || "", po,
       d0.country || "", d0.port || d0.seaPort || "", d0.incoterm || "", d0.weight != null ? Number(d0.weight) : "",
       r.factory || d0.factory || "", dstr(d0.etc), est ? Math.round(est) : "",
       r.mawbNo || "", r.hawbNo || "", dstr(r.flightEtd), dstr(r.flightEta),
@@ -183,7 +183,7 @@ export default function Page() {
 
       {/* Branch filter — every metric below reflects the chosen branch (SCM vs Purchasing) */}
       <div className="flex gap-2 border-b border-gray-200">
-        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM"], ["PURCHASING", "🛒 จัดซื้อ"]] as const).map(([v, label]) => {
+        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM"], ["PURCHASING", "🛒 จัดซื้อ"], ["SAMPLE", "🧪 Sample"]] as const).map(([v, label]) => {
           const n = v === "ALL" ? reqs.length : reqs.filter((r: any) => reqTypeOf(r) === v).length
           return (
             <button key={v} onClick={() => setTypeF(v)}
@@ -324,7 +324,7 @@ export default function Page() {
                       <tr key={r.id} className="hover:bg-gray-50">
                         <td className="px-2 py-1.5 font-semibold text-gray-800">{r.documentNo}</td>
                         <td className="px-2 py-1.5">{r.bu}</td>
-                        <td className="px-2 py-1.5">{reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : "SCM"}</td>
+                        <td className="px-2 py-1.5">{reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : reqTypeOf(r) === "SAMPLE" ? "Sample" : "SCM"}</td>
                         <td className="px-2 py-1.5">{r.requesterName || "-"}</td>
                         <td className="px-2 py-1.5" title={po}>{po || "-"}</td>
                         <td className="px-2 py-1.5">{d0.country || "-"}</td>

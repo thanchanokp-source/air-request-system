@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { MAROON, BUS, buColor } from "../_StageWork"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { buildRequesters } from "@/lib/pull-requesters"
+import { pullReqType } from "@/lib/pull-reqtype"
 
 const CAT_LABEL: Record<string, string> = { INV: "INV", PACKING: "Packing", AWB: "AWB", CUSTOMS: "ใบขน", COMBINED: "รวม" }
 const PC_CATS: [string, string][] = [["INV", "PC"], ["PACKING", "PC"], ["COMBINED", "PC"]]
@@ -26,7 +27,7 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [onlyMissing, setOnlyMissing] = useState(false)
-  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE">("ALL")
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
@@ -62,8 +63,7 @@ export default function Page() {
     } finally { setBusy(null) }
   }
 
-  // A doc's branch: requestType, falling back to the documentNo prefix (SCM_… vs PULL_…) for older docs.
-  const reqTypeOf = (r: any) => (r.requestType === "PURCHASING" || String(r.documentNo || "").toUpperCase().startsWith("PULL")) ? "PURCHASING" : "SCM"
+  const reqTypeOf = pullReqType
   // Tracking-style filters: Doc No / PO / Requester (all searchable multi-select). Requester merges by user id.
   const { options: requesters, displayOf } = useMemo(() => buildRequesters(reqs), [reqs])
   const docNos = useMemo(() => [...new Set(reqs.map(r => r.documentNo).filter(Boolean))].sort(), [reqs])
@@ -139,7 +139,7 @@ export default function Page() {
 
       {/* Branch filter — separate SCM requests from Purchasing requests */}
       <div className="flex gap-2 border-b border-gray-200">
-        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM req"], ["PURCHASING", "🛒 Purchase req"]] as const).map(([v, label]) => {
+        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM req"], ["PURCHASING", "🛒 Purchase req"], ["SAMPLE", "🧪 Sample"]] as const).map(([v, label]) => {
           const n = v === "ALL" ? reqs.length : reqs.filter(r => reqTypeOf(r) === v).length
           return (
             <button key={v} onClick={() => setTypeF(v)}
@@ -179,6 +179,8 @@ export default function Page() {
                     <span className="font-bold text-gray-900">{rq.documentNo}</span>
                     {reqTypeOf(rq) === "PURCHASING"
                       ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">Purchase req</span>
+                      : reqTypeOf(rq) === "SAMPLE"
+                      ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">🧪 Sample</span>
                       : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200">SCM req</span>}
                     <span className="text-xs text-gray-400">{rq.requesterName} · PO {pos || "-"}</span>
                     <span className={`ml-auto text-[11px] px-2 py-0.5 rounded-full ${n ? "bg-sky-50 text-sky-700" : "bg-gray-100 text-gray-400"}`}>📎 {n} ไฟล์</span>

@@ -8,6 +8,7 @@ import LandedCostCompare from "@/components/pull/LandedCostCompare"
 import SignatureModal from "@/components/signature-modal"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { buildRequesters } from "@/lib/pull-requesters"
+import { pullReqType } from "@/lib/pull-reqtype"
 
 // Approver stages: which role owns each, and where Approve / Send-back go.
 const APPROVER: Record<string, { role: string; label: string; next: string; back: string; backLabel: string }> = {
@@ -172,7 +173,7 @@ export default function Page() {
             const pq = poQ.trim().toLowerCase()
             const displayOf = buildRequesters(reqs).displayOf
             const shown = reqs.filter(rq => {
-              if (typeF !== "ALL" && (rq.requestType || "SCM") !== typeF) return false
+              if (typeF !== "ALL" && pullReqType(rq) !== typeF) return false
               if (docF.length && !docF.includes(rq.documentNo)) return false
               if (poF.length && !(rq.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
               if (reqF.length && !reqF.includes(displayOf(rq))) return false
