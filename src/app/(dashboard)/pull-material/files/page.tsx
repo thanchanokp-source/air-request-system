@@ -61,18 +61,25 @@ export default function Page() {
 
   // A doc's branch: requestType, falling back to the documentNo prefix (SCM_… vs PULL_…) for older docs.
   const reqTypeOf = (r: any) => (r.requestType === "PURCHASING" || String(r.documentNo || "").toUpperCase().startsWith("PULL")) ? "PURCHASING" : "SCM"
-  // Requester (จัดซื้อ) list — normalise emails to the local-part + de-dupe, so the filter is clean.
+  // Requester (จัดซื้อ) list — GROUP BY the real user id (createdById) so the same person merges even when
+  // their name was stored inconsistently ("sudarat" vs "sudarat.r"). Display = the most name-like value.
   const rname = (s: any) => String(s || "").split("@")[0].trim()
+  const reqKey = (r: any) => r.createdById || rname(r.requesterName).toLowerCase()
   const requesters = useMemo(() => {
-    const m = new Map<string, string>()
-    reqs.forEach(r => { const d = rname(r.requesterName); if (d && !m.has(d.toLowerCase())) m.set(d.toLowerCase(), d) })
-    return [...m.values()].sort()
+    const m = new Map<string, Set<string>>()
+    reqs.forEach(r => { const d = rname(r.requesterName); if (!d) return; const k = reqKey(r); if (!m.has(k)) m.set(k, new Set()); m.get(k)!.add(d) })
+    return [...m.entries()].map(([key, names]) => {
+      const arr = [...names]
+      const noDot = arr.filter(n => !n.includes(".")) // "sudarat" beats "sudarat.r"
+      const display = (noDot.length ? noDot : arr).sort((a, b) => a.length - b.length)[0]
+      return { key, display }
+    }).sort((a, b) => a.display.localeCompare(b.display))
   }, [reqs])
   const shown = useMemo(() => {
     const term = q.trim().toLowerCase()
     return reqs.filter(r => {
       if (typeF !== "ALL" && reqTypeOf(r) !== typeF) return false
-      if (reqF && rname(r.requesterName).toLowerCase() !== reqF.toLowerCase()) return false
+      if (reqF && reqKey(r) !== reqF) return false
       if (onlyMissing && (r.attachments || []).length > 0) return false
       if (!term) return true
       return String(r.documentNo || "").toLowerCase().includes(term)
@@ -163,7 +170,7 @@ export default function Page() {
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔎 ค้นหา เลขเอกสาร / PO…" className="w-full sm:w-72 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
         <select value={reqF} onChange={e => setReqF(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
           <option value="">👤 จัดซื้อทั้งหมด</option>
-          {requesters.map(r => <option key={r} value={r}>{r}</option>)}
+          {requesters.map(r => <option key={r.key} value={r.key}>{r.display}</option>)}
         </select>
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input type="checkbox" checked={onlyMissing} onChange={e => setOnlyMissing(e.target.checked)} className="w-4 h-4 accent-red-700" /> เฉพาะที่ยังไม่มีไฟล์
