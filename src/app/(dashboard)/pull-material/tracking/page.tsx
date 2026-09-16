@@ -168,12 +168,18 @@ export default function Page() {
   const scopeReqs = reqs.filter(rq => effType === "ALL" || (rq.requestType || "SCM") === effType)
   const docNos = [...new Set(scopeReqs.map(r => r.documentNo).filter(Boolean))].sort()
   const pos = [...new Set(scopeReqs.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort()
-  const requesters = [...new Set(scopeReqs.map(r => r.requesterName).filter(Boolean))].sort()
+  // Requester filter: normalise the raw requesterName (some docs store a full email) to the local-part,
+  // then de-dupe case-insensitively so the dropdown shows one clean name per person, not raw emails.
+  const rname = (s: any) => String(s || "").split("@")[0].trim()
+  const reqMap = new Map<string, string>()
+  scopeReqs.forEach(r => { const d = rname(r.requesterName); if (d && !reqMap.has(d.toLowerCase())) reqMap.set(d.toLowerCase(), d) })
+  const requesters = [...reqMap.values()].sort()
+  const reqFLower = reqF.map(x => x.toLowerCase())
   const shown = scopeReqs.filter(rq => {
     if (statusF && rq.status !== statusF) return false
     if (docF.length && !docF.includes(rq.documentNo)) return false
     if (poF.length && !(rq.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
-    if (reqF.length && !reqF.includes(rq.requesterName)) return false
+    if (reqF.length && !reqFLower.includes(rname(rq.requesterName).toLowerCase())) return false
     return true
   })
 

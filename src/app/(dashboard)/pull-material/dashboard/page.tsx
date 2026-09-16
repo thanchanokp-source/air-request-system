@@ -9,14 +9,19 @@ export default function Page() {
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  // Branch of a doc: requestType, falling back to the documentNo prefix (PULL_… = Purchasing, else SCM).
+  const reqTypeOf = (r: any) => (r.requestType === "PURCHASING" || String(r.documentNo || "").toUpperCase().startsWith("PULL")) ? "PURCHASING" : "SCM"
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { load() }, [bu]) // eslint-disable-line
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
 
-  const items = reqs.flatMap((r: any) => r.items || [])
-  const totalDocs = reqs.length
+  // Apply the SCM / Purchasing filter to every metric below.
+  const fReqs = typeF === "ALL" ? reqs : reqs.filter((r: any) => reqTypeOf(r) === typeF)
+  const items = fReqs.flatMap((r: any) => r.items || [])
+  const totalDocs = fReqs.length
   const totalItems = items.length
   const totalPullGarment = items.reduce((s, i) => s + (Number(i.pullGarment) || 0), 0)
   // Pull RM freight is priced in USD (air master rates are USD/kg).
@@ -28,10 +33,10 @@ export default function Page() {
 
   // By status
   const byStatus: Record<string, number> = {}
-  reqs.forEach((r: any) => { byStatus[r.status] = (byStatus[r.status] || 0) + 1 })
+  fReqs.forEach((r: any) => { byStatus[r.status] = (byStatus[r.status] || 0) + 1 })
 
   // Regular vs Irregular
-  const regular = reqs.filter((r: any) => r.mode === "REGULAR").length
+  const regular = fReqs.filter((r: any) => r.mode === "REGULAR").length
   const irregular = totalDocs - regular
 
   // Air vs Sea decision (per material line)
@@ -49,7 +54,7 @@ export default function Page() {
 
   // Monthly trend (docs + est)
   const byMonth: Record<string, { docs: number; est: number }> = {}
-  reqs.forEach((r: any) => {
+  fReqs.forEach((r: any) => {
     const d = new Date(r.createdAt); if (isNaN(d.getTime())) return
     const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
     if (!byMonth[k]) byMonth[k] = { docs: 0, est: 0 }
@@ -102,6 +107,20 @@ export default function Page() {
       <div className="flex gap-1.5">{BUS.map(b => (
         <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
+
+      {/* Branch filter — every metric below reflects the chosen branch (SCM vs Purchasing) */}
+      <div className="flex gap-2 border-b border-gray-200">
+        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM"], ["PURCHASING", "🛒 จัดซื้อ"]] as const).map(([v, label]) => {
+          const n = v === "ALL" ? reqs.length : reqs.filter((r: any) => reqTypeOf(r) === v).length
+          return (
+            <button key={v} onClick={() => setTypeF(v)}
+              className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${typeF === v ? "" : "border-transparent text-gray-400 hover:text-gray-600"}`}
+              style={typeF === v ? { color: MAROON, borderColor: MAROON } : undefined}>
+              {label}<span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-500">{n}</span>
+            </button>
+          )
+        })}
+      </div>
 
       {loading ? <p className="text-sm text-gray-400">Loading…</p> : totalDocs === 0 ? (
         <div className="bg-white rounded-xl border p-12 text-center text-gray-400">ยังไม่มีเอกสารใน BU นี้</div>
