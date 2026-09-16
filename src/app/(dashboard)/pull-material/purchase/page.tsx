@@ -193,7 +193,10 @@ export default function PurchasePage() {
       // No manual Logistics step anymore: server auto-computes Est Air + Air L/T, then goes straight to
       // the air decision (SCM or PC). LG only enters ACTUAL later, after approval.
       // A RETURNED doc (PC_REVISE) goes STRAIGHT back to LG (APPROVED) — no re-approval — per the flow.
-      const next = rq.status === "PC_REVISE" ? "APPROVED" : (rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION")
+      // SAMPLE (MER) auto-approves after Purchase fills → straight to LG (booking + actual). No approval chain.
+      const next = rq.status === "PC_REVISE" ? "APPROVED"
+        : rq.requestType === "SAMPLE" ? "APPROVED"
+        : rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION"
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ itemUpdates, status: next, otherPorts }),

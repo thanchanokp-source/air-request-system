@@ -22,10 +22,10 @@ const claimNav = [
   { href: "/settings", label: "SETTINGS", adminOnly: true },
 ]
 const pullNav = [
-  { href: "/pull-material/dashboard", label: "DASHBOARD", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT"] },
-  { href: "/pull-material/request", label: "NEW REQUEST", roles: ["ADMIN", "SCM_PULL", "PURCHASING"] },
-  { href: "/pull-material/tracking", label: "TRACKING DOCUMENT", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT"] },
-  { href: "/pull-material/files", label: "ATTACH FILES", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT"] },
+  { href: "/pull-material/dashboard", label: "DASHBOARD", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT", "MER_PULL"] },
+  { href: "/pull-material/request", label: "NEW REQUEST", roles: ["ADMIN", "SCM_PULL", "PURCHASING", "MER_PULL"] },
+  { href: "/pull-material/tracking", label: "TRACKING DOCUMENT", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "MER_PULL"] },
+  { href: "/pull-material/files", label: "ATTACH FILES", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "MER_PULL"] },
   { href: "/pull-material/sample", label: "SAMPLE", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT"] },
   { href: "/pull-material/purchase", label: "รอจัดซื้อกรอก", roles: ["ADMIN", "PURCHASING"] },
   { href: "/pull-material/revise-stats", label: "REVISE STATS", roles: ["ADMIN", "PURCHASING"] },
@@ -59,7 +59,7 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
   const isAdmin = role === "ADMIN"
 
   const allRoles = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
-  const PULL_ROLES = ["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM"] // pure Pull RM roles
+  const PULL_ROLES = ["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM", "MER_PULL"] // pure Pull RM roles
   // + air approvers who ALSO act in Pull RM (they keep Claim Air too, so not "pure pull").
   const PULL_TAB_ROLES = [...PULL_ROLES, "VP_SCM", "PULL_PRESIDENT"]
   const hasPull = isAdmin || allRoles.some((r: string) => PULL_TAB_ROLES.includes(r))

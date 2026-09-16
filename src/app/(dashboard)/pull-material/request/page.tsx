@@ -63,9 +63,12 @@ export default function ScmRequestPage() {
   // requestType decides the approval TAIL (SCM → VP SCM → President · PC → DVM Pur → VP Pur).
   // Real users: derived from role (no toggle). Admin: a toggle to preview BOTH request UIs.
   const isRealAdmin = roles.includes("ADMIN")
-  const derivedReqType: "SCM" | "PURCHASING" = roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PURCHASING" : "SCM"
-  const [adminReqType, setAdminReqType] = useState<"SCM" | "PURCHASING">("SCM")
-  const reqType: "SCM" | "PURCHASING" = isRealAdmin ? adminReqType : derivedReqType
+  // MER_PULL keys a SAMPLE (like SCM: BOM picker → brand/supplier/item/remark), auto-approves after Purchase.
+  const derivedReqType: "SCM" | "PURCHASING" | "SAMPLE" =
+    roles.includes("MER_PULL") && !roles.includes("SCM_PULL") && !roles.includes("PURCHASING") ? "SAMPLE"
+    : roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PURCHASING" : "SCM"
+  const [adminReqType, setAdminReqType] = useState<"SCM" | "PURCHASING" | "SAMPLE">("SCM")
+  const reqType: "SCM" | "PURCHASING" | "SAMPLE" = isRealAdmin ? adminReqType : derivedReqType
 
   const [bu, setBu] = useState("NYG")
   const [q, setQ] = useState("")
@@ -615,11 +618,11 @@ export default function ScmRequestPage() {
         </div>
       )}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>{reqType === "PURCHASING" ? "PURCHASING REQUEST AIR" : "SCM — RM REQ AIR"}</h1>
+        <h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>{reqType === "PURCHASING" ? "PURCHASING REQUEST AIR" : reqType === "SAMPLE" ? "SAMPLE" : "SCM — RM REQ AIR"}</h1>
       </div>
 
-      {/* Sub-tabs — only SCM has a "Send Approve" step; Purchasing req is a single direct form (no tabs). */}
-      {reqType !== "PURCHASING" && (
+      {/* Sub-tabs — only SCM has a "Send Approve" step; Purchasing & Sample are single direct forms (no tabs). */}
+      {reqType === "SCM" && (
       <div className="flex gap-1 border-b border-gray-200">
         {([["request", "1 · Request"], ["approve", "2 · Send Approve"]] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
@@ -652,17 +655,17 @@ export default function ScmRequestPage() {
         Request type:
         {isRealAdmin ? (
           <span className="inline-flex gap-1">
-            {(["SCM", "PURCHASING"] as const).map(t => (
+            {(["SCM", "PURCHASING", "SAMPLE"] as const).map(t => (
               <button key={t} onClick={() => setAdminReqType(t)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${reqType === t ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
-                style={reqType === t ? { background: MAROON } : undefined}>{t === "SCM" ? "SCM request" : "Purchasing request"}</button>
+                style={reqType === t ? { background: MAROON } : undefined}>{t === "SCM" ? "SCM request" : t === "PURCHASING" ? "Purchasing request" : "Sample (MER)"}</button>
             ))}
-            <span className="ml-1 self-center text-amber-600">· admin preview both</span>
+            <span className="ml-1 self-center text-amber-600">· admin preview all</span>
           </span>
         ) : (
           <>
-            <span className="font-semibold text-gray-600">{reqType === "SCM" ? "SCM" : "Purchasing"}</span>
-            <span>{reqType === "SCM" ? "→ VP SCM → President" : "→ DVM Pur → VP Pur"}</span>
+            <span className="font-semibold text-gray-600">{reqType === "SCM" ? "SCM" : reqType === "SAMPLE" ? "Sample (MER)" : "Purchasing"}</span>
+            <span>{reqType === "SCM" ? "→ VP SCM → President" : reqType === "SAMPLE" ? "→ จัดซื้อกรอก → auto-approve → LG" : "→ DVM Pur → VP Pur"}</span>
           </>
         )}
       </div>

@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   const bu = String(body.bu || "NYG").toUpperCase()
-  const requestType = body.requestType === "PURCHASING" ? "PURCHASING" : "SCM"
+  const requestType = body.requestType === "PURCHASING" ? "PURCHASING" : body.requestType === "SAMPLE" ? "SAMPLE" : "SCM"
   const mode = body.mode === "REGULAR" ? "REGULAR" : "IRREGULAR"
   const isAdmin = (session.user as any).role === "ADMIN"
   const isTest = isAdmin && body.isTest === true // only admin can mark a doc as TEST
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   // Doc no: <FAMILY>_<BU>_YYMM_<seq> — SCM-keyed docs use SCM_ prefix, Purchase-keyed keep PULL_.
   const now = new Date()
   const yymm = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, "0")}`
-  const family = requestType === "SCM" ? "SCM" : "PULL"
+  const family = requestType === "SCM" ? "SCM" : requestType === "SAMPLE" ? "MER" : "PULL"
   const prefix = `${family}_${bu}_${yymm}_`
   const last = await (prisma as any).pullMaterialRequest.findFirst({
     where: { documentNo: { startsWith: prefix } },
