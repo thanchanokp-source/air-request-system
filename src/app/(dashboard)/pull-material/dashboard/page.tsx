@@ -1,8 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, STATUS_LABEL, fmt, buColor } from "../_StageWork"
+import { MultiSelect } from "@/components/ui/multi-select"
+import { buildRequesters } from "@/lib/pull-requesters"
 
 export default function Page() {
   const { data: session, status: auth } = useSession()
@@ -10,6 +12,9 @@ export default function Page() {
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING">("ALL")
+  const [docF, setDocF] = useState<string[]>([])
+  const [poF, setPoF] = useState<string[]>([])
+  const [reqF, setReqF] = useState<string[]>([])
   // Branch of a doc: requestType, falling back to the documentNo prefix (PULL_… = Purchasing, else SCM).
   const reqTypeOf = (r: any) => (r.requestType === "PURCHASING" || String(r.documentNo || "").toUpperCase().startsWith("PULL")) ? "PURCHASING" : "SCM"
 
@@ -18,8 +23,17 @@ export default function Page() {
 
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
 
-  // Apply the SCM / Purchasing filter to every metric below.
-  const fReqs = typeF === "ALL" ? reqs : reqs.filter((r: any) => reqTypeOf(r) === typeF)
+  // Filter options (Doc No / PO / จัดซื้อ) + apply SCM/Purchasing + those filters to EVERY metric below.
+  const { options: reqOptions, displayOf } = useMemo(() => buildRequesters(reqs), [reqs])
+  const docNos = useMemo(() => [...new Set(reqs.map((r: any) => r.documentNo).filter(Boolean))].sort(), [reqs])
+  const poNos = useMemo(() => [...new Set(reqs.flatMap((r: any) => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort(), [reqs])
+  const fReqs = reqs.filter((r: any) => {
+    if (typeF !== "ALL" && reqTypeOf(r) !== typeF) return false
+    if (docF.length && !docF.includes(r.documentNo)) return false
+    if (poF.length && !(r.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
+    if (reqF.length && !reqF.includes(displayOf(r))) return false
+    return true
+  })
   const items = fReqs.flatMap((r: any) => r.items || [])
   const totalDocs = fReqs.length
   const totalItems = items.length
@@ -180,6 +194,17 @@ export default function Page() {
             </button>
           )
         })}
+      </div>
+
+      {/* Searchable filters — narrow every metric + the table by Doc No / PO / จัดซื้อ */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="w-48"><MultiSelect label="Doc No…" options={docNos} value={docF} onChange={setDocF} /></div>
+        <div className="w-48"><MultiSelect label="PO…" options={poNos} value={poF} onChange={setPoF} /></div>
+        <div className="w-48"><MultiSelect label="จัดซื้อ…" options={reqOptions} value={reqF} onChange={setReqF} /></div>
+        {(docF.length > 0 || poF.length > 0 || reqF.length > 0) && (
+          <button onClick={() => { setDocF([]); setPoF([]); setReqF([]) }} className="text-xs text-gray-400 hover:text-red-600 underline">ล้าง filter</button>
+        )}
+        <span className="text-xs text-gray-400 ml-auto">{fReqs.length} เอกสาร</span>
       </div>
 
       {loading ? <p className="text-sm text-gray-400">Loading…</p> : totalDocs === 0 ? (
