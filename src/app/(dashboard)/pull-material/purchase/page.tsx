@@ -39,6 +39,10 @@ export default function PurchasePage() {
   const [pcTab, setPcTab] = useState<"queue" | "revise" | "stats">("queue")
   const [srcTab, setSrcTab] = useState<"ALL" | "SCM" | "MER">("ALL") // SCM-origin vs MER-origin work split
   const [uploadingPL, setUploadingPL] = useState<string | null>(null)
+  const [purUsers, setPurUsers] = useState<{ name: string; email: string }[]>([]) // Purchasing users (FW target list)
+  const [fwId, setFwId] = useState<string | null>(null) // which doc's Forward picker is open
+  const [fwQ, setFwQ] = useState("")
+  const [fwBusy, setFwBusy] = useState<string | null>(null)
 
   // ── Own-docs scoping: a Purchasing user only sees documents assigned to THEM (admin sees all). ──
   const myEmail = String((session?.user as any)?.email || "").toLowerCase()
@@ -52,11 +56,15 @@ export default function PurchasePage() {
   }
   const isMerDoc = (rq: any) => rq.requestType === "SAMPLE" || String(rq.documentNo || "").startsWith("MER_")
   // A doc is "mine" if its purchaserEmail is me, or (when unset) any item's PO-owner resolves to my email.
+  // Mirrors pull-notify PENDING_PURCHASING routing EXACTLY: SCM docs with NO derivable PO owner fall back
+  // to the whole Purchasing pool (server emails everyone) → must stay visible to every purchaser here too.
   const ownsDoc = (rq: any) => {
     if (isAdmin) return true
     if (!myEmail) return false
     if (rq.purchaserEmail) return String(rq.purchaserEmail).toLowerCase() === myEmail
-    return (rq.items || []).some((i: any) => poUserEmail(i.poUsername) === myEmail)
+    const owners = [...new Set((rq.items || []).map((i: any) => poUserEmail(i.poUsername)).filter(Boolean) as string[])]
+    if (owners.length === 0) return true // no POUSERNAME → pool doc → visible to all purchasing
+    return owners.includes(myEmail)
   }
 
   const load = async () => {
@@ -73,7 +81,22 @@ export default function PurchasePage() {
   useEffect(() => {
     fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRows(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRows(d.rows || [])).catch(() => {})
+    // Purchasing colleagues (Forward targets).
+    fetch("/api/pull-material/approvers").then(r => r.json()).then(d => {
+      const purs = (d.users || []).filter((u: any) => [u.role, ...(u.roles || [])].includes("PURCHASING"))
+        .map((u: any) => ({ name: u.name || u.email, email: String(u.email || "").toLowerCase() })).filter((u: any) => u.email)
+      setPurUsers(purs)
+    }).catch(() => {})
   }, [])
+
+  // Forward a doc to another purchaser (reassign purchaserEmail + re-alert them). Optimistic list refresh.
+  const forwardDoc = async (rq: any, email: string) => {
+    setFwBusy(rq.id)
+    try {
+      const r = await fetch(`/api/pull-material/${rq.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ forwardTo: email }) })
+      if (r.ok) { setFwId(null); setFwQ(""); await load() } else alert("Forward ไม่สำเร็จ")
+    } finally { setFwBusy(null) }
+  }
 
   // On opening a doc: seed the fill-once form from item[0]'s current values (so a re-opened / returned doc
   // shows what was entered before). Weight = the doc's total (stored on item[0]).
@@ -572,22 +595,57 @@ export default function PurchasePage() {
               {base.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">No documents at this stage</div> :
                 shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400">ไม่พบเอกสารที่ตรงกับ “{soQ}”</div> :
                 <div className="space-y-2.5">
-                  {shown.map(rq => (
-                    <button key={rq.id} onClick={() => setOpenId(rq.id)}
-                      className={`w-full flex items-center justify-between gap-3 px-5 py-4 bg-white rounded-2xl border shadow-sm hover:shadow-md transition text-left ${rq.status === "PC_REVISE" ? "border-red-200" : "border-gray-100 hover:border-gray-200"}`}>
-                      <div>
-                        <div className="font-semibold text-gray-900 flex items-center gap-2">{rq.documentNo}
+                  {shown.map(rq => {
+                    const brands = [...new Set(rq.items.map((i: any) => i.brand).filter(Boolean))] as string[]
+                    // Pool doc = SCM-origin with no purchaserEmail and no derivable PO owner → nobody's specific queue.
+                    const isPool = !isMerDoc(rq) && !rq.purchaserEmail && !rq.items.some((i: any) => poUserEmail(i.poUsername))
+                    const fwList = purUsers.filter(u => !fwQ.trim() || u.name.toLowerCase().includes(fwQ.trim().toLowerCase()) || u.email.includes(fwQ.trim().toLowerCase()))
+                    return (
+                    <div key={rq.id} onClick={() => setOpenId(rq.id)}
+                      className={`relative w-full flex items-center justify-between gap-3 px-5 py-4 bg-white rounded-2xl border shadow-sm hover:shadow-md transition text-left cursor-pointer ${rq.status === "PC_REVISE" ? "border-red-200" : isPool ? "border-amber-200" : "border-gray-100 hover:border-gray-200"}`}>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 flex items-center gap-2 flex-wrap">{rq.documentNo}
                           {rq.status === "PC_REVISE" && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">↩️ REVISE #{rq.reviseCount || 1}</span>}
                           {rq.mode === "REGULAR"
                             ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">🟢 REGULAR</span>
                             : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">🟠 IRREGULAR</span>}
+                          {isPool && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">👥 ยังไม่มีเจ้าของ</span>}
                         </div>
-                        <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items.length} items · {[...new Set(rq.items.map((i: any) => i.soNoDoc))].join(", ")}</div>
+                        {brands.length > 0 && <div className="text-[11px] font-semibold mt-0.5" style={{ color: MAROON }}>🏷️ {brands.join(", ")}</div>}
+                        <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · {rq.items.length} items · {[...new Set(rq.items.map((i: any) => i.soNoDoc))].filter(Boolean).join(", ")}</div>
                         {rq.status === "PC_REVISE" && rq.lastReturnReason && <div className="text-[11px] text-red-600 mt-1">เหตุผลตีกลับ: {rq.lastReturnReason}</div>}
                       </div>
-                      <span className="text-gray-300 text-lg">›</span>
-                    </button>
-                  ))}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Forward to another purchaser */}
+                        <div className="relative">
+                          <button type="button" disabled={fwBusy === rq.id}
+                            onClick={e => { e.stopPropagation(); setFwId(fwId === rq.id ? null : rq.id); setFwQ("") }}
+                            className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 disabled:opacity-40">
+                            {fwBusy === rq.id ? "…" : "↪ FW"}
+                          </button>
+                          {fwId === rq.id && (
+                            <div className="absolute right-0 top-full mt-1 z-20 w-60 bg-white border border-gray-200 rounded-xl shadow-lg p-2" onClick={e => e.stopPropagation()}>
+                              <div className="text-[10px] font-semibold text-gray-500 px-1 pb-1">ส่งต่อให้จัดซื้อ</div>
+                              <input autoFocus value={fwQ} onChange={e => setFwQ(e.target.value)} placeholder="ค้นหาชื่อ / อีเมล…"
+                                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs mb-1 focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                              <div className="max-h-52 overflow-y-auto">
+                                {fwList.length === 0 ? <div className="text-[11px] text-gray-400 px-2 py-3 text-center">ไม่พบจัดซื้อ</div> :
+                                  fwList.map(u => (
+                                    <button key={u.email} type="button" onClick={() => forwardDoc(rq, u.email)}
+                                      className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-blue-50 text-xs">
+                                      <div className="font-medium text-gray-800">{u.name}</div>
+                                      <div className="text-[10px] text-gray-400">{u.email}</div>
+                                    </button>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-gray-300 text-lg">›</span>
+                      </div>
+                    </div>
+                    )
+                  })}
                 </div>}
             </div>
           )

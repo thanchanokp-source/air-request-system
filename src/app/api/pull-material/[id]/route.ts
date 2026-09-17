@@ -125,6 +125,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await (prisma as any).pullMaterialRequest.update({ where: { id }, data: { mode: body.mode } })
   }
 
+  // Purchasing forwards a doc to another purchaser (e.g. a pool doc with no PO owner) → reassign + re-alert.
+  if (body.forwardTo) {
+    const to = String(body.forwardTo).trim().toLowerCase()
+    if (!/^[\w.+-]+@nanyangtextile\.com$/i.test(to)) return NextResponse.json({ error: "invalid purchaser email" }, { status: 400 })
+    await (prisma as any).pullMaterialRequest.update({ where: { id }, data: { purchaserEmail: to } })
+    await notifyPullStage(id, "PENDING_PURCHASING").catch(() => {})
+    return NextResponse.json({ ok: true, forwardedTo: to })
+  }
+
   // Edit (recalled doc): packages / remark at request level; Purchase packing-list filename.
   if ("packages" in body || "remark" in body || "packingListName" in body || "factory" in body) {
     await (prisma as any).pullMaterialRequest.update({
