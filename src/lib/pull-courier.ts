@@ -46,7 +46,7 @@ export function itemHasAnyRate(item: any, seaRows: any[], courierRows: any[], bu
 // purchase form, LG and Approval pages. Air weight breaks + LAOS↔VTE aliasing mirror the backend.
 const LC_BREAKS = [45, 100, 250, 300, 500, 1000, 2000, 8000]
 const lcBreakKey = (w: number) => { let b = 45; for (const x of LC_BREAKS) if (x <= w) b = x; return "Q" + b }
-const lcCbm = (w: number) => (w < 500 ? 1 : w <= 700 ? 2 : w <= 1000 ? 3 : 4)
+const lcCbm = (w: number) => (w < 500 ? 1 : w <= 700 ? 2 : w <= 1000 ? 3 : 5)
 const lcUp = (s: any) => String(s || "").toUpperCase()
 export type LandedLine = { freight: number; fca: number; clear: number; local: number; store: number; transport: number; total: number; cbm?: number }
 export function pullLandedCost(o: { airRows: any[]; seaRows: any[]; courierRows: any[]; truckRows: any[]; port?: any; seaPort?: any; country?: any; weight?: any; incoterm?: any; bu?: any; factory?: any }) {

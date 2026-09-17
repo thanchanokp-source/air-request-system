@@ -14,7 +14,7 @@ const BUS = ["NYG", "EA", "TRM", "GW"]
 // Landed-cost constants (Thailand-side, baht) — converted to USD via EXCHANGE_RATE at compute time.
 const SHIP_CLEAR_BAHT = 1000, LOCAL_AIR_BAHT_KG = 2, STORE_AIR_BAHT_KG = 4.5, STORE_SEA_BAHT = 1500, LOCAL_SEA_BAHT_CBM = 2500
 // CBM by shipment weight (sea): <500kg=1, ≤700=2, ≤1000=3, >1000=4.
-const cbmOf = (w: number) => (w < 500 ? 1 : w <= 700 ? 2 : w <= 1000 ? 3 : 4)
+const cbmOf = (w: number) => (w < 500 ? 1 : w <= 700 ? 2 : w <= 1000 ? 3 : 5)
 
 type Bom = {
   soNoDoc: string; customerName?: string; customerPo?: string; vendorName?: string
@@ -145,8 +145,9 @@ export default function ScmRequestPage() {
   const [files, setFiles] = useState<File[]>([])   // attachments staged in the form → uploaded after create
   // MER Sample form: Brand / Supplier / Item desc (dropdown-search from BOM) + Qty + Remark → many lines.
   const [smpOpts, setSmpOpts] = useState<{ brands: string[]; suppliers: string[]; items: string[] }>({ brands: [], suppliers: [], items: [] })
-  const [smpNew, setSmpNew] = useState({ brand: "", supplier: "", item: "", qty: "", remark: "" })
-  const [smpLines, setSmpLines] = useState<{ brand: string; supplier: string; item: string; qty: string; remark: string }[]>([])
+  const [smpNew, setSmpNew] = useState({ brand: "", supplier: "", item: "", so: "", qty: "", remark: "" })
+  const [smpLines, setSmpLines] = useState<{ brand: string; supplier: string; item: string; so: string; qty: string; remark: string }[]>([])
+  const [smpSos, setSmpSos] = useState<string[]>([]) // SO options, filtered by the currently-picked brand/supplier/item
   const [smpPurchasers, setSmpPurchasers] = useState<{ name: string; email: string }[]>([]) // registered Purchasing users to alert
   const [smpPurEmail, setSmpPurEmail] = useState("")
   const [isTest, setIsTest] = useState(false)
@@ -256,6 +257,19 @@ export default function ScmRequestPage() {
       setSmpPurchasers(purs)
     }).catch(() => {})
   }, [bu, reqType])
+  // Sample SO dropdown — refetch (debounced) whenever the picked Brand / Supplier / Item changes,
+  // so the SO list only shows SOs that match the line being entered.
+  useEffect(() => {
+    if (reqType !== "SAMPLE") { setSmpSos([]); return }
+    const t = setTimeout(() => {
+      const qs = new URLSearchParams({ bu, sampleSo: "1" })
+      if (smpNew.brand.trim()) qs.set("brand", smpNew.brand.trim())
+      if (smpNew.supplier.trim()) qs.set("supplier", smpNew.supplier.trim())
+      if (smpNew.item.trim()) qs.set("item", smpNew.item.trim())
+      fetch(`/api/bom?${qs.toString()}`).then(r => r.json()).then(d => setSmpSos(d.sos || [])).catch(() => {})
+    }, 300)
+    return () => clearTimeout(t)
+  }, [bu, reqType, smpNew.brand, smpNew.supplier, smpNew.item])
   // Master Purchase cities (Country/Port/City) for the PC City dropdown.
   useEffect(() => {
     if (reqType !== "PURCHASING") return
@@ -555,7 +569,7 @@ export default function ScmRequestPage() {
       // Resolve the picked "Name · email@…" (or a free-typed email) to a plain purchaser email.
       const purEmail = (() => { const s = smpPurEmail.trim(); const m = s.match(/[\w.+-]+@nanyangtextile\.com/i); return m ? m[0].toLowerCase() : "" })()
       const sampleItems = smpLines.map(l => ({
-        soNoDoc: "", brand: l.brand || null, vendorName: l.supplier || null, itemName: l.item || null,
+        soNoDoc: l.so || "", brand: l.brand || null, vendorName: l.supplier || null, itemName: l.item || null,
         partDesc: l.remark || null, pullMaterialQty: l.qty ? Number(l.qty) : null,
       }))
       setSubmitting(true)
@@ -568,7 +582,7 @@ export default function ScmRequestPage() {
         if (!r.ok) return stop(d.error || "ส่ง Sample ไม่สำเร็จ")
         for (const f of files) { const fd = new FormData(); fd.append("file", f); fd.append("source", "MER"); await fetch(`/api/pull-material/${d.request.id}/attachments`, { method: "POST", body: fd }).catch(() => {}) }
         showToast(`✓ ส่ง Sample แล้ว: ${d.request?.documentNo}${files.length ? ` · แนบ ${files.length} ไฟล์` : ""}`, true)
-        setSmpLines([]); setSmpNew({ brand: "", supplier: "", item: "", qty: "", remark: "" }); setRemark(""); setFiles([]); setSmpPurEmail("")
+        setSmpLines([]); setSmpNew({ brand: "", supplier: "", item: "", so: "", qty: "", remark: "" }); setRemark(""); setFiles([]); setSmpPurEmail("")
       } finally { setSubmitting(false) }
       return
     }
@@ -719,7 +733,7 @@ export default function ScmRequestPage() {
           const lab = "text-[11px] font-semibold text-gray-600 block mb-1"
           const addLine = () => {
             if (!smpNew.brand.trim() && !smpNew.supplier.trim() && !smpNew.item.trim()) return showToast("⚠ กรอก Brand / Supplier / Item อย่างน้อย 1 ช่อง", false)
-            setSmpLines(p => [...p, { ...smpNew }]); setSmpNew({ brand: "", supplier: "", item: "", qty: "", remark: "" })
+            setSmpLines(p => [...p, { ...smpNew }]); setSmpNew({ brand: "", supplier: "", item: "", so: "", qty: "", remark: "" })
           }
           return (
         <div className="rounded-2xl p-5 space-y-4 shadow-sm" style={{ background: "linear-gradient(180deg,#fffdf8 0%,#ffffff 60%)", border: `1px solid ${GOLD_SOFT}55` }}>
@@ -729,25 +743,36 @@ export default function ScmRequestPage() {
               <div className="md:col-span-1"><label className={lab}>Brand</label><ComboBox value={smpNew.brand} onChange={v => setSmpNew(p => ({ ...p, brand: v }))} options={smpOpts.brands} placeholder="ค้นหา Brand" /></div>
               <div className="md:col-span-1"><label className={lab}>Supplier</label><ComboBox value={smpNew.supplier} onChange={v => setSmpNew(p => ({ ...p, supplier: v }))} options={smpOpts.suppliers} placeholder="ค้นหา Supplier" /></div>
               <div className="md:col-span-2"><label className={lab}>Item Desc</label><ComboBox value={smpNew.item} onChange={v => setSmpNew(p => ({ ...p, item: v }))} options={smpOpts.items} placeholder="ค้นหา Item" /></div>
-              <div><label className={lab}>Qty</label><input type="number" value={smpNew.qty} onChange={e => setSmpNew(p => ({ ...p, qty: e.target.value }))} placeholder="0" className={sInp} /></div>
-              <div className="flex gap-1.5">
+              <div className="md:col-span-1">
+                <label className={lab}>SO <span className="text-gray-300 font-normal">— ตาม Brand/Supplier/Item</span></label>
+                <ComboBox value={smpNew.so} onChange={v => setSmpNew(p => ({ ...p, so: v }))} options={smpSos} placeholder={smpSos.length ? "เลือก SO" : "ค้นหา SO"} />
+              </div>
+              <div className="md:col-span-1">
+                <label className={lab}>Qty</label>
+                <div className="relative">
+                  <input type="number" value={smpNew.qty} onChange={e => setSmpNew(p => ({ ...p, qty: e.target.value }))} placeholder="0" className={sInp + " pr-11"} />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400 pointer-events-none">PCS</span>
+                </div>
+              </div>
+              <div className="md:col-span-6 flex gap-1.5">
                 <input value={smpNew.remark} onChange={e => setSmpNew(p => ({ ...p, remark: e.target.value }))} placeholder="Remark" className={sInp} />
-                <button type="button" onClick={addLine} className="shrink-0 px-3 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>+ เพิ่ม</button>
+                <button type="button" onClick={addLine} className="shrink-0 px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>+ เพิ่ม</button>
               </div>
             </div>
           </div>
 
           <div className="border border-gray-100 rounded-xl overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500"><tr>{["Brand", "Supplier", "Item Desc", "Qty", "Remark", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
+              <thead className="bg-gray-50 text-gray-500"><tr>{["Brand", "Supplier", "Item Desc", "SO", "Qty", "Remark", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody className="divide-y divide-gray-50">
-                {smpLines.length === 0 ? <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">ยังไม่มีรายการ — กรอกด้านบนแล้วกด “+ เพิ่ม”</td></tr> :
+                {smpLines.length === 0 ? <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">ยังไม่มีรายการ — กรอกด้านบนแล้วกด “+ เพิ่ม”</td></tr> :
                   smpLines.map((l, i) => (
                     <tr key={i} className="hover:bg-gray-50">
                       <td className="px-3 py-1.5">{l.brand || "-"}</td>
                       <td className="px-3 py-1.5">{l.supplier || "-"}</td>
                       <td className="px-3 py-1.5 max-w-[260px] truncate" title={l.item}>{l.item || "-"}</td>
-                      <td className="px-3 py-1.5">{l.qty || "-"}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{l.so || "-"}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{l.qty ? `${l.qty} PCS` : "-"}</td>
                       <td className="px-3 py-1.5 text-gray-500">{l.remark || "-"}</td>
                       <td className="px-3 py-1.5 text-right"><button type="button" onClick={() => setSmpLines(p => p.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-600 px-1">✕</button></td>
                     </tr>

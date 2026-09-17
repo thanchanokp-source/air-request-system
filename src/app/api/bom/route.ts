@@ -73,6 +73,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(out)
   }
 
+  // Sample SO mode: distinct SO numbers, filtered by whatever Brand / Supplier / Item is already picked
+  // (so the SO dropdown stays in sync with the MER Sample line being entered).
+  if (sp.get("sampleSo")) {
+    if (!has("so_no_doc")) return NextResponse.json({ sos: [] })
+    const brand = (sp.get("brand") || "").trim()
+    const supplier = (sp.get("supplier") || "").trim()
+    const item = (sp.get("item") || "").trim()
+    const wh: string[] = ["so_no_doc IS NOT NULL AND so_no_doc <> ''"]; const pr: any[] = []
+    if (brand && has("brand_name")) { pr.push(brand); wh.push(`brand_name = $${pr.length}`) }
+    if (supplier && has("vend_name")) { pr.push(supplier); wh.push(`vend_name = $${pr.length}`) }
+    if (item) { const itemCol = has("item_name") ? "item_name" : has("part_desc") ? "part_desc" : null; if (itemCol) { pr.push(item); wh.push(`${itemCol} = $${pr.length}`) } }
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT DISTINCT so_no_doc AS v FROM ${SRC} WHERE ${wh.join(" AND ")} ORDER BY so_no_doc DESC LIMIT 500`, ...pr)
+      return NextResponse.json({ sos: rows.map(r => r.v) })
+    } catch (e: any) { return NextResponse.json({ sos: [], error: e?.message || "sampleSo failed" }) }
+  }
+
   // Vendor address mode: look up dc_vendor by vendor_name (CONTAIN match) and concat its address
   // (address_line1..4 + city + county + country) → prefill the Pickup/Vendor address on the PC form.
   const vendorAddr = (sp.get("vendorAddr") || "").trim()

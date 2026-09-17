@@ -95,7 +95,7 @@ export default function Page() {
     const d0 = its.find((i: any) => i.airFreightCost != null) || its[0] || {}
     const est = its.reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
     const po = [...new Set(its.map((i: any) => i.poNoDoc).filter(Boolean))].join(", ")
-    return [r.documentNo, r.bu, reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : reqTypeOf(r) === "SAMPLE" ? "Sample" : "SCM", r.requesterName || "", po,
+    return [r.documentNo, r.bu, reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : reqTypeOf(r) === "SAMPLE" ? "Sample" : "SCM", displayOf(r) || "", po,
       d0.country || "", d0.port || d0.seaPort || "", d0.incoterm || "", d0.weight != null ? Number(d0.weight) : "",
       r.factory || d0.factory || "", dstr(d0.etc), est ? Math.round(est) : "",
       r.mawbNo || "", r.hawbNo || "", dstr(r.flightEtd), dstr(r.flightEta),
@@ -325,7 +325,7 @@ export default function Page() {
                         <td className="px-2 py-1.5 font-semibold text-gray-800">{r.documentNo}</td>
                         <td className="px-2 py-1.5">{r.bu}</td>
                         <td className="px-2 py-1.5">{reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : reqTypeOf(r) === "SAMPLE" ? "Sample" : "SCM"}</td>
-                        <td className="px-2 py-1.5">{r.requesterName || "-"}</td>
+                        <td className="px-2 py-1.5">{displayOf(r) || "-"}</td>
                         <td className="px-2 py-1.5" title={po}>{po || "-"}</td>
                         <td className="px-2 py-1.5">{d0.country || "-"}</td>
                         <td className="px-2 py-1.5">{d0.port || d0.seaPort || "-"}</td>
