@@ -194,8 +194,9 @@ export default function PurchasePage() {
       // the air decision (SCM or PC). LG only enters ACTUAL later, after approval.
       // A RETURNED doc (PC_REVISE) goes STRAIGHT back to LG (APPROVED) — no re-approval — per the flow.
       // SAMPLE (MER) auto-approves after Purchase fills → straight to LG (booking + actual). No approval chain.
+      const isSample = rq.requestType === "SAMPLE" || String(rq.documentNo || "").startsWith("MER_")
       const next = rq.status === "PC_REVISE" ? "APPROVED"
-        : rq.requestType === "SAMPLE" ? "APPROVED"
+        : isSample ? "APPROVED"
         : rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION"
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -356,14 +357,21 @@ export default function PurchasePage() {
                 <div className="font-bold text-lg text-gray-900">{openReq.documentNo}</div>
                 <div className="text-xs text-gray-400">{openReq.requesterName} · {openReq.items.length} items</div>
                 <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] text-gray-500 font-medium">Mode:</span>
-                  {(["REGULAR", "IRREGULAR"] as const).map(m => (
-                    <button key={m} onClick={() => setDocMode(openReq.id, m)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${openReq.mode === m ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
-                      style={openReq.mode === m ? { background: m === "REGULAR" ? "#15803d" : "#b45309" } : undefined}>
-                      {m === "REGULAR" ? "🟢 Regular" : "🟠 Irregular"}
-                    </button>
-                  ))}
+                  {/* SAMPLE (MER) docs auto-approve after Purchase saves — no Regular/Irregular choice. */}
+                  {(openReq.requestType === "SAMPLE" || String(openReq.documentNo || "").startsWith("MER_")) ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-white" style={{ background: "#6b1a1a" }}>✦ Sample (MER) · auto-approve</span>
+                  ) : (
+                    <>
+                      <span className="text-[11px] text-gray-500 font-medium">Mode:</span>
+                      {(["REGULAR", "IRREGULAR"] as const).map(m => (
+                        <button key={m} onClick={() => setDocMode(openReq.id, m)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${openReq.mode === m ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                          style={openReq.mode === m ? { background: m === "REGULAR" ? "#15803d" : "#b45309" } : undefined}>
+                          {m === "REGULAR" ? "🟢 Regular" : "🟠 Irregular"}
+                        </button>
+                      ))}
+                    </>
+                  )}
                   <span className="text-[11px] text-gray-500 font-medium ml-2">Factory:</span>
                   <select value={factoryDefault(openReq)} onChange={e => setFactory(openReq.id, e.target.value)}
                     className="border border-gray-200 rounded-lg px-2 py-1 text-[11px] font-bold bg-white focus:outline-none focus:ring-2 focus:ring-red-200">
