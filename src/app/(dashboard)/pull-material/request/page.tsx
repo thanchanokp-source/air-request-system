@@ -64,9 +64,10 @@ export default function ScmRequestPage() {
   // requestType decides the approval TAIL (SCM → VP SCM → President · PC → DVM Pur → VP Pur).
   // Real users: derived from role (no toggle). Admin: a toggle to preview BOTH request UIs.
   const isRealAdmin = roles.includes("ADMIN")
-  // MER_PULL keys a SAMPLE (like SCM: BOM picker → brand/supplier/item/remark), auto-approves after Purchase.
+  // The whole Merchandise family (MER_* / DVM_MER* / VP_MER*) keys a SAMPLE — auto-approves after Purchase.
+  const isMerUser = roles.some((r: string) => /^(MER_|DVM_MER|VP_MER)/.test(r))
   const derivedReqType: "SCM" | "PURCHASING" | "SAMPLE" =
-    roles.includes("MER_PULL") && !roles.includes("SCM_PULL") && !roles.includes("PURCHASING") ? "SAMPLE"
+    isMerUser && !roles.includes("SCM_PULL") && !roles.includes("PURCHASING") ? "SAMPLE"
     : roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PURCHASING" : "SCM"
   const [adminReqType, setAdminReqType] = useState<"SCM" | "PURCHASING" | "SAMPLE">("SCM")
   const reqType: "SCM" | "PURCHASING" | "SAMPLE" = isRealAdmin ? adminReqType : derivedReqType

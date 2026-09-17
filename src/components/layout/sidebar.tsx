@@ -21,11 +21,14 @@ const claimNav = [
   { href: "/master/delay-code", label: "MASTER DELAY CODE", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "SCM_USER"], masterEdit: true },
   { href: "/settings", label: "SETTINGS", adminOnly: true },
 ]
+// Whole Merchandise family (any BU + DVM/DPM merch) — they key Sample requests in RM REQ AIR.
+const MER_GROUP = ["MER_PULL", "MER_USER", "MER_GW", "MER_EA", "MER_TRM", "DVM_MER", "DVM_MER_EA", "DVM_MER_TRM", "VP_MER", "VP_MER_EA", "VP_MER_TRM", "VP_MER_GW"]
+
 const pullNav = [
-  { href: "/pull-material/dashboard", label: "DASHBOARD", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT", "MER_PULL"] },
-  { href: "/pull-material/request", label: "NEW REQUEST", roles: ["ADMIN", "SCM_PULL", "PURCHASING", "MER_PULL"] },
-  { href: "/pull-material/tracking", label: "TRACKING DOCUMENT", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "MER_PULL"] },
-  { href: "/pull-material/files", label: "ATTACH FILES", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "MER_PULL"] },
+  { href: "/pull-material/dashboard", label: "DASHBOARD", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT", ...MER_GROUP] },
+  { href: "/pull-material/request", label: "NEW REQUEST", roles: ["ADMIN", "SCM_PULL", "PURCHASING", ...MER_GROUP] },
+  { href: "/pull-material/tracking", label: "TRACKING DOCUMENT", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", ...MER_GROUP] },
+  { href: "/pull-material/files", label: "ATTACH FILES", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", ...MER_GROUP] },
   { href: "/pull-material/purchase", label: "รอจัดซื้อกรอก", roles: ["ADMIN", "PURCHASING"] },
   { href: "/pull-material/revise-stats", label: "REVISE STATS", roles: ["ADMIN", "PURCHASING", "DVM_PUR", "VP_PUR"] },
   { href: "/pull-material/approval", label: "APPROVAL", roles: ["ADMIN", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT", "DVM_PUR", "VP_PUR"] },
@@ -60,7 +63,7 @@ export default function Sidebar({ role, onClose }: { role: string; onClose?: () 
   const allRoles = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const PULL_ROLES = ["PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM", "MER_PULL"] // pure Pull RM roles
   // + air approvers who ALSO act in Pull RM (they keep Claim Air too, so not "pure pull").
-  const PULL_TAB_ROLES = [...PULL_ROLES, "VP_SCM", "PULL_PRESIDENT"]
+  const PULL_TAB_ROLES = [...PULL_ROLES, "VP_SCM", "PULL_PRESIDENT", ...MER_GROUP]
   const hasPull = isAdmin || allRoles.some((r: string) => PULL_TAB_ROLES.includes(r))
   // Pure Pull RM user (no air-side role) → hide the Claim Air family entirely.
   const isPurePull = !isAdmin && allRoles.length > 0 && allRoles.every((r: string) => PULL_ROLES.includes(r))
