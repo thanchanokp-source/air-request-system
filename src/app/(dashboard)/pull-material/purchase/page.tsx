@@ -606,9 +606,6 @@ export default function PurchasePage() {
                       <div className="min-w-0">
                         <div className="font-semibold text-gray-900 flex items-center gap-2 flex-wrap">{rq.documentNo}
                           {rq.status === "PC_REVISE" && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">↩️ REVISE #{rq.reviseCount || 1}</span>}
-                          {rq.mode === "REGULAR"
-                            ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">🟢 REGULAR</span>
-                            : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">🟠 IRREGULAR</span>}
                           {isPool && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">👥 ยังไม่มีเจ้าของ</span>}
                         </div>
                         {brands.length > 0 && <div className="text-[11px] font-semibold mt-0.5" style={{ color: MAROON }}>🏷️ {brands.join(", ")}</div>}
