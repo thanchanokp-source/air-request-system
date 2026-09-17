@@ -13,7 +13,7 @@ const GOLD_SOFT = "#c9a94e"
 const BUS = ["NYG", "EA", "TRM", "GW"]
 // Landed-cost constants (Thailand-side, baht) — converted to USD via EXCHANGE_RATE at compute time.
 const SHIP_CLEAR_BAHT = 1000, LOCAL_AIR_BAHT_KG = 2, STORE_AIR_BAHT_KG = 4.5, STORE_SEA_BAHT = 1500, LOCAL_SEA_BAHT_CBM = 2500
-// CBM by shipment weight (sea): <500kg=1, ≤700=2, ≤1000=3, >1000=4.
+// CBM by shipment weight (sea): <500kg=1, ≤700=2, ≤1000=3, >1000=5.
 const cbmOf = (w: number) => (w < 500 ? 1 : w <= 700 ? 2 : w <= 1000 ? 3 : 5)
 
 type Bom = {
