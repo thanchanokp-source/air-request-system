@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { MAROON, BUS, STATUS_LABEL, buColor, fmtDate, fmt } from "../_StageWork"
 import { pcApprover } from "@/lib/pull-approvers"
 import { pullReqType } from "@/lib/pull-reqtype"
+import { buildRequesters } from "@/lib/pull-requesters"
 import { MultiSelect } from "@/components/ui/multi-select"
 
 // Pipeline steps branch by request type. Each status maps to the CURRENT (in-progress) step index;
@@ -170,18 +171,15 @@ export default function Page() {
   const scopeReqs = reqs.filter(rq => effType === "ALL" || pullReqType(rq) === effType)
   const docNos = [...new Set(scopeReqs.map(r => r.documentNo).filter(Boolean))].sort()
   const pos = [...new Set(scopeReqs.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort()
-  // Requester filter: normalise the raw requesterName (some docs store a full email) to the local-part,
-  // then de-dupe case-insensitively so the dropdown shows one clean name per person, not raw emails.
-  const rname = (s: any) => String(s || "").split("@")[0].trim()
-  const reqMap = new Map<string, string>()
-  scopeReqs.forEach(r => { const d = rname(r.requesterName); if (d && !reqMap.has(d.toLowerCase())) reqMap.set(d.toLowerCase(), d) })
-  const requesters = [...reqMap.values()].sort()
-  const reqFLower = reqF.map(x => x.toLowerCase())
+  // Requester filter + display: buildRequesters strips the @domain, MERGES the same person even when the
+  // name was stored inconsistently ("sudarat" vs "sudarat.r" vs a full email), and picks the cleanest name.
+  // One source of truth so the list, the filter and the card all show ONE consistent name per person.
+  const { options: requesters, displayOf } = buildRequesters(scopeReqs)
   const shown = scopeReqs.filter(rq => {
     if (statusF && rq.status !== statusF) return false
     if (docF.length && !docF.includes(rq.documentNo)) return false
     if (poF.length && !(rq.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
-    if (reqF.length && !reqFLower.includes(rname(rq.requesterName).toLowerCase())) return false
+    if (reqF.length && !reqF.includes(displayOf(rq))) return false
     return true
   })
 
@@ -246,7 +244,7 @@ export default function Page() {
                     <tr key={rq.id} className="hover:bg-gray-50">
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         <div className="font-semibold text-blue-700">{rq.documentNo}</div>
-                        <div className="text-[11px] text-gray-400">{rq.requesterName}</div>
+                        <div className="text-[11px] text-gray-400">{displayOf(rq)}</div>
                       </td>
                       <td className="px-4 py-2.5 text-gray-600 max-w-[220px] truncate" title={rowPos.join(", ")}>{rowPos.join(", ") || "-"}</td>
                       <td className="px-4 py-3">
@@ -347,7 +345,7 @@ export default function Page() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setViewRq(null)}>
             <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-3 border-b">
-                <div><span className="font-bold text-lg text-gray-900">{rq.documentNo}</span> <span className="text-xs text-gray-400">· {rq.requesterName} · {pullStatus(rq)}</span></div>
+                <div><span className="font-bold text-lg text-gray-900">{rq.documentNo}</span> <span className="text-xs text-gray-400">· {displayOf(rq)} · {pullStatus(rq)}</span></div>
                 <button onClick={() => setViewRq(null)} className="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ปิด</button>
               </div>
               <div className="overflow-y-auto p-5">
@@ -356,7 +354,7 @@ export default function Page() {
                 <div className="bg-white rounded-2xl border border-gray-100 p-4">
                   <div className="text-sm font-bold text-gray-800 mb-3">📄 Document</div>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                    <Info label="BU" value={rq.bu} /><Info label="Requester" value={rq.requesterName} />
+                    <Info label="BU" value={rq.bu} /><Info label="Requester" value={displayOf(rq)} />
                     {rq.remark && <div className="col-span-2"><Info label="Remark" value={rq.remark} /></div>}
                   </div>
                   {(rq.attachments || []).length > 0 && (
@@ -396,7 +394,7 @@ export default function Page() {
                     <div className="space-y-0">
                       {vSteps.map((s, i) => {
                         const sDone = i < vCur, sNow = i === vCur
-                        const who = i === 0 ? rq.requesterName : (sNow && vIsPC && rq.status === "PENDING_VP_PUR") ? (pcApprover(rq.bu)?.split("@")[0] || "") : ""
+                        const who = i === 0 ? displayOf(rq) : (sNow && vIsPC && rq.status === "PENDING_VP_PUR") ? (pcApprover(rq.bu)?.split("@")[0] || "") : ""
                         return (
                           <div key={s} className="flex gap-3">
                             <div className="flex flex-col items-center">
