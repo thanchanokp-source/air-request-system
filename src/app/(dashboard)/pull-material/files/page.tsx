@@ -19,7 +19,8 @@ export default function Page() {
   const isAdmin = roles.includes("ADMIN")
   const isPc = roles.includes("PURCHASING")
   const isLg = roles.includes("LOGISTICS_IMPORT")
-  const canUse = isAdmin || isPc || isLg || roles.includes("SCM_PULL")
+  const isMer = roles.some((r: string) => /^(MER_|DVM_MER|VP_MER)/.test(r))
+  const canUse = isAdmin || isPc || isLg || roles.includes("SCM_PULL") || isMer
   const userId = (session?.user as any)?.id
 
   const [bu, setBu] = useState("NYG")

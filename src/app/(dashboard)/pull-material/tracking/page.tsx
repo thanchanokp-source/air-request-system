@@ -39,7 +39,8 @@ export default function Page() {
   const isScmPull = roles.includes("SCM_PULL")
   const isPurchasing = roles.includes("PURCHASING")
   const isLgImport = roles.includes("LOGISTICS_IMPORT")
-  const canUse = isAdmin || isScmPull || isPurchasing || isLgImport
+  const isMer = roles.some((r: string) => /^(MER_|DVM_MER|VP_MER)/.test(r))
+  const canUse = isAdmin || isScmPull || isPurchasing || isLgImport || isMer
   // Who may see BOTH types (with the tab): admin, LG (handles both), or a person holding both roles.
   // A pure SCM / pure Purchasing user sees ONLY their own request type.
   const canSeeBoth = isAdmin || isLgImport || (isScmPull && isPurchasing)
