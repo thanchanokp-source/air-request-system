@@ -37,7 +37,27 @@ export default function PurchasePage() {
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
   const [pcTab, setPcTab] = useState<"queue" | "revise" | "stats">("queue")
+  const [srcTab, setSrcTab] = useState<"ALL" | "SCM" | "MER">("ALL") // SCM-origin vs MER-origin work split
   const [uploadingPL, setUploadingPL] = useState<string | null>(null)
+
+  // ── Own-docs scoping: a Purchasing user only sees documents assigned to THEM (admin sees all). ──
+  const myEmail = String((session?.user as any)?.email || "").toLowerCase()
+  // POUSERNAME ("JUTHALAK POUKNOI") → login email (mirror of pull-notify.poUsernameToEmail; client-safe copy).
+  const poUserEmail = (name: any): string | null => {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean)
+    if (!parts.length) return null
+    const first = parts[0].toLowerCase().replace(/[^a-z0-9]/g, ""); if (!first) return null
+    const initial = parts.length > 1 ? parts[1][0].toLowerCase().replace(/[^a-z0-9]/g, "") : ""
+    return `${first}${initial ? "." + initial : ""}@nanyangtextile.com`
+  }
+  const isMerDoc = (rq: any) => rq.requestType === "SAMPLE" || String(rq.documentNo || "").startsWith("MER_")
+  // A doc is "mine" if its purchaserEmail is me, or (when unset) any item's PO-owner resolves to my email.
+  const ownsDoc = (rq: any) => {
+    if (isAdmin) return true
+    if (!myEmail) return false
+    if (rq.purchaserEmail) return String(rq.purchaserEmail).toLowerCase() === myEmail
+    return (rq.items || []).some((i: any) => poUserEmail(i.poUsername) === myEmail)
+  }
 
   const load = async () => {
     setLoading(true)
@@ -514,7 +534,11 @@ export default function PurchasePage() {
         ) : (() => {
           const term = soQ.trim().toLowerCase()
           // One list — both new work (PENDING_PURCHASING) and returned docs (PC_REVISE, shown with a REVISE badge).
-          const base = reqs.filter(rq => rq.status === "PENDING_PURCHASING" || rq.status === "PC_REVISE")
+          // Scoped to the logged-in purchaser's own documents (admin sees all).
+          const owned = reqs.filter(rq => (rq.status === "PENDING_PURCHASING" || rq.status === "PC_REVISE") && ownsDoc(rq))
+          const merCount = owned.filter(isMerDoc).length, scmCount = owned.length - merCount
+          // Split by source: SCM-origin vs MER-origin.
+          const base = owned.filter(rq => srcTab === "ALL" ? true : srcTab === "MER" ? isMerDoc(rq) : !isMerDoc(rq))
           const { options: reqOptions, displayOf } = buildRequesters(base)
           const docNos = [...new Set(base.map(r => r.documentNo).filter(Boolean))].sort()
           const pos = [...new Set(base.flatMap(r => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort()
@@ -527,10 +551,18 @@ export default function PurchasePage() {
           })
           return (
             <div className="space-y-3">
+              {/* SCM / MER work split */}
+              <div className="flex gap-1.5">
+                {([["ALL", `ทั้งหมด (${owned.length})`], ["SCM", `SCM (${scmCount})`], ["MER", `MER (${merCount})`]] as const).map(([k, label]) => (
+                  <button key={k} onClick={() => { setSrcTab(k); setDocF([]); setPoF([]); setReqF([]) }}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition ${srcTab === k ? "text-white border-transparent shadow-sm" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                    style={srcTab === k ? { background: MAROON } : undefined}>{label}</button>
+                ))}
+              </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="w-48"><MultiSelect label="Doc No…" options={docNos} value={docF} onChange={setDocF} /></div>
                 <div className="w-48"><MultiSelect label="PO…" options={pos} value={poF} onChange={setPoF} /></div>
-                <div className="w-48"><MultiSelect label="จัดซื้อ…" options={reqOptions} value={reqF} onChange={setReqF} /></div>
+                <div className="w-48"><MultiSelect label="ผู้ขอ…" options={reqOptions} value={reqF} onChange={setReqF} /></div>
                 <div className="relative w-56">
                   <input value={soQ} onChange={e => setSoQ(e.target.value)} placeholder="🔎 ค้นหา SO / เลขเอกสาร…"
                     className="w-full border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
