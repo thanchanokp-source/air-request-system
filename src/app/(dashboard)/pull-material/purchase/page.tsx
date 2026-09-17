@@ -87,20 +87,20 @@ export default function PurchasePage() {
     await fetch(`/api/pull-material/${rqId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: m }) }).catch(() => {})
   }
 
-  // Purchase attaches the packing list (and any supporting file) → sent along to LG.
-  const uploadPackingList = async (rq: any, files: FileList) => {
+  // Purchase attaches a supporting file (Packing List / INV) under its category → sent along to LG.
+  const uploadDoc = async (rq: any, files: FileList, category: "PACKING" | "INV", label: string) => {
     setUploadingPL(rq.id)
     try {
       let firstName = ""
       for (const f of Array.from(files)) {
         if (!firstName) firstName = f.name
-        const fd = new FormData(); fd.append("file", f)
+        const fd = new FormData(); fd.append("file", f); fd.append("category", category); fd.append("source", "PC")
         await fetch(`/api/pull-material/${rq.id}/attachments`, { method: "POST", body: fd }).catch(() => {})
       }
       // Record the packing-list filename (informational, shown to LG).
-      if (firstName) await fetch(`/api/pull-material/${rq.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ packingListName: firstName }) }).catch(() => {})
+      if (category === "PACKING" && firstName) await fetch(`/api/pull-material/${rq.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ packingListName: firstName }) }).catch(() => {})
       await load()
-      alert("📎 แนบ Packing List แล้ว")
+      alert(`📎 แนบ ${label} แล้ว`)
     } finally { setUploadingPL(null) }
   }
 
@@ -340,7 +340,7 @@ export default function PurchasePage() {
 
   return (
     <div className="p-5 md:p-8 max-w-[1000px] mx-auto space-y-5">
-      <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>รอจัดซื้อกรอก <span className="text-base font-normal text-gray-400">(งานจาก SCM)</span></h1></div>
+      <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>รอจัดซื้อกรอก <span className="text-base font-normal text-gray-400">(งานจาก {openReq ? ((openReq.requestType === "SAMPLE" || String(openReq.documentNo || "").startsWith("MER_")) ? "MER" : "SCM") : "SCM / MER"})</span></h1></div>
 
       {(
       <>
@@ -385,7 +385,12 @@ export default function PurchasePage() {
                   <label className="px-3 py-2.5 rounded-xl text-sm font-medium border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 cursor-pointer">
                     {uploadingPL === openReq.id ? "กำลังแนบ…" : "📎 แนบ Packing List"}
                     <input type="file" multiple className="hidden" disabled={uploadingPL === openReq.id}
-                      onChange={e => { const fs = e.target.files; e.target.value = ""; if (fs?.length) uploadPackingList(openReq, fs) }} />
+                      onChange={e => { const fs = e.target.files; e.target.value = ""; if (fs?.length) uploadDoc(openReq, fs, "PACKING", "Packing List") }} />
+                  </label>
+                  <label className="px-3 py-2.5 rounded-xl text-sm font-medium border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 cursor-pointer">
+                    {uploadingPL === openReq.id ? "กำลังแนบ…" : "🧾 แนบ INV"}
+                    <input type="file" multiple className="hidden" disabled={uploadingPL === openReq.id}
+                      onChange={e => { const fs = e.target.files; e.target.value = ""; if (fs?.length) uploadDoc(openReq, fs, "INV", "INV") }} />
                   </label>
                   <button onClick={() => save(openReq)} disabled={busy === openReq.id || !allReady}
                     className="px-5 py-2.5 rounded-xl text-white text-sm font-semibold shadow-sm hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition" style={{ background: MAROON }}>
