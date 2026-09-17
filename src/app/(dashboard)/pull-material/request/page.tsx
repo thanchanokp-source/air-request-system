@@ -60,14 +60,14 @@ export default function ScmRequestPage() {
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
   const canScm = roles.includes("ADMIN") || roles.includes("SCM_PULL")
   const canPc = roles.includes("ADMIN") || roles.includes("PURCHASING")
-  const isAdmin = canScm || canPc // gate: SCM_PULL / PURCHASING / ADMIN can create a request
+  const canMer = roles.some((r: string) => /^(MER_|DVM_MER|VP_MER)/.test(r)) // whole Merchandise family → Sample
+  const isAdmin = canScm || canPc || canMer // gate: SCM_PULL / PURCHASING / MER / ADMIN can create a request
   // requestType decides the approval TAIL (SCM → VP SCM → President · PC → DVM Pur → VP Pur).
   // Real users: derived from role (no toggle). Admin: a toggle to preview BOTH request UIs.
   const isRealAdmin = roles.includes("ADMIN")
   // The whole Merchandise family (MER_* / DVM_MER* / VP_MER*) keys a SAMPLE — auto-approves after Purchase.
-  const isMerUser = roles.some((r: string) => /^(MER_|DVM_MER|VP_MER)/.test(r))
   const derivedReqType: "SCM" | "PURCHASING" | "SAMPLE" =
-    isMerUser && !roles.includes("SCM_PULL") && !roles.includes("PURCHASING") ? "SAMPLE"
+    canMer && !roles.includes("SCM_PULL") && !roles.includes("PURCHASING") ? "SAMPLE"
     : roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PURCHASING" : "SCM"
   const [adminReqType, setAdminReqType] = useState<"SCM" | "PURCHASING" | "SAMPLE">("SCM")
   const reqType: "SCM" | "PURCHASING" | "SAMPLE" = isRealAdmin ? adminReqType : derivedReqType
