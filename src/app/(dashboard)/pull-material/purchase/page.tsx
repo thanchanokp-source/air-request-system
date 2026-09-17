@@ -613,7 +613,12 @@ export default function PurchasePage() {
                         {rq.status === "PC_REVISE" && rq.lastReturnReason && <div className="text-[11px] text-red-600 mt-1">เหตุผลตีกลับ: {rq.lastReturnReason}</div>}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {/* Forward to another purchaser */}
+                        <button type="button" onClick={e => { e.stopPropagation(); setOpenId(rq.id) }}
+                          className="px-3 py-1.5 rounded-lg text-[11px] font-bold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">
+                          เปิด (Open)
+                        </button>
+                        {/* Forward — only for POOL docs (no PO owner); those alert all purchasing, so anyone can hand it off. */}
+                        {isPool && (
                         <div className="relative">
                           <button type="button" disabled={fwBusy === rq.id}
                             onClick={e => { e.stopPropagation(); setFwId(fwId === rq.id ? null : rq.id); setFwQ("") }}
@@ -638,6 +643,7 @@ export default function PurchasePage() {
                             </div>
                           )}
                         </div>
+                        )}
                         <span className="text-gray-300 text-lg">›</span>
                       </div>
                     </div>
