@@ -2273,6 +2273,12 @@ export default function RequestDetailPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700">← Back</button>
         <h1 className="text-xl font-bold text-gray-900">{req.documentNo}</h1>
+        {/* Back-to-SCM / returned reason — surfaced doc-level so SCM sees WHY it came back, on any section. */}
+        {(() => {
+          const reasons = [...new Set((req.items || []).filter((i: any) => i.itemComment && i.itemStatus === "PENDING").map((i: any) => String(i.itemComment).trim()).filter(Boolean))]
+          if (!reasons.length) return null
+          return <div className="w-full rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-800"><b>↩ ส่งกลับ — เหตุผล:</b> {reasons.join(" · ")}</div>
+        })()}
         {req.isTest && (
           <span className="text-xs bg-amber-100 border border-amber-300 text-amber-800 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">🧪 TEST — email goes to admin</span>
         )}
