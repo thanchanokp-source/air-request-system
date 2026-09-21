@@ -1251,7 +1251,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     })
     const newStatus = await recalcDocStatus(id)
-    await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
+    // A NYG doc wrongly imported as NYK Direct (rode the GW claim engine) is being sent back to SCM to
+    // be redone as a proper NYG claim → clear nykDirect so it no longer routes through the GW machinery.
+    const clearNyk = request.bu !== "GW" && !!(request as any).nykDirect
+    await prisma.airRequest.update({ where: { id }, data: { status: newStatus, ...(clearNyk ? { nykDirect: false } : {}) } })
     // Alert SCM (re-select claim dept). PENDING_SCM notify targets the SCM user.
     if (newStatus === "PENDING_SCM") await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
     return NextResponse.json(await getUpdated())
@@ -1333,7 +1336,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // GW claim dept rejects → send SO back to MER (GW) to re-select the claim dept.
   if (action === "claim_back_to_mer_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG", "CLAIM_NEXT_APPROVER"].includes(userRole)) {
-    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    // NYK Direct imports ride the GW claim machinery even though bu=NYG → allow them past the GW guard.
+    if (request.bu !== "GW" && !(request as any).nykDirect) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(request.status)) return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     if (!comment) return NextResponse.json({ error: "Please provide a reason" }, { status: 400 })
@@ -1444,7 +1448,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // doesn't fire an email + doc-status recalc per SO (that made 30+ SO very slow).
   // DB writes per item, then a single recalc + single notify at the end.
   if (action === "batch_approve_claim_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
-    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    // NYK Direct imports ride the GW claim machinery even though bu=NYG → allow them past the GW guard.
+    if (request.bu !== "GW" && !(request as any).nykDirect) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(request.status)) return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     if (!Array.isArray(itemIds) || itemIds.length === 0) return NextResponse.json({ error: "itemIds required" }, { status: 400 })
     const crNo = (request as any).crNo || null
@@ -1514,7 +1519,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (action === "approve_so_claim_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
-    if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    // NYK Direct imports ride the GW claim machinery even though bu=NYG → allow them past the GW guard.
+    if (request.bu !== "GW" && !(request as any).nykDirect) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(request.status)) return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
     if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
     const itemData = await prisma.airRequestItem.findUnique({ where: { id: itemId } })

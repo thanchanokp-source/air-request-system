@@ -878,6 +878,9 @@ export default function RequestDetailPage() {
   // for them regardless of the doc's tagged BU. They only ever sit at the NYK claim stage, so the
   // other GW-gated screens (MER/DPM/GM/President) never trigger for them.
   const isGWRequest = req?.bu === "GW" || !!req?.nykDirect
+  // Claim-reject routing follows the TRUE BU (not nykDirect): a NYG doc — even a NYK-Direct one riding the
+  // GW claim engine — must reject "Back to SCM" (NYG), never "Back to Merchandise" (GW/MER).
+  const claimBackGw = req?.bu === "GW"
   // Procurement's special "approve-self or forward-to-boss" flow belonged to the
   // manual-forward model. NYG now uses the priority model → Procurement approves like
   // any other dept (VP_PROCUREMENT is the next priority group), so disable it.
@@ -4471,7 +4474,7 @@ export default function RequestDetailPage() {
               </button>
               <button onClick={() => { setBackReason(""); setBackModalOpen(true) }} disabled={claimFwdSaving}
                 className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-40">
-                ↩ {isGWRequest ? "Back to Merchandise" : (role === "CLAIM_NEXT_APPROVER" ? "Back to previous" : "Back to SCM")}{claimSelIds.length ? ` (${claimSelIds.length})` : ""}
+                ↩ {claimBackGw ? "Back to Merchandise" : (role === "CLAIM_NEXT_APPROVER" ? "Back to previous" : "Back to SCM")}{claimSelIds.length ? ` (${claimSelIds.length})` : ""}
               </button>
             </div>
           </div>
@@ -4804,7 +4807,7 @@ export default function RequestDetailPage() {
                     })
                     if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); ok = false }
                   } else {
-                    const backAction = isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so"
+                    const backAction = claimBackGw ? "claim_back_to_mer_gw" : "back_to_scm_so"
                     for (const iid of claimActIds) {
                       const res = await fetch(`/api/requests/${id}/approve`, {
                         method: "POST", headers: { "Content-Type": "application/json" },
@@ -4913,7 +4916,7 @@ export default function RequestDetailPage() {
                       if (reason == null || !reason.trim()) return
                       const ids = [...dvmSelected]
                       setSubmitting("_batch")
-                      const backAction = isGwClaimP1Role ? (isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so") : "reject_so"
+                      const backAction = isGwClaimP1Role ? (claimBackGw ? "claim_back_to_mer_gw" : "back_to_scm_so") : "reject_so"
                       let ok = true
                       for (const itemId of ids) {
                         const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" },
@@ -5302,7 +5305,7 @@ export default function RequestDetailPage() {
                           setSubmitting(item.id)
                           const res = await fetch(`/api/requests/${id}/approve`, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: isGwClaimP1Role ? (isGWRequest ? "claim_back_to_mer_gw" : "back_to_scm_so") : "reject_so", itemId: item.id, comment: rejectSoComment })
+                            body: JSON.stringify({ action: isGwClaimP1Role ? (claimBackGw ? "claim_back_to_mer_gw" : "back_to_scm_so") : "reject_so", itemId: item.id, comment: rejectSoComment })
                           })
                           if (res.ok) { window.location.href = "/requests"; return } else { const err = await res.json(); alert(err.error || "Error") }
                           setSubmitting(null); setRejectingSo(null); setRejectSoComment("")
