@@ -525,6 +525,13 @@ export default function ApprovalsPage() {
                     : <StatusBadge status={req.status} bu={req.bu} />}
                   <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">EST {fmtNum(estTotal)} {cur}</span>
                   <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">ACT {fmtNum(actTotal)} {cur}</span>
+                  {/* Back-to-SCM / returned reason — shown on the card so SCM sees WHY it came back without opening. */}
+                  {(() => {
+                    const reasons = [...new Set((req.items || []).filter((i: any) => i.itemComment && i.itemStatus === "PENDING").map((i: any) => String(i.itemComment).trim()).filter(Boolean))]
+                    if (!reasons.length) return null
+                    const txt = reasons.join(" · ")
+                    return <span className="text-xs bg-orange-50 text-orange-800 border border-orange-300 px-2 py-0.5 rounded-full font-medium max-w-[280px] truncate" title={txt}>↩ ส่งกลับ: {txt}</span>
+                  })()}
                   {Object.entries(deptSums).map(([dept, sum]) => (
                     <span key={dept} className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">{dept} {fmtNum(sum)} {cur}</span>
                   ))}
