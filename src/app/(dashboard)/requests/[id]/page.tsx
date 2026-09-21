@@ -4778,7 +4778,7 @@ export default function RequestDetailPage() {
               <div className="w-9 h-9 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-lg">↩</div>
               <div>
                 <h3 className="text-base font-bold text-gray-800">
-                  {(!isGWRequest && role === "CLAIM_NEXT_APPROVER") ? "Send back to previous approver" : `Send back to ${isGWRequest ? "Merchandise" : "SCM"}`}
+                  {(!claimBackGw && role === "CLAIM_NEXT_APPROVER") ? "Send back to previous approver" : `Send back to ${claimBackGw ? "Merchandise" : "SCM"}`}
                 </h3>
                 <p className="text-xs text-gray-400">
                   {claimActIds.length} SO · {(!isGWRequest && role === "CLAIM_NEXT_APPROVER") ? "returns to the previous claim position" : "will re-assign the claim department"}
@@ -4912,7 +4912,7 @@ export default function RequestDetailPage() {
                   </button>
                   <button disabled={submitting !== null}
                     onClick={async () => {
-                      const reason = window.prompt(`Reason for sending ${dvmSelected.size} SO back${isGWRequest ? " to Merchandise" : " to SCM"}:`)
+                      const reason = window.prompt(`Reason for sending ${dvmSelected.size} SO back${claimBackGw ? " to Merchandise" : " to SCM"}:`)
                       if (reason == null || !reason.trim()) return
                       const ids = [...dvmSelected]
                       setSubmitting("_batch")
@@ -4927,7 +4927,7 @@ export default function RequestDetailPage() {
                       setDvmSelected(new Set()); setSubmitting(null)
                     }}
                     className="px-3 py-1.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50">
-                    {isGWRequest ? `↩ Back to Merchandise (${dvmSelected.size})` : `↩ Back to SCM (${dvmSelected.size})`}
+                    {claimBackGw ? `↩ Back to Merchandise (${dvmSelected.size})` : `↩ Back to SCM (${dvmSelected.size})`}
                   </button>
                 </>
               )}
@@ -5277,7 +5277,7 @@ export default function RequestDetailPage() {
                       )}
                       {isGwClaimP1Role && (
                         <button onClick={() => { setRejectingSo(rejectingSo === item.id ? null : item.id); setRejectSoComment("") }} disabled={isSub}
-                          className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{isGWRequest ? "Back to Merchandise" : "Back to SCM"}</button>
+                          className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{claimBackGw ? "Back to Merchandise" : "Back to SCM"}</button>
                       )}
                     </div>
                   )}
@@ -5296,7 +5296,7 @@ export default function RequestDetailPage() {
                 )}
                 {rejectingSo === item.id && (
                   <div className="px-4 py-3 bg-red-50 border-t border-red-100 space-y-2">
-                    <label className="text-xs font-medium text-red-700">{isGwClaimP1Role ? (isGWRequest ? "Reason for sending back to Merchandise *" : "Reason for sending back to SCM *") : "Reject reason *"}</label>
+                    <label className="text-xs font-medium text-red-700">{isGwClaimP1Role ? (claimBackGw ? "Reason for sending back to Merchandise *" : "Reason for sending back to SCM *") : "Reject reason *"}</label>
                     <textarea value={rejectSoComment} onChange={e => setRejectSoComment(e.target.value)} rows={2}
                       placeholder="Enter reason..." className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                     <div className="flex gap-2">
@@ -5311,7 +5311,7 @@ export default function RequestDetailPage() {
                           setSubmitting(null); setRejectingSo(null); setRejectSoComment("")
                         }}
                         className="px-4 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 disabled:opacity-40">
-                        {isSub ? "..." : (isGwClaimP1Role ? (isGWRequest ? "Confirm — Back to Merchandise" : "Confirm — Back to SCM") : "Confirm Reject")}
+                        {isSub ? "..." : (isGwClaimP1Role ? (claimBackGw ? "Confirm — Back to Merchandise" : "Confirm — Back to SCM") : "Confirm Reject")}
                       </button>
                       <button onClick={() => setRejectingSo(null)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
                     </div>
