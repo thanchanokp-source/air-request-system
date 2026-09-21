@@ -522,7 +522,7 @@ export default function ApprovalsPage() {
                   <span className="text-xs text-gray-500 truncate">{req.buName}</span>
                   {req.status === "COMPLETED" && claimPending
                     ? <span className="px-2 py-1 rounded-full text-xs font-semibold uppercase bg-amber-100 text-amber-700" title="ฝั่ง air เสร็จแล้ว แต่ยังมี claim รออนุมัติ">⏳ Claim pending</span>
-                    : <StatusBadge status={req.status} />}
+                    : <StatusBadge status={req.status} bu={req.bu} />}
                   <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">EST {fmtNum(estTotal)} {cur}</span>
                   <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">ACT {fmtNum(actTotal)} {cur}</span>
                   {Object.entries(deptSums).map(([dept, sum]) => (
