@@ -5285,6 +5285,17 @@ export default function RequestDetailPage() {
                         <button onClick={() => { setRejectingSo(rejectingSo === item.id ? null : item.id); setRejectSoComment("") }} disabled={isSub}
                           className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{claimBackGw ? "Back to Merchandise" : "Back to SCM"}</button>
                       )}
+                      {/* NYG/EA/TRM only: drop THIS SO directly (data is wrong) — claim approver deletes it, no MER round-trip. */}
+                      {!claimBackGw && (
+                        <button disabled={isSub}
+                          onClick={async () => {
+                            if (!confirm(`Drop / ลบ SO ${item.so} ออกจากเอกสาร?\nลบเฉพาะ SO นี้ · เอกสารยังอยู่ · ย้อนกลับไม่ได้`)) return
+                            setSubmitting(item.id)
+                            const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete_item", itemId: item.id }) })
+                            if (res.ok) { setReq(await res.json()); setSubmitting(null) } else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null) }
+                          }}
+                          className="px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-medium hover:bg-rose-700 disabled:opacity-50">🗑 Drop SO</button>
+                      )}
                     </div>
                   )}
                 </div>

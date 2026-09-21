@@ -568,6 +568,11 @@ export default function RequestsPage() {
                 <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
                   className="font-bold text-blue-700 hover:underline text-sm shrink-0">{dg.request.documentNo}</Link>
                 <AggBadge rows={dg.styles.flatMap((s: any) => s.rows)} docStatus={dg.request.status} />
+                {/* Returned reason (Back to Merchandise / SCM) — shown on the card so MER/SCM sees WHY before opening. */}
+                {["PENDING_MER", "PENDING_MER_GW", "PENDING_SCM"].includes(dg.request.status) && dg.request.rejectionReason && (
+                  <span onClick={e => e.stopPropagation()} title={dg.request.rejectionReason}
+                    className="text-[11px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-800 border border-orange-300 font-medium max-w-[260px] truncate shrink-0">↩ ส่งกลับ: {dg.request.rejectionReason}</span>
+                )}
                 {dg.request.lgForwardEmail && (() => {
                   const names = (dg.request.lgForwardNames?.length ? dg.request.lgForwardNames : dg.request.lgForwardName ? [dg.request.lgForwardName] : dg.request.lgForwardEmails || [dg.request.lgForwardEmail]).map((n: string) => String(n).split("@")[0]).join(", ")
                   return (

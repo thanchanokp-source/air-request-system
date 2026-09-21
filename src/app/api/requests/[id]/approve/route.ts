@@ -1260,6 +1260,45 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
+  // Claim approver (NYG/EA/TRM) drops a SO back to MERCHANDISE — the data is wrong / should be removed.
+  // Per SO (not the whole doc's data); the doc moves to PENDING_MER so MER can delete just that SO.
+  if (action === "claim_back_to_mer_so") {
+    if (request.bu === "GW") return NextResponse.json({ error: "Not for GW" }, { status: 400 })
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    if (!comment) return NextResponse.json({ error: "reason required" }, { status: 400 })
+    const item = request.items.find((i: any) => i.id === itemId)
+    if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    await (prisma as any).claimApproval.deleteMany({ where: { itemId } })
+    await prisma.airRequestItem.update({ where: { id: itemId }, data: { itemStatus: "PENDING", claimDepartment: null, claimDepts: null, itemComment: comment } as any })
+    await prisma.approvalLog.create({ data: { requestId: id, userId, action: "BACK_TO_MER", fromStatus: request.status, toStatus: "PENDING_MER", comment: `Drop SO ${item?.so} → MER: ${comment}` } })
+    // NYK-Direct NYG docs sent back leave the GW engine → clear the flag so they behave as normal NYG.
+    const clearNyk = request.bu !== "GW" && !!(request as any).nykDirect
+    await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_MER", rejectionReason: comment, ...(clearNyk ? { nykDirect: false } : {}) } })
+    await notifyStatusChange(id, "PENDING_MER").catch(() => {})
+    return NextResponse.json(await getUpdated())
+  }
+
+  // Drop (delete) ONE SO — the SO is removed, the document itself stays. The claim approver can do this
+  // directly (no round-trip to MER); MER can also do it when a doc is back with them.
+  if (action === "delete_item") {
+    const allowRoles = ["MER_USER", "MER_EA", "MER_TRM", "ADMIN",
+      "SCM_NYG", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYK", "CLAIM_NEXT_APPROVER",
+      "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT",
+      "DVM_MER", "VP_MER", "VP_COMMERCIAL", "VP_PRODUCTION", "VP_PROCUREMENT", "VP_NYK"]
+    if (!heldRoles.some(r => allowRoles.includes(r))) return NextResponse.json({ error: "Claim / Merchandise / Admin only" }, { status: 403 })
+    if (request.bu === "GW") return NextResponse.json({ error: "Not for GW" }, { status: 400 })
+    if (["COMPLETED", "REJECTED"].includes(request.status)) return NextResponse.json({ error: "ลบไม่ได้ เอกสารปิดแล้ว" }, { status: 400 })
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    const item = request.items.find((i: any) => i.id === itemId)
+    if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    // Detach any attachment/log rows pointing at this SO (plain itemId fields, no cascade) then delete
+    // the item — claimApproval cascades automatically (schema onDelete: Cascade).
+    await (prisma as any).requestAttachment.updateMany({ where: { itemId } , data: { itemId: null } }).catch(() => {})
+    await prisma.airRequestItem.delete({ where: { id: itemId } })
+    await prisma.approvalLog.create({ data: { requestId: id, userId, action: "DELETE_ITEM", fromStatus: request.status, toStatus: request.status, comment: `Dropped SO ${item?.so}` } })
+    return NextResponse.json(await getUpdated())
+  }
+
   // CLAIM_NEXT_APPROVER: approve single SO directly (no priority chain)
   if (action === "approve_so_next" && userRole === "CLAIM_NEXT_APPROVER") {
     const userEmail = session.user?.email || ""
