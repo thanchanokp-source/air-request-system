@@ -719,7 +719,7 @@ export default function RequestDetailPage() {
   const [procureDecision, setProcureDecision] = useState<"approve" | "forward" | null>(null)
   const [claimFwdDone, setClaimFwdDone] = useState<string|null>(null)
   // Claim review: card list (expand each) vs flat table (see all at once).
-  const [claimTableView, setClaimTableView] = useState(false)
+  const [claimTableView, setClaimTableView] = useState(true)
   // Story 4: universal "all MER data" panel every role can open — flat table / by style / by SO.
   const [showAllData, setShowAllData] = useState(false)
   const [allView, setAllView] = useState<"table" | "style" | "so">("table")
