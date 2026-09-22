@@ -4957,14 +4957,6 @@ export default function RequestDetailPage() {
                 </>
               )}
             </div>
-            {/* Legend — what each action means (NYG/EA/TRM claim). */}
-            {!claimBackGw && (
-              <div className="mt-2 text-[11px] text-gray-600 bg-blue-50/60 border border-blue-100 rounded-lg px-3 py-2 flex flex-wrap gap-x-5 gap-y-1">
-                <span><b className="text-green-700">✓ Approve</b> = อนุมัติ claim ของแผนกเรา</span>
-                <span><b className="text-orange-600">↩ Back to SCM</b> = ไม่ใช่ claim ของเรา (claim เลือกผิดแผนก)</span>
-                <span><b className="text-rose-600">↩ Back to MER</b> = data ผิด → ส่งให้ MER ลบ SO นั้น</span>
-              </div>
-            )}
           </div>
 
           {/* Attach supporting files — by DOCUMENT (GW claim) */}
@@ -4976,6 +4968,16 @@ export default function RequestDetailPage() {
                 <input type="file" className="hidden" multiple disabled={uploadingItem === "_req"}
                   onChange={async e => { const files = Array.from(e.target.files || []); e.target.value = ""; for (const f of files) await attachFileFn(f) }} />
               </label>
+            </div>
+          )}
+
+          {/* Legend — what each claim action means (NYG/EA/TRM). Placed above the
+              CR/EVP picker box so it reads as a note in that area. */}
+          {!claimBackGw && (
+            <div className="text-[11px] text-gray-600 bg-blue-50/60 border border-blue-100 rounded-lg px-3 py-2 flex flex-wrap gap-x-5 gap-y-1">
+              <span><b className="text-green-700">✓ Approve</b> = อนุมัติ claim ของแผนกเรา</span>
+              <span><b className="text-orange-600">↩ Back to SCM</b> = ไม่ใช่ claim ของเรา (claim เลือกผิดแผนก)</span>
+              <span><b className="text-rose-600">↩ Back to MER</b> = data ผิด → ส่งให้ MER ลบ SO นั้น</span>
             </div>
           )}
 
