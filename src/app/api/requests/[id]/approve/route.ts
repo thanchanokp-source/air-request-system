@@ -398,7 +398,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW LG "Save Draft" — save the same LG data (Actual / INV / HAWB / Ship Date / QTY by SO)
   // WITHOUT changing status or running the NYG-specific advancement. GW uses its own item
   // statuses, so it must not go through the LOGISTICS (NYG) draft handler above.
-  if (action === "save_logistics_draft" && (userRole === "LOGISTICS_GW" || (isFwdTarget && request.bu === "GW") || (userRole === "ADMIN" && request.bu === "GW"))) {
+  if (action === "save_logistics_draft" && (userRole === "LOGISTICS_GW" || (heldRoles.includes("LOGISTICS_SUB") && request.bu === "GW") || (isFwdTarget && request.bu === "GW") || (userRole === "ADMIN" && request.bu === "GW"))) {
     if (itemActuals && typeof itemActuals === "object") {
       for (const [iid, val] of Object.entries(itemActuals)) {
         const num = parseFloat(String(val))
@@ -1042,7 +1042,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // GW LOGISTICS (parallel with Claim): enter invoice/HAWB/actual per SO. Saving
   // data does NOT advance the SO — it only completes the Logistics side; the SO
   // reaches Accounting when Claim is also fully approved.
-  if (action === "approve" && (userRole === "LOGISTICS_GW" || (isFwdTarget && request.bu === "GW"))) {
+  if (action === "approve" && (userRole === "LOGISTICS_GW" || (heldRoles.includes("LOGISTICS_SUB") && request.bu === "GW") || (isFwdTarget && request.bu === "GW"))) {
     if (request.bu !== "GW") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW", "PENDING_LOGISTICS_GW", "PENDING_PRESIDENT_GW"].includes(request.status)) {
       return NextResponse.json({ error: "Request is not at the Logistics stage" }, { status: 400 })

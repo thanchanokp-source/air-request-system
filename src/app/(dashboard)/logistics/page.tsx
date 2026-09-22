@@ -81,10 +81,10 @@ export default function LgBookingPage() {
       const bookable = bu === "GW" ? ["PRES_PASSED", "PRESIDENT_PENDING"] : ["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED", "PRESIDENT_PENDING"]
       for (const it of (r.items || [])) {
         if (!bookable.includes(it.itemStatus)) continue
-        // LG BOOKING is a worklist of SOs still MISSING an Actual → any SO that already has an Actual
-        // drops off (regardless of send state). Actual = 0 counts as NOT entered (blank HAWB total /
-        // never joined a HAWB) so it stays visible for LG to complete.
-        if (it.actualAirFreight) continue
+        // Drop a SO off the worklist only once it's been SENT (logisticsSent) with its Actual in. A SO with
+        // an Actual entered but NOT yet sent = a DRAFT → keep it visible (with the "📝 draft" badge) so LG
+        // can re-open and continue. (Previously any Actual hid it, so drafted SOs vanished from the list.)
+        if (r.logisticsSent && it.actualAirFreight) continue
         out.push({ ...it, request: r, brand: it.brand || r.brandName || "(no brand)" })
       }
     }

@@ -69,9 +69,9 @@ export default function LgEntryPage() {
       for (const it of (r.items || [])) {
         if (!idset.has(it.id)) continue
         if (!bookable.includes(it.itemStatus)) continue
-        // After "Save & Send" keep only SOs still missing an Actual (drafts stay editable pre-send).
-        // Actual = 0 counts as NOT entered so LG can re-open and fix it.
-        if (r.logisticsSent && it.actualAirFreight) continue
+        // The entry page shows the SOs the LG explicitly SELECTED (entryIds) — always keep them visible so
+        // a partly-sent doc can still be continued/edited. (Doc-level logisticsSent must not hide a SO that
+        // LG re-opened to fill/fix its Actual — that made drafted SOs vanish after Save Draft.)
         out.push({ ...it, request: r, brand: it.brand || r.brandName || "(no brand)" })
       }
     }
