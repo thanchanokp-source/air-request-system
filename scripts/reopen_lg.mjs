@@ -20,7 +20,8 @@ if (!guard.includes(req.status)) console.log(`\n⚠️ status=${req.status} ไ�
 
 console.log(`\nPLAN → set logisticsSent=false + clear actualAirFreight on ${req.items.length} item(s) (itemStatus ไม่แตะ)`)
 if (APPLY) {
-  await prisma.airRequest.update({ where: { id: req.id }, data: { logisticsSent: false } })
+  // lgReopened=true → the next LG "Send" is SILENT (won't re-alert claim/SCM NYK); the send clears it.
+  await prisma.airRequest.update({ where: { id: req.id }, data: { logisticsSent: false, lgReopened: true } })
   for (const it of req.items) await prisma.airRequestItem.update({ where: { id: it.id }, data: { actualAirFreight: null } })
   await prisma.approvalLog.create({ data: { requestId: req.id, userId: req.createdById || undefined, action: "REOPEN_LG", fromStatus: req.status, toStatus: req.status, comment: "Admin reopened Logistics — re-enter actual air freight" } }).catch(() => {})
   console.log("\n✅ APPLIED — เอกสารกลับเข้าคิว LG BOOKING ให้กรอก actual ใหม่ (chip Logistics กลับเป็น pending)")

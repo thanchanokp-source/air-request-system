@@ -388,8 +388,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       // Mark LG as sent (chip turns green only now) + email the claimers the files + signed PDF.
       await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
-      await notifyLgFilesToClaimers(id).catch(() => {})
-      await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
+      // SILENT re-send: if this doc was reopened by admin for a correction, DON'T re-alert the
+      // claim / SCM NYK people (they're already handling it). Clear the flag so the next fresh
+      // send behaves normally.
+      const lgSilent = !!(request as any).lgReopened
+      if (lgSilent) {
+        await (prisma.airRequest as any).update({ where: { id }, data: { lgReopened: false } }).catch(() => {})
+      } else {
+        await notifyLgFilesToClaimers(id).catch(() => {})
+        await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
+      }
     }
     await logLgEntry(request, session, userId, body).catch(() => {})
     return NextResponse.json(await getUpdated())
@@ -1102,8 +1110,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // draft) + email the claimers the LG files + signed PDF (item 2).
     if (body.lgComplete) {
       await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
-      await notifyLgFilesToClaimers(id).catch(() => {})
-      await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
+      // SILENT re-send after an admin reopen → don't re-alert claim / SCM NYK; clear the flag.
+      if ((request as any).lgReopened) {
+        await (prisma.airRequest as any).update({ where: { id }, data: { lgReopened: false } }).catch(() => {})
+      } else {
+        await notifyLgFilesToClaimers(id).catch(() => {})
+        await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
+      }
     }
     return NextResponse.json(await getUpdated())
   }
@@ -1162,7 +1175,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     // LG confirmed/sent → chip turns green + gate President on this (not on draft).
     await (prisma.airRequest as any).update({ where: { id }, data: { logisticsSent: true } }).catch(() => {})
-    await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
+    // SILENT re-send after an admin reopen → don't re-alert claim / SCM NYK; clear the flag.
+    if ((request as any).lgReopened) {
+      await (prisma.airRequest as any).update({ where: { id }, data: { lgReopened: false } }).catch(() => {})
+    } else {
+      await notifyGwClaimNyk(id).catch(() => {}) // LG done (INV+Actual in) → NOW alert SCM NYK claim
+    }
     const newStatus = await recalcDocStatus(id)
     if (newStatus !== request.status) {
       await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })

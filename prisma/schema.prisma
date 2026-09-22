@@ -126,6 +126,7 @@ model AirRequest {
   claimNextName       String?
   bu                  String              @default("NYG")
   logisticsSent       Boolean             @default(false) // LG pressed "Save & Send" (not just Save Draft) → chip turns green
+  lgReopened          Boolean             @default(false) // admin reopened LG for a correction → next LG send is SILENT (don't re-alert claim/SCM); cleared on that send
   pendingRate         Boolean             @default(false) // held: Country rate missing, not yet sent to first approver
   pendingWeight       Boolean             @default(false) // held: a DESCRIPTION has no WT Charge in Master, not yet sent
   nykDirect           Boolean             @default(false) // GW "NYK Direct" import: skips all approvers → lands at SCM NYK claim; after NYK done → Accounting (skip President)
