@@ -2,7 +2,7 @@ import { prisma } from "./prisma"
 
 const norm = (s: any) => String(s ?? "").trim().toUpperCase()
 // A cell may hold several values in one string (comma / slash / semicolon). Split → clean tokens.
-const splitMulti = (s: any) => norm(s).split(/[,/;]+/).map(x => x.trim()).filter(Boolean)
+const splitMulti = (s: any) => norm(s).split(/[,/;\s]+/).map(x => x.trim()).filter(Boolean)
 
 // Canonical SO key: digits only, leading zeros stripped. Excel often drops a leading 0 (a real
 // 8-digit SO "01234567" becomes "1234567"), so we compare SOs with leading zeros removed on BOTH
@@ -46,26 +46,36 @@ export async function attachGarmentPo(requests: any[]): Promise<void> {
     }
     if (missSos.size === 0) return // everything served from cache → no BOM query at all
 
-    // 2) BOM may store the SO with OR without the leading 0. Fetch every plausible written form
-    // (raw / digits / no-leading-zero / zero-padded to 8) for the MISSING SOs only, 3 columns.
-    const candidates = new Set<string>()
+    // 2) BOM's soNoDoc cell may hold ONE SO or a COMMA/SPACE LIST of several SOs sharing the same
+    // garment PO (e.g. "09260005,09260006,09260011" → FL2610719). Exact IN misses the multi-SO rows,
+    // so fetch with `contains` on the 8-digit-padded form of each MISSING SO (precise enough to avoid
+    // most false hits; the exact per-token grouping below filters any that slip through). Runs only
+    // for cache misses (then cached 10 min), so the wider scan is infrequent.
+    const orForms = new Set<string>()
     for (const s of missSos) {
       const digits = s.replace(/\D/g, "")
-      candidates.add(s)
-      if (digits) { candidates.add(digits); candidates.add(digits.replace(/^0+/, "")); candidates.add(digits.padStart(8, "0")) }
+      if (!digits) continue
+      orForms.add(digits.padStart(8, "0")) // canonical 8-digit written form (matches inside a list)
+      orForms.add(digits.replace(/^0+/, "")) // and the no-leading-zero form
     }
-    const boms: any[] = await (prisma as any).billOfMaterial.findMany({
-      where: { soNoDoc: { in: [...candidates].filter(Boolean) } },
-      select: { soNoDoc: true, poNoDoc: true, bu: true },
-    }).catch(() => [])
+    const boms: any[] = orForms.size
+      ? await (prisma as any).billOfMaterial.findMany({
+          where: { OR: [...orForms].map(f => ({ soNoDoc: { contains: f } })) },
+          select: { soNoDoc: true, poNoDoc: true, bu: true },
+        }).catch(() => [])
+      : []
 
-    // key = "<canonical SO>|<BU>" -> set of garment PO numbers (poNoDoc may itself be a comma list).
+    // key = "<canonical SO>|<BU>" -> set of garment PO numbers. SPLIT soNoDoc into its SO tokens so a
+    // multi-SO cell maps its PO to EACH of its SOs (poNoDoc may itself be a comma list too).
     const byKey = new Map<string, Set<string>>()
     for (const b of boms) {
-      if (!soKey(b.soNoDoc)) continue
-      const k = keyOf(b.soNoDoc, b.bu)
-      if (!byKey.has(k)) byKey.set(k, new Set())
-      for (const po of splitMulti(b.poNoDoc)) byKey.get(k)!.add(po)
+      const soTokens = splitMulti(b.soNoDoc)
+      for (const soTok of soTokens) {
+        if (!soKey(soTok)) continue
+        const k = keyOf(soTok, b.bu)
+        if (!byKey.has(k)) byKey.set(k, new Set())
+        for (const po of splitMulti(b.poNoDoc)) byKey.get(k)!.add(po)
+      }
     }
     // 3) Fill the missed items + cache the result (incl. null misses, so we don't re-query them).
     for (const it of items) {
