@@ -14,6 +14,7 @@ const claimNav = [
   { href: "/files", label: "DOCUMENT FOR LOGISTICS & ACCOUNTING" },
   { href: "/requests/nyk-import", label: "NYK IMPORT", adminOnly: true },
   { href: "/logistics", label: "LG BOOKING", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "LOGISTICS_SUB"] },
+  { href: "/lg-air-booking", label: "LG AIR BOOKING (ทดลอง)", adminOnly: true },
   { href: "/qty-air-map", label: "QTY AIR MAP", adminOnly: true },
   { href: "/qty-air-check", label: "QTY AIR CHECK", adminOnly: true },
   { href: "/fix-hawb", label: "FIX HAWB", adminOnly: true },
