@@ -20,7 +20,7 @@ export default function QtyAirMapPage() {
 
   useEffect(() => {
     setLoading(true); setErr("")
-    fetch(`/api/map-data?mode=sosub`).then(async r => {
+    fetch(`/api/map-data?mode=sosubinv`).then(async r => {
       if (!r.ok) { const e = await r.json().catch(() => ({} as any)); throw new Error(e.error || `HTTP ${r.status}`) }
       return r.json()
     }).then(setData).catch(e => setErr(e.message)).finally(() => setLoading(false))
@@ -61,7 +61,12 @@ export default function QtyAirMapPage() {
     <div className="p-6 max-w-6xl mx-auto space-y-5">
       <div>
         <h1 className="text-xl font-bold" style={{ color: MAROON }}>QTY AIR MAP</h1>
-        <p className="text-xs text-gray-500 mt-0.5">เทียบ QTY AIR: <b>air req (MER กรอก)</b> ↔ <b>mp_line (final_pcs)</b> · จับคู่ด้วย <b>SO + SUB</b> · mp_line รวม final_pcs ต่อ SO+SUB · <b>INV โชว์ให้เช็คเอง (คนละชุด A/G จับคู่อัตโนมัติไม่ได้)</b></p>
+        <p className="text-xs text-gray-500 mt-0.5">จับคู่ด้วย <b>SO</b> · ดึงทุก line ของ SO นั้นจาก <b>mp_line</b> มารวม <code>final_pcs</code> · <b>air req = แผนล่วงหน้า</b> / <b>mp_line = ออกจริง (อาจช้ากว่า)</b></p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 mt-1.5">
+          <span><b className="text-green-700">✓ เจอทั้ง 2 ฝั่ง</b> = ส่งออกแน่นอน</span>
+          <span><b className="text-amber-700">⏳ มีใน air req แต่ยังไม่เจอใน mp_line</b> = ยังไม่ออกจริง — <u>ห้ามตัด รอไว้</u></span>
+          <span><b className="text-sky-700">❗ มีใน mp_line แต่ไม่มีใน air req</b> = ออกจริงแล้วแต่ไม่มีใบแอร์ — <u>ให้ MER ทำใบแอร์</u></span>
+        </div>
       </div>
 
       {loading && <div className="text-sm text-gray-500">กำลังโหลด…</div>}
@@ -95,10 +100,10 @@ export default function QtyAirMapPage() {
           {/* ── สรุป % + แยกสาเหตุไม่เจอ (ตามตัวกรอง brand/date) ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { l: "ก้อน ① ทั้งหมด", v: sum.total.toLocaleString(), s: "SO+SUB (air req)", c: MAROON },
-              { l: "✓ เจอใน mp_line", v: sum.matched.toLocaleString(), s: `${sum.pct(sum.matched)}%`, c: "#15803d" },
-              { l: "⚠ ไม่เจอ", v: sum.nf.toLocaleString(), s: `${sum.pct(sum.nf)}%`, c: "#b45309" },
-              { l: "ก้อน ② mp_line only", v: sum.mpOnly.toLocaleString(), s: "ไม่มีใน air req", c: "#0369a1" },
+              { l: "SO ใน air req (ทั้งหมด)", v: sum.total.toLocaleString(), s: "แผนล่วงหน้า", c: MAROON },
+              { l: "✓ ส่งออกแน่นอน", v: sum.matched.toLocaleString(), s: `${sum.pct(sum.matched)}% · เจอใน mp_line`, c: "#15803d" },
+              { l: "⏳ ยังไม่ออกจริง (ห้ามตัด)", v: sum.nf.toLocaleString(), s: `${sum.pct(sum.nf)}% · รอ mp_line`, c: "#b45309" },
+              { l: "❗ ต้องให้ MER ทำใบแอร์", v: sum.mpOnly.toLocaleString(), s: "ออกจริง ไม่มีใบแอร์", c: "#0369a1" },
             ].map((c, i) => (
               <div key={i} className="bg-white rounded-xl border border-gray-200 p-3">
                 <p className="text-[11px] text-gray-400">{c.l}</p>

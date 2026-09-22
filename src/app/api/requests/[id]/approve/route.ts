@@ -1308,6 +1308,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json(await getUpdated())
   }
 
+  // Claim approver flags a SO for MER to drop (data wrong) — NO status change: the doc stays at claim so
+  // the other SOs keep flowing; the flagged SO shows in MER's Drop Queue.
+  if (action === "flag_drop_so") {
+    if (request.bu === "GW") return NextResponse.json({ error: "Not for GW" }, { status: 400 })
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    if (!comment) return NextResponse.json({ error: "reason required" }, { status: 400 })
+    const item = request.items.find((i: any) => i.id === itemId)
+    if (!item) return NextResponse.json({ error: "Item not found" }, { status: 404 })
+    await prisma.airRequestItem.update({ where: { id: itemId }, data: { dropRequested: true, dropReason: comment, dropRequestedBy: (session.user as any)?.email || null } as any })
+    await prisma.approvalLog.create({ data: { requestId: id, userId, action: "FLAG_DROP", fromStatus: request.status, toStatus: request.status, comment: `Flag SO ${item?.so} → MER drop: ${comment}` } })
+    return NextResponse.json(await getUpdated())
+  }
+
+  // Remove a drop flag — MER (or claim) decided NOT to drop after all.
+  if (action === "unflag_drop_so") {
+    if (!itemId) return NextResponse.json({ error: "itemId required" }, { status: 400 })
+    await prisma.airRequestItem.update({ where: { id: itemId }, data: { dropRequested: false, dropReason: null, dropRequestedBy: null } as any })
+    await prisma.approvalLog.create({ data: { requestId: id, userId, action: "UNFLAG_DROP", fromStatus: request.status, toStatus: request.status, comment: `Unflag drop` } })
+    return NextResponse.json(await getUpdated())
+  }
+
   // CLAIM_NEXT_APPROVER: approve single SO directly (no priority chain)
   if (action === "approve_so_next" && userRole === "CLAIM_NEXT_APPROVER") {
     const userEmail = session.user?.email || ""

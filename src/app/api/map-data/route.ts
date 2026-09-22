@@ -18,8 +18,13 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const mode = req.nextUrl.searchParams.get("mode") === "so" ? "so" : "sosub"
-  const K = mode === "so" ? (so: any, _sub: any) => soN(so) : (so: any, sub: any) => soN(so) + "|" + norm(sub)
+  const mp0 = req.nextUrl.searchParams.get("mode")
+  const mode = mp0 === "so" ? "so" : mp0 === "sosubinv" ? "sosubinv" : "sosub"
+  // Invoice normalize: strip spaces/dashes, uppercase → so "A250920-3" and "a2509203" compare equal.
+  const normInv = (s: any) => String(s == null ? "" : s).toUpperCase().replace(/[^A-Z0-9]/g, "")
+  const K = mode === "so" ? (so: any, _sub: any, _inv: any) => soN(so)
+    : mode === "sosubinv" ? (so: any, sub: any, inv: any) => soN(so) + "|" + norm(sub) + "|" + normInv(inv)
+    : (so: any, sub: any, _inv: any) => soN(so) + "|" + norm(sub)
 
   let mp: any[] = []
   try {
@@ -31,7 +36,7 @@ export async function GET(req: NextRequest) {
   const mpMap = new Map<string, { so: string; sub: string; pcs: number; rows: number; inv: Set<string>; brand: Set<string> }>()
   const mpSoSet = new Set<string>() // SO-level presence in mp_line (ignore SUB) — for "no SO at all"
   for (const r of mp) {
-    const k = K(r.so_no, r.sub_no)
+    const k = K(r.so_no, r.sub_no, r.invoice_no)
     mpSoSet.add(soN(r.so_no))
     const e = mpMap.get(k) || { so: String(r.so_no ?? ""), sub: mode === "so" ? "" : String(r.sub_no ?? ""), pcs: 0, rows: 0, inv: new Set<string>(), brand: new Set<string>() }
     e.pcs += Number(r.final_pcs) || 0
@@ -46,7 +51,7 @@ export async function GET(req: NextRequest) {
   })
   const airMap = new Map<string, { so: string; sub: string | null; qty: number; plan: number; inv: Set<string>; docs: Set<string>; brand: Set<string>; dates: Set<string> }>()
   for (const i of items) {
-    const k = K(i.so, i.sub)
+    const k = K(i.so, i.sub, i.invoiceNo)
     const e = airMap.get(k) || { so: i.so, sub: mode === "so" ? "" : i.sub, qty: 0, plan: 0, inv: new Set<string>(), docs: new Set<string>(), brand: new Set<string>(), dates: new Set<string>() }
     e.qty += Number(i.qtyRequestAir) || 0
     e.plan += Number(i.qtyOriginalShipment) || 0

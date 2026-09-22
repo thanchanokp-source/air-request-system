@@ -267,6 +267,11 @@ model AirRequestItem {
   claimPercentage      Float?
   qtyActualShip        Int?
   shipmentGroupId      String? // split shipments of one SO share this → plan totals count the group once
+  // Claim approver flags a SO for MER to drop (data wrong) WITHOUT moving the whole doc — the doc stays
+  // at claim so the other SOs keep flowing; the flagged SO shows in MER's Drop Queue to delete.
+  dropRequested        Boolean         @default(false)
+  dropReason           String?
+  dropRequestedBy      String?
   request              AirRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
   hawbGroup            HawbGroup?      @relation(fields: [hawbGroupId], references: [id], onDelete: SetNull)
   claimApprovals       ClaimApproval[]

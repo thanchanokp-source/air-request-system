@@ -5283,18 +5283,22 @@ export default function RequestDetailPage() {
                       )}
                       {isGwClaimP1Role && (
                         <button onClick={() => { setRejectingSo(rejectingSo === item.id ? null : item.id); setRejectSoComment("") }} disabled={isSub}
+                          title={claimBackGw ? "" : "กรณีไม่ใช่ claim ของเรา (claim ผิดแผนก) → ส่งกลับ SCM เลือกใหม่"}
                           className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{claimBackGw ? "Back to Merchandise" : "Back to SCM"}</button>
                       )}
-                      {/* NYG/EA/TRM only: drop THIS SO directly (data is wrong) — claim approver deletes it, no MER round-trip. */}
-                      {!claimBackGw && (
-                        <button disabled={isSub}
+                      {/* NYG/EA/TRM only: flag THIS SO for MER to drop (data wrong). Doc stays at claim so other SOs keep flowing. */}
+                      {!claimBackGw && (item.dropRequested
+                        ? <span className="px-3 py-1 bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-xs font-medium" title={item.dropReason || ""}>⏳ รอ MER drop</span>
+                        : <button disabled={isSub}
+                          title="กรณี data ผิด — ส่งให้ MER ลบ SO นี้ (SO อื่นเดินต่อได้)"
                           onClick={async () => {
-                            if (!confirm(`Drop / ลบ SO ${item.so} ออกจากเอกสาร?\nลบเฉพาะ SO นี้ · เอกสารยังอยู่ · ย้อนกลับไม่ได้`)) return
+                            const reason = window.prompt(`ส่ง SO ${item.so} ให้ MER ลบ (data ผิด) — เหตุผล:`)
+                            if (reason == null || !reason.trim()) return
                             setSubmitting(item.id)
-                            const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete_item", itemId: item.id }) })
+                            const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "flag_drop_so", itemId: item.id, comment: reason.trim() }) })
                             if (res.ok) { setReq(await res.json()); setSubmitting(null) } else { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); setSubmitting(null) }
                           }}
-                          className="px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-medium hover:bg-rose-700 disabled:opacity-50">🗑 Drop SO</button>
+                          className="px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-medium hover:bg-rose-700 disabled:opacity-50">↩ Back to MER</button>
                       )}
                     </div>
                   )}
