@@ -9,6 +9,7 @@ import SignatureModal from "@/components/signature-modal"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { buildRequesters } from "@/lib/pull-requesters"
 import { pullReqType } from "@/lib/pull-reqtype"
+import { pullLandedCost, cheapestMode, modeTotals, SHIP_MODE_LABEL, type ShipMode } from "@/lib/pull-courier"
 
 // Approver stages: which role owns each, and where Approve / Send-back go.
 const APPROVER: Record<string, { role: string; label: string; next: string; back: string; backLabel: string }> = {
@@ -77,6 +78,18 @@ export default function Page() {
     fetch("/api/pull-material/air-rates").then(r => r.json()).then(d => setAirRates(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/truck-rates").then(r => r.json()).then(d => setTruckRates(d.rows || [])).catch(() => {})
   }, [])
+  // ── Shipping mode pick (PC branch — 1 shipment / 1 doc, single approver per BU) ──────────────
+  // The doc is ALWAYS an AIR request from the user. The cheapest mode is pre-selected as a SUGGESTION;
+  // choosing anything but AIR requires a reason, which is stored with the doc and in the history log.
+  const [mode, setMode] = useState<ShipMode | null>(null)
+  const [modeReason, setModeReason] = useState("")
+  // Landed cost of a doc, computed from the same helper the compare box uses (single source of truth).
+  const landedOf = (rq: any) => {
+    const its = rq?.items || []
+    const s0 = its.find((x: any) => x.airFreightCost != null) || its[0] || {}
+    return { s0, lc: pullLandedCost({ airRows: airRates, seaRows: seaRates, courierRows: courierRates, truckRows: truckRates, port: s0.port, seaPort: s0.seaPort, country: s0.country, weight: s0.weight, incoterm: s0.incoterm, bu: rq?.bu, factory: rq?.factory || s0.factory }) }
+  }
+
   // role → approver names (for the stepper)
   const [roleNames, setRoleNames] = useState<Record<string, string[]>>({})
   useEffect(() => {
@@ -103,8 +116,33 @@ export default function Page() {
   }
   useEffect(() => { load() }, [isAdmin, myEmail]) // eslint-disable-line
 
+  // Opening a doc → pre-select its stored mode, else the CHEAPEST priced mode (suggestion only),
+  // else AIR (what the user actually requested).
+  useEffect(() => {
+    const rq = allReqs.find(r => r.id === openId)
+    if (!rq) { setMode(null); setModeReason(""); return }
+    const { lc } = landedOf(rq)
+    setMode((rq.shipMode as ShipMode) || cheapestMode(lc) || "AIR")
+    setModeReason(rq.shipModeReason || "")
+  }, [openId, allReqs, airRates, seaRates, courierRates, truckRates]) // eslint-disable-line
+
   const act = async (rq: any, toStatus: string) => {
     const isApprove = toStatus === "APPROVED"
+    // Approving a PC doc also LOCKS IN the shipping mode (+ the landed cost of every mode, for history).
+    let modePayload: any = {}
+    if (isApprove && pullReqType(rq) === "PURCHASING") {
+      const { s0, lc } = landedOf(rq)
+      if (lc) {
+        if (!mode) return alert("เลือก mode ขนส่ง (Air / Sea / Courier) ก่อนอนุมัติ")
+        if (mode !== "AIR" && !modeReason.trim()) return alert("เอกสารนี้ผู้ขอร้องขอ AIR — เลือก mode อื่นต้องระบุเหตุผล")
+        const t = modeTotals(lc)
+        modePayload = {
+          shipMode: mode, shipModeReason: modeReason.trim() || null, shipModeSource: "APPROVER",
+          shipModeEst: { estAir: t.AIR, estSea: t.SEA, estCourier: t.COURIER, chosenEst: t[mode],
+            port: s0.port, seaPort: s0.seaPort, weightKg: s0.weight, brand: s0.brand, carrier: mode === "COURIER" ? "DHL" : null },
+        }
+      }
+    }
     // Approving requires a signature (like Air Claim) — the signature popup IS the confirmation
     // (draw first time / reuse after). Non-approve actions still confirm with a dialog.
     let signatureData: string | undefined
@@ -116,7 +154,7 @@ export default function Page() {
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: toStatus, ...(signatureData ? { signatureData } : {}) }),
+        body: JSON.stringify({ status: toStatus, ...modePayload, ...(signatureData ? { signatureData } : {}) }),
       })
       if (r.ok) { setOpenId(null); await load() } else alert("Error")
     } finally { setBusy(false) }
@@ -278,10 +316,30 @@ export default function Page() {
                           {s0.pickupAddress && <div className="col-span-2 sm:col-span-4"><Info label="Supplier / Pickup address" value={s0.pickupAddress} /></div>}
                         </div>
 
-                        {/* Full LANDED-COST compare (Air / Courier / Sea + Market) — all USD, shared with request & LG */}
+                        {/* Full LANDED-COST compare (Air / Courier / Sea + Market) — all USD, shared with request & LG.
+                            Here it is a PICKER: the approver chooses the shipping mode; LG still has the final say. */}
                         <div className="mb-4">
                           <LandedCostCompare airRows={airRates} seaRows={seaRates} courierRows={courierRates} truckRows={truckRates}
-                            port={s0.port} seaPort={s0.seaPort} country={s0.country} weight={s0.weight} incoterm={s0.incoterm} bu={openReq.bu} factory={openReq.factory || s0.factory} />
+                            port={s0.port} seaPort={s0.seaPort} country={s0.country} weight={s0.weight} incoterm={s0.incoterm} bu={openReq.bu} factory={openReq.factory || s0.factory}
+                            value={canApprove(openReq.status, openReq.bu) ? mode : (openReq.shipMode as ShipMode) || null}
+                            onChange={canApprove(openReq.status, openReq.bu) ? setMode : undefined}
+                            requestedMode="AIR" needDate={s0.needDate} leadTimeAir={s0.leadTimeAir} leadTimeSea={s0.leadTimeSea} />
+                          {canApprove(openReq.status, openReq.bu) && (
+                            <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-[11px] font-semibold text-gray-600">
+                                  Mode ที่จะอนุมัติ: <span className="font-bold" style={{ color: MAROON }}>{mode ? SHIP_MODE_LABEL[mode] : "-"}</span>
+                                  {mode && (() => { const t = modeTotals(landedOf(openReq).lc); return t[mode] != null ? <span className="text-gray-500"> · {fmt(t[mode] as number)} USD</span> : null })()}
+                                </span>
+                                <span className="text-[10px] text-gray-400">LG เป็นผู้ชี้ขาดขั้นสุดท้าย (เปลี่ยนได้โดยไม่ต้องอนุมัติใหม่)</span>
+                              </div>
+                              {mode && mode !== "AIR" && (
+                                <input value={modeReason} onChange={e => setModeReason(e.target.value)}
+                                  placeholder="เหตุผลที่ไม่ส่ง AIR ตามที่ผู้ขอร้องขอ (บังคับ)…"
+                                  className="mt-2 w-full border border-red-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200" />
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         <div className="overflow-x-auto border rounded-xl">

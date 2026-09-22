@@ -258,3 +258,46 @@ export async function notifyPullReturn(reqId: string, reviseCount: number, reaso
 export async function notifyPullLogistics(reqId: string): Promise<void> {
   return notifyPullStage(reqId, "PENDING_LOGISTICS")
 }
+
+// LG overruled the shipping mode that was approved (LG has the FINAL say — no re-approval). Tell the
+// approver who picked the original mode + the purchaser/requester so nobody plans on the old mode.
+export async function notifyShipModeChange(reqId: string, fromMode: string, toMode: string, byName: string, reason: string | null): Promise<void> {
+  const rq = await (prisma as any).pullMaterialRequest.findUnique({
+    where: { id: reqId },
+    select: {
+      documentNo: true, bu: true, isTest: true, createdById: true, requesterEmail: true, purchaserEmail: true,
+      approverName: true, approvedEst: true, actors: true, shipModeBy: true,
+      items: { select: { poNoDoc: true, country: true, port: true, seaPort: true, needDate: true } },
+    },
+  }).catch(() => null)
+  if (!rq) return
+  let testTo: string | null = null
+  if (rq.isTest && rq.createdById) {
+    const cu = await (prisma.user as any).findUnique({ where: { id: rq.createdById }, select: { email: true } }).catch(() => null)
+    testTo = cu?.email || rq.requesterEmail || null
+  }
+  // Approver (PC approver of this BU) + purchaser + requester + everyone who acted, minus the LG user.
+  const emails = [...new Set([pcApprover(rq.bu), rq.purchaserEmail, rq.requesterEmail, ...(rq.actors || [])]
+    .filter(Boolean).map((e: any) => String(e).toLowerCase()))].filter(e => e !== String(rq.shipModeBy || "").toLowerCase())
+  if (!emails.length) return
+  const users = await (prisma.user as any).findMany({ where: { email: { in: emails, mode: "insensitive" } }, select: { id: true, email: true } })
+  const byEmail = new Map<string, any>(users.map((u: any) => [String(u.email).toLowerCase(), u]))
+  const s0 = (rq.items || [])[0] || {}
+  const fields = [
+    { label: "เปลี่ยน mode ขนส่ง", value: `${fromMode} → <b>${toMode}</b>` },
+    { label: "เปลี่ยนโดย (LG)", value: byName || "-" },
+    { label: "เหตุผล", value: reason || "-" },
+    { label: "PO", value: [...new Set((rq.items || []).map((i: any) => i.poNoDoc).filter(Boolean))].join(", ") },
+    { label: "Country / Port", value: [s0.country, s0.port || s0.seaPort].filter(Boolean).join(" · ") },
+    { label: "Need date", value: s0.needDate ? new Date(s0.needDate).toLocaleDateString("en-GB") : "" },
+  ]
+  const statusText = `🚚 LG เปลี่ยน mode ขนส่ง (${fromMode} → ${toMode}) — ไม่ต้องอนุมัติใหม่`
+  await runWithTestMail(testTo, async () => {
+    for (const email of emails) {
+      const u = byEmail.get(email)
+      const link = u ? await magicLoginFor(u.id, "/pull-material/tracking") : (APP_URL ? `${APP_URL}/login?next=${encodeURIComponent("/pull-material/tracking")}` : "/login")
+      const html = pullEmailCard({ documentNo: rq.documentNo, bu: rq.bu, statusText, fields, cta: "ดูเอกสาร (Tracking)", link })
+      await sendMail([email], `[Pull Material] LG เปลี่ยน mode ขนส่ง ${fromMode} → ${toMode} — ${rq.documentNo}`, html).catch(() => {})
+    }
+  }).catch(() => {})
+}

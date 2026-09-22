@@ -372,6 +372,16 @@ model PullMaterialRequest {
   approverSignature String?
   approverName      String?
   approvedAt        DateTime?
+  // ── Shipping mode (Air / Sea / Courier). The doc is ALWAYS raised as an AIR request by the user;
+  // the compare box only SUGGESTS the cheapest mode. Approver picks a mode (must give a reason when it
+  // is not AIR), LG has the FINAL say and may change it after approval without a re-approval.
+  shipMode        String?   // AIR | SEA | COURIER — mode in force right now
+  shipModeBy      String?   // email of whoever set it last
+  shipModeAt      DateTime?
+  shipModeSource  String?   // APPROVER | LG
+  shipModeReason  String?   // why this mode (required when != AIR)
+  approvedMode    String?   // snapshot of the mode at the moment of approval (to show "LG changed it")
+  approvedEst     Float?    // landed-cost total (USD) of the approved mode
   attachments    PullMaterialAttachment[]
   recallReason   String?
   recalledBy     String?
@@ -600,4 +610,31 @@ model LgEntryLog {
 
   @@index([requestId])
   @@index([createdAt])
+}
+
+// Append-only history of every shipping-mode choice on a Pull RM doc (approver picks + LG overrides).
+// Keeps the landed cost of ALL modes at the moment of the choice so the decision can be analysed later.
+model PullShipModeLog {
+  id          String   @id @default(cuid())
+  requestId   String
+  documentNo  String?
+  bu          String?
+  brand       String?
+  port        String?
+  seaPort     String?
+  weightKg    Float?
+  chosenMode  String   // AIR | SEA | COURIER
+  prevMode    String?  // what it was before this change
+  carrier     String?  // courier carrier (DHL / FEDEX) when chosenMode = COURIER
+  estAir      Float?
+  estSea      Float?
+  estCourier  Float?
+  chosenEst   Float?   // landed cost of chosenMode
+  reason      String?
+  source      String   // APPROVER | LG
+  chosenBy    String?
+  chosenAt    DateTime @default(now())
+
+  @@index([requestId])
+  @@index([chosenAt])
 }

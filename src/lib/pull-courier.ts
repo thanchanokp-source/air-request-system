@@ -128,3 +128,31 @@ export function courierUsd(rows: any[], port: string, dest: string, weightKg: nu
   if (!thb || isNaN(thb)) return null
   return Math.round((thb / EXCHANGE_RATE) * 100) / 100
 }
+
+// ── Shipping mode helpers ────────────────────────────────────────────────────────────────────────
+// A Pull RM doc is ALWAYS raised as an AIR request; the mode below is what the approver picked (and
+// LG may override). Keep the union here so the API, the compare box and both pages agree.
+export type ShipMode = "AIR" | "SEA" | "COURIER"
+export const SHIP_MODES: ShipMode[] = ["AIR", "SEA", "COURIER"]
+export const SHIP_MODE_LABEL: Record<ShipMode, string> = { AIR: "✈️ Air", SEA: "🚢 Sea (LCL)", COURIER: "📦 Courier" }
+
+// Landed-cost totals per mode (null = no master rate for that mode).
+export function modeTotals(lc: any): Record<ShipMode, number | null> {
+  return { AIR: lc?.air?.total ?? null, SEA: lc?.sea?.total ?? null, COURIER: lc?.courier?.total ?? null }
+}
+
+// Cheapest mode that actually has a price — a SUGGESTION only (the user asked for AIR).
+export function cheapestMode(lc: any): ShipMode | null {
+  const t = modeTotals(lc)
+  const priced = SHIP_MODES.filter(m => t[m] != null && (t[m] as number) > 0)
+  if (!priced.length) return null
+  return priced.reduce((a, b) => ((t[b] as number) < (t[a] as number) ? b : a))
+}
+
+// Lead time text ("3 days", "30 วัน", "25-30 days") → days as a number (first number found).
+export function ltDays(txt: any): number | null {
+  const m = String(txt || "").match(/\d+(\.\d+)?/)
+  if (!m) return null
+  const n = Number(m[0])
+  return isNaN(n) ? null : n
+}

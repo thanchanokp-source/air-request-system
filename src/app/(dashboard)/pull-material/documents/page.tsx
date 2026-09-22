@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
-import { courierUsd, destForBu, seaUsd } from "@/lib/pull-courier"
+import { courierUsd, destForBu, seaUsd, pullLandedCost, cheapestMode, modeTotals, SHIP_MODE_LABEL, type ShipMode } from "@/lib/pull-courier"
 import { pullReqType } from "@/lib/pull-reqtype"
 import LandedCostCompare from "@/components/pull/LandedCostCompare"
 
@@ -63,6 +63,11 @@ export default function Page() {
   const [airRates, setAirRates] = useState<any[]>([])
   const [truckRates, setTruckRates] = useState<any[]>([])
   const [editFwd, setEditFwd] = useState(false) // toggle the FWD picker for Pre cost
+  // ── Shipping mode — LG has the FINAL say. The approver's pick arrives on the doc (approvedMode);
+  // LG may change it here WITHOUT a re-approval (the change is logged + emailed to the approver).
+  const [lgMode, setLgMode] = useState<ShipMode | null>(null)
+  const [lgModeReason, setLgModeReason] = useState("")
+  const [modeBusy, setModeBusy] = useState(false)
   useEffect(() => {
     fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRates(d.rows || [])).catch(() => {})
@@ -170,6 +175,47 @@ export default function Page() {
   // Per-PO invoice (stored in rq.poInvoices map); edits are keyed "poinv:<po>".
   const poInv = (rq: any, po: string) => edits[rq.id]?.["poinv:" + po] ?? ((rq.poInvoices || {})[po] || "")
   const buildPoInvoices = (rq: any) => { const m: Record<string, string> = { ...(rq.poInvoices || {}) }; Object.entries(edits[rq.id] || {}).forEach(([k, v]) => { if (k.startsWith("poinv:")) { const po = k.slice(6); if (v) m[po] = v; else delete m[po] } }); return m }
+
+  // Landed cost of a doc — same helper the compare box uses, so LG and Approval can never disagree.
+  const landedOf = (rq: any) => {
+    const its = rq?.items || []
+    const d0 = its.find((x: any) => x.airFreightCost != null) || its[0] || {}
+    return { d0, lc: pullLandedCost({ airRows: airRates, seaRows: seaRates, courierRows: courierRates, truckRows: truckRates, port: d0.port, seaPort: d0.seaPort, country: d0.country, weight: d0.weight, incoterm: d0.incoterm, bu: rq?.bu, factory: rq?.factory || d0.factory }) }
+  }
+
+  // Opening a doc → start from the mode in force: LG's own last pick, else what the approver approved,
+  // else the cheapest priced mode. AIR is what the user asked for in the first place.
+  useEffect(() => {
+    const rq = reqs.find(r => r.id === openId)
+    if (!rq) { setLgMode(null); setLgModeReason(""); return }
+    const { lc } = landedOf(rq)
+    setLgMode((rq.shipMode as ShipMode) || (rq.approvedMode as ShipMode) || cheapestMode(lc) || "AIR")
+    setLgModeReason(rq.shipModeReason || "")
+  }, [openId, reqs, airRates, seaRates, courierRates, truckRates]) // eslint-disable-line
+
+  // LG confirms / overrides the shipping mode — FINAL say, no re-approval. Logged + the approver is
+  // emailed whenever it differs from the mode that was approved.
+  const saveMode = async (rq: any) => {
+    if (!lgMode) return
+    if (lgMode !== "AIR" && !lgModeReason.trim()) return alert("เอกสารนี้ผู้ขอร้องขอ AIR — เลือก mode อื่นต้องระบุเหตุผล")
+    const { d0, lc } = landedOf(rq)
+    const t = modeTotals(lc)
+    if (rq.approvedMode && rq.approvedMode !== lgMode &&
+      !confirm(`เปลี่ยน mode จากที่อนุมัติไว้ (${rq.approvedMode}) → ${lgMode}?\n\nระบบจะบันทึกประวัติและแจ้งเมลผู้อนุมัติ (ไม่ต้องอนุมัติใหม่)`)) return
+    setModeBusy(true)
+    try {
+      const r = await fetch(`/api/pull-material/${rq.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shipMode: lgMode, shipModeReason: lgModeReason.trim() || null, shipModeSource: "LG",
+          shipModeEst: { estAir: t.AIR, estSea: t.SEA, estCourier: t.COURIER, chosenEst: t[lgMode],
+            port: d0.port, seaPort: d0.seaPort, weightKg: d0.weight, brand: d0.brand, carrier: lgMode === "COURIER" ? "DHL" : null },
+        }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) { await load(); alert(`บันทึก mode ขนส่งแล้ว: ${lgMode}`) } else alert(d.error || "บันทึกไม่สำเร็จ")
+    } catch (e) { alert("Error: " + String((e as any)?.message || e).slice(0, 160)) } finally { setModeBusy(false) }
+  }
 
   // Save the actual (HAWB / INV / Actual Air) → closes the doc (COMPLETED) so it shows done in Tracking.
   const save = async (rq: any) => {
@@ -571,7 +617,38 @@ export default function Page() {
                     return (
                       <div className="mb-4 space-y-2">
                         <LandedCostCompare airRows={airRates} seaRows={seaRates} courierRows={courierRates} truckRows={truckRates}
-                          port={d0.port} seaPort={d0.seaPort} country={d0.country} weight={d0.weight} incoterm={d0.incoterm} bu={rq.bu} factory={raw(rq, "factory") || d0.factory} />
+                          port={d0.port} seaPort={d0.seaPort} country={d0.country} weight={d0.weight} incoterm={d0.incoterm} bu={rq.bu} factory={raw(rq, "factory") || d0.factory}
+                          value={rq.status === "COMPLETED" ? (rq.shipMode as ShipMode) || null : lgMode}
+                          onChange={rq.status === "COMPLETED" ? undefined : setLgMode}
+                          requestedMode="AIR" needDate={d0.needDate} leadTimeAir={d0.leadTimeAir} leadTimeSea={d0.leadTimeSea} />
+
+                        {/* LG = final say. Shows what the approver approved, lets LG change it (reason + log). */}
+                        <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                            <span className="text-[11px] text-sky-900">
+                              ✅ Approver อนุมัติ: <b>{rq.approvedMode ? SHIP_MODE_LABEL[rq.approvedMode as ShipMode] : "—"}</b>
+                              {rq.approvedEst != null && <span className="text-sky-700"> · {fmt(rq.approvedEst)} USD</span>}
+                            </span>
+                            <span className="text-[11px] text-sky-900">
+                              🚚 LG เลือก: <b>{lgMode ? SHIP_MODE_LABEL[lgMode] : "—"}</b>
+                            </span>
+                            {rq.approvedMode && lgMode && rq.approvedMode !== lgMode && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">LG เปลี่ยนจาก {rq.approvedMode} → {lgMode}</span>
+                            )}
+                            {rq.status !== "COMPLETED" && (
+                              <button onClick={() => saveMode(rq)} disabled={modeBusy}
+                                className="ml-auto px-3 py-1.5 rounded-lg text-white text-xs font-semibold disabled:opacity-50" style={{ background: "#0369a1" }}>
+                                {modeBusy ? "…" : "💾 ยืนยัน mode (LG ชี้ขาด)"}
+                              </button>
+                            )}
+                          </div>
+                          {rq.status !== "COMPLETED" && lgMode && lgMode !== "AIR" && (
+                            <input value={lgModeReason} onChange={e => setLgModeReason(e.target.value)}
+                              placeholder="เหตุผลที่ไม่ส่ง AIR ตามที่ผู้ขอร้องขอ (บังคับ)…"
+                              className="mt-2 w-full border border-red-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200" />
+                          )}
+                          <p className="mt-1.5 text-[10px] text-sky-700">เปลี่ยนได้โดยไม่ต้องอนุมัติใหม่ · ระบบบันทึกประวัติทุกครั้งและแจ้งเมลผู้อนุมัติเมื่อต่างจากที่อนุมัติไว้</p>
+                        </div>
                         {(noAir || !seaM || (cwt > 0 && cwt <= 100 && !courierUsd(courierRates, d0.port, destForBu(rq.bu), cwt, "DHL"))) && (
                           <div className="flex flex-wrap gap-3 text-[11px]">
                             {noAir && <a href={addLink("air", d0.port)} className="text-amber-600 font-semibold underline hover:text-amber-700">✈️ เพิ่ม Air rate</a>}
@@ -607,6 +684,9 @@ export default function Page() {
               {/* LG entry — HAWB / INV / Actual (once per doc). LOCKED (grey) while No Master: LG must fill
                   the rate + Save (→ Approval) first; actual is entered later after the doc is approved. */}
               {(() => { const locked = rq.status === "PENDING_LG_RATE"
+                // Mode in force decides the wording: a courier parcel has a TRACKING NO, not a HAWB.
+                const curMode: ShipMode = (lgMode || rq.shipMode || rq.approvedMode || "AIR") as ShipMode
+                const isCourier = curMode === "COURIER"
                 const pcOpts = airPreCostOptions(airRates, d0.port, destForBu(rq.bu), d0.weight, d0.incoterm)
                 const pcFwd = raw(rq, "preCostFwd")
                 return (
@@ -619,8 +699,8 @@ export default function Page() {
                   <div className={`space-y-3 ${locked ? "opacity-50 pointer-events-none select-none" : ""}`}>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">MAWB NO</label>
                       <input disabled={locked} value={raw(rq, "mawbNo")} onChange={e => setVal(rq.id, "mawbNo", e.target.value)} placeholder="MAWB…" className={inp} /></div>
-                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">HAWB NO</label>
-                      <input disabled={locked} value={raw(rq, "hawbNo")} onChange={e => setVal(rq.id, "hawbNo", e.target.value)} placeholder="HAWB…" className={inp} /></div>
+                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">{isCourier ? "TRACKING NO (Courier)" : "HAWB NO"}</label>
+                      <input disabled={locked} value={raw(rq, "hawbNo")} onChange={e => setVal(rq.id, "hawbNo", e.target.value)} placeholder={isCourier ? "Tracking no…" : "HAWB…"} className={inp} /></div>
                     <div className="grid grid-cols-2 gap-3">
                       <div><label className="text-[11px] font-semibold text-green-700 block mb-1">FLIGHT ETD</label>
                         <input disabled={locked} type="date" value={rawDate(rq, "flightEtd")} onChange={e => setVal(rq.id, "flightEtd", e.target.value)} className={inp} /></div>
@@ -643,7 +723,7 @@ export default function Page() {
                     </div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">CFM IN-HOUSE DATE <span className="font-normal text-gray-400">(วันยืนยันเข้าโรงงาน)</span></label>
                       <input disabled={locked} type="date" value={rawDate(rq, "cfmInHouseDate")} onChange={e => setVal(rq.id, "cfmInHouseDate", e.target.value)} className={inp} /></div>
-                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">ACTUAL AIR FREIGHT <span className="text-red-500">*</span></label>
+                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">{curMode === "AIR" ? "ACTUAL AIR FREIGHT" : `ACTUAL FREIGHT (${curMode})`} <span className="text-red-500">*</span></label>
                       <input disabled={locked} type="number" value={raw(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} /></div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">LOCAL CHARGE (TH)</label>
                       <input disabled={locked} type="number" value={raw(rq, "localChargeTh")} onChange={e => setVal(rq.id, "localChargeTh", e.target.value)} placeholder="0" className={inp} /></div>

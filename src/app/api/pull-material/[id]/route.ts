@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { sendMail } from "@/lib/email"
 import { runWithTestMail } from "@/lib/test-ctx"
-import { notifyPullStage, notifyPullReturn } from "@/lib/pull-notify"
+import { notifyPullStage, notifyPullReturn, notifyShipModeChange } from "@/lib/pull-notify"
 import { recomputePullAir } from "@/lib/pull-freight"
 import { itemHasAnyRate } from "@/lib/pull-courier"
 import { magicLoginFor } from "@/lib/notify"
@@ -167,6 +167,42 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     })
   }
 
+  // ── Shipping mode (AIR / SEA / COURIER) ──────────────────────────────────────────────────────
+  // The doc is ALWAYS raised as an AIR request by the user. The approver PICKS a mode at approval
+  // (cheapest is only a suggestion — a non-AIR pick needs a reason); LG has the FINAL say and may
+  // change it afterwards with NO re-approval. Every change is appended to PullShipModeLog together
+  // with the landed cost of ALL modes at that moment, for later analysis.
+  if (typeof body.shipMode === "string" && ["AIR", "SEA", "COURIER"].includes(body.shipMode)) {
+    const src = body.shipModeSource === "LG" ? "LG" : "APPROVER"
+    const est = body.shipModeEst || {}
+    const reason = String(body.shipModeReason || "").trim() || null
+    if (body.shipMode !== "AIR" && !reason) {
+      return NextResponse.json({ error: "ผู้ขอร้องขอ AIR — เลือก mode อื่นต้องระบุเหตุผล" }, { status: 400 })
+    }
+    const cur = await (prisma as any).pullMaterialRequest.findUnique({
+      where: { id },
+      select: { shipMode: true, approvedMode: true, documentNo: true, bu: true },
+    })
+    const prev = cur?.shipMode || null
+    await (prisma as any).pullMaterialRequest.update({
+      where: { id },
+      data: { shipMode: body.shipMode, shipModeBy: actorEmail || null, shipModeAt: new Date(), shipModeSource: src, shipModeReason: reason },
+    })
+    await (prisma as any).pullShipModeLog.create({
+      data: {
+        requestId: id, documentNo: cur?.documentNo || null, bu: cur?.bu || null,
+        brand: est.brand || null, port: est.port || null, seaPort: est.seaPort || null, weightKg: num(est.weightKg),
+        chosenMode: body.shipMode, prevMode: prev, carrier: est.carrier || null,
+        estAir: num(est.estAir), estSea: num(est.estSea), estCourier: num(est.estCourier), chosenEst: num(est.chosenEst),
+        reason, source: src, chosenBy: actorEmail || null,
+      },
+    }).catch(() => {})
+    // LG overruled what was approved → tell the approver and the doc owners (no re-approval needed).
+    if (src === "LG" && cur?.approvedMode && cur.approvedMode !== body.shipMode) {
+      await notifyShipModeChange(id, cur.approvedMode, body.shipMode, actorName || actorEmail || "LG", reason).catch(() => {})
+    }
+  }
+
   if (body.status && (PULL_FLOW as readonly string[]).concat(["NO_AIR", "RECALLED", "REJECTED"]).includes(body.status)) {
     const data: any = { status: body.status }
     const isStop = body.status === "RECALLED" || body.status === "REJECTED"
@@ -206,6 +242,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     // DVM Purchase approval → snapshot the approver's signature onto the doc (stamped in the PDF).
+    // Approval also FREEZES the shipping mode that was approved + its landed cost (LG changes are
+    // compared against this snapshot, so "LG changed Sea → Air" stays visible on the doc).
+    if (body.status === "APPROVED") {
+      const chosen = typeof body.shipMode === "string" ? body.shipMode : (await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { shipMode: true } }))?.shipMode
+      if (chosen) {
+        data.approvedMode = chosen
+        data.approvedEst = num(body.shipModeEst?.chosenEst)
+      }
+    }
     if (body.status === "APPROVED" && typeof body.signatureData === "string" && body.signatureData.startsWith("data:image")) {
       data.approverSignature = body.signatureData
       data.approverName = (session.user as any).name || actorEmail || null

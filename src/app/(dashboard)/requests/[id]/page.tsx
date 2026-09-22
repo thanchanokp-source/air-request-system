@@ -4935,9 +4935,36 @@ export default function RequestDetailPage() {
                     className="px-3 py-1.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 disabled:opacity-50">
                     {claimBackGw ? `↩ Back to Merchandise (${dvmSelected.size})` : `↩ Back to SCM (${dvmSelected.size})`}
                   </button>
+                  {/* NYG/EA/TRM batch: flag selected SOs for MER to drop (data wrong) — doc stays at claim. */}
+                  {!claimBackGw && (
+                    <button disabled={submitting !== null}
+                      onClick={async () => {
+                        const reason = window.prompt(`ส่ง ${dvmSelected.size} SO ให้ MER ลบ (data ผิด) — เหตุผล:`)
+                        if (reason == null || !reason.trim()) return
+                        const ids = [...dvmSelected]
+                        setSubmitting("_batch")
+                        let ok = true, last: any = null
+                        for (const itemId of ids) {
+                          const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "flag_drop_so", itemId, comment: reason.trim() }) })
+                          if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Error"); ok = false; break }
+                          last = await res.json()
+                        }
+                        if (ok && last) { setReq(last); setDvmSelected(new Set()) }
+                        setSubmitting(null)
+                      }}
+                      className="px-3 py-1.5 bg-rose-600 text-white rounded-lg font-medium hover:bg-rose-700 disabled:opacity-50">↩ Back to MER ({dvmSelected.size})</button>
+                  )}
                 </>
               )}
             </div>
+            {/* Legend — what each action means (NYG/EA/TRM claim). */}
+            {!claimBackGw && (
+              <div className="mt-2 text-[11px] text-gray-600 bg-blue-50/60 border border-blue-100 rounded-lg px-3 py-2 flex flex-wrap gap-x-5 gap-y-1">
+                <span><b className="text-green-700">✓ Approve</b> = อนุมัติ claim ของแผนกเรา</span>
+                <span><b className="text-orange-600">↩ Back to SCM</b> = ไม่ใช่ claim ของเรา (claim เลือกผิดแผนก)</span>
+                <span><b className="text-rose-600">↩ Back to MER</b> = data ผิด → ส่งให้ MER ลบ SO นั้น</span>
+              </div>
+            )}
           </div>
 
           {/* Attach supporting files — by DOCUMENT (GW claim) */}
