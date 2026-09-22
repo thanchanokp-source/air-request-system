@@ -525,8 +525,11 @@ export default function ApprovalsPage() {
                     : <StatusBadge status={req.status} bu={req.bu} />}
                   <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">EST {fmtNum(estTotal)} {cur}</span>
                   <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">ACT {fmtNum(actTotal)} {cur}</span>
-                  {/* Back-to-SCM / returned reason — shown on the card so SCM sees WHY it came back without opening. */}
+                  {/* Returned reason — shown ONLY to the recipient of the return (SCM re-selects claim / MER edits),
+                      never to the claim approver whose other SOs are unrelated to the sent-back ones. */}
                   {(() => {
+                    const canSeeBack = ["SCM_USER", "MER_USER", "MER_EA", "MER_TRM", "ADMIN"].some(r => myRoles.includes(r))
+                    if (!canSeeBack) return null
                     const reasons = [...new Set((req.items || []).filter((i: any) => i.itemComment && i.itemStatus === "PENDING").map((i: any) => String(i.itemComment).trim()).filter(Boolean))]
                     if (!reasons.length) return null
                     const txt = reasons.join(" · ")

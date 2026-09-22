@@ -20,6 +20,7 @@ const MASTER_ROLES_NYG = [
   { role: "SCM_NYK",              label: "Claim-SCM NYK User",    hint: "Enter CR NO",                             needsPriority: true, bu: "NYG" },
   { role: "SCM_NYK_EVP",          label: "Claim-SCM NYK EVP",     hint: "Approves after the Action Approver",      needsPriority: true, bu: "NYG" },
   { role: "LOGISTICS",            label: "Logistics",             hint: "Manage HAWB + Generate PDF",               needsPriority: false, bu: "NYG" },
+  { role: "LOGISTICS_SUB",        label: "Logistics sub",         hint: "Logistics helper (same booking access, NYG)", needsPriority: false, bu: "NYG" },
   { role: "ACCOUNTING",           label: "Accounting",            hint: "Receives final file + closes document",              needsPriority: false, bu: "NYG" },
 ]
 

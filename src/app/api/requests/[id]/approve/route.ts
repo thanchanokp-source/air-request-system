@@ -1250,11 +1250,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         comment: `SO: ${item?.so} — ${comment || "Back to SCM"}`
       }
     })
-    const newStatus = await recalcDocStatus(id)
-    // A NYG doc wrongly imported as NYK Direct (rode the GW claim engine) is being sent back to SCM to
-    // be redone as a proper NYG claim → clear nykDirect so it no longer routes through the GW machinery.
-    const clearNyk = request.bu !== "GW" && !!(request as any).nykDirect
-    await prisma.airRequest.update({ where: { id }, data: { status: newStatus, ...(clearNyk ? { nykDirect: false } : {}) } })
+    // Recompute with the GW engine for NYK-Direct docs so the doc's stage stays correct (don't touch
+    // nykDirect — back-to-SCM only re-picks the claim dept; the doc's routing must not change here).
+    const isGwFlow = request.bu === "GW" || !!(request as any).nykDirect
+    const newStatus = isGwFlow ? await recalcDocStatusGW(id) : await recalcDocStatus(id)
+    await prisma.airRequest.update({ where: { id }, data: { status: newStatus } })
     // Alert SCM (re-select claim dept). PENDING_SCM notify targets the SCM user.
     if (newStatus === "PENDING_SCM") await notifyStatusChange(id, "PENDING_SCM").catch(() => {})
     return NextResponse.json(await getUpdated())
@@ -1296,6 +1296,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await (prisma as any).requestAttachment.updateMany({ where: { itemId } , data: { itemId: null } }).catch(() => {})
     await prisma.airRequestItem.delete({ where: { id: itemId } })
     await prisma.approvalLog.create({ data: { requestId: id, userId, action: "DELETE_ITEM", fromStatus: request.status, toStatus: request.status, comment: `Dropped SO ${item?.so}` } })
+    // Recompute the doc's stage from the SURVIVING items so dropping a stray SO returns the doc to the
+    // remaining SOs' stage (GW engine for NYK-Direct docs) — never leaves the doc stranded at a stage
+    // that belongs only to the SO we just removed.
+    const its = await (prisma as any).airRequestItem.findMany({ where: { requestId: id }, select: { id: true } })
+    if (its.length) {
+      const isGwFlow = request.bu === "GW" || !!(request as any).nykDirect
+      const ns = isGwFlow ? await recalcDocStatusGW(id) : await recalcDocStatus(id)
+      await prisma.airRequest.update({ where: { id }, data: { status: ns } })
+    }
     return NextResponse.json(await getUpdated())
   }
 
