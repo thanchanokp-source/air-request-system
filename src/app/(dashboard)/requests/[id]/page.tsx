@@ -4974,7 +4974,7 @@ export default function RequestDetailPage() {
           {/* Legend — what each claim action means (NYG/EA/TRM). Placed above the
               CR/EVP picker box so it reads as a note in that area. */}
           {!claimBackGw && (
-            <div className="text-[11px] text-gray-600 bg-blue-50/60 border border-blue-100 rounded-lg px-3 py-2 flex flex-wrap gap-x-5 gap-y-1">
+            <div className="text-sm text-gray-700 bg-blue-50/60 border border-blue-100 rounded-lg px-4 py-3 flex flex-wrap gap-x-6 gap-y-2 leading-relaxed">
               <span><b className="text-green-700">✓ Approve</b> = อนุมัติ claim ของแผนกเรา</span>
               <span><b className="text-orange-600">↩ Back to SCM</b> = ไม่ใช่ claim ของเรา (claim เลือกผิดแผนก)</span>
               <span><b className="text-rose-600">↩ Back to MER</b> = data ผิด → ส่งให้ MER ลบ SO นั้น</span>

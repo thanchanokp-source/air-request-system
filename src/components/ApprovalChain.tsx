@@ -133,10 +133,9 @@ const STAGE_INFO: Record<string, { label: string; roles: string[]; assigned?: (r
 function currentStageWho(status: string, bu: string, soItem: any, req: any, dir?: any[]): string {
   const info = STAGE_INFO[status]
   if (!info) return ""
-  // Logistics is a whole team (everyone alerted can act / FW) → list all names, not just the first.
+  // Logistics is a whole team → show just the word "Logistics" (no person names) per request.
   const isLgStage = status === "PENDING_LOGISTICS" || status === "PENDING_LOGISTICS_GW"
-  const who = nameOf(info.assigned?.(req, soItem))
-    || (isLgStage ? resolveRoleNames(dir, info.roles, bu).join(", ") : resolveRoleEmail(dir, info.roles, bu))
+  const who = isLgStage ? "" : (nameOf(info.assigned?.(req, soItem)) || resolveRoleEmail(dir, info.roles, bu))
   // Always surface the current stage even when the specific person can't be resolved (e.g. SCM /
   // President / Logistics — role-based, not per-doc assigned) so an in-flight doc always shows Waiting.
   return who ? `${info.label}: ${who}` : info.label
@@ -280,11 +279,8 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
     // TRM logistics = LOGISTICS_TRM (Urairat, whose bu=GW) → look up by that role with NO bu filter
     // (the role already encodes TRM). Other BUs use the shared LOGISTICS scoped by the doc's BU.
     // Show the WHOLE LG team alerted for this BU (all can act / FW), not just the first person.
-    const lgName = (bu === "TRM"
-      ? resolveRoleNames(approvers, ["LOGISTICS_TRM"], undefined)
-      : resolveRoleNames(approvers, ["LOGISTICS"], bu)).join(", ")
-    const lgFw = req?.lgForwardEmail ? ` → FW: ${fwNames(req)}` : ""
-    const lgWho = !completed && !rejected && claimReached && !lgDone ? `Logistics${lgName ? `: ${lgName}` : ""}${lgFw}` : ""
+    // Show only the word "Logistics" (whole team, no person name) per request.
+    const lgWho = !completed && !rejected && claimReached && !lgDone ? "Logistics" : ""
     const pendingWho = [...(stageWho ? [stageWho] : []), ...(lgWho ? [lgWho] : []), ...claimWho, ...(nykWho ? [nykWho] : [])]
     return (
       <div className="py-1">
@@ -379,9 +375,8 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   // Logistics runs in PARALLEL with Claim at PENDING_CLAIM_GW — that status has no linear STAGE_INFO
   // entry, so surface LG here (until Save & Send sets logisticsSent). At PENDING_LOGISTICS_GW the
   // linear stageWho already names Logistics, so only add it for the parallel status to avoid a dup.
-  const gwLgFw = req?.lgForwardEmail ? ` → FW: ${fwNames(req)}` : ""
   const gwLgWho = (status === "PENDING_CLAIM_GW" && !lgDone && !completed && !rejected)
-    ? (() => { const n = resolveRoleNames(approvers, ["LOGISTICS_GW"], undefined).join(", "); return [(n ? `Logistics: ${n}` : "Logistics") + gwLgFw] })()
+    ? ["Logistics"]
     : []
   const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwLgWho, ...gwClaimWho, ...(gwNykWho ? [gwNykWho] : [])]
 

@@ -79,7 +79,7 @@ const STATUS_ROLES: Record<string, string[]> = {
   PENDING_SCM:          ["SCM_USER"],
   PENDING_VP_SCM:       ["VP_SCM"],
   PENDING_PRESIDENT:    ["PRESIDENT"],
-  PENDING_LOGISTICS:    ["LOGISTICS"],
+  PENDING_LOGISTICS:    ["LOGISTICS", "LOGISTICS_SUB"],
   PENDING_CLAIM:        ["DVM_COMMERCIAL","DVM_PROCUREMENT","DVM_NYK","DVM_PRODUCTION","CLAIM_COMMERCIAL","CLAIM_PROCUREMENT","CLAIM_NYK","CLAIM_PRODUCTION"],
   PENDING_VP_CLAIM:     ["VP_COMMERCIAL","VP_PROCUREMENT","VP_NYK","VP_PRODUCTION"],
   PENDING_VP_NYK:       ["VP_NYK"],
@@ -727,7 +727,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
       const acHtml = buildHtml(req, "PENDING_SCM", link, undefined, undefined, acMagicLink)
       const lgUsers = await (prisma.user as any).findMany({ where: (req as any).bu === "TRM"
         ? { isActive: true, OR: [{ role: "LOGISTICS_TRM" }, { roles: { has: "LOGISTICS_TRM" } }] }
-        : { isActive: true, bu: { in: [(req as any).bu || "NYG", "ALL"] }, OR: [{ role: "LOGISTICS" }, { roles: { has: "LOGISTICS" } }] }, select: { email: true } })
+        : { isActive: true, bu: { in: [(req as any).bu || "NYG", "ALL"] }, OR: [{ role: { in: ["LOGISTICS", "LOGISTICS_SUB"] } }, { roles: { hasSome: ["LOGISTICS", "LOGISTICS_SUB"] } }] }, select: { email: true } })
       const acUsers = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: "ACCOUNTING" }, { roles: { has: "ACCOUNTING" } }] }, select: { email: true } })
       const lgEmails = lgUsers.map((u: any) => u.email).filter(Boolean)
       const acEmails = acUsers.map((u: any) => u.email).filter(Boolean)
@@ -946,7 +946,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
         // BU-scoped: NYG docs → NYG Logistics; EA docs → EA Logistics (quynh). Cross-BU LG (bu="ALL") sees both.
         const lgUsers = await prisma.user.findMany({ where: ((req as any).bu === "TRM"
           ? { isActive: true, OR: [{ role: "LOGISTICS_TRM" }, { roles: { has: "LOGISTICS_TRM" } }] }
-          : { isActive: true, bu: { in: [(req as any).bu || "NYG", "ALL"] }, OR: [{ role: "LOGISTICS" }, { roles: { has: "LOGISTICS" } }] }) as any, select: { id: true, email: true } })
+          : { isActive: true, bu: { in: [(req as any).bu || "NYG", "ALL"] }, OR: [{ role: { in: ["LOGISTICS", "LOGISTICS_SUB"] } }, { roles: { hasSome: ["LOGISTICS", "LOGISTICS_SUB"] } }] }) as any, select: { id: true, email: true } })
         for (const u of lgUsers) {
           if (!u.email) continue
           const html = buildHtml(req, "PENDING_LOGISTICS", docLink, undefined, undefined, await magicLoginFor(u.id, "/logistics"))
@@ -1403,7 +1403,7 @@ async function notifyReviseToLgImpl(requestId: string, reason: string, byName?: 
     const req = await (prisma.airRequest as any).findUnique({ where: { id: requestId }, select: { documentNo: true, bu: true, brandName: true } })
     if (!req) return
     const bu = req.bu || "NYG"
-    const lgRoles = bu === "GW" ? ["LOGISTICS_GW"] : bu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS"]
+    const lgRoles = bu === "GW" ? ["LOGISTICS_GW"] : bu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS", "LOGISTICS_SUB"]
     const us = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: { in: lgRoles } }, { roles: { hasSome: lgRoles } }] }, select: { email: true, bu: true } })
     const recipients = us.filter((u: any) => bu === "TRM" || !u.bu || u.bu === "ALL" || u.bu === bu).map((u: any) => u.email).filter(Boolean)
     if (!recipients.length) return
@@ -1446,7 +1446,7 @@ async function notifyRecallImpl(requestId: string, byName?: string, reason?: str
     }
     // TRM logistics = the LOGISTICS_TRM role (Urairat, whose bu=GW) → query by role, NOT bu.
     // Other non-GW BUs use the shared LOGISTICS role scoped by the doc's BU.
-    const lgRoles = bu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS"]
+    const lgRoles = bu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS", "LOGISTICS_SUB"]
     const lgScope = bu !== "TRM"
     switch (req.status) {
       case "PENDING_DVM_MER": req.assignedDvmMer ? add(req.assignedDvmMer) : await addRole(["DVM_MER"]); break
@@ -1684,7 +1684,7 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
         }
       }
       if (!doc.logisticsSent) {
-        const lgRoles = docBu === "GW" ? ["LOGISTICS_GW"] : docBu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS"]
+        const lgRoles = docBu === "GW" ? ["LOGISTICS_GW"] : docBu === "TRM" ? ["LOGISTICS_TRM"] : ["LOGISTICS", "LOGISTICS_SUB"]
         const lgUs = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: { in: lgRoles } }, { roles: { hasSome: lgRoles } }] }, select: { email: true, bu: true } })
         for (const u of lgUs) { if (docBu === "TRM" || !u.bu || u.bu === "ALL" || u.bu === docBu) addE(u.email) }
       }
@@ -2005,8 +2005,8 @@ export async function notifyLgPendingReminder(): Promise<{ sent: number; docs: n
   for (const bu of ["NYG", "GW"] as const) {
     const list = byBu[bu]
     if (!list.length) continue
-    const lgRole = bu === "GW" ? "LOGISTICS_GW" : "LOGISTICS"
-    const lgUsers: any[] = await (prisma.user as any).findMany({ where: { isActive: true, role: lgRole }, select: { id: true, email: true } })
+    const lgRoles = bu === "GW" ? ["LOGISTICS_GW"] : ["LOGISTICS", "LOGISTICS_SUB"]
+    const lgUsers: any[] = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: { in: lgRoles } }, { roles: { hasSome: lgRoles } }] }, select: { id: true, email: true } })
     for (const u of lgUsers) {
       if (!u.email) continue
       // One personal login token reused across this user's doc links (persists so older
