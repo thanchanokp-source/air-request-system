@@ -103,7 +103,8 @@ export default function LgBookingPage() {
       const byDoc: Record<string, any[]> = {}
       for (const row of brandRows) (byDoc[row.request.id] ||= []).push(row)
       const docs = Object.values(byDoc).map(items => ({ request: items[0].request, items }))
-      const draftIds = brandRows.filter((r: any) => r.hawbNo || r.actualAirFreight != null).map((r: any) => r.id)
+      // Draft = LG has started entering data on this SO — from the FIRST field (INV), not only HAWB/Actual.
+      const draftIds = brandRows.filter((r: any) => r.invoiceNo || r.hawbNo || r.actualAirFreight != null).map((r: any) => r.id)
       return { brand, docs, count: brandRows.length, ids: brandRows.map(r => r.id), draftCount: draftIds.length, draftIds }
     })
   }, [rows, q, buF, fwOnly])
@@ -220,27 +221,38 @@ export default function LgBookingPage() {
             <span className="text-xs text-gray-400">{soMatches.length} found · tick to select</span>
           </div>
           {soMatches.length === 0 ? <div className="px-4 py-8 text-center text-gray-400 text-sm">No SO matches</div> : (
-            <div className="max-h-[62vh] overflow-auto p-3 grid sm:grid-cols-2 gap-2.5">
-              {soMatches.map(r => (
-                <label key={r.id} className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition ${selected.has(r.id) ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}>
-                  <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} className="mt-0.5 rounded border-gray-300" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-gray-900 text-sm">{r.so}</span>
-                      <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">{r.request.documentNo}</span>
-                      {(r.hawbNo || r.actualAirFreight != null) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">✓ booked</span>}
-                    </div>
-                    <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1">
-                      <Cell label="Style" value={r.style} />
-                      <Cell label="Sub" value={r.sub} />
-                      <Cell label="Customer PO" value={r.customerPO} />
-                      <Cell label="จำนวน (QTY)" value={r.qtyRequestAir} />
-                      <Cell label="น้ำหนัก (kg)" value={r.grossWeight} />
-                      <Cell label="Brand" value={r.brand} />
-                    </div>
-                  </div>
-                </label>
-              ))}
+            <div className="max-h-[62vh] overflow-auto">
+              <table className="w-full text-xs whitespace-nowrap">
+                <thead className="bg-gray-50 text-gray-500 sticky top-0 z-10">
+                  <tr className="text-left">
+                    <th className="px-3 py-2 w-8"></th>
+                    <th className="px-3 py-2 font-medium">SO</th>
+                    <th className="px-3 py-2 font-medium">Doc</th>
+                    <th className="px-3 py-2 font-medium">Style</th>
+                    <th className="px-3 py-2 font-medium">Sub</th>
+                    <th className="px-3 py-2 font-medium">Customer PO</th>
+                    <th className="px-3 py-2 font-medium">Brand</th>
+                    <th className="px-3 py-2 font-medium text-right">QTY</th>
+                    <th className="px-3 py-2 font-medium text-right">น้ำหนัก (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {soMatches.map(r => (
+                    <tr key={r.id} onClick={() => toggle(r.id)}
+                      className={`border-t border-gray-100 cursor-pointer ${selected.has(r.id) ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+                      <td className="px-3 py-1.5"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggle(r.id)} onClick={e => e.stopPropagation()} className="rounded border-gray-300" /></td>
+                      <td className="px-3 py-1.5 font-bold text-gray-900">{r.so} {(r.invoiceNo || r.hawbNo || r.actualAirFreight != null) && <span className="text-[9px] px-1 py-0.5 rounded-full bg-amber-100 text-amber-700 align-middle" title="มี draft (เริ่มกรอกแล้ว)">📝</span>}</td>
+                      <td className="px-3 py-1.5 text-blue-700">{r.request.documentNo}</td>
+                      <td className="px-3 py-1.5 text-gray-700">{r.style || "-"}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{r.sub || "-"}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{r.customerPO || "-"}</td>
+                      <td className="px-3 py-1.5 text-gray-600">{r.brand || "-"}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(r.qtyRequestAir)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{r.grossWeight != null ? fmtNum(r.grossWeight) : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -276,7 +288,7 @@ export default function LgBookingPage() {
                   const cur = (req.bu === "EA" || String(req.documentNo || "").startsWith("AIR_EA")) ? "USD" : "THB" // EA prices in USD
                   const docIds = items.map((i: any) => i.id)
                   const docAllOn = docIds.every((id: string) => selected.has(id))
-                  const docDraft = items.filter((i: any) => i.hawbNo || i.actualAirFreight != null).length
+                  const docDraft = items.filter((i: any) => i.invoiceNo || i.hawbNo || i.actualAirFreight != null).length
                   return (
                     <div key={req.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-4 py-3 bg-gray-50/70 border-b border-gray-100 flex flex-wrap items-center gap-2">
@@ -292,7 +304,7 @@ export default function LgBookingPage() {
                           )
                         })()}
                         {docDraft > 0 && <span role="button" tabIndex={0} title="กดเพื่อเลือก SO ที่มี draft ในเอกสารนี้"
-                          onClick={e => { e.stopPropagation(); toggleMany(items.filter((i: any) => i.hawbNo || i.actualAirFreight != null).map((i: any) => i.id), true) }}
+                          onClick={e => { e.stopPropagation(); toggleMany(items.filter((i: any) => i.invoiceNo || i.hawbNo || i.actualAirFreight != null).map((i: any) => i.id), true) }}
                           className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300 font-medium whitespace-nowrap cursor-pointer hover:bg-amber-200">📝 draft {docDraft} SO ✓</span>}
                         <span className="text-xs text-gray-500">{req.bu}</span>
                         <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">EST {fmtNum(est)} {cur}</span>
