@@ -205,7 +205,10 @@ export default function LgEntryPage() {
     let err = ""
     try { await persist(new Set(ready)); await load() } catch (e: any) { err = e?.message || "error" }
     setSaving(false); await new Promise(r => setTimeout(r, 50))
-    alert(err ? `ส่งไม่สำเร็จ: ${err}` : `Forwarded ${ready.length} document(s)`)
+    if (err) { alert(`ส่งไม่สำเร็จ: ${err}`); return }
+    alert(`Forwarded ${ready.length} document(s)`)
+    // Send สำเร็จ → เด้งกลับหน้า LG BOOKING
+    window.location.href = "/logistics"
   }
 
   // Export the SELECTED transactions (cross-document) as the MER-format sheet + SCM claim columns,
