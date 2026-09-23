@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 //   Step 2: see every SO+SUB on the invoice; tick the SOs that reached LG (others locked)
 // Data from /api/lg-inv-booking (admin-only). No writes — "ไปหน้าเพิ่ม HAWB" is a placeholder.
 const MAROON = "#6b1a1a"
-type Line = { so: string; sub: string; pcs: number; plan: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none" }
+type Line = { so: string; sub: string; pcs: number; plan: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none"; itemId: string | null }
 const QTY: Record<string, { txt: string; cls: string }> = {
   exactly: { txt: "✓ exactly", cls: "bg-green-100 text-green-700" },
   revise:  { txt: "✏ revise",  cls: "bg-sky-100 text-sky-700" },
@@ -71,6 +71,19 @@ export default function LgAirBookingPage() {
     }
     return { ready, locked, selCnt, selPcs }
   }, [chosenInvs, sel])
+
+  // Hand off to the existing HAWB entry page (/logistics/entry) — it reads air req item IDs from
+  // sessionStorage "lg_entry_ids". Collect the ticked (ready) SO+SUB lines' item ids.
+  const goHawb = () => {
+    const ids: string[] = []
+    for (const iv of chosenInvs) for (const l of iv.sos) {
+      if (l.air === "ready" && l.itemId && sel[`${iv.inv}|${l.so}|${l.sub}`]) ids.push(l.itemId)
+    }
+    const uniq = [...new Set(ids)]
+    if (!uniq.length) { alert("ยังไม่มี SO ที่เลือก (หรือหา item ในระบบไม่เจอ)"); return }
+    try { sessionStorage.setItem("lg_entry_ids", JSON.stringify(uniq)) } catch {}
+    window.location.href = "/logistics/entry"
+  }
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
@@ -143,7 +156,7 @@ export default function LgAirBookingPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => setStep(1)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">← แก้ INV</button>
             <span className="text-xs text-gray-500 font-semibold">Brand: {brand}</span>
-            <button onClick={() => alert(`→ ไปหน้าเพิ่ม HAWB (หน้าเดิม)\n\n• SO/INV ที่ติ๊กไว้มาให้แล้ว — ไม่ต้องกรอก INV\n• LG ใส่ HAWB + expense (1 HAWB = ${brand})\n• SO ที่ล็อก (ยังไม่ถึงคิว LG) ถูกข้ามไว้\n\n(preview — ยังไม่เขียนลง flow จริง)\n\nพร้อมส่ง: ${summary.selCnt} SO`)}
+            <button onClick={goHawb}
               disabled={summary.selCnt === 0}
               className="ml-auto text-sm font-bold text-white px-4 py-1.5 rounded-lg disabled:opacity-40" style={{ background: "#15803d" }}>ไปหน้าเพิ่ม HAWB ({summary.selCnt})</button>
           </div>
