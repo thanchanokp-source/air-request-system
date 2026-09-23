@@ -46,14 +46,16 @@ export async function GET(req: NextRequest) {
   // ── Air Request items (NYG, non-test) ──
   const items = await (prisma as any).airRequestItem.findMany({
     where: { request: { bu: "NYG", isTest: false } },
-    select: { so: true, sub: true, brand: true, invoiceNo: true, qtyRequestAir: true,
+    select: { so: true, sub: true, brand: true, invoiceNo: true, qtyRequestAir: true, airFreight: true, actualAirFreight: true,
       request: { select: { documentNo: true, status: true } } },
   }).catch(() => [])
-  const airBySo = new Map<string, { so: string; qtyPlan: number; brands: Set<string>; docs: Set<string>; invs: Set<string>; subs: Set<string> }>()
+  const airBySo = new Map<string, { so: string; qtyPlan: number; est: number; actual: number; brands: Set<string>; docs: Set<string>; invs: Set<string>; subs: Set<string> }>()
   for (const i of items) {
     const k = soN(i.so); if (!k) continue
-    const g = airBySo.get(k) || { so: i.so, qtyPlan: 0, brands: new Set<string>(), docs: new Set<string>(), invs: new Set<string>(), subs: new Set<string>() }
+    const g = airBySo.get(k) || { so: i.so, qtyPlan: 0, est: 0, actual: 0, brands: new Set<string>(), docs: new Set<string>(), invs: new Set<string>(), subs: new Set<string>() }
     g.qtyPlan += Number(i.qtyRequestAir) || 0
+    g.est += Number(i.airFreight) || 0
+    g.actual += Number(i.actualAirFreight) || 0
     if (i.brand) g.brands.add(String(i.brand))
     if (i.invoiceNo) g.invs.add(String(i.invoiceNo))
     if (i.sub) g.subs.add(String(i.sub))
@@ -68,11 +70,14 @@ export async function GET(req: NextRequest) {
   let exactly = 0, revise = 0, prepaid = 0
   // QTY (pcs) totals — the ACTUAL exported qty from mp_line, split by match status.
   let exactlyPcs = 0, revisePcs = 0, prepaidPcs = 0, shippedPcs = 0
+  // Freight totals (THB) for the matched (exported ∩ air req) SOs — EST (planned) + Actual (LG-entered).
+  let matchedEst = 0, matchedActual = 0
   for (const [k, m] of mpBySo) {
     const a = airBySo.get(k)
     const qtyAirMap = m.pcs
     shippedPcs += qtyAirMap
     if (a) {
+      matchedEst += a.est; matchedActual += a.actual
       const status = a.qtyPlan === qtyAirMap ? "exactly" : "revise"
       if (status === "exactly") { exactly++; exactlyPcs += qtyAirMap } else { revise++; revisePcs += qtyAirMap }
       tabA.push({ status, so: m.so, brand: [...(a.brands.size ? a.brands : m.brands)].slice(0, 2), qtyPlan: a.qtyPlan, qtyAirMap, lines: m.lines, docs: [...a.docs].slice(0, 3), airInv: [...a.invs].slice(0, 3), subs: [...(a.subs.size ? a.subs : new Set(mpSubs(m)))] })
@@ -95,6 +100,8 @@ export async function GET(req: NextRequest) {
       tabA: tabA.length, tabB: tabB.length, exactly, revise, prepaid, noship: tabB.length, mpKeys: mpBySo.size, airKeys: airBySo.size,
       // pcs totals — actual exported qty from mp_line
       shippedPcs, exactlyPcs, revisePcs, prepaidPcs, matchedPcs: exactlyPcs + revisePcs, matchedSo: exactly + revise,
+      // freight totals (THB) for matched SOs
+      matchedEst: Math.round(matchedEst), matchedActual: Math.round(matchedActual),
     },
   })
 }

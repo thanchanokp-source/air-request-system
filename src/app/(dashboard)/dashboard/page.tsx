@@ -926,6 +926,20 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+          {/* freight (THB) for matched SOs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+            {([
+              ["EST freight ตรง mp_line (THB)", mpCounts.matchedEst, "text-sky-700", "bg-sky-50 border-sky-200", "แผน (air req)"],
+              ["Actual freight (THB)", mpCounts.matchedActual, "text-teal-700", "bg-teal-50 border-teal-200", "LG กรอกจริง"],
+              ["Δ Actual − EST (THB)", (mpCounts.matchedActual ?? 0) - (mpCounts.matchedEst ?? 0), ((mpCounts.matchedActual ?? 0) - (mpCounts.matchedEst ?? 0)) > 0 ? "text-red-600" : "text-green-600", "bg-gray-50 border-gray-200", "ต่างจากแผน"],
+            ] as [string, any, string, string, string][]).map(([l, v, tc, bg, sub]) => (
+              <div key={l} className={`rounded-lg border p-2.5 ${bg}`}>
+                <p className="text-[11px] text-gray-500">{l}</p>
+                <p className={`text-lg font-bold tabular-nums ${tc}`}>{v != null ? (v > 0 && l.startsWith("Δ") ? "+" : "") + Number(v).toLocaleString() : "—"}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
+              </div>
+            ))}
+          </div>
           {/* SO-count breakdown */}
           <div className="flex flex-wrap gap-2 text-[11px]">
             <span className="px-2.5 py-1 rounded-lg border bg-green-50 border-green-200 text-green-800">✓ exactly <b>{Number(mpCounts.exactly || 0).toLocaleString()}</b> SO</span>
