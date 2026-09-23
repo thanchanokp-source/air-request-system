@@ -25,11 +25,13 @@ export default function LgAirBookingPage() {
   const [data, setData] = useState<{ brands: Brand[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState("")
-  const [step, setStep] = useState<1 | 2>(1)
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [brand, setBrand] = useState<string | null>(null)
   const [q, setQ] = useState("")
   const [pickedInv, setPickedInv] = useState<Set<string>>(new Set())
   const [sel, setSel] = useState<Record<string, boolean>>({}) // `${inv}|${so}|${sub}` -> bool
+  const [hawbIn, setHawbIn] = useState<Record<string, string>>({}) // inv -> HAWB no (LG types)
+  const [expIn, setExpIn] = useState<Record<string, string>>({})   // inv -> expense/HAWB total (LG types)
 
   useEffect(() => {
     setLoading(true); setErr("")
@@ -72,18 +74,16 @@ export default function LgAirBookingPage() {
     return { ready, locked, selCnt, selPcs }
   }, [chosenInvs, sel])
 
-  // Hand off to the existing HAWB entry page (/logistics/entry) — it reads air req item IDs from
-  // sessionStorage "lg_entry_ids". Collect the ticked (ready) SO+SUB lines' item ids.
+  // Go to the in-page TRIAL HAWB entry (step 3) — admin preview, does NOT touch the real
+  // /logistics/entry flow. INV is carried over (locked); LG only types HAWB + expense.
   const goHawb = () => {
-    const ids: string[] = []
-    for (const iv of chosenInvs) for (const l of iv.sos) {
-      if (l.air === "ready" && l.itemId && sel[`${iv.inv}|${l.so}|${l.sub}`]) ids.push(l.itemId)
-    }
-    const uniq = [...new Set(ids)]
-    if (!uniq.length) { alert("ยังไม่มี SO ที่เลือก (หรือหา item ในระบบไม่เจอ)"); return }
-    try { sessionStorage.setItem("lg_entry_ids", JSON.stringify(uniq)) } catch {}
-    window.location.href = "/logistics/entry"
+    if (summary.selCnt === 0) { alert("ยังไม่มี SO ที่เลือก"); return }
+    setStep(3)
   }
+  // Selected lines grouped by INV (only ticked ready lines) — for step 3.
+  const hawbGroups = useMemo(() => chosenInvs
+    .map(iv => ({ inv: iv.inv, lines: iv.sos.filter(l => l.air === "ready" && sel[`${iv.inv}|${l.so}|${l.sub}`]) }))
+    .filter(g => g.lines.length > 0), [chosenInvs, sel])
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
@@ -91,12 +91,12 @@ export default function LgAirBookingPage() {
         <h1 className="text-xl font-bold" style={{ color: MAROON }}>LG AIR BOOKING <span className="text-xs font-normal text-gray-400">(ทดลอง · admin · read-only · INV-first)</span></h1>
         <p className="text-xs text-gray-500 mt-0.5">เลือก brand → ติ๊ก INV จาก <b>mp_line</b> → เห็นทุก SO ในใบ → ติ๊ก SO ที่ถึงคิว LG → เพิ่ม HAWB · <b>1 HAWB = brand เดียว</b></p>
         <div className="flex items-center gap-2 mt-3 text-xs flex-wrap">
-          {[[1, "เลือก brand + INV"], [2, "ติ๊ก SO ที่พร้อม"]].map(([nn, l]) => (
+          {[[1, "เลือก brand + INV"], [2, "ติ๊ก SO ที่พร้อม"], [3, "ใส่ HAWB (INV มาให้แล้ว)"]].map(([nn, l]) => (
             <span key={nn as number} className={`flex items-center gap-2 px-3 py-1.5 rounded-full border font-medium ${step === nn ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200"}`} style={step === nn ? { background: MAROON } : {}}>
               <span className={`w-4 h-4 rounded-full grid place-items-center text-[10px] ${step === nn ? "bg-white/25" : "bg-gray-100 text-gray-500"}`}>{nn as number}</span>{l}
             </span>
           ))}
-          <span className="text-gray-300">→ 3 เพิ่ม HAWB (ไม่ต้องกรอก INV) → 4 ส่งต่อ claim</span>
+          <span className="text-gray-300">→ 4 ส่งต่อ claim</span>
         </div>
       </div>
 
@@ -201,6 +201,67 @@ export default function LgAirBookingPage() {
               </div>
             )
           })}
+        </>
+      )}
+
+      {data && step === 3 && (
+        <>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={() => setStep(2)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">← กลับไปเลือก SO</button>
+            <span className="text-xs text-gray-500 font-semibold">Brand: {brand}</span>
+            <span className="text-[11px] text-gray-400">INV มาจาก mp_line แล้ว — LG ใส่แค่ HAWB + expense</span>
+          </div>
+          {hawbGroups.map(g => {
+            const pcs = g.lines.reduce((a, l) => a + l.pcs, 0)
+            return (
+              <div key={g.inv} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3 bg-orange-50/60 border-b border-gray-200 flex-wrap">
+                  <span className="text-[11px] font-semibold text-orange-700">INV NO.</span>
+                  <span className="font-mono font-bold text-[15px]">{g.inv}</span>
+                  <span className="text-[10px] text-gray-400">🔒 มาจาก mp_line — ไม่ต้องกรอก</span>
+                  <span className="ml-auto text-[11px] text-gray-500">{g.lines.length} SO · {pcs.toLocaleString()} pcs</span>
+                </div>
+                <table className="w-full text-xs">
+                  <thead><tr className="text-left text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
+                    <th className="px-3.5 py-2">SO</th><th className="px-3.5 py-2">SUB</th><th className="px-3.5 py-2 text-right">QTY (mp_line)</th>
+                  </tr></thead>
+                  <tbody>
+                    {g.lines.map((l, i) => (
+                      <tr key={i} className="border-b border-gray-50 last:border-0">
+                        <td className="px-3.5 py-2 font-mono font-bold">{l.so}</td>
+                        <td className="px-3.5 py-2 font-mono">SUB {l.sub || "-"}</td>
+                        <td className="px-3.5 py-2 text-right font-semibold tabular-nums">{l.pcs.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex flex-wrap items-end gap-4 px-4 py-3 border-t border-gray-100 bg-gray-50/40">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-orange-700 mb-1">HAWB# <span className="text-red-500">*</span></label>
+                    <input value={hawbIn[g.inv] || ""} onChange={e => setHawbIn(p => ({ ...p, [g.inv]: e.target.value }))}
+                      placeholder="ใส่เลข HAWB…" className="w-48 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-orange-700 mb-1">EXPENSE / HAWB (THB)</label>
+                    <input value={expIn[g.inv] || ""} onChange={e => setExpIn(p => ({ ...p, [g.inv]: e.target.value }))}
+                      inputMode="numeric" placeholder="0" className="w-40 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-200" />
+                  </div>
+                  <span className="text-[11px] text-gray-400 pb-1.5">Actual/SO = expense ÷ qty (คิดตอนบันทึกจริง)</span>
+                </div>
+              </div>
+            )
+          })}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                const missing = hawbGroups.filter(g => !(hawbIn[g.inv] || "").trim()).map(g => g.inv)
+                if (missing.length) { alert("ใส่ HAWB ให้ครบทุก INV ก่อน:\n" + missing.join(", ")); return }
+                const lines = hawbGroups.map(g => `• INV ${g.inv} → HAWB ${hawbIn[g.inv]} · expense ${expIn[g.inv] || "0"} · ${g.lines.length} SO`).join("\n")
+                alert(`(preview — ยังไม่เขียนลง flow จริง)\n\nBrand: ${brand}\n${lines}\n\nขั้นถัดไป (ของจริง): บันทึก actual + ส่งต่อ claim`)
+              }}
+              className="text-sm font-bold text-white px-5 py-2.5 rounded-lg" style={{ background: "#15803d" }}>บันทึก + ส่งต่อ claim (preview)</button>
+            <span className="text-xs text-gray-400">{hawbGroups.length} INV · ใส่ HAWB แล้ว {hawbGroups.filter(g => (hawbIn[g.inv] || "").trim()).length}/{hawbGroups.length}</span>
+          </div>
         </>
       )}
     </div>
