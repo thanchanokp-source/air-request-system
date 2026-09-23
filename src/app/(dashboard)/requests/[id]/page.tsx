@@ -1910,8 +1910,14 @@ export default function RequestDetailPage() {
                   onClick={async () => {
                     if (!confirm(`ลบไฟล์ "${a.fileName}" ?`)) return
                     setDeletingAtt(a.id)
-                    await fetch(`/api/attachments/${a.id}`, { method: "DELETE" }).catch(() => {})
-                    setReq((prev: any) => ({ ...prev, attachments: (prev.attachments || []).filter((x: any) => x.id !== a.id) }))
+                    const res = await fetch(`/api/attachments/${a.id}`, { method: "DELETE" }).catch(() => null)
+                    if (res && res.ok) {
+                      // Remove from view ONLY when the server actually deleted it.
+                      setReq((prev: any) => ({ ...prev, attachments: (prev.attachments || []).filter((x: any) => x.id !== a.id) }))
+                    } else {
+                      const err = res ? ((await res.json().catch(() => ({}))).error || `ลบไม่สำเร็จ (${res.status})`) : "ลบไม่สำเร็จ"
+                      alert(err)
+                    }
                     setDeletingAtt(null)
                   }}
                   className="text-red-400 hover:text-red-600 font-bold leading-none disabled:opacity-40 shrink-0"

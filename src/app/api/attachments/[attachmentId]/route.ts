@@ -41,13 +41,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const att = await prisma.requestAttachment.findUnique({ where: { id: attachmentId } })
   if (!att) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  // Only the uploader can delete their own attachment
-  if (att.uploadedById !== userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  const isAdmin = role === "ADMIN"
+
+  // The uploader can delete their own attachment; ADMIN can delete any.
+  if (att.uploadedById !== userId && !isAdmin) {
+    return NextResponse.json({ error: "Forbidden — เฉพาะคนที่อัปโหลด หรือ admin เท่านั้นที่ลบได้" }, { status: 403 })
   }
 
-  // MER files are locked after submission — VP MER must reject for a redo
-  if (role === "MER_USER" || role === "MER_GW") {
+  // MER files are locked after submission — VP MER must reject for a redo (admin bypasses).
+  if (!isAdmin && (role === "MER_USER" || role === "MER_GW")) {
     return NextResponse.json({ error: "Files cannot be deleted after submission. Please have the VP Merchandise Reject to redo" }, { status: 400 })
   }
 
