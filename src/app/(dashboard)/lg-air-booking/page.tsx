@@ -32,6 +32,7 @@ export default function LgAirBookingPage() {
   const [sel, setSel] = useState<Record<string, boolean>>({}) // `${inv}|${so}|${sub}` -> bool
   const [hawbAll, setHawbAll] = useState("") // ONE HAWB no for all selected INVs (1 HAWB spans many INV)
   const [expAll, setExpAll] = useState("")   // ONE expense/HAWB total → distributed across lines by qty
+  const [hawbFiles, setHawbFiles] = useState<File[]>([]) // AWB/expense document(s) for this HAWB
 
   useEffect(() => {
     setLoading(true); setErr("")
@@ -230,6 +231,21 @@ export default function LgAirBookingPage() {
                 <input value={expAll} onChange={e => setExpAll(e.target.value)} inputMode="numeric" placeholder="0"
                   className="w-44 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-200" />
               </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-orange-700 mb-1">เอกสารแนบ (AWB) <span className="text-red-500">*</span></label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="text-xs px-3 py-1.5 rounded-lg border border-orange-300 text-orange-700 hover:bg-orange-50 cursor-pointer whitespace-nowrap">📎 แนบไฟล์
+                    <input type="file" multiple className="hidden" onChange={e => { const fs = Array.from(e.target.files || []); e.target.value = ""; setHawbFiles(p => [...p, ...fs]) }} />
+                  </label>
+                  {hawbFiles.length === 0 && <span className="text-[10px] text-gray-400">— ยังไม่มีไฟล์ —</span>}
+                  {hawbFiles.map((f, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5 max-w-[160px]">
+                      <span className="text-blue-600 truncate">📎 {f.name}</span>
+                      <button onClick={() => setHawbFiles(p => p.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-500 font-bold leading-none shrink-0">✕</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
               <div className="ml-auto text-right">
                 <p className="text-[11px] text-gray-400">รวม</p>
                 <p className="text-sm font-bold text-gray-700">{hawbGroups.length} INV · {allLines.length} SO · {totalPcs.toLocaleString()} pcs</p>
@@ -265,7 +281,8 @@ export default function LgAirBookingPage() {
               onClick={() => {
                 if (!hawbAll.trim()) { alert("ใส่เลข HAWB ก่อน"); return }
                 if (!exp) { alert("ใส่ EXPENSE/HAWB ก่อน"); return }
-                alert(`(preview — ยังไม่เขียนลง flow จริง)\n\nBrand: ${brand}\nHAWB: ${hawbAll}\nExpense: ${exp.toLocaleString()} THB\nครอบ: ${hawbGroups.length} INV · ${allLines.length} SO · ${totalPcs.toLocaleString()} pcs\nActual/SO = expense ÷ qty รวม × qty ของแต่ละ SO\n\nขั้นถัดไป (ของจริง): บันทึก actual + ส่งต่อ claim`)
+                if (hawbFiles.length === 0) { alert("ต้องแนบไฟล์เอกสาร (AWB) ของ HAWB นี้ก่อน"); return }
+                alert(`(preview — ยังไม่เขียนลง flow จริง)\n\nBrand: ${brand}\nHAWB: ${hawbAll}\nExpense: ${exp.toLocaleString()} THB\nไฟล์แนบ: ${hawbFiles.map(f => f.name).join(", ")}\nครอบ: ${hawbGroups.length} INV · ${allLines.length} SO · ${totalPcs.toLocaleString()} pcs\nActual/SO = expense ÷ qty รวม × qty ของแต่ละ SO\n\nขั้นถัดไป (ของจริง): อัปโหลดไฟล์ + บันทึก actual + ส่งต่อ claim`)
               }}
               className="text-sm font-bold text-white px-5 py-2.5 rounded-lg" style={{ background: "#15803d" }}>บันทึก + ส่งต่อ claim (preview)</button>
             <span className="text-xs text-gray-400">ถ้าต้องแยกหลาย HAWB (คนละเที่ยว) → แยกทำทีละชุด INV</span>
