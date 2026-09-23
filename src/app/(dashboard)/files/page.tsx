@@ -320,7 +320,7 @@ export default function FilesPage() {
       a.download = `${fullReq.documentNo}_${fullItem.so}.pdf`
       document.body.appendChild(a); a.click()
       document.body.removeChild(a); URL.revokeObjectURL(url)
-    } catch { alert("PDF generation failed") }
+    } catch (e) { console.error("PDF error (per-SO):", e); alert("PDF generation failed: " + ((e as any)?.message || String(e))) }
     finally { setPdfLoading(null) }
   }
 
@@ -348,7 +348,7 @@ export default function FilesPage() {
       const url = URL.createObjectURL(r.blob)
       const a = document.createElement("a"); a.href = url; a.download = r.name
       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
-    } catch { alert("PDF generation failed") }
+    } catch (e) { console.error("PDF error (doc):", e); alert("PDF generation failed: " + ((e as any)?.message || String(e))) }
     finally { setPdfLoading(null) }
   }
   const previewDocPdf = async (req: any) => {
@@ -356,7 +356,7 @@ export default function FilesPage() {
     try {
       const r = await buildDocBlob(req); if (!r) return
       setPreview({ url: URL.createObjectURL(r.blob), name: r.name })
-    } catch { alert("PDF generation failed") }
+    } catch (e) { console.error("PDF error (preview):", e); alert("PDF generation failed: " + ((e as any)?.message || String(e))) }
     finally { setPdfLoading(null) }
   }
 
@@ -404,7 +404,7 @@ export default function FilesPage() {
       a.download = `Combined_${pages.length}SO.pdf`
       document.body.appendChild(a); a.click()
       document.body.removeChild(a); URL.revokeObjectURL(url)
-    } catch { alert("Combined PDF generation failed") }
+    } catch (e) { console.error("PDF error (combined):", e); alert("Combined PDF generation failed: " + ((e as any)?.message || String(e))) }
     finally { setCombineLoading(false) }
   }
 
@@ -439,7 +439,7 @@ export default function FilesPage() {
       a.download = `Combined_filtered_${pages.length}SO.pdf`
       document.body.appendChild(a); a.click()
       document.body.removeChild(a); URL.revokeObjectURL(url)
-    } catch { alert("PDF generation failed") }
+    } catch (e) { console.error("PDF error (all-filtered):", e); alert("PDF generation failed: " + ((e as any)?.message || String(e))) }
     finally { setCombineLoading(false) }
   }
 
