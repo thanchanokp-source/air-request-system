@@ -1,124 +1,84 @@
 "use client"
 import { useEffect, useMemo, useState } from "react"
 
-// LG AIR BOOKING (admin trial · NYG · READ-ONLY preview) — SO-driven LG flow:
-//   Step 1: search + pick SOs · Step 2: select INV (mapped to mp_line), live status.
-// Data comes from /api/air-export-map (admin-only). No writes yet — the "ไปหน้าเพิ่ม HAWB"
-// action is a placeholder until the write path + HAWB grouping are locked.
+// LG AIR BOOKING (admin trial · NYG · READ-ONLY preview) — INV-FIRST flow:
+//   Step 1: pick a BRAND (1 HAWB = 1 brand) → tick INVs of that brand
+//   Step 2: see every SO+SUB on the invoice; tick the SOs that reached LG (others locked)
+// Data from /api/lg-inv-booking (admin-only). No writes — "ไปหน้าเพิ่ม HAWB" is a placeholder.
 const MAROON = "#6b1a1a"
-type Line = { sub: string; inv: string; pcs: number; style?: string; etd?: string; forwarder?: string }
-type RowA = { status: string; so: string; brand: string[]; qtyPlan: number | null; qtyAirMap: number; lines: Line[]; docs: string[]; airInv: string[] }
-type RowB = { status: string; so: string; brand: string[]; qtyPlan: number | null; docs: string[]; airInv: string[] }
-type Data = { tabA: RowA[]; tabB: RowB[]; counts: any; error?: string }
-type Pool = { so: string; brand: string; inMp: boolean; plan: number | null; lines: Line[]; docs: string[] }
+type Line = { so: string; sub: string; pcs: number; style: string; air: "ready" | "pending" | "none" }
+type Inv = { inv: string; sos: Line[]; total: number; ready: number; complete: boolean }
+type Brand = { brand: string; invCount: number; readySo: number; invs: Inv[] }
 
-const n = (v: number | null) => (v == null ? "—" : v.toLocaleString())
+const AIR: Record<string, { txt: string; cls: string }> = {
+  ready:   { txt: "✓ พร้อม (ถึงคิว LG)", cls: "bg-green-100 text-green-700" },
+  pending: { txt: "⏳ ยังไม่ถึงคิว LG",   cls: "bg-amber-100 text-amber-700" },
+  none:    { txt: "✚ ไม่มีใน air req → SCM", cls: "bg-red-100 text-red-700" },
+}
 
 export default function LgAirBookingPage() {
-  const [data, setData] = useState<Data | null>(null)
+  const [data, setData] = useState<{ brands: Brand[] } | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState("")
   const [step, setStep] = useState<1 | 2>(1)
+  const [brand, setBrand] = useState<string | null>(null)
   const [q, setQ] = useState("")
-  const [dropOpen, setDropOpen] = useState(false)
-  const [picked, setPicked] = useState<Set<string>>(new Set())
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  // per-SO selected INV line indices (default = all)
-  const [sel, setSel] = useState<Record<string, Set<number>>>({})
-  const [q2, setQ2] = useState("")
+  const [pickedInv, setPickedInv] = useState<Set<string>>(new Set())
+  const [sel, setSel] = useState<Record<string, boolean>>({}) // `${inv}|${so}|${sub}` -> bool
 
   useEffect(() => {
     setLoading(true); setErr("")
-    fetch("/api/air-export-map").then(async r => {
+    fetch("/api/lg-inv-booking").then(async r => {
       const d = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
       return d
     }).then(setData).catch(e => setErr(e.message)).finally(() => setLoading(false))
   }, [])
 
-  // Build the SO pool — START FROM AIR REQUEST SOs only. tabA "auto_air_prepaid_mapping" rows are
-  // mp_line-only (NOT in any air req) → excluded here; they go through the separate PREPAID flow.
-  const pool = useMemo<Pool[]>(() => {
-    if (!data) return []
-    const out: Pool[] = []
-    for (const r of data.tabA || []) {
-      if (r.status === "auto_air_prepaid_mapping") continue // not in air req → not part of the LG air-req pool
-      out.push({ so: r.so, brand: r.brand[0] || "(no brand)", inMp: true, plan: r.qtyPlan, lines: r.lines || [], docs: r.docs || [] })
-    }
-    for (const r of data.tabB || []) out.push({ so: r.so, brand: r.brand[0] || "(no brand)", inMp: false, plan: r.qtyPlan, lines: [], docs: r.docs || [] })
-    return out
-  }, [data])
-  const poolBySo = useMemo(() => { const m = new Map<string, Pool>(); for (const p of pool) m.set(p.so, p); return m }, [pool])
-
+  const brands = data?.brands || []
+  const brandObj = useMemo(() => brands.find(b => b.brand === brand) || null, [brands, brand])
   const qq = q.trim().toLowerCase()
-  const dropMatches = useMemo(() => pool
-    .filter(p => !qq || p.so.toLowerCase().includes(qq) || p.brand.toLowerCase().includes(qq)), [pool, qq])
-  const DROP_CAP = 50
-  const dropList = useMemo(() => dropMatches.slice(0, DROP_CAP), [dropMatches])
+  const invList = useMemo(() => !brandObj ? [] : brandObj.invs.filter(iv => !qq || iv.inv.toLowerCase().includes(qq)), [brandObj, qq])
 
-  // Dropdown chip: show exactly / revise / ยังไม่เจอ so the user can spot mismatches BEFORE selecting.
-  const poolStatus = (p: Pool) => {
-    if (!p.inMp) return { txt: "⏳ ยังไม่เจอ", cls: "bg-amber-100 text-amber-700" }
-    const mpSum = p.lines.reduce((a, l) => a + (l.pcs || 0), 0)
-    if (p.plan == null) return { txt: "✚ auto", cls: "bg-red-100 text-red-700" }
-    if (p.plan === mpSum) return { txt: "✓ exactly", cls: "bg-green-100 text-green-700" }
-    return { txt: "✏ revise", cls: "bg-sky-100 text-sky-700" }
-  }
+  const selectBrand = (b: string) => { if (b !== brand) { setBrand(b); setPickedInv(new Set()) } }
+  const toggleInv = (inv: string, on: boolean) => setPickedInv(p => { const s = new Set(p); on ? s.add(inv) : s.delete(inv); return s })
 
-  const addSO = (so: string) => { setPicked(p => new Set(p).add(so)); setQ("") }
-  const removeSO = (so: string) => setPicked(p => { const s = new Set(p); s.delete(so); return s })
-  const clearAll = () => setPicked(new Set())
-
-  // selected INV set for a SO (default all lines)
-  const selOf = (p: Pool) => sel[p.so] ?? new Set(p.lines.map((_, i) => i))
-  const setSelOf = (so: string, s: Set<number>) => setSel(prev => ({ ...prev, [so]: s }))
-  const toggleLine = (p: Pool, i: number) => { const s = new Set(selOf(p)); s.has(i) ? s.delete(i) : s.add(i); setSelOf(p.so, s) }
-  const toggleAllLines = (p: Pool, on: boolean) => setSelOf(p.so, on ? new Set(p.lines.map((_, i) => i)) : new Set())
-
-  const selPcs = (p: Pool) => p.lines.reduce((a, l, i) => a + (selOf(p).has(i) ? l.pcs : 0), 0)
-  const statusOf = (p: Pool) => {
-    if (!p.inMp) return { k: "noship", cls: "bg-amber-100 text-amber-700 border-amber-200", txt: "⏳ ยังไม่มี record ship" }
-    const pcs = selPcs(p)
-    if (p.plan == null) return { k: "auto", cls: "bg-red-100 text-red-700 border-red-200", txt: "✚ auto air prepaid" }
-    if (p.plan === pcs) return { k: "exactly", cls: "bg-green-100 text-green-700 border-green-200", txt: "✓ exactly" }
-    return { k: "revise", cls: "bg-sky-100 text-sky-700 border-sky-200", txt: "✏ revise qty" }
-  }
-
-  // Step 2 rows grouped by brand
-  const chosen = useMemo(() => [...picked].map(so => poolBySo.get(so)).filter(Boolean) as Pool[], [picked, poolBySo])
-  const q2q = q2.trim().toLowerCase()
-  const groups = useMemo(() => {
-    const g: Record<string, Pool[]> = {}
-    for (const p of chosen) {
-      if (q2q && !(p.so.toLowerCase().includes(q2q) || p.brand.toLowerCase().includes(q2q) || p.lines.some(l => l.inv.toLowerCase().includes(q2q)))) continue
-      ;(g[p.brand] = g[p.brand] || []).push(p)
+  const go2 = () => {
+    if (!pickedInv.size) { alert("เลือก INV ก่อน"); return }
+    // default-tick all ready lines of the picked INVs
+    const next: Record<string, boolean> = {}
+    for (const iv of (brandObj?.invs || [])) {
+      if (!pickedInv.has(iv.inv)) continue
+      for (const l of iv.sos) if (l.air === "ready") next[`${iv.inv}|${l.so}|${l.sub}`] = true
     }
-    for (const k of Object.keys(g)) g[k].sort((a, b) => a.so.localeCompare(b.so))
-    return g
-  }, [chosen, q2q])
+    setSel(next); setStep(2)
+  }
+
+  const chosenInvs = useMemo(() => (brandObj?.invs || []).filter(iv => pickedInv.has(iv.inv)), [brandObj, pickedInv])
+  const toggleLine = (inv: string, l: Line) => { const k = `${inv}|${l.so}|${l.sub}`; setSel(s => ({ ...s, [k]: !s[k] })) }
+  const toggleAll = (iv: Inv, on: boolean) => setSel(s => { const n = { ...s }; for (const l of iv.sos) if (l.air === "ready") n[`${iv.inv}|${l.so}|${l.sub}`] = on; return n })
 
   const summary = useMemo(() => {
-    let exactly = 0, revise = 0, auto = 0, noship = 0, ready = 0
-    for (const p of chosen) {
-      const st = statusOf(p)
-      if (st.k === "exactly") exactly++; else if (st.k === "revise") revise++; else if (st.k === "auto") auto++; else if (st.k === "noship") noship++
-      if (p.inMp && selPcs(p) > 0) ready++
+    let ready = 0, locked = 0, selCnt = 0, selPcs = 0
+    for (const iv of chosenInvs) for (const l of iv.sos) {
+      if (l.air === "ready") { ready++; if (sel[`${iv.inv}|${l.so}|${l.sub}`]) { selCnt++; selPcs += l.pcs } }
+      else locked++
     }
-    return { exactly, revise, auto, noship, ready }
-  }, [chosen, sel])
+    return { ready, locked, selCnt, selPcs }
+  }, [chosenInvs, sel])
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-5">
+    <div className="p-6 max-w-5xl mx-auto space-y-5">
       <div>
-        <h1 className="text-xl font-bold" style={{ color: MAROON }}>LG AIR BOOKING <span className="text-xs font-normal text-gray-400">(ทดลอง · admin · read-only)</span></h1>
-        <p className="text-xs text-gray-500 mt-0.5">เลือก SO ที่จะทำ → เลือก INV → ระบบ map กับ <b>mp_line</b> (SHIPPED · AIR PP) ให้อัตโนมัติ → ครบแล้วไปหน้าเพิ่ม HAWB</p>
+        <h1 className="text-xl font-bold" style={{ color: MAROON }}>LG AIR BOOKING <span className="text-xs font-normal text-gray-400">(ทดลอง · admin · read-only · INV-first)</span></h1>
+        <p className="text-xs text-gray-500 mt-0.5">เลือก brand → ติ๊ก INV จาก <b>mp_line</b> → เห็นทุก SO ในใบ → ติ๊ก SO ที่ถึงคิว LG → เพิ่ม HAWB · <b>1 HAWB = brand เดียว</b></p>
         <div className="flex items-center gap-2 mt-3 text-xs flex-wrap">
-          {[[1, "เลือก SO"], [2, "เลือก INV + ตรวจ map"]].map(([nn, l]) => (
+          {[[1, "เลือก brand + INV"], [2, "ติ๊ก SO ที่พร้อม"]].map(([nn, l]) => (
             <span key={nn as number} className={`flex items-center gap-2 px-3 py-1.5 rounded-full border font-medium ${step === nn ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200"}`} style={step === nn ? { background: MAROON } : {}}>
               <span className={`w-4 h-4 rounded-full grid place-items-center text-[10px] ${step === nn ? "bg-white/25" : "bg-gray-100 text-gray-500"}`}>{nn as number}</span>{l}
             </span>
           ))}
-          <span className="text-gray-300">→ 3 เพิ่ม HAWB (หน้าเดิม · ไม่ต้องกรอก INV) → 4 ส่งต่อ claim</span>
+          <span className="text-gray-300">→ 3 เพิ่ม HAWB (ไม่ต้องกรอก INV) → 4 ส่งต่อ claim</span>
         </div>
       </div>
 
@@ -127,131 +87,100 @@ export default function LgAirBookingPage() {
 
       {data && step === 1 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <label className="block text-xs font-semibold text-gray-600 mb-1.5">ค้นหา + เลือก SO ที่จะทำ (พิมพ์ SO หรือ brand — ข้าม doc ได้)</label>
-          <div className="relative">
-            <input value={q} onChange={e => { setQ(e.target.value); setDropOpen(true) }} onFocus={() => setDropOpen(true)}
-              onBlur={() => setTimeout(() => setDropOpen(false), 150)} autoComplete="off"
-              placeholder="🔍 พิมพ์ SO หรือ brand เช่น 9261 / fanatics…"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
-            {dropOpen && (
-              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-[60vh] overflow-auto">
-                <div className="px-3 py-1.5 text-[11px] text-gray-400 border-b border-gray-100 bg-gray-50 sticky top-0">
-                  {dropMatches.length > DROP_CAP
-                    ? `แสดง ${DROP_CAP} จาก ${dropMatches.length} — พิมพ์ SO/brand เพื่อกรองให้แคบลง`
-                    : `${dropMatches.length} SO`}
-                </div>
-                {dropList.length ? dropList.map(p => (
-                  <div key={p.so} onMouseDown={e => { e.preventDefault(); addSO(p.so) }}
-                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-gray-50 last:border-0 hover:bg-red-50/60 ${picked.has(p.so) ? "opacity-40 pointer-events-none" : ""}`}>
-                    <span className="font-mono font-bold text-[13px]">{p.so}</span>
-                    <span className="text-xs text-gray-500">{p.brand}</span>
-                    {(() => { const s = poolStatus(p); return <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.cls}`}>{s.txt}</span> })()}
-                  </div>
-                )) : <div className="px-3 py-3 text-xs text-gray-400">ไม่พบ SO ที่ตรง</div>}
-              </div>
-            )}
+          <label className="block text-xs font-semibold text-gray-600 mb-2">1) เลือก Brand <span className="text-gray-400 font-normal">— 1 HAWB = brand เดียว ทำทีละ brand</span></label>
+          <div className="flex flex-wrap gap-2">
+            {brands.map(b => (
+              <button key={b.brand} onClick={() => selectBrand(b.brand)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold ${brand === b.brand ? "text-white border-transparent" : "bg-gray-50 text-gray-600 border-gray-200 hover:border-red-300"}`}
+                style={brand === b.brand ? { background: MAROON } : {}}>
+                {b.brand} <span className="text-[10px] opacity-70">{b.invCount} INV · พร้อม {b.readySo}</span>
+              </button>
+            ))}
+            {brands.length === 0 && <span className="text-xs text-gray-400">ไม่มีข้อมูล mp_line</span>}
           </div>
-          <div className="flex flex-wrap gap-2 mt-3 min-h-[8px]">
-            {[...picked].map(so => { const p = poolBySo.get(so); return (
-              <span key={so} className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${p?.inMp ? "bg-red-50 text-red-800 border-red-100" : "bg-amber-50 text-amber-800 border-amber-100"}`}>
-                <b className="font-mono">{so}</b><span className="opacity-70">{p?.brand}</span>
-                <span onClick={() => removeSO(so)} className="w-4 h-4 rounded-full bg-black/5 grid place-items-center cursor-pointer hover:bg-red-500 hover:text-white">✕</span>
-              </span>
-            )})}
+
+          <label className="block text-xs font-semibold text-gray-600 mb-2 mt-5">2) ติ๊กเลือก INV ของ brand นี้</label>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหา INV ใน brand นี้…"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+          <div className="mt-2.5 border border-gray-200 rounded-lg max-h-[40vh] overflow-auto">
+            {!brand ? <div className="p-4 text-center text-xs text-gray-400">⬆ เลือก brand ก่อน แล้ว INV จะขึ้นให้ติ๊ก</div>
+              : invList.length === 0 ? <div className="p-4 text-center text-xs text-gray-400">ไม่พบ INV ใน brand นี้</div>
+              : invList.map(iv => { const on = pickedInv.has(iv.inv); return (
+                <label key={iv.inv} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 hover:bg-gray-50 ${on ? "bg-green-50/70" : ""}`}>
+                  <input type="checkbox" checked={on} onChange={e => toggleInv(iv.inv, e.target.checked)} className="w-4 h-4 align-middle" style={{ accentColor: "#12855f" }} />
+                  <span className="font-mono font-bold text-[13px]">{iv.inv}</span>
+                  <span className="ml-auto text-[11px] text-gray-400 whitespace-nowrap">{iv.total} SO · <span className="text-green-700 font-semibold">พร้อม {iv.ready}</span>{iv.complete ? "" : " · บางส่วน"}</span>
+                </label>
+              )})}
           </div>
           <div className="flex items-center gap-3 mt-4 flex-wrap">
-            <button onClick={() => { if (!picked.size) { alert("เลือก SO ก่อน"); return } setStep(2) }}
-              className="text-sm font-bold text-white px-5 py-2.5 rounded-lg disabled:opacity-40" style={{ background: MAROON }} disabled={!picked.size}>ถัดไป → เลือก INV</button>
-            <span className="text-xs text-gray-400">{picked.size} SO</span>
-            {picked.size > 0 && <button onClick={clearAll} className="text-xs text-red-600 hover:underline">ล้าง</button>}
+            <button onClick={go2} disabled={!pickedInv.size} className="text-sm font-bold text-white px-5 py-2.5 rounded-lg disabled:opacity-40" style={{ background: MAROON }}>ถัดไป → ดู SO ในใบ</button>
+            <span className="text-xs text-gray-400">เลือก {pickedInv.size} INV</span>
+            {pickedInv.size > 0 && <button onClick={() => setPickedInv(new Set())} className="text-xs text-red-600 hover:underline">ล้าง</button>}
           </div>
         </div>
       )}
 
       {data && step === 2 && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             {[
-              { l: "✓ exactly", v: summary.exactly, c: "#15803d" },
-              { l: "✏ revise qty", v: summary.revise, c: "#0369a1" },
-              { l: "✚ auto prepaid", v: summary.auto, c: "#b91c1c" },
-              { l: "⏳ ยังไม่มี record ship", v: summary.noship, c: "#b45309" },
+              { l: "✓ SO พร้อมทำ", v: summary.ready, c: "#15803d" },
+              { l: "🔒 SO ที่ล็อก", v: summary.locked, c: "#b45309" },
+              { l: "✅ เลือกแล้ว (ไป HAWB)", v: `${summary.selCnt} · ${summary.selPcs.toLocaleString()} pcs`, c: "#15803d" },
             ].map((k, i) => (
               <div key={i} className="bg-white rounded-xl border border-gray-200 p-3">
                 <p className="text-[11px] text-gray-400">{k.l}</p>
-                <p className="text-2xl font-bold tabular-nums" style={{ color: k.c }}>{k.v}</p>
+                <p className="text-xl font-bold tabular-nums" style={{ color: k.c }}>{k.v}</p>
               </div>
             ))}
           </div>
-
           <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => setStep(1)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">← แก้รายการ SO</button>
-            <input value={q2} onChange={e => setQ2(e.target.value)} placeholder="🔍 ค้นหา SO / INV / Brand"
-              className="flex-1 min-w-40 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
-            <button onClick={() => alert(`→ ไปหน้าเพิ่ม HAWB (หน้าเดิม)\n\n• INV ที่เลือกไว้มาให้แล้ว — ไม่ต้องกรอก INV\n• LG ใส่ HAWB + expense (จัดกลุ่มตามเที่ยว/HAWB, 1 HAWB = brand เดียว)\n• auto prepaid → ผ่าน SCM เลือก claim ก่อน\n\n(ยังเป็น preview — ยังไม่เขียนลง flow จริง)\n\nพร้อมส่ง: ${summary.ready} SO`)}
-              disabled={summary.ready === 0}
-              className="text-sm font-bold text-white px-4 py-1.5 rounded-lg disabled:opacity-40" style={{ background: "#15803d" }}>ไปหน้าเพิ่ม HAWB ({summary.ready})</button>
+            <button onClick={() => setStep(1)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">← แก้ INV</button>
+            <span className="text-xs text-gray-500 font-semibold">Brand: {brand}</span>
+            <button onClick={() => alert(`→ ไปหน้าเพิ่ม HAWB (หน้าเดิม)\n\n• SO/INV ที่ติ๊กไว้มาให้แล้ว — ไม่ต้องกรอก INV\n• LG ใส่ HAWB + expense (1 HAWB = ${brand})\n• SO ที่ล็อก (ยังไม่ถึงคิว LG) ถูกข้ามไว้\n\n(preview — ยังไม่เขียนลง flow จริง)\n\nพร้อมส่ง: ${summary.selCnt} SO`)}
+              disabled={summary.selCnt === 0}
+              className="ml-auto text-sm font-bold text-white px-4 py-1.5 rounded-lg disabled:opacity-40" style={{ background: "#15803d" }}>ไปหน้าเพิ่ม HAWB ({summary.selCnt})</button>
           </div>
 
-          {Object.entries(groups).map(([brand, rows]) => (
-            <div key={brand} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="flex items-center gap-2.5 px-4 py-2.5 bg-gray-50 border-l-4" style={{ borderColor: "#c8ccd6" }}>
-                <span className="font-bold text-sm">{brand}</span>
-                <span className="text-[11px] text-gray-500">🧾 HAWB แยกตาม brand (มีได้หลาย HAWB)</span>
-                <span className="ml-auto text-[11px] text-gray-500">{rows.length} SO</span>
+          {chosenInvs.map(iv => {
+            const allReadyOn = iv.sos.filter(l => l.air === "ready").every(l => sel[`${iv.inv}|${l.so}|${l.sub}`]) && iv.ready > 0
+            return (
+              <div key={iv.inv} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-200 flex-wrap">
+                  <span className="font-mono font-bold text-[15px]">{iv.inv}</span>
+                  <span className="ml-auto flex items-center gap-2.5">
+                    <span className="w-28 h-1.5 rounded bg-gray-200 overflow-hidden"><i className="block h-full bg-green-600" style={{ width: `${iv.total ? Math.round(iv.ready / iv.total * 100) : 0}%` }} /></span>
+                    <span className={`text-[11.5px] font-semibold ${iv.complete ? "text-green-700" : "text-amber-700"}`}>{iv.complete ? "✓ INV ครบ" : "บางส่วน"} · พร้อม {iv.ready}/{iv.total} SO</span>
+                  </span>
+                </div>
+                <table className="w-full text-xs">
+                  <thead><tr className="text-left text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
+                    <th className="px-3.5 py-2 w-10 text-center">{iv.ready > 0 && <input type="checkbox" checked={allReadyOn} onChange={e => toggleAll(iv, e.target.checked)} />}</th>
+                    <th className="px-3.5 py-2">SO</th><th className="px-3.5 py-2">SUB</th><th className="px-3.5 py-2 text-right">QTY (mp_line)</th><th className="px-3.5 py-2">สถานะ air req</th>
+                  </tr></thead>
+                  <tbody>
+                    {iv.sos.map((l, i) => { const k = `${iv.inv}|${l.so}|${l.sub}`; const on = !!sel[k]; const a = AIR[l.air]
+                      const ready = l.air === "ready"
+                      return (
+                        <tr key={i} onClick={() => ready && toggleLine(iv.inv, l)}
+                          className={`border-b border-gray-50 last:border-0 ${ready ? `cursor-pointer ${on ? "bg-green-50/70" : "hover:bg-gray-50"}` : "bg-gray-50/70 text-gray-400"}`}>
+                          <td className="px-3.5 py-2.5 text-center">{ready
+                            ? <input type="checkbox" checked={on} onChange={() => toggleLine(iv.inv, l)} onClick={e => e.stopPropagation()} className="align-middle" style={{ accentColor: "#12855f" }} />
+                            : <span title="ล็อก">🔒</span>}</td>
+                          <td className="px-3.5 py-2.5 font-mono font-bold">{l.so}</td>
+                          <td className="px-3.5 py-2.5 font-mono">SUB {l.sub || "-"}</td>
+                          <td className="px-3.5 py-2.5 text-right font-semibold tabular-nums">{l.pcs.toLocaleString()}</td>
+                          <td className="px-3.5 py-2.5"><span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${a.cls}`}>{a.txt}</span></td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {!iv.complete && <div className="px-4 py-2 text-[11.5px] text-amber-700 bg-amber-50 border-t border-amber-100">⚠ INV นี้ยังไม่ครบ — มี SO ที่ยังทำไม่ได้ (ยังไม่ถึงคิว LG / ไม่มีใน air req) · ทำ partial ที่พร้อมก่อนได้ · HAWB จะยังไม่ปิดจนครบ</div>}
               </div>
-              <div className="grid grid-cols-[1.3fr_1fr_88px_100px_66px_1fr_128px] gap-2.5 px-4 py-2 text-[10.5px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
-                <span>SO</span><span>Style</span><span className="text-right">QTY แผน</span><span className="text-right">QTY mp_line</span><span className="text-right">Δ</span><span>INV</span><span className="text-right">Status</span>
-              </div>
-              {rows.map(p => {
-                const st = statusOf(p); const pcs = selPcs(p); const d = p.plan == null || !p.inMp ? null : pcs - p.plan
-                const open = expanded.has(p.so); const s = selOf(p)
-                return (
-                  <div key={p.so} className="border-b border-gray-100 last:border-0">
-                    <div className="grid grid-cols-[1.3fr_1fr_88px_100px_66px_1fr_128px] gap-2.5 px-4 py-2.5 items-center cursor-pointer hover:bg-gray-50/60"
-                      onClick={() => setExpanded(e => { const x = new Set(e); x.has(p.so) ? x.delete(p.so) : x.add(p.so); return x })}>
-                      <span className="font-mono font-bold text-[13px]">{p.so}</span>
-                      <span className="text-xs text-gray-500 truncate">{p.lines[0]?.style || "—"}</span>
-                      <span className="text-right text-[13px] font-semibold tabular-nums text-gray-500">{n(p.plan)}</span>
-                      <span className={`text-right text-[13px] font-semibold tabular-nums ${st.k === "exactly" ? "text-green-700" : st.k === "revise" ? "text-sky-700" : "text-gray-400"}`}>{p.inMp ? pcs.toLocaleString() : "—"}</span>
-                      <span className={`text-right text-xs font-bold tabular-nums ${d ? "text-sky-700" : "text-gray-400"}`}>{d == null ? "—" : d === 0 ? "0" : d > 0 ? "+" + d : d}</span>
-                      <span className="text-xs">{p.inMp ? <span className="text-sky-700 font-semibold">{p.lines.length} INV ▾</span> : <span className="text-gray-300">—</span>}</span>
-                      <span className={`justify-self-end text-[11px] font-semibold px-2.5 py-1 rounded-full border ${st.cls}`}>{st.txt}</span>
-                    </div>
-                    {open && (
-                      <div className="px-4 pb-3.5 pl-11 bg-gray-50/60">
-                        {p.inMp ? (
-                          <>
-                            <div className="text-[11px] text-gray-500 my-2">เลือก INV/SUB ที่จะ claim (ติ๊กออกเฉพาะที่ไม่เอา) · <b>{s.size}</b>/{p.lines.length} INV · <b className="tabular-nums">{pcs.toLocaleString()}</b> pcs · doc: {p.docs.join(", ") || "—"}</div>
-                            <table className="w-full border border-gray-200 rounded-lg overflow-hidden bg-white">
-                              <thead><tr className="text-left text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-200">
-                                <th className="px-2.5 py-1.5 w-8 text-center"><input type="checkbox" checked={s.size === p.lines.length} ref={el => { if (el) el.indeterminate = s.size > 0 && s.size < p.lines.length }} onChange={e => toggleAllLines(p, e.target.checked)} /></th>
-                                <th className="px-2.5 py-1.5">SUB (map SO+SUB)</th><th className="px-2.5 py-1.5">INV (mp_line)</th><th className="px-2.5 py-1.5">ETD</th><th className="px-2.5 py-1.5 text-right">pcs</th>
-                              </tr></thead>
-                              <tbody>
-                                {p.lines.map((l, i) => (
-                                  <tr key={i} onClick={() => toggleLine(p, i)} className={`cursor-pointer border-b border-gray-50 last:border-0 ${s.has(i) ? "bg-green-50/70" : ""}`}>
-                                    <td className="px-2.5 py-2 text-center"><input type="checkbox" checked={s.has(i)} onChange={() => toggleLine(p, i)} onClick={e => e.stopPropagation()} className="align-middle" /></td>
-                                    <td className="px-2.5 py-2 font-mono text-xs font-semibold">SUB {l.sub || "-"}</td>
-                                    <td className="px-2.5 py-2 font-mono text-xs text-gray-500">{l.inv || "-"}</td>
-                                    <td className="px-2.5 py-2 text-xs text-gray-500">{l.etd ? String(l.etd).slice(0, 10) : "—"}</td>
-                                    <td className="px-2.5 py-2 text-right font-semibold tabular-nums">{l.pcs.toLocaleString()}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </>
-                        ) : (
-                          <div className="my-2 px-4 py-3 rounded-lg bg-amber-50 text-amber-700 text-xs font-semibold">⏳ SO นี้ยังไม่เจอใน mp_line (SHIPPED · AIR PP) — ส่งไม่ได้จนกว่าจะมี record ship</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          ))}
-          {chosen.length === 0 && <div className="text-center text-gray-400 py-8 text-sm">ไม่มี SO ที่เลือก</div>}
+            )
+          })}
         </>
       )}
     </div>
