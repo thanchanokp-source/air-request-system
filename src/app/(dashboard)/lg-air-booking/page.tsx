@@ -6,7 +6,10 @@ import { useEffect, useMemo, useState } from "react"
 //   Step 2: see every SO+SUB on the invoice; tick the SOs that reached LG (others locked)
 // Data from /api/lg-inv-booking (admin-only). No writes — "ไปหน้าเพิ่ม HAWB" is a placeholder.
 const MAROON = "#6b1a1a"
-type Line = { so: string; sub: string; pcs: number; plan: number | null; est: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none"; itemId: string | null }
+type Line = { so: string; sub: string; pcs: number; plan: number | null; est: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "auto"; itemId: string | null }
+// LG can tick "ready" (in air req, at LG) and "auto" (SUB not in air req → LG does actual, SCM later).
+// "pending" (in air req but not yet at LG) is locked.
+const canTick = (air: string) => air === "ready" || air === "auto"
 const QTY: Record<string, { txt: string; cls: string }> = {
   exactly: { txt: "✓ exactly", cls: "bg-green-100 text-green-700" },
   revise:  { txt: "✏ revise",  cls: "bg-sky-100 text-sky-700" },
@@ -18,7 +21,7 @@ type Brand = { brand: string; invCount: number; readySo: number; invs: Inv[] }
 const AIR: Record<string, { txt: string; cls: string }> = {
   ready:   { txt: "✓ พร้อม (ถึงคิว LG)", cls: "bg-green-100 text-green-700" },
   pending: { txt: "⏳ ยังไม่ถึงคิว LG",   cls: "bg-amber-100 text-amber-700" },
-  none:    { txt: "✚ ไม่มีใน air req → SCM", cls: "bg-red-100 text-red-700" },
+  auto:    { txt: "✚ auto add → SCM", cls: "bg-red-100 text-red-700" },
 }
 
 export default function LgAirBookingPage() {
@@ -57,19 +60,19 @@ export default function LgAirBookingPage() {
     const next: Record<string, boolean> = {}
     for (const iv of (brandObj?.invs || [])) {
       if (!pickedInv.has(iv.inv)) continue
-      for (const l of iv.sos) if (l.air === "ready") next[`${iv.inv}|${l.so}|${l.sub}`] = true
+      for (const l of iv.sos) if (canTick(l.air)) next[`${iv.inv}|${l.so}|${l.sub}`] = true
     }
     setSel(next); setStep(2)
   }
 
   const chosenInvs = useMemo(() => (brandObj?.invs || []).filter(iv => pickedInv.has(iv.inv)), [brandObj, pickedInv])
   const toggleLine = (inv: string, l: Line) => { const k = `${inv}|${l.so}|${l.sub}`; setSel(s => ({ ...s, [k]: !s[k] })) }
-  const toggleAll = (iv: Inv, on: boolean) => setSel(s => { const n = { ...s }; for (const l of iv.sos) if (l.air === "ready") n[`${iv.inv}|${l.so}|${l.sub}`] = on; return n })
+  const toggleAll = (iv: Inv, on: boolean) => setSel(s => { const n = { ...s }; for (const l of iv.sos) if (canTick(l.air)) n[`${iv.inv}|${l.so}|${l.sub}`] = on; return n })
 
   const summary = useMemo(() => {
     let ready = 0, locked = 0, selCnt = 0, selPcs = 0
     for (const iv of chosenInvs) for (const l of iv.sos) {
-      if (l.air === "ready") { ready++; if (sel[`${iv.inv}|${l.so}|${l.sub}`]) { selCnt++; selPcs += l.pcs } }
+      if (canTick(l.air)) { ready++; if (sel[`${iv.inv}|${l.so}|${l.sub}`]) { selCnt++; selPcs += l.pcs } }
       else locked++
     }
     return { ready, locked, selCnt, selPcs }
@@ -83,7 +86,7 @@ export default function LgAirBookingPage() {
   }
   // Selected lines grouped by INV (only ticked ready lines) — for step 3.
   const hawbGroups = useMemo(() => chosenInvs
-    .map(iv => ({ inv: iv.inv, lines: iv.sos.filter(l => l.air === "ready" && sel[`${iv.inv}|${l.so}|${l.sub}`]) }))
+    .map(iv => ({ inv: iv.inv, lines: iv.sos.filter(l => canTick(l.air) && sel[`${iv.inv}|${l.so}|${l.sub}`]) }))
     .filter(g => g.lines.length > 0), [chosenInvs, sel])
 
   return (
@@ -163,7 +166,7 @@ export default function LgAirBookingPage() {
           </div>
 
           {chosenInvs.map(iv => {
-            const allReadyOn = iv.sos.filter(l => l.air === "ready").every(l => sel[`${iv.inv}|${l.so}|${l.sub}`]) && iv.ready > 0
+            const allReadyOn = iv.sos.filter(l => canTick(l.air)).every(l => sel[`${iv.inv}|${l.so}|${l.sub}`]) && iv.ready > 0
             return (
               <div key={iv.inv} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b border-gray-200 flex-wrap">
@@ -180,7 +183,7 @@ export default function LgAirBookingPage() {
                   </tr></thead>
                   <tbody>
                     {iv.sos.map((l, i) => { const k = `${iv.inv}|${l.so}|${l.sub}`; const on = !!sel[k]; const a = AIR[l.air]
-                      const ready = l.air === "ready"
+                      const ready = canTick(l.air)
                       return (
                         <tr key={i} onClick={() => ready && toggleLine(iv.inv, l)}
                           className={`border-b border-gray-50 last:border-0 ${ready ? `cursor-pointer ${on ? "bg-green-50/70" : "hover:bg-gray-50"}` : "bg-gray-50/70 text-gray-400"}`}>

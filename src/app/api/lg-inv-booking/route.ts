@@ -42,24 +42,26 @@ export async function GET(_req: NextRequest) {
     select: { id: true, so: true, sub: true, itemStatus: true, qtyRequestAir: true, airFreight: true },
   }).catch(() => [])
   const subN = (s: any) => String(s == null ? "" : s).trim().toUpperCase()
-  const soAir = new Map<string, "ready" | "pending">()
+  // Readiness is per SO+SUB (NOT per SO): a SUB that shipped but isn't in air req = "auto",
+  // even if the SO has OTHER subs in air req. (Prevents an auto SUB inheriting the SO's status.)
+  const airBySoSub = new Map<string, "ready" | "pending">()
   const planBySoSub = new Map<string, number>() // `${soKey}|${SUB}` -> planned air qty
   const estBySoSub = new Map<string, number>()  // `${soKey}|${SUB}` -> EST air freight
   const idBySoSub = new Map<string, string>()    // `${soKey}|${SUB}` -> a bookable (READY) air req item id
   for (const it of items) {
     const k = soN(it.so); if (!k) continue
-    const isReady = READY.has(it.itemStatus)
-    const cur = soAir.get(k)
-    if (isReady) soAir.set(k, "ready")           // ready wins
-    else if (cur !== "ready") soAir.set(k, "pending")
     const pk = `${k}|${subN(it.sub)}`
+    const isReady = READY.has(it.itemStatus)
+    const cur = airBySoSub.get(pk)
+    if (isReady) airBySoSub.set(pk, "ready")          // ready wins
+    else if (cur !== "ready") airBySoSub.set(pk, "pending")
     planBySoSub.set(pk, (planBySoSub.get(pk) || 0) + (Number(it.qtyRequestAir) || 0))
     estBySoSub.set(pk, (estBySoSub.get(pk) || 0) + (Number(it.airFreight) || 0))
     if (isReady && !idBySoSub.has(pk)) idBySoSub.set(pk, it.id) // first bookable item for this SO+SUB
   }
 
   // 3) Group mp_line by INVOICE → its SO+SUB lines (with air-req status), then by brand.
-  type Line = { so: string; sub: string; pcs: number; plan: number | null; est: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none"; itemId: string | null }
+  type Line = { so: string; sub: string; pcs: number; plan: number | null; est: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "auto"; itemId: string | null }
   const invMap = new Map<string, { inv: string; brand: string; lines: Line[] }>()
   for (const r of mp) {
     const inv = String(r.invoice_no ?? "").trim(); if (!inv) continue
@@ -67,9 +69,10 @@ export async function GET(_req: NextRequest) {
     const key = `${brand}||${inv}`
     const g = invMap.get(key) || { inv, brand, lines: [] as Line[] }
     const k = soN(r.so_no)
-    const air = k && soAir.has(k) ? soAir.get(k)! : "none"
     const pcs = Number(r.final_pcs) || 0
     const planKey = `${k}|${subN(r.sub_no)}`
+    // air per SO+SUB: ready / pending (in air req) · auto (SUB not in air req → LG does actual, SCM later)
+    const air = airBySoSub.get(planKey) ?? "auto"
     const plan = planBySoSub.has(planKey) ? planBySoSub.get(planKey)! : null
     const qty: Line["qty"] = plan == null ? "auto" : plan === pcs ? "exactly" : "revise"
     const itemId = idBySoSub.get(planKey) || null
@@ -81,8 +84,9 @@ export async function GET(_req: NextRequest) {
   // 4) Shape: brands → invs → lines. Sort brands by name, invs by inv no.
   const byBrand = new Map<string, any[]>()
   for (const g of invMap.values()) {
-    const readyCnt = g.lines.filter(l => l.air === "ready").length
-    const inv = { inv: g.inv, sos: g.lines, total: g.lines.length, ready: readyCnt, complete: readyCnt === g.lines.length }
+    // "bookable" = LG can act now (ready OR auto). "complete" = no line still waiting (pending).
+    const bookable = g.lines.filter(l => l.air === "ready" || l.air === "auto").length
+    const inv = { inv: g.inv, sos: g.lines, total: g.lines.length, ready: bookable, complete: g.lines.every(l => l.air !== "pending") }
     if (!byBrand.has(g.brand)) byBrand.set(g.brand, [])
     byBrand.get(g.brand)!.push(inv)
   }
