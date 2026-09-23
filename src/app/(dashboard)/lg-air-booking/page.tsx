@@ -56,6 +56,15 @@ export default function LgAirBookingPage() {
   const DROP_CAP = 50
   const dropList = useMemo(() => dropMatches.slice(0, DROP_CAP), [dropMatches])
 
+  // Dropdown chip: show exactly / revise / ยังไม่เจอ so the user can spot mismatches BEFORE selecting.
+  const poolStatus = (p: Pool) => {
+    if (!p.inMp) return { txt: "⏳ ยังไม่เจอ", cls: "bg-amber-100 text-amber-700" }
+    const mpSum = p.lines.reduce((a, l) => a + (l.pcs || 0), 0)
+    if (p.plan == null) return { txt: "✚ auto", cls: "bg-red-100 text-red-700" }
+    if (p.plan === mpSum) return { txt: "✓ exactly", cls: "bg-green-100 text-green-700" }
+    return { txt: "✏ revise", cls: "bg-sky-100 text-sky-700" }
+  }
+
   const addSO = (so: string) => { setPicked(p => new Set(p).add(so)); setQ("") }
   const removeSO = (so: string) => setPicked(p => { const s = new Set(p); s.delete(so); return s })
   const clearAll = () => setPicked(new Set())
@@ -136,7 +145,7 @@ export default function LgAirBookingPage() {
                     className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-gray-50 last:border-0 hover:bg-red-50/60 ${picked.has(p.so) ? "opacity-40 pointer-events-none" : ""}`}>
                     <span className="font-mono font-bold text-[13px]">{p.so}</span>
                     <span className="text-xs text-gray-500">{p.brand}</span>
-                    <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full ${p.inMp ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>{p.inMp ? "✓ mp_line" : "⏳ ยังไม่เจอ"}</span>
+                    {(() => { const s = poolStatus(p); return <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.cls}`}>{s.txt}</span> })()}
                   </div>
                 )) : <div className="px-3 py-3 text-xs text-gray-400">ไม่พบ SO ที่ตรง</div>}
               </div>
