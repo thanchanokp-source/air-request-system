@@ -72,12 +72,14 @@ export async function GET(req: NextRequest) {
   let exactlyPcs = 0, revisePcs = 0, prepaidPcs = 0, shippedPcs = 0
   // Freight totals (THB) for the matched (exported ∩ air req) SOs — EST (planned) + Actual (LG-entered).
   let matchedEst = 0, matchedActual = 0
+  let actualFilledSo = 0, actualWaitingSo = 0 // matched SOs: LG has entered actual vs still waiting
   for (const [k, m] of mpBySo) {
     const a = airBySo.get(k)
     const qtyAirMap = m.pcs
     shippedPcs += qtyAirMap
     if (a) {
       matchedEst += a.est; matchedActual += a.actual
+      if (a.actual > 0) actualFilledSo++; else actualWaitingSo++
       const status = a.qtyPlan === qtyAirMap ? "exactly" : "revise"
       if (status === "exactly") { exactly++; exactlyPcs += qtyAirMap } else { revise++; revisePcs += qtyAirMap }
       tabA.push({ status, so: m.so, brand: [...(a.brands.size ? a.brands : m.brands)].slice(0, 2), qtyPlan: a.qtyPlan, qtyAirMap, lines: m.lines, docs: [...a.docs].slice(0, 3), airInv: [...a.invs].slice(0, 3), subs: [...(a.subs.size ? a.subs : new Set(mpSubs(m)))] })
@@ -102,6 +104,7 @@ export async function GET(req: NextRequest) {
       shippedPcs, exactlyPcs, revisePcs, prepaidPcs, matchedPcs: exactlyPcs + revisePcs, matchedSo: exactly + revise,
       // freight totals (THB) for matched SOs
       matchedEst: Math.round(matchedEst), matchedActual: Math.round(matchedActual),
+      actualFilledSo, actualWaitingSo,
     },
   })
 }

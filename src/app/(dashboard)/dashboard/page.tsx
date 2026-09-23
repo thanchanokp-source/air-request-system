@@ -911,41 +911,43 @@ export default function DashboardPage() {
             <span className="text-[11px] text-gray-400">SHIPPED · AIR PP · เฉพาะ admin</span>
             <a href="/qty-air-check" className="ml-auto text-[11px] text-blue-600 hover:underline">ดูรายละเอียด →</a>
           </div>
-          {/* actual exported qty (pcs) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-            {([
-              ["ส่งออกจริงรวม (pcs)", mpCounts.shippedPcs, "text-teal-700", "bg-teal-50 border-teal-200", `${mpCounts.mpKeys ?? 0} SO`],
-              ["✓ ตรง air req (pcs)", mpCounts.matchedPcs, "text-green-700", "bg-green-50 border-green-200", `${mpCounts.matchedSo ?? 0} SO`],
-              ["✏ ต้อง revise (pcs)", mpCounts.revisePcs, "text-orange-700", "bg-orange-50 border-orange-200", `${mpCounts.revise ?? 0} SO`],
-              ["✚ auto add (pcs)", mpCounts.prepaidPcs, "text-sky-700", "bg-sky-50 border-sky-200", `${mpCounts.prepaid ?? 0} SO`],
-            ] as [string, any, string, string, string][]).map(([l, v, tc, bg, sub]) => (
-              <div key={l} className={`rounded-lg border p-2.5 ${bg}`}>
-                <p className="text-[11px] text-gray-500">{l}</p>
-                <p className={`text-xl font-bold tabular-nums ${tc}`}>{v != null ? Number(v).toLocaleString() : "—"}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
+          {/* 4 หลัก: (1) pcs ส่งออกจริง (2) EST air (3) Actual air + รอเติม (4) %var */}
+          {(() => {
+            const est = mpCounts.matchedEst ?? 0, act = mpCounts.matchedActual ?? 0
+            const varPct = est > 0 ? Math.round((act - est) / est * 1000) / 10 : null
+            return (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* 1) exported pcs */}
+              <div className="rounded-lg border p-3 bg-teal-50 border-teal-200">
+                <p className="text-[11px] text-gray-500">📦 ส่งออกจริง (pcs)</p>
+                <p className="text-2xl font-bold tabular-nums text-teal-700">{Number(mpCounts.shippedPcs || 0).toLocaleString()}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{mpCounts.mpKeys ?? 0} SO ใน mp_line</p>
               </div>
-            ))}
-          </div>
-          {/* freight (THB) for matched SOs */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
-            {([
-              ["EST freight ตรง mp_line (THB)", mpCounts.matchedEst, "text-sky-700", "bg-sky-50 border-sky-200", "แผน (air req)"],
-              ["Actual freight (THB)", mpCounts.matchedActual, "text-teal-700", "bg-teal-50 border-teal-200", "LG กรอกจริง"],
-              ["Δ Actual − EST (THB)", (mpCounts.matchedActual ?? 0) - (mpCounts.matchedEst ?? 0), ((mpCounts.matchedActual ?? 0) - (mpCounts.matchedEst ?? 0)) > 0 ? "text-red-600" : "text-green-600", "bg-gray-50 border-gray-200", "ต่างจากแผน"],
-            ] as [string, any, string, string, string][]).map(([l, v, tc, bg, sub]) => (
-              <div key={l} className={`rounded-lg border p-2.5 ${bg}`}>
-                <p className="text-[11px] text-gray-500">{l}</p>
-                <p className={`text-lg font-bold tabular-nums ${tc}`}>{v != null ? (v > 0 && l.startsWith("Δ") ? "+" : "") + Number(v).toLocaleString() : "—"}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
+              {/* 2) EST air */}
+              <div className="rounded-lg border p-3 bg-sky-50 border-sky-200">
+                <p className="text-[11px] text-gray-500">💠 Estimate air (THB)</p>
+                <p className="text-2xl font-bold tabular-nums text-sky-700">{est.toLocaleString()}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">แผนของ SO ที่ส่งออกแล้ว</p>
               </div>
-            ))}
-          </div>
-          {/* SO-count breakdown */}
-          <div className="flex flex-wrap gap-2 text-[11px]">
-            <span className="px-2.5 py-1 rounded-lg border bg-green-50 border-green-200 text-green-800">✓ exactly <b>{Number(mpCounts.exactly || 0).toLocaleString()}</b> SO</span>
-            <span className="px-2.5 py-1 rounded-lg border bg-orange-50 border-orange-200 text-orange-800">✏ revise <b>{Number(mpCounts.revise || 0).toLocaleString()}</b> SO</span>
-            <span className="px-2.5 py-1 rounded-lg border bg-sky-50 border-sky-200 text-sky-800">✚ auto <b>{Number(mpCounts.prepaid || 0).toLocaleString()}</b> SO</span>
-            <span className="px-2.5 py-1 rounded-lg border bg-amber-50 border-amber-200 text-amber-800">⏳ ยังไม่ส่งออก <b>{Number(mpCounts.noship || 0).toLocaleString()}</b> SO</span>
+              {/* 3) Actual air filled + waiting */}
+              <div className="rounded-lg border p-3 bg-green-50 border-green-200">
+                <p className="text-[11px] text-gray-500">✅ Actual air (THB)</p>
+                <p className="text-2xl font-bold tabular-nums text-green-700">{act.toLocaleString()}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">เติมแล้ว <b className="text-green-700">{Number(mpCounts.actualFilledSo || 0).toLocaleString()}</b> SO · <span className="text-amber-700">รอ LG เติมอีก <b>{Number(mpCounts.actualWaitingSo || 0).toLocaleString()}</b> SO</span></p>
+              </div>
+              {/* 4) % variance actual vs est */}
+              <div className="rounded-lg border p-3 bg-gray-50 border-gray-200">
+                <p className="text-[11px] text-gray-500">📊 Actual vs EST</p>
+                <p className={`text-2xl font-bold tabular-nums ${varPct == null ? "text-gray-400" : varPct > 0 ? "text-red-600" : "text-green-600"}`}>{varPct == null ? "—" : (varPct > 0 ? "↑" : "↓") + Math.abs(varPct) + "%"}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Δ {(act - est > 0 ? "+" : "") + (act - est).toLocaleString()} THB</p>
+              </div>
+            </div>
+            )
+          })()}
+          {/* กล่องเทา: อยู่ใน air req แต่ยังไม่อยู่ใน mp_line */}
+          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 inline-flex items-center gap-2">
+            <span className="text-[11px] text-gray-500">⏳ อยู่ใน air req แต่ยังไม่มีใน mp_line (ยังไม่ส่งออก):</span>
+            <span className="text-sm font-bold text-gray-700 tabular-nums">{Number(mpCounts.noship || 0).toLocaleString()} transaction</span>
           </div>
         </div>
       )}
