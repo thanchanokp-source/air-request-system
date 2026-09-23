@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 //   Step 2: see every SO+SUB on the invoice; tick the SOs that reached LG (others locked)
 // Data from /api/lg-inv-booking (admin-only). No writes — "ไปหน้าเพิ่ม HAWB" is a placeholder.
 const MAROON = "#6b1a1a"
-type Line = { so: string; sub: string; pcs: number; plan: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none"; itemId: string | null }
+type Line = { so: string; sub: string; pcs: number; plan: number | null; est: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none"; itemId: string | null }
 const QTY: Record<string, { txt: string; cls: string }> = {
   exactly: { txt: "✓ exactly", cls: "bg-green-100 text-green-700" },
   revise:  { txt: "✏ revise",  cls: "bg-sky-100 text-sky-700" },
@@ -255,23 +255,31 @@ export default function LgAirBookingPage() {
             <table className="w-full text-xs">
               <thead><tr className="text-left text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
                 <th className="px-3.5 py-2">INV (mp_line)</th><th className="px-3.5 py-2">SO</th><th className="px-3.5 py-2">SUB</th>
-                <th className="px-3.5 py-2 text-right">QTY (mp_line)</th><th className="px-3.5 py-2 text-right">Actual (preview)</th>
+                <th className="px-3.5 py-2 text-right">QTY (mp_line)</th><th className="px-3.5 py-2 text-right">EST (air req)</th><th className="px-3.5 py-2 text-right">Actual (preview)</th><th className="px-3.5 py-2 text-right">Δ vs EST</th>
               </tr></thead>
               <tbody>
-                {allLines.map((l, i) => (
+                {allLines.map((l, i) => {
+                  const actual = exp ? Math.round(l.pcs * perUnit * 100) / 100 : null
+                  const d = actual != null && l.est != null ? Math.round((actual - l.est) * 100) / 100 : null
+                  return (
                   <tr key={i} className="border-b border-gray-50 last:border-0">
                     <td className="px-3.5 py-2 font-mono text-gray-500">{l.inv}</td>
                     <td className="px-3.5 py-2 font-mono font-bold">{l.so}</td>
                     <td className="px-3.5 py-2 font-mono">SUB {l.sub || "-"}</td>
                     <td className="px-3.5 py-2 text-right font-semibold tabular-nums">{l.pcs.toLocaleString()}</td>
-                    <td className="px-3.5 py-2 text-right tabular-nums text-teal-700 font-semibold">{exp ? (Math.round(l.pcs * perUnit * 100) / 100).toLocaleString() : "—"}</td>
+                    <td className="px-3.5 py-2 text-right tabular-nums text-sky-700">{l.est != null ? l.est.toLocaleString() : "—"}</td>
+                    <td className="px-3.5 py-2 text-right tabular-nums text-teal-700 font-semibold">{actual != null ? actual.toLocaleString() : "—"}</td>
+                    <td className={`px-3.5 py-2 text-right tabular-nums font-semibold ${d == null ? "text-gray-300" : d > 0 ? "text-red-600" : d < 0 ? "text-green-600" : "text-gray-400"}`}>{d == null ? "—" : (d > 0 ? "+" : "") + d.toLocaleString()}</td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
               <tfoot><tr className="border-t border-gray-200 bg-gray-50/60 font-bold">
                 <td className="px-3.5 py-2" colSpan={3}>รวม</td>
                 <td className="px-3.5 py-2 text-right tabular-nums">{totalPcs.toLocaleString()}</td>
+                <td className="px-3.5 py-2 text-right tabular-nums text-sky-700">{(() => { const e = allLines.reduce((a, l) => a + (l.est || 0), 0); return e ? e.toLocaleString() : "—" })()}</td>
                 <td className="px-3.5 py-2 text-right tabular-nums text-teal-700">{exp ? exp.toLocaleString() : "—"}</td>
+                <td className="px-3.5 py-2 text-right tabular-nums">{(() => { const e = allLines.reduce((a, l) => a + (l.est || 0), 0); const d = exp && e ? Math.round((exp - e) * 100) / 100 : null; return d == null ? "—" : (d > 0 ? "+" : "") + d.toLocaleString() })()}</td>
               </tr></tfoot>
             </table>
           </div>

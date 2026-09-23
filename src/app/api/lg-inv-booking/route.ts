@@ -39,11 +39,12 @@ export async function GET(_req: NextRequest) {
   // 2) Air Request items (NYG) → per-SO readiness + per SO+SUB planned air qty + the bookable item id.
   const items = await (prisma as any).airRequestItem.findMany({
     where: { request: { bu: "NYG", isTest: false } },
-    select: { id: true, so: true, sub: true, itemStatus: true, qtyRequestAir: true },
+    select: { id: true, so: true, sub: true, itemStatus: true, qtyRequestAir: true, airFreight: true },
   }).catch(() => [])
   const subN = (s: any) => String(s == null ? "" : s).trim().toUpperCase()
   const soAir = new Map<string, "ready" | "pending">()
   const planBySoSub = new Map<string, number>() // `${soKey}|${SUB}` -> planned air qty
+  const estBySoSub = new Map<string, number>()  // `${soKey}|${SUB}` -> EST air freight
   const idBySoSub = new Map<string, string>()    // `${soKey}|${SUB}` -> a bookable (READY) air req item id
   for (const it of items) {
     const k = soN(it.so); if (!k) continue
@@ -53,11 +54,12 @@ export async function GET(_req: NextRequest) {
     else if (cur !== "ready") soAir.set(k, "pending")
     const pk = `${k}|${subN(it.sub)}`
     planBySoSub.set(pk, (planBySoSub.get(pk) || 0) + (Number(it.qtyRequestAir) || 0))
+    estBySoSub.set(pk, (estBySoSub.get(pk) || 0) + (Number(it.airFreight) || 0))
     if (isReady && !idBySoSub.has(pk)) idBySoSub.set(pk, it.id) // first bookable item for this SO+SUB
   }
 
   // 3) Group mp_line by INVOICE → its SO+SUB lines (with air-req status), then by brand.
-  type Line = { so: string; sub: string; pcs: number; plan: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none"; itemId: string | null }
+  type Line = { so: string; sub: string; pcs: number; plan: number | null; est: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none"; itemId: string | null }
   const invMap = new Map<string, { inv: string; brand: string; lines: Line[] }>()
   for (const r of mp) {
     const inv = String(r.invoice_no ?? "").trim(); if (!inv) continue
@@ -71,7 +73,8 @@ export async function GET(_req: NextRequest) {
     const plan = planBySoSub.has(planKey) ? planBySoSub.get(planKey)! : null
     const qty: Line["qty"] = plan == null ? "auto" : plan === pcs ? "exactly" : "revise"
     const itemId = idBySoSub.get(planKey) || null
-    g.lines.push({ so: so8(r.so_no), sub: String(r.sub_no ?? ""), pcs, plan, qty, style: String(r.style ?? ""), air, itemId })
+    const est = estBySoSub.has(planKey) ? estBySoSub.get(planKey)! : null
+    g.lines.push({ so: so8(r.so_no), sub: String(r.sub_no ?? ""), pcs, plan, est, qty, style: String(r.style ?? ""), air, itemId })
     invMap.set(key, g)
   }
 
