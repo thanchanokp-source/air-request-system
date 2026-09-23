@@ -903,26 +903,35 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── mp_line reconcile (admin only) — ยอด air req ที่ map กับ mp_line (ออกจริง) ── */}
+      {/* ── mp_line reconcile (admin only · NYG) — ยอดส่งออกจริงที่ตรงกับ mp_line ── */}
       {isAdmin && mpCounts && (
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
+        <div className="rounded-xl border-2 border-teal-200 bg-white p-3">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm font-semibold text-gray-700">ยอดที่ map กับ mp_line</span>
-            <span className="text-[11px] text-gray-400">NYG · SHIPPED · AIR PP · join by SO</span>
+            <span className="text-sm font-semibold text-gray-800">📦 ยอดส่งออกจริง (mp_line) · NYG</span>
+            <span className="text-[11px] text-gray-400">SHIPPED · AIR PP · เฉพาะ admin</span>
             <a href="/qty-air-check" className="ml-auto text-[11px] text-blue-600 hover:underline">ดูรายละเอียด →</a>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* actual exported qty (pcs) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
             {([
-              ["✓ ยอดตรง (exactly)", mpCounts.exactly, "text-green-700", "bg-green-50 border-green-200"],
-              ["✗ ยอดไม่ตรง (revise)", mpCounts.revise, "text-red-700", "bg-red-50 border-red-200"],
-              ["✚ auto (air ไม่มี)", mpCounts.prepaid, "text-sky-700", "bg-sky-50 border-sky-200"],
-              ["⏳ ยังไม่ส่งออก", mpCounts.noship, "text-amber-700", "bg-amber-50 border-amber-200"],
-            ] as [string, any, string, string][]).map(([l, v, tc, bg]) => (
+              ["ส่งออกจริงรวม (pcs)", mpCounts.shippedPcs, "text-teal-700", "bg-teal-50 border-teal-200", `${mpCounts.mpKeys ?? 0} SO`],
+              ["✓ ตรง air req (pcs)", mpCounts.matchedPcs, "text-green-700", "bg-green-50 border-green-200", `${mpCounts.matchedSo ?? 0} SO`],
+              ["✏ ต้อง revise (pcs)", mpCounts.revisePcs, "text-orange-700", "bg-orange-50 border-orange-200", `${mpCounts.revise ?? 0} SO`],
+              ["✚ auto add (pcs)", mpCounts.prepaidPcs, "text-sky-700", "bg-sky-50 border-sky-200", `${mpCounts.prepaid ?? 0} SO`],
+            ] as [string, any, string, string, string][]).map(([l, v, tc, bg, sub]) => (
               <div key={l} className={`rounded-lg border p-2.5 ${bg}`}>
                 <p className="text-[11px] text-gray-500">{l}</p>
                 <p className={`text-xl font-bold tabular-nums ${tc}`}>{v != null ? Number(v).toLocaleString() : "—"}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
               </div>
             ))}
+          </div>
+          {/* SO-count breakdown */}
+          <div className="flex flex-wrap gap-2 text-[11px]">
+            <span className="px-2.5 py-1 rounded-lg border bg-green-50 border-green-200 text-green-800">✓ exactly <b>{Number(mpCounts.exactly || 0).toLocaleString()}</b> SO</span>
+            <span className="px-2.5 py-1 rounded-lg border bg-orange-50 border-orange-200 text-orange-800">✏ revise <b>{Number(mpCounts.revise || 0).toLocaleString()}</b> SO</span>
+            <span className="px-2.5 py-1 rounded-lg border bg-sky-50 border-sky-200 text-sky-800">✚ auto <b>{Number(mpCounts.prepaid || 0).toLocaleString()}</b> SO</span>
+            <span className="px-2.5 py-1 rounded-lg border bg-amber-50 border-amber-200 text-amber-800">⏳ ยังไม่ส่งออก <b>{Number(mpCounts.noship || 0).toLocaleString()}</b> SO</span>
           </div>
         </div>
       )}

@@ -66,15 +66,18 @@ export async function GET(req: NextRequest) {
   // Tab A = SO ที่มีประวัติส่งออก (อยู่ใน mp_line): matched (exactly/revise) หรือ auto prepaid (mp_line only)
   const tabA: any[] = []
   let exactly = 0, revise = 0, prepaid = 0
+  // QTY (pcs) totals — the ACTUAL exported qty from mp_line, split by match status.
+  let exactlyPcs = 0, revisePcs = 0, prepaidPcs = 0, shippedPcs = 0
   for (const [k, m] of mpBySo) {
     const a = airBySo.get(k)
     const qtyAirMap = m.pcs
+    shippedPcs += qtyAirMap
     if (a) {
       const status = a.qtyPlan === qtyAirMap ? "exactly" : "revise"
-      status === "exactly" ? exactly++ : revise++
+      if (status === "exactly") { exactly++; exactlyPcs += qtyAirMap } else { revise++; revisePcs += qtyAirMap }
       tabA.push({ status, so: m.so, brand: [...(a.brands.size ? a.brands : m.brands)].slice(0, 2), qtyPlan: a.qtyPlan, qtyAirMap, lines: m.lines, docs: [...a.docs].slice(0, 3), airInv: [...a.invs].slice(0, 3), subs: [...(a.subs.size ? a.subs : new Set(mpSubs(m)))] })
     } else {
-      prepaid++
+      prepaid++; prepaidPcs += qtyAirMap
       tabA.push({ status: "auto_air_prepaid_mapping", so: m.so, brand: [...m.brands].slice(0, 2), qtyPlan: null, qtyAirMap, lines: m.lines, docs: [], airInv: [], subs: mpSubs(m) })
     }
   }
@@ -88,6 +91,10 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     tabA, tabB,
-    counts: { tabA: tabA.length, tabB: tabB.length, exactly, revise, prepaid, noship: tabB.length, mpKeys: mpBySo.size, airKeys: airBySo.size },
+    counts: {
+      tabA: tabA.length, tabB: tabB.length, exactly, revise, prepaid, noship: tabB.length, mpKeys: mpBySo.size, airKeys: airBySo.size,
+      // pcs totals — actual exported qty from mp_line
+      shippedPcs, exactlyPcs, revisePcs, prepaidPcs, matchedPcs: exactlyPcs + revisePcs, matchedSo: exactly + revise,
+    },
   })
 }
