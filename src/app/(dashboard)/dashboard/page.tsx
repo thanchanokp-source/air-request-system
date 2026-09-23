@@ -630,6 +630,14 @@ export default function DashboardPage() {
     buInit.current = true
   }, [session, canAll, viewBus])
 
+  // Admin-only: mp_line reconcile summary (air req plan ↔ mp_line actual, NYG · SHIPPED · AIR PP).
+  const isAdmin = (session?.user as any)?.role === "ADMIN"
+  const [mpCounts, setMpCounts] = useState<any>(null)
+  useEffect(() => {
+    if (!isAdmin) return
+    fetch("/api/air-export-map").then(r => r.ok ? r.json() : null).then(d => setMpCounts(d?.counts || null)).catch(() => {})
+  }, [isAdmin])
+
   const [requests, setRequests]   = useState<any[]>([])
   const [loading,  setLoading]    = useState(true)
   const [yearFilter,  setYearFilter]  = useState("")
@@ -894,6 +902,30 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ── mp_line reconcile (admin only) — ยอด air req ที่ map กับ mp_line (ออกจริง) ── */}
+      {isAdmin && mpCounts && (
+        <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm font-semibold text-gray-700">ยอดที่ map กับ mp_line</span>
+            <span className="text-[11px] text-gray-400">NYG · SHIPPED · AIR PP · join by SO</span>
+            <a href="/qty-air-check" className="ml-auto text-[11px] text-blue-600 hover:underline">ดูรายละเอียด →</a>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {([
+              ["✓ ยอดตรง (exactly)", mpCounts.exactly, "text-green-700", "bg-green-50 border-green-200"],
+              ["✗ ยอดไม่ตรง (revise)", mpCounts.revise, "text-red-700", "bg-red-50 border-red-200"],
+              ["✚ auto (air ไม่มี)", mpCounts.prepaid, "text-sky-700", "bg-sky-50 border-sky-200"],
+              ["⏳ ยังไม่ส่งออก", mpCounts.noship, "text-amber-700", "bg-amber-50 border-amber-200"],
+            ] as [string, any, string, string][]).map(([l, v, tc, bg]) => (
+              <div key={l} className={`rounded-lg border p-2.5 ${bg}`}>
+                <p className="text-[11px] text-gray-500">{l}</p>
+                <p className={`text-xl font-bold tabular-nums ${tc}`}>{v != null ? Number(v).toLocaleString() : "—"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── KPI ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3">

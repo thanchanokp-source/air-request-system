@@ -30,8 +30,8 @@ export default function LgAirBookingPage() {
   const [q, setQ] = useState("")
   const [pickedInv, setPickedInv] = useState<Set<string>>(new Set())
   const [sel, setSel] = useState<Record<string, boolean>>({}) // `${inv}|${so}|${sub}` -> bool
-  const [hawbIn, setHawbIn] = useState<Record<string, string>>({}) // inv -> HAWB no (LG types)
-  const [expIn, setExpIn] = useState<Record<string, string>>({})   // inv -> expense/HAWB total (LG types)
+  const [hawbAll, setHawbAll] = useState("") // ONE HAWB no for all selected INVs (1 HAWB spans many INV)
+  const [expAll, setExpAll] = useState("")   // ONE expense/HAWB total → distributed across lines by qty
 
   useEffect(() => {
     setLoading(true); setErr("")
@@ -204,66 +204,75 @@ export default function LgAirBookingPage() {
         </>
       )}
 
-      {data && step === 3 && (
+      {data && step === 3 && (() => {
+        const allLines = hawbGroups.flatMap(g => g.lines.map(l => ({ ...l, inv: g.inv })))
+        const totalPcs = allLines.reduce((a, l) => a + l.pcs, 0)
+        const exp = parseFloat(expAll) || 0
+        const perUnit = totalPcs > 0 ? exp / totalPcs : 0
+        return (
         <>
           <div className="flex items-center gap-2 flex-wrap">
             <button onClick={() => setStep(2)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">← กลับไปเลือก SO</button>
             <span className="text-xs text-gray-500 font-semibold">Brand: {brand}</span>
-            <span className="text-[11px] text-gray-400">INV มาจาก mp_line แล้ว — LG ใส่แค่ HAWB + expense</span>
+            <span className="text-[11px] text-gray-400">INV มาจาก mp_line แล้ว — ใส่ HAWB เดียว + expense เดียว (1 HAWB ครอบหลาย INV) · actual กระจายตาม qty</span>
           </div>
-          {hawbGroups.map(g => {
-            const pcs = g.lines.reduce((a, l) => a + l.pcs, 0)
-            return (
-              <div key={g.inv} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3 bg-orange-50/60 border-b border-gray-200 flex-wrap">
-                  <span className="text-[11px] font-semibold text-orange-700">INV NO.</span>
-                  <span className="font-mono font-bold text-[15px]">{g.inv}</span>
-                  <span className="text-[10px] text-gray-400">🔒 มาจาก mp_line — ไม่ต้องกรอก</span>
-                  <span className="ml-auto text-[11px] text-gray-500">{g.lines.length} SO · {pcs.toLocaleString()} pcs</span>
-                </div>
-                <table className="w-full text-xs">
-                  <thead><tr className="text-left text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
-                    <th className="px-3.5 py-2">SO</th><th className="px-3.5 py-2">SUB</th><th className="px-3.5 py-2 text-right">QTY (mp_line)</th>
-                  </tr></thead>
-                  <tbody>
-                    {g.lines.map((l, i) => (
-                      <tr key={i} className="border-b border-gray-50 last:border-0">
-                        <td className="px-3.5 py-2 font-mono font-bold">{l.so}</td>
-                        <td className="px-3.5 py-2 font-mono">SUB {l.sub || "-"}</td>
-                        <td className="px-3.5 py-2 text-right font-semibold tabular-nums">{l.pcs.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex flex-wrap items-end gap-4 px-4 py-3 border-t border-gray-100 bg-gray-50/40">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-orange-700 mb-1">HAWB# <span className="text-red-500">*</span></label>
-                    <input value={hawbIn[g.inv] || ""} onChange={e => setHawbIn(p => ({ ...p, [g.inv]: e.target.value }))}
-                      placeholder="ใส่เลข HAWB…" className="w-48 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-orange-700 mb-1">EXPENSE / HAWB (THB)</label>
-                    <input value={expIn[g.inv] || ""} onChange={e => setExpIn(p => ({ ...p, [g.inv]: e.target.value }))}
-                      inputMode="numeric" placeholder="0" className="w-40 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-200" />
-                  </div>
-                  <span className="text-[11px] text-gray-400 pb-1.5">Actual/SO = expense ÷ qty (คิดตอนบันทึกจริง)</span>
-                </div>
+
+          {/* One HAWB for all selected INVs */}
+          <div className="bg-white rounded-xl border-2 border-orange-200 overflow-hidden">
+            <div className="flex flex-wrap items-end gap-4 px-4 py-3.5 bg-orange-50/70 border-b border-orange-100">
+              <div>
+                <label className="block text-[11px] font-semibold text-orange-700 mb-1">HAWB# <span className="text-red-500">*</span> <span className="font-normal text-gray-400">(1 ใบสำหรับ {hawbGroups.length} INV ที่เลือก)</span></label>
+                <input value={hawbAll} onChange={e => setHawbAll(e.target.value)} placeholder="ใส่เลข HAWB…"
+                  className="w-56 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200" />
               </div>
-            )
-          })}
+              <div>
+                <label className="block text-[11px] font-semibold text-orange-700 mb-1">EXPENSE / HAWB (THB)</label>
+                <input value={expAll} onChange={e => setExpAll(e.target.value)} inputMode="numeric" placeholder="0"
+                  className="w-44 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-orange-200" />
+              </div>
+              <div className="ml-auto text-right">
+                <p className="text-[11px] text-gray-400">รวม</p>
+                <p className="text-sm font-bold text-gray-700">{hawbGroups.length} INV · {allLines.length} SO · {totalPcs.toLocaleString()} pcs</p>
+                <p className="text-[11px] text-gray-400">Actual/SO = {exp ? `${exp.toLocaleString()} ÷ ${totalPcs.toLocaleString()} × qty` : "expense ÷ qty รวม × qty"}</p>
+              </div>
+            </div>
+            <table className="w-full text-xs">
+              <thead><tr className="text-left text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
+                <th className="px-3.5 py-2">INV (mp_line)</th><th className="px-3.5 py-2">SO</th><th className="px-3.5 py-2">SUB</th>
+                <th className="px-3.5 py-2 text-right">QTY (mp_line)</th><th className="px-3.5 py-2 text-right">Actual (preview)</th>
+              </tr></thead>
+              <tbody>
+                {allLines.map((l, i) => (
+                  <tr key={i} className="border-b border-gray-50 last:border-0">
+                    <td className="px-3.5 py-2 font-mono text-gray-500">{l.inv}</td>
+                    <td className="px-3.5 py-2 font-mono font-bold">{l.so}</td>
+                    <td className="px-3.5 py-2 font-mono">SUB {l.sub || "-"}</td>
+                    <td className="px-3.5 py-2 text-right font-semibold tabular-nums">{l.pcs.toLocaleString()}</td>
+                    <td className="px-3.5 py-2 text-right tabular-nums text-teal-700 font-semibold">{exp ? (Math.round(l.pcs * perUnit * 100) / 100).toLocaleString() : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr className="border-t border-gray-200 bg-gray-50/60 font-bold">
+                <td className="px-3.5 py-2" colSpan={3}>รวม</td>
+                <td className="px-3.5 py-2 text-right tabular-nums">{totalPcs.toLocaleString()}</td>
+                <td className="px-3.5 py-2 text-right tabular-nums text-teal-700">{exp ? exp.toLocaleString() : "—"}</td>
+              </tr></tfoot>
+            </table>
+          </div>
+
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
-                const missing = hawbGroups.filter(g => !(hawbIn[g.inv] || "").trim()).map(g => g.inv)
-                if (missing.length) { alert("ใส่ HAWB ให้ครบทุก INV ก่อน:\n" + missing.join(", ")); return }
-                const lines = hawbGroups.map(g => `• INV ${g.inv} → HAWB ${hawbIn[g.inv]} · expense ${expIn[g.inv] || "0"} · ${g.lines.length} SO`).join("\n")
-                alert(`(preview — ยังไม่เขียนลง flow จริง)\n\nBrand: ${brand}\n${lines}\n\nขั้นถัดไป (ของจริง): บันทึก actual + ส่งต่อ claim`)
+                if (!hawbAll.trim()) { alert("ใส่เลข HAWB ก่อน"); return }
+                if (!exp) { alert("ใส่ EXPENSE/HAWB ก่อน"); return }
+                alert(`(preview — ยังไม่เขียนลง flow จริง)\n\nBrand: ${brand}\nHAWB: ${hawbAll}\nExpense: ${exp.toLocaleString()} THB\nครอบ: ${hawbGroups.length} INV · ${allLines.length} SO · ${totalPcs.toLocaleString()} pcs\nActual/SO = expense ÷ qty รวม × qty ของแต่ละ SO\n\nขั้นถัดไป (ของจริง): บันทึก actual + ส่งต่อ claim`)
               }}
               className="text-sm font-bold text-white px-5 py-2.5 rounded-lg" style={{ background: "#15803d" }}>บันทึก + ส่งต่อ claim (preview)</button>
-            <span className="text-xs text-gray-400">{hawbGroups.length} INV · ใส่ HAWB แล้ว {hawbGroups.filter(g => (hawbIn[g.inv] || "").trim()).length}/{hawbGroups.length}</span>
+            <span className="text-xs text-gray-400">ถ้าต้องแยกหลาย HAWB (คนละเที่ยว) → แยกทำทีละชุด INV</span>
           </div>
         </>
-      )}
+        )
+      })()}
     </div>
   )
 }
