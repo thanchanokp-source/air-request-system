@@ -787,7 +787,11 @@ export default function FilesPage() {
                                   const hawbs = [...new Set((req.items || []).map((i: any) => (i.hawbNo || "").trim()).filter(Boolean))] as string[]
                                   if (!hawbs.length) return <p className="text-xs text-gray-400 mt-2">No HAWB yet — enter HAWB in LG Booking first, then attach files here.</p>
                                   const open = hawbPanel.has(req.id)
-                                  const attached = hawbs.filter(h => (req.attachments || []).some((a: any) => (a.hawbNo || "") === h)).length
+                                  // HAWB files may be stored either way: by the hawbNo field (files page upload)
+                                  // OR category "HAWB:<no>" (LG entry upload) — match BOTH so files attached in
+                                  // either place show up here.
+                                  const attHawb = (a: any, h: string) => (a.hawbNo || "") === h || a.category === "HAWB:" + h
+                                  const attached = hawbs.filter(h => (req.attachments || []).some((a: any) => attHawb(a, h))).length
                                   return (
                                     <div className="mt-2">
                                       <button onClick={e => { e.stopPropagation(); toggleHawbPanel(req.id) }}
@@ -798,7 +802,7 @@ export default function FilesPage() {
                                       {open && (
                                         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
                                           {hawbs.map(h => {
-                                            const files = (req.attachments || []).filter((a: any) => (a.hawbNo || "") === h)
+                                            const files = (req.attachments || []).filter((a: any) => attHawb(a, h))
                                             const key = `${req.id}:${h}`
                                             return (
                                               <div key={h} className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 min-w-0">

@@ -135,7 +135,8 @@ export default function LgEntryPage() {
   // list of HAWB numbers still missing a file.
   const hawbsMissingFiles = () => {
     const hawbNos = [...new Set(hawbGroups.map((g: any) => String(g.hawbNo || "").trim()).filter(Boolean))]
-    const hasFile = (h: string) => involvedReqIds.some(id => (docMap[id]?.attachments || []).some((a: any) => String(a.category) === `HAWB:${h}`))
+    // A HAWB file may be stored as category "HAWB:<no>" (LG entry) OR the hawbNo field (files page) — accept both.
+    const hasFile = (h: string) => involvedReqIds.some(id => (docMap[id]?.attachments || []).some((a: any) => String(a.category) === `HAWB:${h}` || String(a.hawbNo || "") === h))
     return hawbNos.filter(h => !hasFile(h))
   }
 
