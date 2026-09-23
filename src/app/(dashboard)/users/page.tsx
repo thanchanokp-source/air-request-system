@@ -11,6 +11,7 @@ const MASTER_ROLES_NYG = [
   { role: "PRESIDENT",            label: "President",             hint: "Approves all requests after VP MER",         needsPriority: false, bu: "NYG" },
   { role: "SCM_USER",             label: "SCM User",              hint: "Assign Claim Dept + select VP SCM",         needsPriority: false, bu: "NYG" },
   { role: "VP_SCM",               label: "VP SCM",                hint: "Approves after SCM User (set up in master)", needsPriority: false, bu: "NYG" },
+  { role: "DPM_SCM",              label: "DPM SCM",               hint: "Approves SCM NYG claim FIRST (before VP SCM/Saji)", needsPriority: false, bu: "NYG" },
   { role: "CLAIM_PRODUCTION",     label: "Claim – Production",    hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
   { role: "VP_PRODUCTION",        label: "VP Claim – Production", hint: "Approves after Claim Production (Priority 1 first)", needsPriority: true, bu: "NYG" },
   { role: "CLAIM_PROCUREMENT",    label: "Claim – Procurement",   hint: "Priority 1 = handles first (auto-cascade to P2…)", needsPriority: true,  bu: "NYG" },
@@ -110,7 +111,7 @@ function effectiveBu(u: any): string {
 // Role order by approval flow (NYG then GW)
 const FLOW_ORDER: string[] = [
   // NYG flow
-  "MER_USER", "DVM_MER", "VP_MER", "PRESIDENT", "SCM_USER", "VP_SCM",
+  "MER_USER", "DVM_MER", "VP_MER", "PRESIDENT", "SCM_USER", "VP_SCM", "DPM_SCM",
   "CLAIM_COMMERCIAL", "VP_COMMERCIAL", "CLAIM_PRODUCTION", "VP_PRODUCTION",
   "CLAIM_NYG", "CLAIM_NYK", "CLAIM_PROCUREMENT", "VP_PROCUREMENT",
   "LOGISTICS", "ACCOUNTING",
@@ -130,7 +131,7 @@ const FLOW_ORDER: string[] = [
 type ActionType = "Approver" | "User" | "Read"
 const ROLE_ACTION: Record<string, ActionType> = {
   // Approvers — click to approve
-  DVM_MER: "Approver", VP_MER: "Approver", PRESIDENT: "Approver", VP_SCM: "Approver",
+  DVM_MER: "Approver", VP_MER: "Approver", PRESIDENT: "Approver", VP_SCM: "Approver", DPM_SCM: "Approver",
   DVM_MER_EA: "Approver", VP_MER_EA: "Approver",
   DVM_MER_TRM: "Approver", VP_MER_TRM: "Approver",
   DPM_GW: "Approver", GM_GW: "Approver", PRESIDENT_GW: "Approver",
@@ -156,7 +157,7 @@ const ACTION_STYLE: Record<ActionType, string> = {
 const ROLE_LABEL: Record<string, string> = {
   // NYG
   DVM_MER: "DVM Merchandise", VP_MER: "VP Merchandise", PRESIDENT: "President", LOGISTICS: "Logistics", ACCOUNTING: "Accounting",
-  SCM_USER: "SCM User", VP_SCM: "VP SCM",
+  SCM_USER: "SCM User", VP_SCM: "VP SCM", DPM_SCM: "DPM SCM",
   CLAIM_COMMERCIAL:  "Claim-Commercial",
   CLAIM_PRODUCTION:  "Claim-Production",
   CLAIM_NYG:         "Claim-SCM NYG",

@@ -167,8 +167,8 @@ export function claimEntryDisplayRoles(dept: string): string[] {
     case "PROCUREMENT": return ["CLAIM_PROCUREMENT"]
     case "NYK":
     case "SCM NYK": return ["SCM_NYK_APPROVER"]
-    // GW entry = SCM_NYG; NYG/EA/TRM entry = VP_SCM (Saji). Both listed for display resolution.
-    case "SCM NYG": return ["SCM_NYG", "VP_SCM"]
+    // GW entry = SCM_NYG; NYG/EA/TRM entry = DPM_SCM (sirinya, before Saji=VP_SCM). Both listed for display resolution.
+    case "SCM NYG": return ["SCM_NYG", "DPM_SCM"]
     case "GW":
     case "SUPPLIER":
     case "SUPPLIER_IN":
@@ -282,10 +282,10 @@ export const CLAIM_DEPT_ROLE_MAP: Record<string, { entry: string[]; vp: string[]
   // NYG merch = DVM_MER/VP_MER; EA merch = DVM_MER_EA/VP_MER_EA. Both listed so the acting-role
   // resolver recognises either — the SPECIFIC person is still scoped by assignedDvmMer/assignedVpMer.
   COMMERCIAL: { entry: ["DVM_MER", "DVM_MER_EA", "DVM_MER_TRM"], vp: ["VP_MER", "VP_MER_EA", "VP_MER_TRM"] },
-  // NYG / EA / TRM only: "SCM NYG" claim = SINGLE-STEP approval by Saji (role VP_SCM).
-  // No VP stage (vp: []) → one Saji approval completes the split. GW's "SCM NYG" is
-  // unaffected: GW routes via CLAIM_CHAINS / claim-forward, never through these entry/vp maps.
-  "SCM NYG": { entry: ["VP_SCM"], vp: [] },
+  // NYG / EA / TRM only: "SCM NYG" claim = 2-STEP → DPM SCM (sirinya, role DPM_SCM) approves first,
+  // then VP SCM (Saji, role VP_SCM) finishes. GW's "SCM NYG" is unaffected: GW routes via
+  // CLAIM_CHAINS / claim-forward, never through these entry/vp maps.
+  "SCM NYG": { entry: ["DPM_SCM"], vp: ["VP_SCM"] },
 }
 export function claimEntryRoles(dept: string): string[] {
   return CLAIM_DEPT_ROLE_MAP[dept]?.entry ?? [`DVM_${dept}`, `CLAIM_${dept}`]

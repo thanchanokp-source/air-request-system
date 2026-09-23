@@ -2075,9 +2075,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       let splitStatus: string
       if (actingIsVp) splitStatus = "COMPLETED"
       else {
-        const vpRoles = claimVpRoles(dept)
-        const vpExists = await (prisma.user as any).count({
-          where: { isActive: true, priority: { not: null }, OR: [{ role: { in: vpRoles } }, { roles: { hasSome: vpRoles } }] },
+        // A separate VP stage exists if any active user holds a VP role for this dept. Do NOT require
+        // a priority here — some VP approvers (e.g. VP SCM / Saji, DPM SCM) are set up without one,
+        // and requiring priority would wrongly complete the claim at the entry step (skipping the VP).
+        const vpRoles = claimVpRoles(dept).filter(Boolean)
+        const vpExists = vpRoles.length > 0 && await (prisma.user as any).count({
+          where: { isActive: true, OR: [{ role: { in: vpRoles } }, { roles: { hasSome: vpRoles } }] },
         }) > 0
         splitStatus = vpExists ? "CLAIM_PASSED" : "COMPLETED"
       }
