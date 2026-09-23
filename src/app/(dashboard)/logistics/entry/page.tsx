@@ -129,8 +129,18 @@ export default function LgEntryPage() {
   const LG_FILE_CATS = ["INV", "AWB", "EXPENSE", "COMBINE"]
   const lgFileCount = (r: any) => (r?.attachments || []).filter((a: any) => LG_FILE_CATS.includes(a.category)).length
 
+  // Business rule: every HAWB (with a number) MUST have ≥1 attached file before Send — entering a
+  // HAWB requires its AWB/expense document. Files are attached to every selected doc, so a HAWB
+  // "has a file" if any involved doc carries an attachment with category HAWB:<no>. Returns the
+  // list of HAWB numbers still missing a file.
+  const hawbsMissingFiles = () => {
+    const hawbNos = [...new Set(hawbGroups.map((g: any) => String(g.hawbNo || "").trim()).filter(Boolean))]
+    const hasFile = (h: string) => involvedReqIds.some(id => (docMap[id]?.attachments || []).some((a: any) => String(a.category) === `HAWB:${h}`))
+    return hawbNos.filter(h => !hasFile(h))
+  }
+
   // Per-document readiness to advance (Send): all its bookable SOs are calculated in a HAWB w/ No,
-  // have a ship date, booking dates filled, and ≥1 file attached.
+  // have a ship date + QTY, AND every HAWB has its file attached.
   const docComplete = (reqId: string) => {
     const items = allLgItems.filter(i => i.request.id === reqId)
     if (items.length === 0) return false
@@ -138,8 +148,7 @@ export default function LgEntryPage() {
     if (!allCalc) return false
     if (!items.every(hasShipDate)) return false
     if (!items.every(it => liveQty(it) > 0)) return false // QTY Air must be filled
-    // Booking Date removed — no longer required to send.
-    // Attachments are OPTIONAL — a document does not need its own file to be sent.
+    if (hawbsMissingFiles().length) return false // every HAWB must have its document attached
     return true
   }
 
@@ -198,6 +207,9 @@ export default function LgEntryPage() {
     // Every selected SO must have Plan Ship Date + QTY Air filled before Send.
     const missingDetail = allLgItems.filter(it => !hasShipDate(it) || !(liveQty(it) > 0))
     if (missingDetail.length) { alert(`Please complete all details before sending — SOs still missing Plan Ship Date / QTY Air:\n${[...new Set(missingDetail.map(i => i.so))].join(", ")}`); return }
+    // Every HAWB must have its document attached before Send.
+    const noFile = hawbsMissingFiles()
+    if (noFile.length) { alert(`ต้องแนบไฟล์ให้ครบทุก HAWB ก่อน Send — HAWB ที่ยังไม่มีเอกสาร:\n${noFile.join(", ")}`); return }
     const ready = involvedReqIds.filter(docComplete)
     if (ready.length === 0) { alert("No documents are ready to send — selected SOs must be in a HAWB (with HAWB No)"); return }
     if (!confirm(`Forward ${ready.length} ready document(s)? (the rest will be saved as draft)`)) return

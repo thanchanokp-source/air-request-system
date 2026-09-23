@@ -15,6 +15,8 @@ export const runtime = "nodejs"
 //       none    = not in any air req (auto air prepaid → must go via SCM first)
 // Writes NOTHING — admin trial before we build the write path.
 const soN = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
+// Display form: pad an all-digit SO to the canonical 8 digits (Excel/mp_line may drop the leading 0).
+const so8 = (s: any) => { const raw = String(s == null ? "" : s).trim(); return /^\d+$/.test(raw) ? raw.padStart(8, "0") : raw }
 const READY = new Set(["LOG_PASSED", "CLAIM_PASSED", "PRES_PASSED", "PRESIDENT_PENDING", "COMPLETED"])
 
 export async function GET(_req: NextRequest) {
@@ -34,22 +36,26 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: "อ่าน public.mp_line ไม่ได้: " + (e?.message || "error"), brands: [] }, { status: 500 })
   }
 
-  // 2) Air Request items (NYG) → per-SO readiness (ready if ANY item reached LG).
+  // 2) Air Request items (NYG) → per-SO readiness + per SO+SUB planned air qty.
   const items = await (prisma as any).airRequestItem.findMany({
     where: { request: { bu: "NYG", isTest: false } },
-    select: { so: true, itemStatus: true },
+    select: { so: true, sub: true, itemStatus: true, qtyRequestAir: true },
   }).catch(() => [])
+  const subN = (s: any) => String(s == null ? "" : s).trim().toUpperCase()
   const soAir = new Map<string, "ready" | "pending">()
+  const planBySoSub = new Map<string, number>() // `${soKey}|${SUB}` -> planned air qty
   for (const it of items) {
     const k = soN(it.so); if (!k) continue
     const isReady = READY.has(it.itemStatus)
     const cur = soAir.get(k)
     if (isReady) soAir.set(k, "ready")           // ready wins
     else if (cur !== "ready") soAir.set(k, "pending")
+    const pk = `${k}|${subN(it.sub)}`
+    planBySoSub.set(pk, (planBySoSub.get(pk) || 0) + (Number(it.qtyRequestAir) || 0))
   }
 
   // 3) Group mp_line by INVOICE → its SO+SUB lines (with air-req status), then by brand.
-  type Line = { so: string; sub: string; pcs: number; style: string; air: "ready" | "pending" | "none" }
+  type Line = { so: string; sub: string; pcs: number; plan: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none" }
   const invMap = new Map<string, { inv: string; brand: string; lines: Line[] }>()
   for (const r of mp) {
     const inv = String(r.invoice_no ?? "").trim(); if (!inv) continue
@@ -58,7 +64,11 @@ export async function GET(_req: NextRequest) {
     const g = invMap.get(key) || { inv, brand, lines: [] as Line[] }
     const k = soN(r.so_no)
     const air = k && soAir.has(k) ? soAir.get(k)! : "none"
-    g.lines.push({ so: String(r.so_no ?? ""), sub: String(r.sub_no ?? ""), pcs: Number(r.final_pcs) || 0, style: String(r.style ?? ""), air })
+    const pcs = Number(r.final_pcs) || 0
+    const planKey = `${k}|${subN(r.sub_no)}`
+    const plan = planBySoSub.has(planKey) ? planBySoSub.get(planKey)! : null
+    const qty: Line["qty"] = plan == null ? "auto" : plan === pcs ? "exactly" : "revise"
+    g.lines.push({ so: so8(r.so_no), sub: String(r.sub_no ?? ""), pcs, plan, qty, style: String(r.style ?? ""), air })
     invMap.set(key, g)
   }
 

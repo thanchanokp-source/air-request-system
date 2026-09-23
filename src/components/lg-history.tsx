@@ -17,6 +17,10 @@ export default function LgHistory() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState("")
   const [q, setQ] = useState("")
+  const [fSo, setFSo] = useState("")
+  const [fSub, setFSub] = useState("")
+  const [fHawb, setFHawb] = useState("")
+  const [fInv, setFInv] = useState("")
   const [fromD, setFromD] = useState("")
   const [toD, setToD] = useState("")
   const [actF, setActF] = useState<"all" | "draft" | "send">("all")
@@ -38,19 +42,29 @@ export default function LgHistory() {
 
   const rows = useMemo(() => {
     const qq = q.trim().toLowerCase()
+    const so = fSo.trim().toLowerCase(), sub = fSub.trim().toLowerCase(), hawb = fHawb.trim().toLowerCase(), inv = fInv.trim().toLowerCase()
+    const has = (v: any, needle: string) => String(v || "").toLowerCase().includes(needle)
     return logs.filter(l => {
       if (actF !== "all" && l.action !== actF) return false
       if (fromD || toD) { const d = String(l.createdAt).slice(0, 10); if (fromD && d < fromD) return false; if (toD && d > toD) return false }
-      if (!qq) return true
-      return [l.documentNo, l.so, l.sub, l.brand, l.invoiceNo, l.hawbNo, nameOf(l)].some((x: any) => String(x || "").toLowerCase().includes(qq))
+      if (so && !has(l.so, so)) return false
+      if (sub && !has(l.sub, sub)) return false
+      if (hawb && !has(l.hawbNo, hawb)) return false
+      if (inv && !has(l.invoiceNo, inv)) return false
+      if (qq && ![l.documentNo, l.so, l.sub, l.brand, l.invoiceNo, l.hawbNo, nameOf(l)].some((x: any) => has(x, qq))) return false
+      return true
     })
-  }, [logs, q, fromD, toD, actF])
+  }, [logs, q, fSo, fSub, fHawb, fInv, fromD, toD, actF])
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหา Doc / SO / INV / HAWB / ผู้กรอก"
-          className="w-64 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหารวม Doc / Brand / ผู้กรอก"
+          className="w-56 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+        <input value={fSo} onChange={e => setFSo(e.target.value)} placeholder="SO…" className="w-28 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+        <input value={fSub} onChange={e => setFSub(e.target.value)} placeholder="SUB…" className="w-24 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+        <input value={fHawb} onChange={e => setFHawb(e.target.value)} placeholder="HAWB…" className="w-32 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
+        <input value={fInv} onChange={e => setFInv(e.target.value)} placeholder="INV…" className="w-32 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
         <span className="text-xs text-gray-400">วันที่:</span>
         <input type="date" value={fromD} onChange={e => setFromD(e.target.value)} className="border border-gray-300 rounded-lg px-2 py-1 text-xs" />
         <span className="text-xs text-gray-400">ถึง</span>
@@ -60,7 +74,7 @@ export default function LgHistory() {
             className={`text-xs px-3 py-1.5 rounded-lg border font-medium ${actF === v ? "text-white border-transparent" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
             style={actF === v ? { background: MAROON } : {}}>{v === "all" ? "ทั้งหมด" : v === "draft" ? "Draft" : "Send"}</button>
         ))}
-        {(q || fromD || toD || actF !== "all") && <button onClick={() => { setQ(""); setFromD(""); setToD(""); setActF("all") }} className="text-xs text-red-600 hover:underline">ล้างตัวกรอง</button>}
+        {(q || fSo || fSub || fHawb || fInv || fromD || toD || actF !== "all") && <button onClick={() => { setQ(""); setFSo(""); setFSub(""); setFHawb(""); setFInv(""); setFromD(""); setToD(""); setActF("all") }} className="text-xs text-red-600 hover:underline">ล้างตัวกรอง</button>}
         <span className="text-xs text-gray-400 ml-auto">{rows.length.toLocaleString()} รายการ</span>
       </div>
 

@@ -6,7 +6,12 @@ import { useEffect, useMemo, useState } from "react"
 //   Step 2: see every SO+SUB on the invoice; tick the SOs that reached LG (others locked)
 // Data from /api/lg-inv-booking (admin-only). No writes — "ไปหน้าเพิ่ม HAWB" is a placeholder.
 const MAROON = "#6b1a1a"
-type Line = { so: string; sub: string; pcs: number; style: string; air: "ready" | "pending" | "none" }
+type Line = { so: string; sub: string; pcs: number; plan: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "none" }
+const QTY: Record<string, { txt: string; cls: string }> = {
+  exactly: { txt: "✓ exactly", cls: "bg-green-100 text-green-700" },
+  revise:  { txt: "✏ revise",  cls: "bg-sky-100 text-sky-700" },
+  auto:    { txt: "✚ auto add", cls: "bg-red-100 text-red-700" },
+}
 type Inv = { inv: string; sos: Line[]; total: number; ready: number; complete: boolean }
 type Brand = { brand: string; invCount: number; readySo: number; invs: Inv[] }
 
@@ -157,7 +162,7 @@ export default function LgAirBookingPage() {
                 <table className="w-full text-xs">
                   <thead><tr className="text-left text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
                     <th className="px-3.5 py-2 w-10 text-center">{iv.ready > 0 && <input type="checkbox" checked={allReadyOn} onChange={e => toggleAll(iv, e.target.checked)} />}</th>
-                    <th className="px-3.5 py-2">SO</th><th className="px-3.5 py-2">SUB</th><th className="px-3.5 py-2 text-right">QTY (mp_line)</th><th className="px-3.5 py-2">สถานะ air req</th>
+                    <th className="px-3.5 py-2">SO</th><th className="px-3.5 py-2">SUB</th><th className="px-3.5 py-2 text-right">QTY แผน</th><th className="px-3.5 py-2 text-right">QTY mp_line</th><th className="px-3.5 py-2">qty</th><th className="px-3.5 py-2">สถานะ air req</th>
                   </tr></thead>
                   <tbody>
                     {iv.sos.map((l, i) => { const k = `${iv.inv}|${l.so}|${l.sub}`; const on = !!sel[k]; const a = AIR[l.air]
@@ -170,7 +175,9 @@ export default function LgAirBookingPage() {
                             : <span title="ล็อก">🔒</span>}</td>
                           <td className="px-3.5 py-2.5 font-mono font-bold">{l.so}</td>
                           <td className="px-3.5 py-2.5 font-mono">SUB {l.sub || "-"}</td>
+                          <td className="px-3.5 py-2.5 text-right tabular-nums text-gray-500">{l.plan == null ? "—" : l.plan.toLocaleString()}</td>
                           <td className="px-3.5 py-2.5 text-right font-semibold tabular-nums">{l.pcs.toLocaleString()}</td>
+                          <td className="px-3.5 py-2.5"><span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${QTY[l.qty].cls}`}>{QTY[l.qty].txt}</span></td>
                           <td className="px-3.5 py-2.5"><span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${a.cls}`}>{a.txt}</span></td>
                         </tr>
                       )
