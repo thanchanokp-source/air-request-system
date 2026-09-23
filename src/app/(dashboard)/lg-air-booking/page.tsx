@@ -90,7 +90,7 @@ export default function LgAirBookingPage() {
     <div className="p-6 max-w-5xl mx-auto space-y-5">
       <div>
         <h1 className="text-xl font-bold" style={{ color: MAROON }}>LG AIR BOOKING <span className="text-xs font-normal text-gray-400">(ทดลอง · admin · read-only · INV-first)</span></h1>
-        <p className="text-xs text-gray-500 mt-0.5">เลือก brand → ติ๊ก INV จาก <b>mp_line</b> → เห็นทุก SO ในใบ → ติ๊ก SO ที่ถึงคิว LG → เพิ่ม HAWB · <b>1 HAWB = brand เดียว</b></p>
+        <p className="text-xs text-gray-500 mt-0.5">เลือก brand → ติ๊ก INV → ใส่ HAWB · <b>1 HAWB = brand เดียว</b></p>
         <div className="flex items-center gap-2 mt-3 text-xs flex-wrap">
           {[[1, "เลือก brand + INV"], [2, "ติ๊ก SO ที่พร้อม"], [3, "ใส่ HAWB (INV มาให้แล้ว)"]].map(([nn, l]) => (
             <span key={nn as number} className={`flex items-center gap-2 px-3 py-1.5 rounded-full border font-medium ${step === nn ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200"}`} style={step === nn ? { background: MAROON } : {}}>
@@ -154,9 +154,9 @@ export default function LgAirBookingPage() {
               </div>
             ))}
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => setStep(1)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">← แก้ INV</button>
-            <span className="text-xs text-gray-500 font-semibold">Brand: {brand}</span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={() => setStep(1)} className="text-sm font-semibold px-4 py-2 rounded-lg border-2 text-gray-700 border-gray-300 hover:bg-gray-100">← แก้ INV</button>
+            <span className="text-lg font-bold text-gray-900">{brand}</span>
             <button onClick={goHawb}
               disabled={summary.selCnt === 0}
               className="ml-auto text-sm font-bold text-white px-4 py-1.5 rounded-lg disabled:opacity-40" style={{ background: "#15803d" }}>ไปหน้าเพิ่ม HAWB ({summary.selCnt})</button>
@@ -212,10 +212,9 @@ export default function LgAirBookingPage() {
         const perUnit = totalPcs > 0 ? exp / totalPcs : 0
         return (
         <>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={() => setStep(2)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">← กลับไปเลือก SO</button>
-            <span className="text-xs text-gray-500 font-semibold">Brand: {brand}</span>
-            <span className="text-[11px] text-gray-400">INV มาจาก mp_line แล้ว — ใส่ HAWB เดียว + expense เดียว (1 HAWB ครอบหลาย INV) · actual กระจายตาม qty</span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={() => setStep(2)} className="text-sm font-semibold px-4 py-2 rounded-lg border-2 text-gray-700 border-gray-300 hover:bg-gray-100">← กลับไปเลือก SO</button>
+            <span className="text-lg font-bold text-gray-900">{brand}</span>
           </div>
 
           {/* One HAWB for all selected INVs */}
