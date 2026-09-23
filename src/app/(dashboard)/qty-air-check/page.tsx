@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react"
 const MAROON = "#6b1a1a"
 const n = (v: any) => (v == null ? "—" : Number(v).toLocaleString())
 
-type Row = { status: string; so: string; brand: string[]; qtyPlan: number | null; qtyAirMap: number | null }
+type Row = { status: string; so: string; sub: string[]; brand: string[]; qtyPlan: number | null; qtyAirMap: number | null }
 const STATUS: Record<string, { label: string; cls: string; tint: string }> = {
   exactly:                  { label: "✓ ตรง",                 cls: "bg-green-100 text-green-700 border-green-200", tint: "" },
   revise:                   { label: "✗ ไม่ตรง",              cls: "bg-red-100 text-red-700 border-red-200", tint: "bg-red-50/50" },
@@ -39,14 +39,14 @@ export default function QtyAirCheckPage() {
   // Flatten both tabs into one list for qty verification.
   const all: Row[] = useMemo(() => {
     if (!data) return []
-    const a = (data.tabA || []).map((r: any) => ({ status: r.status, so: r.so, brand: r.brand || [], qtyPlan: r.qtyPlan, qtyAirMap: r.qtyAirMap }))
-    const b = (data.tabB || []).map((r: any) => ({ status: r.status, so: r.so, brand: r.brand || [], qtyPlan: r.qtyPlan, qtyAirMap: null }))
+    const a = (data.tabA || []).map((r: any) => ({ status: r.status, so: r.so, sub: r.subs || [], brand: r.brand || [], qtyPlan: r.qtyPlan, qtyAirMap: r.qtyAirMap }))
+    const b = (data.tabB || []).map((r: any) => ({ status: r.status, so: r.so, sub: r.subs || [], brand: r.brand || [], qtyPlan: r.qtyPlan, qtyAirMap: null }))
     return [...a, ...b]
   }, [data])
   const qq = q.trim().toLowerCase()
   const rows = useMemo(() => all.filter(r =>
     (f === "all" || r.status === f) &&
-    (!qq || r.so.toLowerCase().includes(qq) || r.brand.some(x => x.toLowerCase().includes(qq)))), [all, f, qq])
+    (!qq || r.so.toLowerCase().includes(qq) || r.brand.some(x => x.toLowerCase().includes(qq)) || r.sub.some(x => x.toLowerCase().includes(qq)))), [all, f, qq])
   const c = data?.counts || {}
 
   if (auth === "loading" || loading) return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
@@ -92,20 +92,21 @@ export default function QtyAirCheckPage() {
       <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white">
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500"><tr className="text-left">
-            <th className="px-3 py-2 font-medium">SO</th><th className="px-3 py-2 font-medium">Brand</th>
+            <th className="px-3 py-2 font-medium">SO</th><th className="px-3 py-2 font-medium">SUB</th><th className="px-3 py-2 font-medium">Brand</th>
             <th className="px-3 py-2 font-medium text-right">QTY แผน (air)</th>
             <th className="px-3 py-2 font-medium text-right">QTY AIR MAP (mp_line)</th>
             <th className="px-3 py-2 font-medium text-right">ผลต่าง</th>
             <th className="px-3 py-2 font-medium">ยอด</th>
           </tr></thead>
           <tbody>
-            {rows.length === 0 ? <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">ไม่พบข้อมูล</td></tr> :
+            {rows.length === 0 ? <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">ไม่พบข้อมูล</td></tr> :
               rows.slice(0, 800).map((r, i) => {
                 const s = STATUS[r.status] || { label: r.status, cls: "", tint: "" }
                 const diff = (r.qtyPlan != null && r.qtyAirMap != null) ? r.qtyAirMap - r.qtyPlan : null
                 return (
                   <tr key={i} className={`border-t border-gray-100 ${s.tint}`}>
                     <td className="px-3 py-1.5 font-mono font-semibold">{r.so}</td>
+                    <td className="px-3 py-1.5 font-mono text-gray-500 max-w-[180px] truncate" title={r.sub.join(", ")}>{r.sub.length ? r.sub.join(", ") : "-"}</td>
                     <td className="px-3 py-1.5 text-gray-600">{r.brand.join(", ") || "-"}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums text-gray-500">{n(r.qtyPlan)}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums font-bold text-gray-800">{n(r.qtyAirMap)}</td>

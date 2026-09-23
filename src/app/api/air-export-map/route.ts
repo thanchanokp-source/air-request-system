@@ -49,16 +49,19 @@ export async function GET(req: NextRequest) {
     select: { so: true, sub: true, brand: true, invoiceNo: true, qtyRequestAir: true,
       request: { select: { documentNo: true, status: true } } },
   }).catch(() => [])
-  const airBySo = new Map<string, { so: string; qtyPlan: number; brands: Set<string>; docs: Set<string>; invs: Set<string> }>()
+  const airBySo = new Map<string, { so: string; qtyPlan: number; brands: Set<string>; docs: Set<string>; invs: Set<string>; subs: Set<string> }>()
   for (const i of items) {
     const k = soN(i.so); if (!k) continue
-    const g = airBySo.get(k) || { so: i.so, qtyPlan: 0, brands: new Set<string>(), docs: new Set<string>(), invs: new Set<string>() }
+    const g = airBySo.get(k) || { so: i.so, qtyPlan: 0, brands: new Set<string>(), docs: new Set<string>(), invs: new Set<string>(), subs: new Set<string>() }
     g.qtyPlan += Number(i.qtyRequestAir) || 0
     if (i.brand) g.brands.add(String(i.brand))
     if (i.invoiceNo) g.invs.add(String(i.invoiceNo))
+    if (i.sub) g.subs.add(String(i.sub))
     if (i.request?.documentNo) g.docs.add(i.request.documentNo)
     airBySo.set(k, g)
   }
+  // Distinct SUBs from mp_line lines for a SO group.
+  const mpSubs = (m: any) => [...new Set((m.lines || []).map((l: any) => String(l.sub ?? "").trim()).filter(Boolean))]
 
   // Tab A = SO ที่มีประวัติส่งออก (อยู่ใน mp_line): matched (exactly/revise) หรือ auto prepaid (mp_line only)
   const tabA: any[] = []
@@ -69,10 +72,10 @@ export async function GET(req: NextRequest) {
     if (a) {
       const status = a.qtyPlan === qtyAirMap ? "exactly" : "revise"
       status === "exactly" ? exactly++ : revise++
-      tabA.push({ status, so: m.so, brand: [...(a.brands.size ? a.brands : m.brands)].slice(0, 2), qtyPlan: a.qtyPlan, qtyAirMap, lines: m.lines, docs: [...a.docs].slice(0, 3), airInv: [...a.invs].slice(0, 3) })
+      tabA.push({ status, so: m.so, brand: [...(a.brands.size ? a.brands : m.brands)].slice(0, 2), qtyPlan: a.qtyPlan, qtyAirMap, lines: m.lines, docs: [...a.docs].slice(0, 3), airInv: [...a.invs].slice(0, 3), subs: [...(a.subs.size ? a.subs : new Set(mpSubs(m)))] })
     } else {
       prepaid++
-      tabA.push({ status: "auto_air_prepaid_mapping", so: m.so, brand: [...m.brands].slice(0, 2), qtyPlan: null, qtyAirMap, lines: m.lines, docs: [], airInv: [] })
+      tabA.push({ status: "auto_air_prepaid_mapping", so: m.so, brand: [...m.brands].slice(0, 2), qtyPlan: null, qtyAirMap, lines: m.lines, docs: [], airInv: [], subs: mpSubs(m) })
     }
   }
   tabA.sort((a, b) => (a.status > b.status ? 1 : a.status < b.status ? -1 : 0))
@@ -80,7 +83,7 @@ export async function GET(req: NextRequest) {
   // Tab B = air req มี แต่ยังไม่มีใน mp_line (ยังไม่มีประวัติการส่งออก)
   const tabB: any[] = []
   for (const [k, a] of airBySo) {
-    if (!mpBySo.has(k)) tabB.push({ status: "no_ship_record", so: a.so, brand: [...a.brands].slice(0, 2), qtyPlan: a.qtyPlan, docs: [...a.docs].slice(0, 3), airInv: [...a.invs].slice(0, 3) })
+    if (!mpBySo.has(k)) tabB.push({ status: "no_ship_record", so: a.so, brand: [...a.brands].slice(0, 2), qtyPlan: a.qtyPlan, docs: [...a.docs].slice(0, 3), airInv: [...a.invs].slice(0, 3), subs: [...a.subs] })
   }
 
   return NextResponse.json({
