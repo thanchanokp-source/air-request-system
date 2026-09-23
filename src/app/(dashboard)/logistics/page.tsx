@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import LgHistory from "@/components/lg-history"
-import LgExportMap from "@/components/lg-export-map"
 
 // LG BOOKING — Logistics landing. Familiar doc-card layout, but shows only the SOs still waiting on
 // Logistics (itemStatus PRES_PASSED, doc not yet sent) and GROUPS them BY BRAND across documents.
@@ -143,23 +142,10 @@ export default function LgBookingPage() {
 
   const TabBar = () => (
     <div className="flex gap-1 border-b border-gray-200">
-      {([["booking", "จองงาน (Booking)"], ["history", "📜 ประวัติการกรอก"],
-        // Admin-only preview of the NYG QTY-Air-Map (read-only; does not touch the booking flow).
-        ...(isAdmin ? [["map", "🔗 QTY Air Map · NYG (preview)"]] as const : [])] as const).map(([v, l]) => (
+      {([["booking", "จองงาน (Booking)"], ["history", "📜 ประวัติการกรอก"]] as const).map(([v, l]) => (
         <button key={v} onClick={() => setView(v as any)}
           className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${view === v ? "border-blue-600 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>{l}</button>
       ))}
-    </div>
-  )
-
-  if (view === "map") return (
-    <div className="space-y-4 pb-20">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">LG BOOKING</h1>
-        <p className="text-xs text-gray-400 mt-0.5">QTY Air Map (NYG · preview) — เทียบ air req ↔ mp_line (SHIPPED · AIR PP) ด้วย SO · <b>read-only ยังไม่กระทบการจอง</b></p>
-      </div>
-      <TabBar />
-      <LgExportMap />
     </div>
   )
 
