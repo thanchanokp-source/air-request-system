@@ -47,9 +47,10 @@ export default function LgAirBookingPage() {
   const poolBySo = useMemo(() => { const m = new Map<string, Pool>(); for (const p of pool) m.set(p.so, p); return m }, [pool])
 
   const qq = q.trim().toLowerCase()
-  const dropList = useMemo(() => pool
-    .filter(p => !qq || p.so.toLowerCase().includes(qq) || p.brand.toLowerCase().includes(qq))
-    .slice(0, 25), [pool, qq])
+  const dropMatches = useMemo(() => pool
+    .filter(p => !qq || p.so.toLowerCase().includes(qq) || p.brand.toLowerCase().includes(qq)), [pool, qq])
+  const DROP_CAP = 50
+  const dropList = useMemo(() => dropMatches.slice(0, DROP_CAP), [dropMatches])
 
   const addSO = (so: string) => { setPicked(p => new Set(p).add(so)); setQ("") }
   const removeSO = (so: string) => setPicked(p => { const s = new Set(p); s.delete(so); return s })
@@ -120,7 +121,12 @@ export default function LgAirBookingPage() {
               placeholder="🔍 พิมพ์ SO หรือ brand เช่น 9261 / fanatics…"
               className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
             {dropOpen && (
-              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-72 overflow-auto">
+              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-[60vh] overflow-auto">
+                <div className="px-3 py-1.5 text-[11px] text-gray-400 border-b border-gray-100 bg-gray-50 sticky top-0">
+                  {dropMatches.length > DROP_CAP
+                    ? `แสดง ${DROP_CAP} จาก ${dropMatches.length} — พิมพ์ SO/brand เพื่อกรองให้แคบลง`
+                    : `${dropMatches.length} SO`}
+                </div>
                 {dropList.length ? dropList.map(p => (
                   <div key={p.so} onMouseDown={e => { e.preventDefault(); addSO(p.so) }}
                     className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-gray-50 last:border-0 hover:bg-red-50/60 ${picked.has(p.so) ? "opacity-40 pointer-events-none" : ""}`}>
