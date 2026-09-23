@@ -36,11 +36,15 @@ export default function LgAirBookingPage() {
     }).then(setData).catch(e => setErr(e.message)).finally(() => setLoading(false))
   }, [])
 
-  // Build the SO pool from the reconcile payload.
+  // Build the SO pool — START FROM AIR REQUEST SOs only. tabA "auto_air_prepaid_mapping" rows are
+  // mp_line-only (NOT in any air req) → excluded here; they go through the separate PREPAID flow.
   const pool = useMemo<Pool[]>(() => {
     if (!data) return []
     const out: Pool[] = []
-    for (const r of data.tabA || []) out.push({ so: r.so, brand: r.brand[0] || "(no brand)", inMp: true, plan: r.qtyPlan, lines: r.lines || [], docs: r.docs || [] })
+    for (const r of data.tabA || []) {
+      if (r.status === "auto_air_prepaid_mapping") continue // not in air req → not part of the LG air-req pool
+      out.push({ so: r.so, brand: r.brand[0] || "(no brand)", inMp: true, plan: r.qtyPlan, lines: r.lines || [], docs: r.docs || [] })
+    }
     for (const r of data.tabB || []) out.push({ so: r.so, brand: r.brand[0] || "(no brand)", inMp: false, plan: r.qtyPlan, lines: [], docs: r.docs || [] })
     return out
   }, [data])
