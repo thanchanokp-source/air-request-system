@@ -914,7 +914,9 @@ export default function DashboardPage() {
           {/* 4 หลัก: (1) pcs ส่งออกจริง (2) EST air (3) Actual air + รอเติม (4) %var */}
           {(() => {
             const est = mpCounts.matchedEst ?? 0, act = mpCounts.matchedActual ?? 0
-            const varPct = est > 0 ? Math.round((act - est) / est * 1000) / 10 : null
+            const fEst = mpCounts.filledEst ?? 0 // EST of only the SOs that have actual filled → fair vs actual
+            // Variance compares like-for-like: EST vs Actual of the SAME (filled) SOs.
+            const varPct = fEst > 0 ? Math.round((act - fEst) / fEst * 1000) / 10 : null
             return (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {/* 1) exported pcs */}
@@ -929,17 +931,18 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold tabular-nums text-sky-700">{est.toLocaleString()}</p>
                 <p className="text-[10px] text-gray-400 mt-0.5">แผนของ SO ที่ส่งออกแล้ว</p>
               </div>
-              {/* 3) Actual air filled + waiting */}
+              {/* 3) Actual air filled + waiting + EST of the filled SOs (for fair compare) */}
               <div className="rounded-lg border p-3 bg-green-50 border-green-200">
                 <p className="text-[11px] text-gray-500">✅ Actual air (THB)</p>
                 <p className="text-2xl font-bold tabular-nums text-green-700">{act.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">เติมแล้ว <b className="text-green-700">{Number(mpCounts.actualFilledSo || 0).toLocaleString()}</b> SO · <span className="text-amber-700">รอ LG เติมอีก <b>{Number(mpCounts.actualWaitingSo || 0).toLocaleString()}</b> SO</span></p>
+                <p className="text-[10px] text-gray-500 mt-0.5">EST ของ SO ที่กรอก: <b className="text-sky-700">{fEst.toLocaleString()}</b></p>
+                <p className="text-[10px] text-gray-500 mt-0.5">เติมแล้ว <b className="text-green-700">{Number(mpCounts.actualFilledSo || 0).toLocaleString()}</b> SO · <span className="text-amber-700">รออีก <b>{Number(mpCounts.actualWaitingSo || 0).toLocaleString()}</b> SO</span></p>
               </div>
-              {/* 4) % variance actual vs est */}
+              {/* 4) % variance actual vs EST — SAME (filled) SOs only */}
               <div className="rounded-lg border p-3 bg-gray-50 border-gray-200">
-                <p className="text-[11px] text-gray-500">📊 Actual vs EST</p>
+                <p className="text-[11px] text-gray-500">📊 Actual vs EST <span className="text-gray-400">(SO ที่กรอกแล้ว)</span></p>
                 <p className={`text-2xl font-bold tabular-nums ${varPct == null ? "text-gray-400" : varPct > 0 ? "text-red-600" : "text-green-600"}`}>{varPct == null ? "—" : (varPct > 0 ? "↑" : "↓") + Math.abs(varPct) + "%"}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">Δ {(act - est > 0 ? "+" : "") + (act - est).toLocaleString()} THB</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Δ {(act - fEst > 0 ? "+" : "") + (act - fEst).toLocaleString()} THB (actual − est ที่กรอก)</p>
               </div>
             </div>
             )
