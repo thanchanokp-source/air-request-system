@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 //   Step 2: see every SO+SUB on the invoice; tick the SOs that reached LG (others locked)
 // Data from /api/lg-inv-booking (admin-only). No writes — "ไปหน้าเพิ่ม HAWB" is a placeholder.
 const MAROON = "#6b1a1a"
-type Line = { so: string; sub: string; pcs: number; plan: number | null; est: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "auto"; itemId: string | null }
+type Line = { so: string; sub: string; pcs: number; plan: number | null; est: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "auto"; itemId: string | null; reqId: string | null }
 // LG can tick "ready" (in air req, at LG) and "auto" (SUB not in air req → LG does actual, SCM later).
 // "pending" (in air req but not yet at LG) is locked.
 const canTick = (air: string) => air === "ready" || air === "auto"
@@ -36,6 +36,17 @@ export default function LgAirBookingPage() {
   const [hawbAll, setHawbAll] = useState("") // ONE HAWB no for all selected INVs (1 HAWB spans many INV)
   const [expAll, setExpAll] = useState("")   // ONE expense/HAWB total → distributed across lines by qty
   const [hawbFiles, setHawbFiles] = useState<File[]>([]) // AWB/expense document(s) for this HAWB
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult] = useState("")
+
+  const reload = () => {
+    setLoading(true); setErr("")
+    fetch("/api/lg-inv-booking").then(async r => {
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
+      return d
+    }).then(setData).catch(e => setErr(e.message)).finally(() => setLoading(false))
+  }
 
   useEffect(() => {
     setLoading(true); setErr("")
@@ -89,10 +100,73 @@ export default function LgAirBookingPage() {
     .map(iv => ({ inv: iv.inv, lines: iv.sos.filter(l => canTick(l.air) && sel[`${iv.inv}|${l.so}|${l.sub}`]) }))
     .filter(g => g.lines.length > 0), [chosenInvs, sel])
 
+  // REAL submit: book the selected READY lines (they have an air req item) via the same proven LG flow
+  // (/api/requests/[id]/approve · save_logistics_draft · lgComplete), attach the HAWB file to each
+  // involved document, then advance to claim. Actual/SO = expense ÷ total selected pcs × the SO's pcs.
+  // AUTO lines (mp_line SO with no air req item) are NOT written here — they need SCM first; we report them.
+  const doBook = async () => {
+    const hawbNo = hawbAll.trim()
+    const exp = parseFloat(expAll) || 0
+    if (!hawbNo) { alert("ใส่เลข HAWB ก่อน"); return }
+    if (!exp) { alert("ใส่ EXPENSE/HAWB ก่อน"); return }
+    if (hawbFiles.length === 0) { alert("ต้องแนบไฟล์เอกสาร (AWB) ของ HAWB นี้ก่อน"); return }
+    const allLines = hawbGroups.flatMap(g => g.lines.map(l => ({ ...l, inv: g.inv })))
+    const totalPcs = allLines.reduce((a, l) => a + l.pcs, 0)
+    if (totalPcs <= 0) { alert("ไม่มี qty ให้คิด"); return }
+    const perUnit = exp / totalPcs
+    const ready = allLines.filter(l => l.itemId && l.reqId)
+    const auto = allLines.filter(l => !l.itemId)
+    if (ready.length === 0 && auto.length === 0) { alert("ยังไม่มี SO ที่เลือก"); return }
+    if (!confirm(`บันทึก HAWB ${hawbNo}\n${ready.length ? `${ready.length} SO → ส่งต่อ claim\n` : ""}${auto.length ? `auto ${auto.length} SO → สร้างเอกสารส่ง SCM (Kimita) เลือก claim` : ""}`)) return
+
+    setSubmitting(true); setResult("")
+    const today = new Date().toISOString().slice(0, 10)
+    try {
+      // 1) READY lines (already in air req) → book via the proven LG flow, advance to claim.
+      const byReq = new Map<string, typeof ready>()
+      for (const l of ready) { const a = byReq.get(l.reqId!) || []; a.push(l); byReq.set(l.reqId!, a) }
+      for (const [reqId, lines] of byReq) {
+        // Attach the AWB file(s) to this document FIRST (so the claim alert that fires on advance has them).
+        for (const f of hawbFiles) {
+          const form = new FormData(); form.append("file", f); form.append("category", `HAWB:${hawbNo}`)
+          await fetch(`/api/requests/${reqId}/attachments`, { method: "POST", body: form }).catch(() => {})
+        }
+        const itemLogistics: any = {}, itemActuals: any = {}, itemShipData: any = {}
+        for (const l of lines) {
+          itemLogistics[l.itemId!] = { invoiceNo: l.inv, hawbNo, bookingDate: today }
+          itemActuals[l.itemId!] = String(Math.round(l.pcs * perUnit * 100) / 100) // qty share of the HAWB expense
+          itemShipData[l.itemId!] = { qtyRequestAir: l.pcs }                        // QTY follows mp_line (revise)
+        }
+        const res = await fetch(`/api/requests/${reqId}/approve`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "save_logistics_draft", itemLogistics, itemActuals, itemShipData, lgComplete: true }),
+        })
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+      }
+      // 2) AUTO lines (shipped but never in air req) → create ONE prepaid NYG doc at SCM claim-selection.
+      let autoDoc = ""
+      if (auto.length > 0) {
+        const ares = await fetch("/api/lg-inv-booking", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ brand, hawbNo, bookingDate: today, lines: auto.map(l => ({ so: l.so, sub: l.sub, inv: l.inv, pcs: l.pcs, style: l.style, actual: Math.round(l.pcs * perUnit * 100) / 100 })) }),
+        })
+        if (!ares.ok) { const e = await ares.json().catch(() => ({})); throw new Error(`auto-add: ${e.error || ares.status}`) }
+        const aj = await ares.json().catch(() => ({}))
+        autoDoc = aj?.documentNo || ""
+        if (aj?.id) for (const f of hawbFiles) { const form = new FormData(); form.append("file", f); form.append("category", `HAWB:${hawbNo}`); await fetch(`/api/requests/${aj.id}/attachments`, { method: "POST", body: form }).catch(() => {}) }
+      }
+      setResult(`✓ บันทึก HAWB ${hawbNo}${ready.length ? ` · ${ready.length} SO → claim (${byReq.size} เอกสาร)` : ""}${auto.length ? ` · auto ${auto.length} SO → สร้าง ${autoDoc} ส่ง SCM (Kimita) เลือก claim` : ""}`)
+      setStep(1); setPickedInv(new Set()); setSel({}); setHawbAll(""); setExpAll(""); setHawbFiles([])
+      reload()
+    } catch (e: any) {
+      alert(`บันทึกไม่สำเร็จ: ${e?.message || "error"}`)
+    } finally { setSubmitting(false) }
+  }
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-5">
       <div>
-        <h1 className="text-xl font-bold" style={{ color: MAROON }}>LG AIR BOOKING <span className="text-xs font-normal text-gray-400">(ทดลอง · admin · read-only · INV-first)</span></h1>
+        <h1 className="text-xl font-bold" style={{ color: MAROON }}>LG AIR BOOKING <span className="text-xs font-normal text-gray-400">(NYG · INV-first)</span></h1>
         <p className="text-xs text-gray-500 mt-0.5">เลือก brand → ติ๊ก INV → ใส่ HAWB · <b>1 HAWB = brand เดียว</b></p>
         <div className="flex items-center gap-2 mt-3 text-xs flex-wrap">
           {[[1, "เลือก brand + INV"], [2, "ติ๊ก SO ที่พร้อม"], [3, "ใส่ HAWB (INV มาให้แล้ว)"]].map(([nn, l]) => (
@@ -106,6 +180,8 @@ export default function LgAirBookingPage() {
 
       {loading && <div className="text-sm text-gray-500">กำลังโหลด…</div>}
       {err && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">โหลดไม่สำเร็จ: {err}</div>}
+      {result && <div className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between gap-3">
+        <span>{result}</span><button onClick={() => setResult("")} className="text-green-600 hover:text-green-800 font-bold">✕</button></div>}
 
       {data && step === 1 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
@@ -287,14 +363,9 @@ export default function LgAirBookingPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                if (!hawbAll.trim()) { alert("ใส่เลข HAWB ก่อน"); return }
-                if (!exp) { alert("ใส่ EXPENSE/HAWB ก่อน"); return }
-                if (hawbFiles.length === 0) { alert("ต้องแนบไฟล์เอกสาร (AWB) ของ HAWB นี้ก่อน"); return }
-                alert(`(preview — ยังไม่เขียนลง flow จริง)\n\nBrand: ${brand}\nHAWB: ${hawbAll}\nExpense: ${exp.toLocaleString()} THB\nไฟล์แนบ: ${hawbFiles.map(f => f.name).join(", ")}\nครอบ: ${hawbGroups.length} INV · ${allLines.length} SO · ${totalPcs.toLocaleString()} pcs\nActual/SO = expense ÷ qty รวม × qty ของแต่ละ SO\n\nขั้นถัดไป (ของจริง): อัปโหลดไฟล์ + บันทึก actual + ส่งต่อ claim`)
-              }}
-              className="text-sm font-bold text-white px-5 py-2.5 rounded-lg" style={{ background: "#15803d" }}>บันทึก + ส่งต่อ claim (preview)</button>
+            <button onClick={doBook} disabled={submitting}
+              className="text-sm font-bold text-white px-5 py-2.5 rounded-lg disabled:opacity-50" style={{ background: "#15803d" }}>
+              {submitting ? "กำลังบันทึก…" : "บันทึก + ส่งต่อ claim"}</button>
             <span className="text-xs text-gray-400">ถ้าต้องแยกหลาย HAWB (คนละเที่ยว) → แยกทำทีละชุด INV</span>
           </div>
         </>
