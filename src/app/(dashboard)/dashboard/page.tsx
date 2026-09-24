@@ -1022,11 +1022,11 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
           <div className="flex items-baseline justify-between flex-wrap gap-2">
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.15em]">Claim by department</p>
-            <div className="flex items-center gap-2 flex-wrap">
-              {un && (un.amt.THB||un.amt.USD) ? (
-                <span className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5 tabular-nums"
-                  title="Actual ของ SO ที่ยังไม่ได้เลือก claim dept (เช่น add auto) — ยังไม่รวมในกรมใด">
-                  ⚠ ยังไม่แบ่ง claim {fmtSplit(un.amt,fmtK)}
+            <div className="flex items-center gap-3 flex-wrap">
+              {un && (un.amt.THB||un.amt.USD||un.est.THB||un.est.USD) ? (
+                <span className="text-[11px] text-gray-400 tabular-nums"
+                  title="Actual/Est ของ SO ที่ยังไม่ได้เลือก claim dept (เช่น add auto) — ยังไม่รวมในกรมใด">
+                  ยังไม่แบ่ง claim <span className="font-medium text-gray-500">{fmtSplit(un.amt,fmtK)}</span> <span className="text-gray-300">(est {fmtSplit(un.est,fmtK)})</span>
                 </span>
               ) : null}
               <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtSplit(claimAmtTotal,fmtK)} · Est {fmtSplit(claimEstTotal,fmtK)}</p>
