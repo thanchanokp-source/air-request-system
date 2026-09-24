@@ -7,6 +7,7 @@ import { courierUsd, destForBu, seaUsd, pullLandedCost, cheapestMode, modeTotals
 import { pullReqType } from "@/lib/pull-reqtype"
 import LandedCostCompare from "@/components/pull/LandedCostCompare"
 import { FWD_SHEET, parseFwdRow } from "@/lib/pull-fwd-template"
+import DateRangePicker from "@/components/pull/DateRangePicker"
 
 // Pre cost from the AIR master (same formula as EST: rate at weight-break × weight + origin cost),
 // but broken out PER FORWARDER so LG can pick which FWD this doc actually shipped with.
@@ -606,14 +607,9 @@ export default function Page() {
                   {allPorts.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">ETC ตั้งแต่</label>
-                <input type="date" value={etcFrom} onChange={e => { setEtcFrom(e.target.value); setSelectedIds(new Set()) }} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">ถึง</label>
-                <input type="date" value={etcTo} onChange={e => { setEtcTo(e.target.value); setSelectedIds(new Set()) }} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
-              </div>
+              {/* One calendar for the whole ETC range (was two separate date boxes). */}
+              <DateRangePicker label="ETC (ช่วงวันที่)" from={etcFrom} to={etcTo} placeholder="ทุกวัน ETC"
+                onChange={(f, t) => { setEtcFrom(f); setEtcTo(t); setSelectedIds(new Set()) }} />
               {(portF !== "ALL" || etcFrom || etcTo || q || brandF !== "ALL" || vendorF !== "ALL") &&
                 <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF("ALL"); setVendorF("ALL") }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
               <div className="ml-auto flex items-center gap-2">
