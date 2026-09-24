@@ -871,6 +871,29 @@ export default function Page() {
                     </div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">CFM IN-HOUSE DATE <span className="font-normal text-gray-400">(วันยืนยันเข้าโรงงาน)</span></label>
                       <input disabled={locked} type="date" value={rawDate(rq, "cfmInHouseDate")} onChange={e => setVal(rq.id, "cfmInHouseDate", e.target.value)} className={inp} /></div>
+                    {/* LEGACY doc: the actual was typed before the THB/USD switch existed, so a THB amount
+                        is sitting in a USD field (Est 497 vs Actual 7,769 = ~32x). One click re-reads the
+                        stored numbers AS THB; pressing Save then stores the proper USD value. */}
+                    {(() => {
+                      const act = Number(rq.actualAir) || 0
+                      const looksThb = !rq.actualCurrency && act > 0 && (estTotal > 0 ? act >= estTotal * 5 : act >= 3000)
+                      if (!looksThb || locked) return null
+                      return (
+                        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
+                          <p className="text-[11px] text-amber-800 font-semibold">⚠️ ตัวเลข Actual ของใบนี้น่าจะเป็น THB (สูงกว่า Est ~{Math.round(act / (estTotal || 1))} เท่า)</p>
+                          <button type="button"
+                            onClick={() => {
+                              setActCur("THB")
+                              setEdits(p => ({ ...p, [rq.id]: { ...(p[rq.id] || {}), actualAir: String(act), ...(rq.localChargeTh != null ? { localChargeTh: String(rq.localChargeTh) } : {}) } }))
+                            }}
+                            className="mt-2 px-3 py-1.5 rounded-lg text-white text-[11px] font-bold" style={{ background: "#b45309" }}>
+                            อ่านค่านี้เป็น THB → แปลงเป็น USD (÷ {EXCHANGE_RATE})
+                          </button>
+                          <p className="mt-1.5 text-[10px] text-amber-700">กดแล้วตรวจตัวเลขด้านล่าง แล้วกด Save เพื่อบันทึกเป็น USD</p>
+                        </div>
+                      )
+                    })()}
+
                     {/* Unit switch for the two ACTUAL money boxes. LG usually types THB; the system stores
                         USD (typed THB / 32.5) so Actual and Est are always comparable. */}
                     <div className="flex items-center justify-between pt-1">
