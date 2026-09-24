@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
-import { courierUsd, destForBu, seaUsd, pullLandedCost, cheapestMode, modeTotals, SHIP_MODE_LABEL, type ShipMode } from "@/lib/pull-courier"
+import { courierUsd, destForBu, seaUsd, pullLandedCost, cheapestMode, modeTotals, SHIP_MODE_LABEL, EXCHANGE_RATE, type ShipMode } from "@/lib/pull-courier"
 import { pullReqType } from "@/lib/pull-reqtype"
 import LandedCostCompare from "@/components/pull/LandedCostCompare"
 import { FWD_SHEET, parseFwdRow } from "@/lib/pull-fwd-template"
@@ -69,6 +69,30 @@ export default function Page() {
   const [lgMode, setLgMode] = useState<ShipMode | null>(null)
   const [lgModeReason, setLgModeReason] = useState("")
   const [modeBusy, setModeBusy] = useState(false)
+  // ── Actual currency ─────────────────────────────────────────────────────────────────────────
+  // LG normally types the actual in THB; Est/landed cost is USD. The two ACTUAL boxes are shown in
+  // whichever unit LG picks, and are ALWAYS converted to USD before saving (DB keeps USD only).
+  const [actCur, setActCur] = useState<"THB" | "USD">("THB")
+  const r2 = (n: number) => Math.round(n * 100) / 100
+  const usdOf = (v: any) => { const n = Number(v); return isNaN(n) ? 0 : (actCur === "THB" ? r2(n / EXCHANGE_RATE) : n) }
+  const showOf = (usd: any) => { const n = Number(usd); return isNaN(n) ? "" : String(actCur === "THB" ? r2(n * EXCHANGE_RATE) : r2(n)) }
+  // Value for the two money inputs, in the CURRENTLY selected unit (edits are kept in that unit).
+  const money = (rq: any, k: string) => edits[rq.id]?.[k] ?? (rq[k] != null ? showOf(rq[k]) : "")
+  // Switching unit converts whatever is already typed, so nothing is lost mid-entry.
+  const switchCur = (rq: any, to: "THB" | "USD") => {
+    if (to === actCur) return
+    const f = to === "THB" ? EXCHANGE_RATE : 1 / EXCHANGE_RATE
+    setEdits(p => {
+      const cur = { ...(p[rq.id] || {}) }
+      for (const k of ["actualAir", "localChargeTh"]) {
+        const v = cur[k]
+        if (v !== undefined && v !== "" && !isNaN(Number(v))) cur[k] = String(r2(Number(v) * f))
+      }
+      return { ...p, [rq.id]: cur }
+    })
+    setActCur(to)
+  }
+
   // ── Phase 2 — forwarder template (AIR only): mail it out, import the filled file back.
   const [forwarders, setForwarders] = useState<any[]>([])
   const [fwdName, setFwdName] = useState("")
@@ -210,6 +234,7 @@ export default function Page() {
   // and its email from the contact master.
   useEffect(() => {
     const rq = reqs.find(r => r.id === openId)
+    if (rq) setActCur(rq.actualCurrency === "USD" ? "USD" : "THB")
     if (!rq) { setFwdName(""); setFwdEmail(""); setFwdNote(""); return }
     const name = rq.fwdName || rq.preCostFwd || ""
     setFwdName(name)
@@ -285,8 +310,8 @@ export default function Page() {
 
   // Save the actual (HAWB / INV / Actual Air) → closes the doc (COMPLETED) so it shows done in Tracking.
   const save = async (rq: any) => {
-    if (!String(raw(rq, "actualAir")).trim()) return alert("กรอก Actual Air Freight ก่อนบันทึก")
-    if (!confirm(`บันทึก Actual และปิดงาน ${rq.documentNo}?\n\nActual Air: ${raw(rq, "actualAir")}\nHAWB: ${raw(rq, "hawbNo") || "-"}\n\nสถานะเอกสารจะเปลี่ยนเป็น COMPLETED`)) return
+    if (!String(money(rq, "actualAir")).trim()) return alert("กรอก Actual Air Freight ก่อนบันทึก")
+    if (!confirm(`บันทึก Actual และปิดงาน ${rq.documentNo}?\n\nActual: ${money(rq, "actualAir")} ${actCur}${actCur === "THB" ? ` (= ${usdOf(money(rq, "actualAir"))} USD)` : ""}\nHAWB: ${raw(rq, "hawbNo") || "-"}\n\nสถานะเอกสารจะเปลี่ยนเป็น COMPLETED`)) return
     setBusy(true)
     try {
       const r = await fetch(`/api/pull-material/${rq.id}`, {
@@ -301,8 +326,10 @@ export default function Page() {
           poInvoices: buildPoInvoices(rq),
           preCost: raw(rq, "preCost") === "" ? null : raw(rq, "preCost"),
           preCostFwd: raw(rq, "preCostFwd") || null,
-          actualAir: raw(rq, "actualAir") === "" ? null : raw(rq, "actualAir"),
-          localChargeTh: raw(rq, "localChargeTh") === "" ? null : raw(rq, "localChargeTh"),
+          // Always stored in USD; actualCurrency records the unit LG typed.
+          actualAir: money(rq, "actualAir") === "" ? null : usdOf(money(rq, "actualAir")),
+          localChargeTh: money(rq, "localChargeTh") === "" ? null : usdOf(money(rq, "localChargeTh")),
+          actualCurrency: actCur,
           // Phase 2: values imported from the forwarder's workbook (blank when LG typed them).
           ...(raw(rq, "fwdRemark") ? { fwdRemark: raw(rq, "fwdRemark") } : {}),
           ...(raw(rq, "actualSource") ? { actualSource: raw(rq, "actualSource") } : {}),
@@ -331,8 +358,10 @@ export default function Page() {
           poInvoices: buildPoInvoices(rq),
           preCost: raw(rq, "preCost") === "" ? null : raw(rq, "preCost"),
           preCostFwd: raw(rq, "preCostFwd") || null,
-          actualAir: raw(rq, "actualAir") === "" ? null : raw(rq, "actualAir"),
-          localChargeTh: raw(rq, "localChargeTh") === "" ? null : raw(rq, "localChargeTh"),
+          // Always stored in USD; actualCurrency records the unit LG typed.
+          actualAir: money(rq, "actualAir") === "" ? null : usdOf(money(rq, "actualAir")),
+          localChargeTh: money(rq, "localChargeTh") === "" ? null : usdOf(money(rq, "localChargeTh")),
+          actualCurrency: actCur,
           // Phase 2: values imported from the forwarder's workbook (blank when LG typed them).
           ...(raw(rq, "fwdRemark") ? { fwdRemark: raw(rq, "fwdRemark") } : {}),
           ...(raw(rq, "actualSource") ? { actualSource: raw(rq, "actualSource") } : {}),
@@ -583,7 +612,7 @@ export default function Page() {
         its.forEach((it: any) => { const po = it.poNoDoc || "-"; const g = (byPo[po] ||= { qty: 0, uoms: new Set() }); g.qty += Number(it.pullMaterialQty) || 0; if (it.bomUom) g.uoms.add(it.bomUom) })
         const qtyAir = its.reduce((sm: number, it: any) => sm + (Number(it.pullMaterialQty) || 0), 0)
         const estTotal = its.reduce((sm: number, it: any) => sm + (Number(it.airFreightCost) || 0), 0)
-        const actTotal = raw(rq, "actualAir") === "" ? 0 : Number(raw(rq, "actualAir")) || 0
+        const actTotal = money(rq, "actualAir") === "" ? 0 : usdOf(money(rq, "actualAir"))  // USD
         const diff = actTotal - estTotal
         const pkgs = Array.isArray(rq.packages) ? rq.packages : []
         const pkgStr = pkgs.length ? pkgs.map((p: any) => `${fmt(p.qty)} ${p.uom}`).join(", ") : (d0.cartons ? String(fmt(d0.cartons)) : "")
@@ -842,10 +871,24 @@ export default function Page() {
                     </div>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">CFM IN-HOUSE DATE <span className="font-normal text-gray-400">(วันยืนยันเข้าโรงงาน)</span></label>
                       <input disabled={locked} type="date" value={rawDate(rq, "cfmInHouseDate")} onChange={e => setVal(rq.id, "cfmInHouseDate", e.target.value)} className={inp} /></div>
-                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">{curMode === "AIR" ? "ACTUAL AIR FREIGHT" : `ACTUAL FREIGHT (${curMode})`} <span className="text-red-500">*</span></label>
-                      <input disabled={locked} type="number" value={raw(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} /></div>
-                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">LOCAL CHARGE (TH)</label>
-                      <input disabled={locked} type="number" value={raw(rq, "localChargeTh")} onChange={e => setVal(rq.id, "localChargeTh", e.target.value)} placeholder="0" className={inp} /></div>
+                    {/* Unit switch for the two ACTUAL money boxes. LG usually types THB; the system stores
+                        USD (typed THB / 32.5) so Actual and Est are always comparable. */}
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] font-semibold text-green-700">หน่วยที่กรอก</span>
+                      <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+                        {(["THB", "USD"] as const).map(c => (
+                          <button key={c} type="button" disabled={locked} onClick={() => switchCur(rq, c)}
+                            className={`px-3 py-1 text-[11px] font-bold ${actCur === c ? "text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+                            style={actCur === c ? { background: MAROON } : undefined}>{c}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">{curMode === "AIR" ? "ACTUAL AIR FREIGHT" : `ACTUAL FREIGHT (${curMode})`} ({actCur}) <span className="text-red-500">*</span></label>
+                      <input disabled={locked} type="number" value={money(rq, "actualAir")} onChange={e => setVal(rq.id, "actualAir", e.target.value)} placeholder="0" className={inp} />
+                      <p className="mt-1 text-[10px] text-gray-400">{money(rq, "actualAir") !== "" ? (actCur === "THB" ? `≈ ${fmt(usdOf(money(rq, "actualAir")))} USD` : `≈ ${fmt(Number(money(rq, "actualAir")) * EXCHANGE_RATE)} THB`) + ` @ ${EXCHANGE_RATE}` : `เก็บเป็น USD เสมอ (หาร ${EXCHANGE_RATE} ให้อัตโนมัติ)`}</p></div>
+                    <div><label className="text-[11px] font-semibold text-green-700 block mb-1">LOCAL CHARGE (TH) ({actCur})</label>
+                      <input disabled={locked} type="number" value={money(rq, "localChargeTh")} onChange={e => setVal(rq.id, "localChargeTh", e.target.value)} placeholder="0" className={inp} />
+                      {money(rq, "localChargeTh") !== "" && <p className="mt-1 text-[10px] text-gray-400">{actCur === "THB" ? `≈ ${fmt(usdOf(money(rq, "localChargeTh")))} USD` : `≈ ${fmt(Number(money(rq, "localChargeTh")) * EXCHANGE_RATE)} THB`}</p>}</div>
                   </div>
                   <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
                     <span className={estTotal ? "text-gray-500" : "text-amber-600 font-medium"}>{estTotal ? `Est ${fmt(estTotal)} USD` : "⚠️ ไม่มี rate — เพิ่ม Master Rate"}</span>

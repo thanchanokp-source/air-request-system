@@ -395,6 +395,9 @@ model PullMaterialRequest {
   fwdImportedBy   String?
   fwdRemark       String?   // remark the FWD wrote in the template
   actualSource    String?   // LG | FWD — who the actual figures came from
+  // Currency LG TYPED the actual in (THB is the normal case). actualAir / localChargeTh are ALWAYS
+  // stored in USD (= typed THB / 32.5) so every comparison against Est stays in one unit.
+  actualCurrency  String?   // THB | USD
   attachments    PullMaterialAttachment[]
   recallReason   String?
   recalledBy     String?
