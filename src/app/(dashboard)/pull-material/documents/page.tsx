@@ -48,6 +48,9 @@ export default function Page() {
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE">("ALL")
   // Queue tabs: docs LG still owes an actual for (default) · already entered · missing master rate.
   const [lgTab, setLgTab] = useState<"actual" | "done" | "nomaster">("actual")
+  const [q, setQ] = useState("")            // free text: doc / PO / SO / requester / HAWB / INV
+  const [brandF, setBrandF] = useState("ALL")
+  const [vendorF, setVendorF] = useState("ALL")
   // #4 batch fill: filter by port + ETC range, multi-select docs, fill actual across many at once.
   const [portF, setPortF] = useState("ALL")
   const [etcFrom, setEtcFrom] = useState("")
@@ -516,7 +519,22 @@ export default function Page() {
     const es = docEtcs(r); if (!es.length) return false
     return es.some(e => (!etcFrom || e >= etcFrom) && (!etcTo || e <= etcTo))
   }
-  const shown = reqs.filter(r => inTab(r) && (typeF === "ALL" || pullReqType(r) === typeF) && matchPort(r) && matchEtc(r))
+  // Brand / supplier come from the BOM lines; a doc can carry more than one of each.
+  const docBrands = (r: any) => [...new Set((r.items || []).map((i: any) => i.brand).filter(Boolean))] as string[]
+  const docVendors = (r: any) => [...new Set((r.items || []).map((i: any) => i.vendorName).filter(Boolean))] as string[]
+  const allBrands = [...new Set(reqs.filter(inTab).flatMap(docBrands))].sort()
+  const allVendors = [...new Set(reqs.filter(inTab).flatMap(docVendors))].sort()
+  const matchBrand = (r: any) => brandF === "ALL" || docBrands(r).includes(brandF)
+  const matchVendor = (r: any) => vendorF === "ALL" || docVendors(r).includes(vendorF)
+  // One search box over everything LG actually looks a doc up by.
+  const matchQ = (r: any) => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return true
+    const hay = [r.documentNo, r.requesterName, r.requesterEmail, r.hawbNo, r.mawbNo, r.invoiceNo, r.fwdName,
+      ...(r.items || []).flatMap((i: any) => [i.poNoDoc, i.soNoDoc, i.brand, i.vendorName, i.itemName, i.itemCode, i.port])]
+    return hay.some((v: any) => String(v || "").toLowerCase().includes(needle))
+  }
+  const shown = reqs.filter(r => inTab(r) && (typeF === "ALL" || pullReqType(r) === typeF) && matchPort(r) && matchEtc(r) && matchBrand(r) && matchVendor(r) && matchQ(r))
   const selectableShown = shown.filter(r => r.status !== "COMPLETED") // can't bulk-fill an already-closed doc
   const allSelected = selectableShown.length > 0 && selectableShown.every(r => selectedIds.has(r.id))
   const toggleSel = (id: string) => setSelectedIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -560,8 +578,27 @@ export default function Page() {
             })}
           </div>
 
-          {lgTab === "actual" && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 flex flex-wrap items-end gap-3">
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[240px]">
+                <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">ค้นหา</label>
+                <input value={q} onChange={e => { setQ(e.target.value); setSelectedIds(new Set()) }}
+                  placeholder="🔍 เลขเอกสาร / PO / SO / Brand / Supplier / HAWB / INV / ผู้ขอ…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200" />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">Brand</label>
+                <select value={brandF} onChange={e => { setBrandF(e.target.value); setSelectedIds(new Set()) }} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white max-w-[190px]">
+                  <option value="ALL">ทุก Brand</option>
+                  {allBrands.map(b => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">Supplier</label>
+                <select value={vendorF} onChange={e => { setVendorF(e.target.value); setSelectedIds(new Set()) }} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white max-w-[220px]">
+                  <option value="ALL">ทุก Supplier</option>
+                  {allVendors.map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">Port</label>
                 <select value={portF} onChange={e => { setPortF(e.target.value); setSelectedIds(new Set()) }} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white">
@@ -577,13 +614,14 @@ export default function Page() {
                 <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">ถึง</label>
                 <input type="date" value={etcTo} onChange={e => { setEtcTo(e.target.value); setSelectedIds(new Set()) }} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
               </div>
-              {(portF !== "ALL" || etcFrom || etcTo) && <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo("") }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
+              {(portF !== "ALL" || etcFrom || etcTo || q || brandF !== "ALL" || vendorF !== "ALL") &&
+                <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF("ALL"); setVendorF("ALL") }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
               <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs text-gray-400">{shown.length} ใบ</span>
                 <button onClick={() => exportExcelList(selectedIds.size ? shown.filter(r => selectedIds.has(r.id)) : shown)} disabled={exporting}
                   className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">{exporting ? "…" : `📊 Export Excel${selectedIds.size ? ` (${selectedIds.size})` : " (ทั้งหมด)"}`}</button>
               </div>
             </div>
-          )}
 
           {lgTab === "actual" && selectableShown.length > 0 && (
             <div className="flex items-center gap-3 text-sm">
