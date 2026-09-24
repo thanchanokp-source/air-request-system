@@ -126,9 +126,42 @@ curl -I http://localhost:3003     # ต้องได้ HTTP 200 หรือ 
 ## 9. Backup (สำคัญ)
 
 ข้อมูลจริงทั้งหมดอยู่ที่ **demosupabase (schema air_req_new)** + **Storage bucket**
-แนะนำตั้ง backup ประจำ:
-- **DB:** `pg_dump` schema `air_req_new` เป็นประจำ (รายวัน/สัปดาห์)
-- **ไฟล์:** สำรอง bucket `air-request-attachments`
+
+### 9.1 Backup ทั้งระบบ (รันบน server)
+
+```bash
+cd ~/web/air-request-system
+bash scripts/backup-all.sh                      # → ~/backups/air-request/<วันเวลา>/
+KEEP_DAYS=30 BACKUP_DIR=/mnt/backup bash scripts/backup-all.sh
+```
+
+ได้ครบในโฟลเดอร์เดียว: `db_air_req_new.sql.gz` (pg_dump) · `storage/` (ไฟล์แนบ) · `env.txt` (.env)
+· `code.bundle` (git ทั้ง repo + history) · `master-*.json` · `MANIFEST.txt` (บอกวิธี restore)
+เก็บย้อนหลัง 14 วัน (ปรับด้วย `KEEP_DAYS`) — โฟลเดอร์ตั้ง chmod 700 เพราะมี secret
+
+**ตั้งอัตโนมัติทุกวันตี 1:**
+```bash
+(crontab -l 2>/dev/null; echo "0 1 * * * cd ~/web/air-request-system && bash scripts/backup-all.sh >> ~/backups/backup.log 2>&1") | crontab -
+crontab -l                                      # ตรวจว่าเข้าแล้ว
+```
+
+**Restore:**
+```bash
+gunzip -c db_air_req_new.sql.gz | psql "$DATABASE_URL"        # DB
+docker cp storage/. <storage-container>:/var/lib/storage/      # ไฟล์แนบ
+git clone code.bundle air-request-system                       # โค้ด (ไม่ต้องพึ่ง GitLab)
+node scripts/restore-master.mjs master-backup-*.json           # เฉพาะ master
+```
+
+### 9.2 Backup เครื่อง Windows (โค้ด + .env)
+
+```powershell
+cd C:\Projectsir-request-system
+powershell -ExecutionPolicy Bypass -File scriptsackup-local.ps1
+```
+zip ทั้งโปรเจกต์ (ไม่เอา node_modules/.next) ไว้ที่ `%USERPROFILE%ackupsir-request` เก็บ 30 วัน
+
+> ⚠️ `env.txt` / zip มี secret — อย่าอัปขึ้น git หรือแชร์ทั่วไป
 
 ---
 

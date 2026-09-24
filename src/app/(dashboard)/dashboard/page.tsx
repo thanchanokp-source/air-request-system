@@ -636,6 +636,9 @@ export default function DashboardPage() {
   const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line)
   const [mpMode, setMpMode] = useState(false) // toggle: filter the WHOLE page to only mp_line-shipped SOs
   const mpSoKey = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
+  // mp_line data is NYG-only → the map toggle applies only on the NYG (or All BU) tab; GW/TRM/EA stay normal.
+  const mpAllowed = activeBu === "NYG" || activeBu === "ALL"
+  const mpActive = isAdmin && mpMode && mpAllowed
 
   const [requests, setRequests]   = useState<any[]>([])
   const [loading,  setLoading]    = useState(true)
@@ -700,8 +703,8 @@ export default function DashboardPage() {
            (!countryFilter|| countryKey(row.country)===countryFilter) &&
            (!claimF.length|| claimF.includes(row.claimDepartment)) &&
            (!hawbF.length || hawbF.includes(row.hawbNo)) &&
-           (!mpMode || mpSoSet.has(mpSoKey(row.so)))   // 🔗 map mode → only SOs that shipped in mp_line
-  }), [allSOs,yearFilter,monthFilter,statusFilter,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF,mpMode,mpSoSet])
+           (!mpActive || mpSoSet.has(mpSoKey(row.so)))   // 🔗 map mode (NYG/All only) → only SOs shipped in mp_line
+  }), [allSOs,yearFilter,monthFilter,statusFilter,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF,mpActive,mpSoSet])
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
@@ -911,23 +914,23 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
-        {/* Admin-only toggle: filter the WHOLE page (KPI + charts + data table) to only mp_line-shipped SOs. */}
-        {isAdmin && (
+        {/* Admin toggle (NYG / All BU only — mp_line is NYG data): filter the whole page to mp_line-shipped SOs. */}
+        {isAdmin && mpAllowed && (
           <button onClick={() => setMpMode(v => !v)}
-            className={`ml-auto text-xs font-bold px-4 py-1.5 rounded-lg border transition-colors ${mpMode ? "bg-teal-600 text-white border-transparent" : "bg-white text-teal-700 border-teal-300 hover:bg-teal-50"}`}
-            title="กรองทั้งหน้าให้เหลือเฉพาะ SO ที่ส่งออกจริง (map กับ mp_line)">
-            🔗 {mpMode ? "เฉพาะที่ map mp_line (ON)" : "map mp_line"}
+            className={`ml-auto text-xs font-bold px-4 py-1.5 rounded-lg border transition-colors ${mpActive ? "bg-teal-600 text-white border-transparent" : "bg-white text-teal-700 border-teal-300 hover:bg-teal-50"}`}
+            title="กรองทั้งหน้าให้เหลือเฉพาะ SO ที่ส่งออกจริง (map กับ mp_line) — เฉพาะ NYG">
+            🔗 {mpActive ? "เฉพาะที่ map mp_line (ON)" : "map mp_line"}
           </button>
         )}
       </div>
-      {isAdmin && mpMode && (
+      {mpActive && (
         <div className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-1.5 -mt-1">
-          🔗 โหมด map: ทั้งหน้า (KPI · charts · data table ด้านล่าง) แสดง<b>เฉพาะ SO ที่ส่งออกจริงใน mp_line</b> — เทียบยอดกับการ์ด mp_line ด้านบนได้เลย
+          🔗 โหมด map (NYG): ทั้งหน้า (KPI · charts · data table) แสดง<b>เฉพาะ SO ที่ส่งออกจริงใน mp_line</b> — เทียบยอดกับการ์ด mp_line ด้านบนได้เลย
         </div>
       )}
 
       {/* ── mp_line reconcile (admin · NYG) — shows ONLY in map mode (replaces the KPI row) ── */}
-      {isAdmin && mpMode && mpCounts && (
+      {mpActive && mpCounts && (
         <div className="rounded-xl border-2 border-teal-200 bg-white p-3">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-sm font-semibold text-gray-800">📦 ยอดส่งออกจริง (mp_line) · NYG</span>
@@ -978,7 +981,7 @@ export default function DashboardPage() {
       )}
 
       {/* ── KPI ── (hidden in map mode — the mp_line card above replaces it) ── */}
-      {!mpMode && (
+      {!mpActive && (
       <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {([
           ["QTY SHIP AIR","pcs",fmtNum(totalQAir),"text-orange-700","bg-orange-50 border-orange-200","Requested air"],
