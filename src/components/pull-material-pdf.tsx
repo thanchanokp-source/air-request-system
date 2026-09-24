@@ -94,14 +94,26 @@ export function PullMaterialPdf({ req }: { req: any }) {
           </View>
         ))}
 
-        <Text style={s.sectionTitle}>Logistics — Actual</Text>
+        <Text style={s.sectionTitle}>Logistics — Actual{req.shipMode && req.shipMode !== "AIR" ? ` (${req.shipMode})` : ""}</Text>
         <View style={s.lgBox}>
-          <Cell label="HAWB NO" value={req.hawbNo} />
+          <Cell label={req.shipMode === "COURIER" ? "TRACKING NO" : "HAWB NO"} value={req.hawbNo} />
           <Cell label="MAWB NO" value={req.mawbNo} />
           <Cell label="Invoice NO" value={req.invoiceNo} />
-          <Cell label="Actual Air Freight" value={req.actualAir != null ? fmt(req.actualAir) : "-"} />
-          <Cell label="Est vs Actual" value={req.actualAir != null ? fmt((Number(req.actualAir) || 0) - estTotal) : "-"} />
+          <Cell label="Forwarder" value={req.fwdName || req.preCostFwd} />
+          <Cell label="Flight ETD" value={req.flightEtd ? dt(req.flightEtd) : "-"} />
+          <Cell label="Flight ETA" value={req.flightEta ? dt(req.flightEta) : "-"} />
+          <Cell label="CFM in-house" value={req.cfmInHouseDate ? dt(req.cfmInHouseDate) : "-"} />
+          <Cell label="Pre cost (USD)" value={req.preCost != null ? fmt(req.preCost) : "-"} />
+          <Cell label="Est air (USD)" value={fmt(estTotal)} />
+          <Cell label="Actual freight (USD)" value={req.actualAir != null ? fmt(req.actualAir) : "-"} />
+          <Cell label="Local charge TH (USD)" value={req.localChargeTh != null ? fmt(req.localChargeTh) : "-"} />
+          <Cell label="Est vs Actual (USD)" value={req.actualAir != null ? `${(Number(req.actualAir) || 0) - estTotal >= 0 ? "+" : "-"}${fmt(Math.abs((Number(req.actualAir) || 0) - estTotal))}` : "-"} />
         </View>
+        {req.actualCurrency === "THB" && req.actualAir != null ? (
+          <Text style={{ fontSize: 7, color: "#94a3b8", marginTop: 3 }}>
+            * LG entered the actual in THB ({fmt((Number(req.actualAir) || 0) * 32.5)} THB){req.localChargeTh != null ? ` / local charge ${fmt((Number(req.localChargeTh) || 0) * 32.5)} THB` : ""} — converted at 32.5
+          </Text>
+        ) : null}
 
         {(req.attachments || []).length > 0 ? (
           <View style={{ marginTop: 10 }}>

@@ -796,25 +796,39 @@ export default function DashboardPage() {
   // est = airFreight × claim%. Summed across all filtered SO, biggest first.
   const claimByDept = useMemo(()=>{
     const m: Record<string,{amt:{THB:number,USD:number},est:{THB:number,USD:number},qty:number}> = {}
+    // "ยังไม่แบ่ง claim" bucket = rows with NO claim dept yet (auto / not assigned) → their ACTUAL is not
+    // in any dept, so track it separately so sum(dept actual) + unassigned = total actual (reconciles).
+    const un = {amt:{THB:0,USD:0} as any,est:{THB:0,USD:0} as any,qty:0}
     filtered.forEach(r=>{
       const est=Number(r.airFreight)||0
+      const act=Number(r.actualAirFreight)||0   // ACTUAL only — no est fallback
       const cur=rowCur(r)
-      for(const s of getSplits(r)){
+      const splits=getSplits(r)
+      if(splits.length===0){ un.amt[cur]+=act; un.est[cur]+=est; un.qty+=Number(r.qtyRequestAir)||0; return }
+      for(const s of splits){
         const lbl=deptLabel(s.dept)||"-"; const pct=Number(s.pct)||0
         if(!m[lbl]) m[lbl]={amt:{THB:0,USD:0},est:{THB:0,USD:0},qty:0}
-        m[lbl].amt[cur]+=splitAirCost(r,s)
+        m[lbl].amt[cur]+=act*pct/100              // actual ล้วน (ไม่ fallback est)
         m[lbl].est[cur]+=est*pct/100
         m[lbl].qty+=Math.round((Number(r.qtyRequestAir)||0)*pct/100)
       }
     })
     // _mag = combined magnitude (THB+USD) — used ONLY for relative bar length & ranking, never shown.
-    return Object.entries(m).map(([dept,v])=>({
+    const arr = Object.entries(m).map(([dept,v])=>({
       dept,
       amt:{THB:Math.round(v.amt.THB),USD:Math.round(v.amt.USD)},
       est:{THB:Math.round(v.est.THB),USD:Math.round(v.est.USD)},
       qty:v.qty,
       _mag:(v.amt.THB+v.amt.USD)||(v.est.THB+v.est.USD),
-    })).sort((a,b)=>b._mag-a._mag)
+      unassigned:false,
+    }))
+    if(un.amt.THB||un.amt.USD||un.est.THB||un.est.USD) arr.push({
+      dept:"ยังไม่แบ่ง claim",
+      amt:{THB:Math.round(un.amt.THB),USD:Math.round(un.amt.USD)},
+      est:{THB:Math.round(un.est.THB),USD:Math.round(un.est.USD)},
+      qty:un.qty, _mag:(un.amt.THB+un.amt.USD)||(un.est.THB+un.est.USD), unassigned:true,
+    })
+    return arr.sort((a,b)=>b._mag-a._mag)
   },[filtered])
   const claimAmtTotal = claimByDept.reduce((s,d)=>({THB:s.THB+d.amt.THB,USD:s.USD+d.amt.USD}),{THB:0,USD:0})
   const claimEstTotal = claimByDept.reduce((s,d)=>({THB:s.THB+d.est.THB,USD:s.USD+d.est.USD}),{THB:0,USD:0})

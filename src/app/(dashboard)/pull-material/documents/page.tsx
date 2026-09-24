@@ -46,7 +46,8 @@ export default function Page() {
   const [previewName, setPreviewName] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
   const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE">("ALL")
-  const [lgTab, setLgTab] = useState<"actual" | "nomaster">("actual")
+  // Queue tabs: docs LG still owes an actual for (default) · already entered · missing master rate.
+  const [lgTab, setLgTab] = useState<"actual" | "done" | "nomaster">("actual")
   // #4 batch fill: filter by port + ETC range, multi-select docs, fill actual across many at once.
   const [portF, setPortF] = useState("ALL")
   const [etcFrom, setEtcFrom] = useState("")
@@ -337,7 +338,18 @@ export default function Page() {
         }),
       })
       const d = await r.json().catch(() => ({}))
-      if (r.ok) { setEdits(p => { const n = { ...p }; delete n[rq.id]; return n }); setOpenId(null); await load() }
+      if (r.ok) {
+        // Keep a printable record on the document itself (like Air Claim) — regenerated on every save,
+        // so the newest file always matches what was just entered.
+        try {
+          const blob = await buildPdfBlob(rq)
+          const fd = new FormData()
+          fd.append("file", new File([blob], `${rq.documentNo}_LG_actual.pdf`, { type: "application/pdf" }))
+          fd.append("category", "SUMMARY"); fd.append("source", "LG")
+          await fetch(`/api/pull-material/${rq.id}/attachments`, { method: "POST", body: fd })
+        } catch (e) { console.error("attach pdf failed", e) }
+        setEdits(p => { const n = { ...p }; delete n[rq.id]; return n }); setOpenId(null); await load()
+      }
       else alert(`บันทึกไม่สำเร็จ (HTTP ${r.status}): ${d.error || "อาจยังไม่ได้รัน prisma db push (column actualAir/invoiceNo/hawbNo)"}`)
     } catch (e) { alert("Error: " + String((e as any)?.message || e).slice(0, 160)) } finally { setBusy(false) }
   }
@@ -374,12 +386,30 @@ export default function Page() {
   }
 
   // Build the document PDF (PC + LG data + attachment list) and open it in a preview popup.
+  // The doc as it stands on screen (saved values + anything LG just typed) — money always in USD.
+  const mergedDoc = (rq: any) => ({
+    ...rq,
+    hawbNo: raw(rq, "hawbNo") || null, mawbNo: raw(rq, "mawbNo") || null, invoiceNo: raw(rq, "invoiceNo") || null,
+    flightEtd: rawDate(rq, "flightEtd") || null, flightEta: rawDate(rq, "flightEta") || null,
+    cfmInHouseDate: rawDate(rq, "cfmInHouseDate") || null,
+    preCost: raw(rq, "preCost") === "" ? null : Number(raw(rq, "preCost")),
+    preCostFwd: raw(rq, "preCostFwd") || null,
+    actualAir: money(rq, "actualAir") === "" ? null : usdOf(money(rq, "actualAir")),
+    localChargeTh: money(rq, "localChargeTh") === "" ? null : usdOf(money(rq, "localChargeTh")),
+    actualCurrency: actCur, shipMode: lgMode || rq.shipMode || rq.approvedMode || "AIR",
+    poInvoices: buildPoInvoices(rq),
+  })
+
+  // Render the LG document to a PDF blob (same layout as the Preview popup).
+  const buildPdfBlob = async (rq: any) => {
+    const [{ pdf }, { PullMaterialPdf }] = await Promise.all([import("@react-pdf/renderer"), import("@/components/pull-material-pdf")])
+    return await pdf(React.createElement(PullMaterialPdf, { req: mergedDoc(rq) }) as any).toBlob()
+  }
+
   const openPreview = async (rq: any) => {
     setPdfing(true)
     try {
-      const merged = { ...rq, hawbNo: raw(rq, "hawbNo") || null, mawbNo: raw(rq, "mawbNo") || null, invoiceNo: raw(rq, "invoiceNo") || null, actualAir: raw(rq, "actualAir") === "" ? null : Number(raw(rq, "actualAir")) }
-      const [{ pdf }, { PullMaterialPdf }] = await Promise.all([import("@react-pdf/renderer"), import("@/components/pull-material-pdf")])
-      const blob = await pdf(React.createElement(PullMaterialPdf, { req: merged }) as any).toBlob()
+      const blob = await buildPdfBlob(rq)
       const url = URL.createObjectURL(blob)
       setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url })
       setPreviewName(`${rq.documentNo}.pdf`)
@@ -466,9 +496,16 @@ export default function Page() {
   const Info = ({ label, value }: { label: string; value: any }) => <div><div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div><div className="text-gray-800 text-sm">{value || "-"}</div></div>
   const openReq = reqs.find(r => r.id === openId)
   // Two LG tabs: "actual" = approved docs waiting for actual air entry; "nomaster" = docs still missing Air rate.
-  const inTab = (r: any) => lgTab === "nomaster" ? r.status === "PENDING_LG_RATE" : r.status !== "PENDING_LG_RATE"
+  // "Actual entered" = closed (COMPLETED) or the figure is already saved as a draft → it leaves the
+  // working queue and lives under the "กรอกแล้ว" tab, so the first tab only shows real work left.
+  const actualDone = (r: any) => r.status === "COMPLETED" || r.actualAir != null
+  const inTab = (r: any) =>
+    lgTab === "nomaster" ? r.status === "PENDING_LG_RATE"
+      : lgTab === "done" ? (r.status !== "PENDING_LG_RATE" && actualDone(r))
+        : (r.status !== "PENDING_LG_RATE" && !actualDone(r))
   const nNoMaster = reqs.filter(r => r.status === "PENDING_LG_RATE").length
-  const nActual = reqs.length - nNoMaster
+  const nDone = reqs.filter(r => r.status !== "PENDING_LG_RATE" && actualDone(r)).length
+  const nActual = reqs.length - nNoMaster - nDone
   // #4 helpers: a doc's ports + its ETC dates (from items PC entered).
   const docPorts = (r: any) => [...new Set((r.items || []).map((i: any) => i.port).filter(Boolean))] as string[]
   const docEtcs = (r: any) => (r.items || []).map((i: any) => (i.etc ? String(i.etc).slice(0, 10) : "")).filter(Boolean) as string[]
@@ -501,7 +538,7 @@ export default function Page() {
       {!openReq && (
         <>
           <div className="flex gap-2 border-b border-gray-200">
-            {([["actual", "📥 รอกรอก Actual", nActual], ["nomaster", "⚠️ No Master", nNoMaster]] as const).map(([v, label, n]) => (
+            {([["actual", "📥 รอกรอก Actual", nActual], ["done", "✅ กรอกแล้ว", nDone], ["nomaster", "⚠️ No Master", nNoMaster]] as const).map(([v, label, n]) => (
               <button key={v} onClick={() => { setLgTab(v); setOpenId(null) }}
                 className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${lgTab === v ? "" : "border-transparent text-gray-400 hover:text-gray-600"}`}
                 style={lgTab === v ? { color: v === "nomaster" ? "#b91c1c" : MAROON, borderColor: v === "nomaster" ? "#b91c1c" : MAROON } : undefined}>
@@ -566,7 +603,7 @@ export default function Page() {
           )}
 
           {loading ? <p className="text-sm text-gray-400">Loading…</p> :
-            shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">{lgTab === "nomaster" ? "ไม่มีเอกสารที่รอเติม Air rate 🎉" : "ไม่มีเอกสารที่รอกรอก Actual"}</div> :
+            shown.length === 0 ? <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400">{lgTab === "nomaster" ? "ไม่มีเอกสารที่รอเติม Air rate 🎉" : lgTab === "done" ? "ยังไม่มีเอกสารที่กรอก Actual แล้ว" : "ไม่มีเอกสารที่รอกรอก Actual 🎉"}</div> :
               <div className="space-y-2.5">
                 {shown.map(rq => {
                   const estTotal = rq.items.reduce((sm: number, i: any) => sm + (Number(i.airFreightCost) || 0), 0)
@@ -662,7 +699,7 @@ export default function Page() {
                     <Info label="Supplier Name" value={[...new Set(its.map((i: any) => i.vendorName).filter(Boolean))].join(", ") || rq.vendorContact} />
                   </div>
                   {(rq.attachments || []).length > 0 && (() => {
-                    const CATL: Record<string, string> = { INV: "INV", PACKING: "Packing", AWB: "AWB", CUSTOMS: "ใบขน", COMBINED: "รวม", FWD: "FWD file" }
+                    const CATL: Record<string, string> = { INV: "INV", PACKING: "Packing", AWB: "AWB", CUSTOMS: "ใบขน", COMBINED: "รวม", FWD: "FWD file", SUMMARY: "ใบสรุป LG (PDF)" }
                     const grp = (s: string) => (rq.attachments || []).filter((a: any) => a.source === s || (!a.source && s === "PC"))
                     return (
                       <div className="mt-4 pt-3 border-t border-gray-100">
