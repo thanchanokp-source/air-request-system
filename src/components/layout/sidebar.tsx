@@ -36,6 +36,7 @@ const pullNav = [
   { href: "/pull-material/approval", label: "APPROVAL", roles: ["ADMIN", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT", "DVM_PUR", "VP_PUR"] },
   { href: "/pull-material/documents", label: "LOGISTICS", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/rates", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
+  { href: "/pull-material/forwarders", label: "MASTER FWD", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/master-city", label: "MASTER PURCHASE", roles: ["ADMIN", "PURCHASING"] },
   { href: "/pull-material/users", label: "USER MANAGEMENT", roles: ["ADMIN"] },
 ]
