@@ -23,10 +23,16 @@ export async function GET(req: NextRequest) {
   if (!roles.includes("ADMIN")) return NextResponse.json({ error: "Admin only", tabA: [], tabB: [], counts: {} }, { status: 403 })
 
   // Optional brand filter (?brand=A,B) — normalized like the dashboard's brandKey (upper + single space).
+  // mp_line stores SHORT brand names ("LULULEMON") while air req stores the FULL name
+  // ("LULULEMON ATHLETICA CANADA INC."), so match tolerantly: equal OR one is a prefix of the other.
   const bk = (s: any) => String(s == null ? "" : s).trim().toUpperCase().replace(/\s+/g, " ")
   const brandParam = req.nextUrl.searchParams.get("brand") || ""
-  const brandSet = new Set(brandParam.split(",").map(bk).filter(Boolean))
-  const brandOk = (b: any) => brandSet.size === 0 || brandSet.has(bk(b))
+  const brandSet = [...new Set(brandParam.split(",").map(bk).filter(Boolean))]
+  const brandOk = (b: any) => {
+    if (brandSet.length === 0) return true
+    const x = bk(b); if (!x) return false
+    return brandSet.some(f => x === f || x.startsWith(f) || f.startsWith(x))
+  }
 
   // ── mp_line: actual AIR PP exports that have shipped ──
   let mp: any[] = []
