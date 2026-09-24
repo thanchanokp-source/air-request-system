@@ -926,8 +926,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── mp_line reconcile (admin only · NYG) — ยอดส่งออกจริงที่ตรงกับ mp_line ── */}
-      {isAdmin && mpCounts && (
+      {/* ── mp_line reconcile (admin · NYG) — shows ONLY in map mode (replaces the KPI row) ── */}
+      {isAdmin && mpMode && mpCounts && (
         <div className="rounded-xl border-2 border-teal-200 bg-white p-3">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-sm font-semibold text-gray-800">📦 ยอดส่งออกจริง (mp_line) · NYG</span>
@@ -977,7 +977,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── KPI ─────────────────────────────────────────────────────────── */}
+      {/* ── KPI ── (hidden in map mode — the mp_line card above replaces it) ── */}
+      {!mpMode && (
       <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {([
           ["QTY SHIP AIR","pcs",fmtNum(totalQAir),"text-orange-700","bg-orange-50 border-orange-200","Requested air"],
@@ -992,6 +993,7 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+      )}
 
       {/* ── Claim by department (each claim's share of the airfreight) ────── */}
       {claimByDept.length>0 && (
