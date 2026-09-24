@@ -633,6 +633,9 @@ export default function DashboardPage() {
   // Admin-only: mp_line reconcile summary (air req plan ↔ mp_line actual, NYG · SHIPPED · AIR PP).
   const isAdmin = (session?.user as any)?.role === "ADMIN"
   const [mpCounts, setMpCounts] = useState<any>(null)
+  const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line)
+  const [mpMode, setMpMode] = useState(false) // toggle: filter the WHOLE page to only mp_line-shipped SOs
+  const mpSoKey = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
 
   const [requests, setRequests]   = useState<any[]>([])
   const [loading,  setLoading]    = useState(true)
@@ -645,7 +648,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isAdmin) return
     const qs = brandFKey ? `?brand=${encodeURIComponent(brandFKey)}` : ""
-    fetch(`/api/air-export-map${qs}`).then(r => r.ok ? r.json() : null).then(d => setMpCounts(d?.counts || null)).catch(() => {})
+    fetch(`/api/air-export-map${qs}`).then(r => r.ok ? r.json() : null).then(d => {
+      setMpCounts(d?.counts || null)
+      setMpSoSet(new Set(((d?.tabA || []) as any[]).map(r => mpSoKey(r.so)).filter(Boolean)))
+    }).catch(() => {})
   }, [isAdmin, brandFKey])
   const [docF,  setDocF]  = useState<string[]>([])
   const [soF,  setSoF]  = useState<string[]>([])
@@ -693,8 +699,9 @@ export default function DashboardPage() {
            (!portFilter   || row.port===portFilter) &&
            (!countryFilter|| countryKey(row.country)===countryFilter) &&
            (!claimF.length|| claimF.includes(row.claimDepartment)) &&
-           (!hawbF.length || hawbF.includes(row.hawbNo))
-  }), [allSOs,yearFilter,monthFilter,statusFilter,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF])
+           (!hawbF.length || hawbF.includes(row.hawbNo)) &&
+           (!mpMode || mpSoSet.has(mpSoKey(row.so)))   // 🔗 map mode → only SOs that shipped in mp_line
+  }), [allSOs,yearFilter,monthFilter,statusFilter,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF,mpMode,mpSoSet])
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
@@ -904,7 +911,20 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
+        {/* Admin-only toggle: filter the WHOLE page (KPI + charts + data table) to only mp_line-shipped SOs. */}
+        {isAdmin && (
+          <button onClick={() => setMpMode(v => !v)}
+            className={`ml-auto text-xs font-bold px-4 py-1.5 rounded-lg border transition-colors ${mpMode ? "bg-teal-600 text-white border-transparent" : "bg-white text-teal-700 border-teal-300 hover:bg-teal-50"}`}
+            title="กรองทั้งหน้าให้เหลือเฉพาะ SO ที่ส่งออกจริง (map กับ mp_line)">
+            🔗 {mpMode ? "เฉพาะที่ map mp_line (ON)" : "map mp_line"}
+          </button>
+        )}
       </div>
+      {isAdmin && mpMode && (
+        <div className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-3 py-1.5 -mt-1">
+          🔗 โหมด map: ทั้งหน้า (KPI · charts · data table ด้านล่าง) แสดง<b>เฉพาะ SO ที่ส่งออกจริงใน mp_line</b> — เทียบยอดกับการ์ด mp_line ด้านบนได้เลย
+        </div>
+      )}
 
       {/* ── mp_line reconcile (admin only · NYG) — ยอดส่งออกจริงที่ตรงกับ mp_line ── */}
       {isAdmin && mpCounts && (
