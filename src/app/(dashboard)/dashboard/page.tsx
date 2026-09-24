@@ -636,8 +636,9 @@ export default function DashboardPage() {
   const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line)
   const [mpMode, setMpMode] = useState(false) // toggle: filter the WHOLE page to only mp_line-shipped SOs
   const mpSoKey = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
-  // mp_line data is NYG-only → the map toggle applies only on the NYG (or All BU) tab; GW/TRM/EA stay normal.
-  const mpAllowed = activeBu === "NYG" || activeBu === "ALL"
+  // mp_line data is NYG-only → the map toggle works ONLY on the NYG tab (where the whole page is already
+  // scoped to NYG, so the numbers match the mp_line card). All BU / GW / TRM / EA stay the normal view.
+  const mpAllowed = activeBu === "NYG"
   const mpActive = isAdmin && mpMode && mpAllowed
 
   const [requests, setRequests]   = useState<any[]>([])

@@ -201,6 +201,11 @@ export default function Page() {
     setLgModeReason(rq.shipModeReason || "")
   }, [openId, reqs, airRates, seaRates, courierRates, truckRates]) // eslint-disable-line
 
+  // FWD name (as spelled in the rate master) → email from MASTER FWD. Ignores case/spaces/dots so
+  // "B.F.I" in the rate sheet still finds the "BFI" contact.
+  const fwdKey = (s: any) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "")
+  const fwdEmailOf = (name: any) => forwarders.find((f: any) => fwdKey(f.name) === fwdKey(name))?.email || ""
+
   // Opening a doc → prefill the FWD box: what was used before, else the FWD behind the Pre cost,
   // and its email from the contact master.
   useEffect(() => {
@@ -208,7 +213,7 @@ export default function Page() {
     if (!rq) { setFwdName(""); setFwdEmail(""); setFwdNote(""); return }
     const name = rq.fwdName || rq.preCostFwd || ""
     setFwdName(name)
-    setFwdEmail(rq.fwdEmail || forwarders.find((f: any) => f.name === name)?.email || "")
+    setFwdEmail(rq.fwdEmail || fwdEmailOf(name) || "")
     setFwdNote("")
   }, [openId, reqs, forwarders]) // eslint-disable-line
 
@@ -770,13 +775,18 @@ export default function Page() {
                     <div className="space-y-2.5">
                       <div>
                         <label className="text-[11px] font-semibold text-amber-700 block mb-1">FWD</label>
-                        <input list="pull-fwd-list" value={fwdName} onChange={e => { const v = e.target.value; setFwdName(v); const m = forwarders.find((f: any) => f.name === v); if (m?.email) setFwdEmail(m.email) }}
+                        <input list="pull-fwd-list" value={fwdName} onChange={e => { const v = e.target.value; setFwdName(v); const em = fwdEmailOf(v); if (em) setFwdEmail(em) }}
                           placeholder="ชื่อ Forwarder…" className={inp} />
                         <datalist id="pull-fwd-list">{forwarders.map((f: any) => <option key={f.id} value={f.name}>{f.email}</option>)}</datalist>
                       </div>
                       <div>
                         <label className="text-[11px] font-semibold text-amber-700 block mb-1">อีเมล FWD <span className="text-red-500">*</span></label>
                         <input value={fwdEmail} onChange={e => setFwdEmail(e.target.value)} placeholder="forwarder@company.com" className={inp} />
+                        {/* New FWD in the rate master that nobody has an address for yet — say so instead of
+                            failing at send time. Typing it here saves it into MASTER FWD automatically. */}
+                        {fwdName && !fwdEmailOf(fwdName) && (
+                          <p className="mt-1 text-[10px] text-amber-700">⚠️ “{fwdName}” ยังไม่มีอีเมลใน MASTER FWD — พิมพ์อีเมลที่นี่ ระบบจะจำให้ครั้งต่อไป</p>
+                        )}
                       </div>
                       <div>
                         <label className="text-[11px] font-semibold text-amber-700 block mb-1">ข้อความเพิ่มเติม (ถ้ามี)</label>
