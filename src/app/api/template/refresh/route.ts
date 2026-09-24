@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { readdirSync, copyFileSync, writeFileSync, existsSync, statSync } from "fs"
-import path from "path"
 
 export const runtime = "nodejs"
+
+// IMPORTANT: do NOT import "fs"/"path" statically here. This route does dynamic filesystem work
+// (readdirSync over a runtime dir, path.join(process.cwd(), …)). When Turbopack's file tracer sees
+// those static fs imports + dynamic calls it traces the WHOLE project into the server bundle, which
+// on Linux corrupts the build (missing SSR chunks like [root-of-the-server]__*.js -> ChunkLoadError).
+// Pulling fs/path through a runtime require the bundler can't statically follow keeps the trace scoped.
+const nodeRequire: (m: string) => any = eval("require")
 
 // ADMIN-ONLY: pull the live template files from a source folder into the app's public/ folder,
 // then bump template-meta.json so every MER sees "template updated — download latest".
@@ -18,6 +23,9 @@ export async function POST() {
   if (!session || !roles.includes("ADMIN")) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 })
   }
+
+  const { readdirSync, copyFileSync, writeFileSync, existsSync, statSync } = nodeRequire("fs")
+  const path = nodeRequire("path")
 
   const src = process.env.TEMPLATE_SOURCE_DIR || DEFAULT_SRC
   const dest = path.join(process.cwd(), "public")
