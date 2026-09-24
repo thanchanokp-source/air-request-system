@@ -925,17 +925,16 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold tabular-nums text-teal-700">{Number(mpCounts.shippedPcs || 0).toLocaleString()}</p>
                 <p className="text-[10px] text-gray-400 mt-0.5">{mpCounts.mpKeys ?? 0} SO ใน mp_line</p>
               </div>
-              {/* 2) EST air */}
+              {/* 2) EST air — total + EST of the filled SOs (fair vs actual) */}
               <div className="rounded-lg border p-3 bg-sky-50 border-sky-200">
                 <p className="text-[11px] text-gray-500">💠 Estimate air (THB)</p>
                 <p className="text-2xl font-bold tabular-nums text-sky-700">{est.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">แผนของ SO ที่ส่งออกแล้ว</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">EST ของ SO ที่กรอก actual: <b className="text-sky-700">{fEst.toLocaleString()}</b></p>
               </div>
-              {/* 3) Actual air filled + waiting + EST of the filled SOs (for fair compare) */}
+              {/* 3) Actual air filled + waiting */}
               <div className="rounded-lg border p-3 bg-green-50 border-green-200">
                 <p className="text-[11px] text-gray-500">✅ Actual air (THB)</p>
                 <p className="text-2xl font-bold tabular-nums text-green-700">{act.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">EST ของ SO ที่กรอก: <b className="text-sky-700">{fEst.toLocaleString()}</b></p>
                 <p className="text-[10px] text-gray-500 mt-0.5">เติมแล้ว <b className="text-green-700">{Number(mpCounts.actualFilledSo || 0).toLocaleString()}</b> SO · <span className="text-amber-700">รออีก <b>{Number(mpCounts.actualWaitingSo || 0).toLocaleString()}</b> SO</span></p>
               </div>
               {/* 4) % variance actual vs EST — SAME (filled) SOs only */}
