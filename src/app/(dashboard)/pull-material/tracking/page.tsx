@@ -286,10 +286,10 @@ export default function Page() {
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <button onClick={() => setViewRq(rq)} title="View document (read-only)"
                           className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:text-red-800 hover:border-red-300 mr-1">👁 View</button>
-                        {rq.status === "COMPLETED" && (
-                          <button onClick={() => openPdf(rq)} disabled={pdfing === rq.id} title="Preview / download PDF"
-                            className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50 mr-1" style={{ background: MAROON }}>{pdfing === rq.id ? "…" : "🔍 PDF"}</button>
-                        )}
+                        {/* Printable sheet at ANY stage — the PDF simply shows blanks for what is not
+                            filled in yet (LG actual, INV per PO …). */}
+                        <button onClick={() => openPdf(rq)} disabled={pdfing === rq.id} title="Preview / download PDF"
+                          className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50 mr-1" style={{ background: MAROON }}>{pdfing === rq.id ? "…" : "🔍 PDF"}</button>
                         {(isAdmin || rq.createdById === userId) && !["APPROVED", "COMPLETED", "RECALLED"].includes(rq.status) && (
                           <button onClick={() => recall(rq)} disabled={busy === rq.id} title="Recall (creator only)"
                             className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-amber-700 hover:border-amber-300 disabled:opacity-50">↩ Recall</button>
@@ -346,7 +346,11 @@ export default function Page() {
             <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 py-3 border-b">
                 <div><span className="font-bold text-lg text-gray-900">{rq.documentNo}</span> <span className="text-xs text-gray-400">· {displayOf(rq)} · {pullStatus(rq)}</span></div>
-                <button onClick={() => setViewRq(null)} className="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ปิด</button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => openPdf(rq)} disabled={pdfing === rq.id}
+                    className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: MAROON }}>{pdfing === rq.id ? "…" : "🔍 PDF"}</button>
+                  <button onClick={() => setViewRq(null)} className="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ปิด</button>
+                </div>
               </div>
               <div className="overflow-y-auto p-5">
                <div className="grid lg:grid-cols-3 gap-4">

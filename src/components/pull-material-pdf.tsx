@@ -78,19 +78,23 @@ export function PullMaterialPdf({ req }: { req: any }) {
           {req.remark ? <View style={{ width: "100%", paddingTop: 3 }}><Text style={s.label}>Remark</Text><Text style={s.val}>{req.remark}</Text></View> : null}
         </View>
 
+        {/* By PO — carries the INVOICE NO Purchasing entered per PO (poInvoices), so the printed sheet
+            matches the INV files they uploaded. Falls back to the document-level invoice. */}
         <Text style={s.sectionTitle}>By PO</Text>
         <View style={s.trH}>
-          <Text style={[s.th, { width: "40%" }]}>PO NO</Text>
-          <Text style={[s.th, { width: "35%" }]}>VENDOR</Text>
-          <Text style={[s.th, { width: "15%", textAlign: "right" }]}>QTY AIR</Text>
-          <Text style={[s.th, { width: "10%" }]}>UOM</Text>
+          <Text style={[s.th, { width: "26%" }]}>PO NO</Text>
+          <Text style={[s.th, { width: "30%" }]}>VENDOR</Text>
+          <Text style={[s.th, { width: "22%" }]}>INVOICE NO</Text>
+          <Text style={[s.th, { width: "14%", textAlign: "right" }]}>QTY AIR</Text>
+          <Text style={[s.th, { width: "8%" }]}>UOM</Text>
         </View>
         {Object.keys(byPo).map(po => (
           <View style={s.tr} key={po}>
-            <Text style={[s.td, { width: "40%", fontFamily: "SarabunB" }]}>{po}</Text>
-            <Text style={[s.td, { width: "35%" }]}>{byPo[po].vend || "-"}</Text>
-            <Text style={[s.td, { width: "15%", textAlign: "right", color: MAROON }]}>{fmt(byPo[po].qty)}</Text>
-            <Text style={[s.td, { width: "10%" }]}>{[...byPo[po].uoms].join(", ") || "-"}</Text>
+            <Text style={[s.td, { width: "26%", fontFamily: "SarabunB" }]}>{po}</Text>
+            <Text style={[s.td, { width: "30%" }]}>{byPo[po].vend || "-"}</Text>
+            <Text style={[s.td, { width: "22%" }]}>{(req.poInvoices || {})[po] || req.invoiceNo || "-"}</Text>
+            <Text style={[s.td, { width: "14%", textAlign: "right", color: MAROON }]}>{fmt(byPo[po].qty)}</Text>
+            <Text style={[s.td, { width: "8%" }]}>{[...byPo[po].uoms].join(", ") || "-"}</Text>
           </View>
         ))}
 
@@ -117,8 +121,12 @@ export function PullMaterialPdf({ req }: { req: any }) {
 
         {(req.attachments || []).length > 0 ? (
           <View style={{ marginTop: 10 }}>
-            <Text style={s.sectionTitle}>Attachments</Text>
-            {(req.attachments || []).map((a: any) => <Text key={a.id} style={s.att}>- {a.fileName}</Text>)}
+            <Text style={s.sectionTitle}>Attachments ({(req.attachments || []).length})</Text>
+            {(req.attachments || []).map((a: any) => (
+              <Text key={a.id} style={s.att}>
+                - [{a.source === "LG" ? "LG" : "PC"}{a.category ? ` / ${a.category}` : ""}] {a.fileName}
+              </Text>
+            ))}
           </View>
         ) : null}
 

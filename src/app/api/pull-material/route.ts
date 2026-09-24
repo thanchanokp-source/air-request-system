@@ -13,7 +13,8 @@ export async function GET(req: NextRequest) {
   const bu = (req.nextUrl.searchParams.get("bu") || "").trim()
   const rows = await (prisma as any).pullMaterialRequest.findMany({
     where: bu ? { bu } : {},
-    include: { items: true, attachments: { select: { id: true, fileName: true } } },
+    // category/source are needed by the PDF (it labels INV/Packing from PC vs AWB/summary from LG).
+    include: { items: true, attachments: { select: { id: true, fileName: true, category: true, source: true } } },
     orderBy: { createdAt: "desc" },
   })
   return NextResponse.json({ requests: rows })
