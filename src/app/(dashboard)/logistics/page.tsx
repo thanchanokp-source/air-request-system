@@ -11,6 +11,58 @@ import LgHistory from "@/components/lg-history"
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 
+// One document's transaction table. Big docs (hundreds/thousands of rows) render only a slice
+// and grow it as the user scrolls to the bottom, so opening a 1,500-row document stays snappy.
+// Header stays sticky inside the scroll box; a footer shows how much is shown vs total.
+const ROW_STEP = 60
+function LgDocTable({ items, cur, selected, onToggle }: { items: any[]; cur: string; selected: Set<string>; onToggle: (id: string) => void }) {
+  const [visN, setVisN] = useState(ROW_STEP)
+  const shown = items.slice(0, visN)
+  const onScroll = (e: any) => {
+    const el = e.currentTarget as HTMLDivElement
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) setVisN(n => (n >= items.length ? n : Math.min(items.length, n + ROW_STEP)))
+  }
+  return (
+    <div>
+      <div className="overflow-auto max-h-[56vh]" onScroll={onScroll}>
+        <table className="w-full text-xs whitespace-nowrap">
+          <thead className="bg-gray-50 border-b sticky top-0 z-10"><tr>
+            <th className="px-3 py-2 w-8"></th>
+            {["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","PLAN DATE","QTY AIR","GROSS (KG)",`EST. AIR FREIGHT (${cur})`,`ACTUAL (${cur})`,"FACTORY","COUNTRY","INV NO","HAWB#"].map(h =>
+              <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium">{h}</th>)}
+          </tr></thead>
+          <tbody className="divide-y divide-gray-100">
+            {shown.map((it: any) => (
+              <tr key={it.id} className={selected.has(it.id) ? "bg-blue-50" : "hover:bg-blue-50/30"}>
+                <td className="px-3 py-1.5"><input type="checkbox" checked={selected.has(it.id)} onChange={() => onToggle(it.id)} className="rounded" /></td>
+                <td className="px-3 py-1.5 font-medium">{it.so}</td>
+                <td className="px-3 py-1.5">{it.style}</td>
+                <td className="px-3 py-1.5">{it.sub || "-"}</td>
+                <td className="px-3 py-1.5">{it.customerPO || "-"}</td>
+                <td className="px-3 py-1.5">{it.description || "-"}</td>
+                <td className="px-3 py-1.5">{fmtDate(it.planShipmentDate)}</td>
+                <td className="px-3 py-1.5 text-right font-semibold">{it.qtyRequestAir}</td>
+                <td className="px-3 py-1.5 text-right text-blue-700">{fmtNum(it.grossWeight, 2)}</td>
+                <td className="px-3 py-1.5 text-right text-blue-700">{fmtNum(it.airFreight)}</td>
+                <td className="px-3 py-1.5 text-right font-semibold text-green-700">{it.actualAirFreight != null ? fmtNum(it.actualAirFreight) : "-"}</td>
+                <td className="px-3 py-1.5">{it.factory || "-"}</td>
+                <td className="px-3 py-1.5">{it.country || "-"}</td>
+                <td className="px-3 py-1.5">{it.invoiceNo || "-"}</td>
+                <td className="px-3 py-1.5">{it.hawbNo || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {items.length > ROW_STEP && (
+        <div className="px-4 py-1.5 text-center text-[11px] text-gray-400 bg-gray-50/70 border-t border-gray-100">
+          แสดง {shown.length} จาก {items.length} แถว{visN < items.length ? " · เลื่อนลงเพื่อโหลดเพิ่ม" : " · ครบแล้ว"}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function LgBookingPage() {
   const { data: session } = useSession()
   const router = useRouter()
@@ -297,36 +349,7 @@ export default function LgBookingPage() {
                         <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">ACT {fmtNum(act)} {cur}</span>
                         <span className="text-xs text-gray-400">{allItems.length} transaction · <span className="text-amber-600 font-medium">เหลือ {items.length} รอกรอก actual</span></span>
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs whitespace-nowrap">
-                          <thead className="bg-gray-50 border-b"><tr>
-                            <th className="px-3 py-2 w-8"></th>
-                            {["SO","STYLE","SUB","CUSTOMER PO","DESCRIPTION","PLAN DATE","QTY AIR","GROSS (KG)",`EST. AIR FREIGHT (${cur})`,`ACTUAL (${cur})`,"FACTORY","COUNTRY","INV NO","HAWB#"].map(h =>
-                              <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium">{h}</th>)}
-                          </tr></thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {items.map((it: any) => (
-                              <tr key={it.id} className={selected.has(it.id) ? "bg-blue-50" : "hover:bg-blue-50/30"}>
-                                <td className="px-3 py-1.5"><input type="checkbox" checked={selected.has(it.id)} onChange={() => toggle(it.id)} className="rounded" /></td>
-                                <td className="px-3 py-1.5 font-medium">{it.so}</td>
-                                <td className="px-3 py-1.5">{it.style}</td>
-                                <td className="px-3 py-1.5">{it.sub || "-"}</td>
-                                <td className="px-3 py-1.5">{it.customerPO || "-"}</td>
-                                <td className="px-3 py-1.5">{it.description || "-"}</td>
-                                <td className="px-3 py-1.5">{fmtDate(it.planShipmentDate)}</td>
-                                <td className="px-3 py-1.5 text-right font-semibold">{it.qtyRequestAir}</td>
-                                <td className="px-3 py-1.5 text-right text-blue-700">{fmtNum(it.grossWeight, 2)}</td>
-                                <td className="px-3 py-1.5 text-right text-blue-700">{fmtNum(it.airFreight)}</td>
-                                <td className="px-3 py-1.5 text-right font-semibold text-green-700">{it.actualAirFreight != null ? fmtNum(it.actualAirFreight) : "-"}</td>
-                                <td className="px-3 py-1.5">{it.factory || "-"}</td>
-                                <td className="px-3 py-1.5">{it.country || "-"}</td>
-                                <td className="px-3 py-1.5">{it.invoiceNo || "-"}</td>
-                                <td className="px-3 py-1.5">{it.hawbNo || "-"}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      <LgDocTable items={items} cur={cur} selected={selected} onToggle={toggle} />
                       {/* No air — CANCEL only the ticked SOs of THIS document (doc stays for air SOs) */}
                       <div className="px-4 py-2 border-t border-gray-100 flex justify-end">
                         <button onClick={() => openNoAir(req, docIds)}

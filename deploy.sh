@@ -31,11 +31,25 @@ rm -rf .next.bak
 rm -rf .next
 
 echo "==> [3/5] Build new version (Turbopack, clean) — app still serving old build in memory"
-if npm run build && [ -f .next/BUILD_ID ]; then
-  echo "    build OK (BUILD_ID: $(cat .next/BUILD_ID))"
+# Turbopack occasionally emits a .next whose page.js references an SSR chunk it never wrote
+# (BUILD_ID exists, but a chunk file is missing -> ChunkLoadError / "This page couldn't load" / 502).
+# So we don't trust BUILD_ID alone: after each build we run verify-build.mjs, which fails if any
+# referenced chunk is missing. If a build is incomplete we retry (up to 3x — the flake is intermittent).
+# Only a build that BOTH has BUILD_ID AND passes verification is allowed to replace the running one.
+BUILD_OK=0
+for attempt in 1 2 3; do
+  echo "    build attempt $attempt/3..."
+  rm -rf .next
+  if npm run build && [ -f .next/BUILD_ID ] && node scripts/verify-build.mjs; then
+    BUILD_OK=1; break
+  fi
+  echo "    !! attempt $attempt incomplete/failed — retrying with a clean .next"
+done
+if [ "$BUILD_OK" = "1" ]; then
+  echo "    build OK + verified (BUILD_ID: $(cat .next/BUILD_ID))"
   rm -rf .next.bak
 else
-  echo "!! BUILD FAILED — restoring previous build, NOT restarting. Site stays up on old version."
+  echo "!! BUILD INCOMPLETE after 3 attempts — restoring previous build, NOT restarting. Site stays up on old version."
   rm -rf .next
   [ -d .next.bak ] && mv .next.bak .next
   exit 1

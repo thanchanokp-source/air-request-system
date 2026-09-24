@@ -130,7 +130,18 @@ export default function PurchasePage() {
     await fetch(`/api/pull-material/${rqId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: m }) }).catch(() => {})
   }
 
+  // INVOICE NO per PO — typed here by Purchasing (or read out of the INV file below). Saved to the
+  // document as poInvoices, which is what the PDF's "By PO" table prints.
+  const [invMap, setInvMap] = useState<Record<string, string>>({})
+  const [invReading, setInvReading] = useState(false)
+  const setInv = (po: string, v: string) => setInvMap(p => ({ ...p, [po]: v }))
+  // OCR is best-effort, so nothing it reads is written straight into the form: Purchasing confirms
+  // (and may correct) every number first. Rows sit in this dialog until they do.
+  const [invConfirm, setInvConfirm] = useState<{ po: string; inv: string; from: string; use: boolean }[] | null>(null)
+  const [invOk, setInvOk] = useState<Set<string>>(new Set())   // POs whose number came from a confirmed read
+
   // Purchase attaches a supporting file (Packing List / INV) under its category → sent along to LG.
+  // An INV upload is also passed through the reader so the invoice numbers fill themselves per PO.
   const uploadDoc = async (rq: any, files: FileList, category: "PACKING" | "INV", label: string) => {
     setUploadingPL(rq.id)
     try {
@@ -140,6 +151,7 @@ export default function PurchasePage() {
         const fd = new FormData(); fd.append("file", f); fd.append("category", category); fd.append("source", "PC")
         await fetch(`/api/pull-material/${rq.id}/attachments`, { method: "POST", body: fd }).catch(() => {})
       }
+      if (category === "INV") await readInvFiles(rq, Array.from(files))
       // Record the packing-list filename (informational, shown to LG).
       if (category === "PACKING" && firstName) await fetch(`/api/pull-material/${rq.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ packingListName: firstName }) }).catch(() => {})
       await load()
@@ -206,6 +218,42 @@ export default function PurchasePage() {
     return { est: Math.round((best.rate * w + add) * 100) / 100, add }
   }
 
+  // Read uploaded INV files and map PO -> invoice no (text PDFs / Excel only; scans need typing).
+  // The result is NOT applied straight away — it opens the confirm dialog below.
+  const readInvFiles = async (rq: any, files: File[]) => {
+    const pos = [...new Set((rq.items || []).map((i: any) => i.poNoDoc).filter(Boolean))] as string[]
+    if (!pos.length || !files.length) return
+    setInvReading(true)
+    const found: Record<string, { inv: string; from: string }> = {}
+    let scanned = 0
+    try {
+      for (const file of files) {
+        try {
+          const fd = new FormData(); fd.append("file", file); fd.append("pos", pos.join(","))
+          const d = await fetch("/api/pull-material/read-invoice", { method: "POST", body: fd }).then(r => r.json())
+          if (d.kind === "image" || d.kind === "pdf-scanned") { scanned++; continue }
+          for (const [po, inv] of Object.entries((d.pairs || {}) as Record<string, string>)) {
+            if (inv && !found[po]) found[po] = { inv, from: file.name }
+          }
+        } catch { /* keep going — the user can always type it */ }
+      }
+    } finally { setInvReading(false) }
+    const rows = Object.entries(found).map(([po, v]) => ({ po, inv: v.inv, from: v.from, use: true }))
+    if (rows.length) setInvConfirm(rows)
+    else if (scanned) alert("ไฟล์เป็นสแกน/รูป อ่านเลข INV อัตโนมัติไม่ได้ — พิมพ์เลข INV ต่อ PO เองได้เลย")
+    else alert("อ่านไฟล์แล้วแต่ไม่พบเลข INV ที่ตรงกับ PO ของเอกสารนี้ — พิมพ์เองได้เลย")
+  }
+
+  // Apply only the rows Purchasing ticked, using the (possibly corrected) value they see.
+  const applyInvConfirm = () => {
+    const rows = (invConfirm || []).filter(r => r.use && r.inv.trim())
+    if (rows.length) {
+      setInvMap(p => { const n = { ...p }; rows.forEach(r => { n[r.po] = r.inv.trim() }); return n })
+      setInvOk(p => { const n = new Set(p); rows.forEach(r => n.add(r.po)); return n })
+    }
+    setInvConfirm(null)
+  }
+
   const save = async (rq: any) => {
     // Fill-once validation — one set of values for the whole document.
     const cc = pf("country"), pp = pf("port"), sp = pf("seaPort"), inc = pf("incoterm")
@@ -243,7 +291,7 @@ export default function PurchasePage() {
         : rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION"
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemUpdates, status: next, otherPorts }),
+        body: JSON.stringify({ itemUpdates, status: next, otherPorts, poInvoices: { ...(rq.poInvoices || {}), ...Object.fromEntries(Object.entries(invMap).filter(([, v]) => v && v.trim())) } }),
       })
       if (r.ok) { setEdits({}); setOpenId(null); await load() } else alert("Error")
     } finally { setBusy(null) }
@@ -516,6 +564,24 @@ export default function PurchasePage() {
                     </div>
                   )}
 
+                  {/* INVOICE NO per PO — this is what the document PDF prints in its "By PO" table. */}
+                  <div className="border border-amber-200 bg-amber-50/40 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                      <span className="text-[11px] font-bold text-amber-800">🧾 INVOICE NO ต่อ PO <span className="font-normal text-amber-700">· ใส่แล้วจะขึ้นในเอกสาร PDF</span></span>
+                      {invReading && <span className="text-[11px] text-amber-700">กำลังอ่านเลข INV จากไฟล์…</span>}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {(poList as string[]).map(po => (
+                        <div key={po} className="flex items-center gap-2">
+                          <span className="text-[11px] font-semibold text-gray-600 w-[110px] shrink-0 truncate" title={po}>{po}</span>
+                          <input value={invMap[po] ?? ""} onChange={e => { setInv(po, e.target.value); setInvOk(p => { const n = new Set(p); n.delete(po); return n }) }} placeholder="INV No…"
+                            className="flex-1 border border-amber-300 bg-white rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-200" />
+                          {invOk.has(po) && <span className="text-[10px] font-bold text-emerald-700 shrink-0" title="ยืนยันเลขจากไฟล์แล้ว">✓ ยืนยันแล้ว</span>}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[10px] text-gray-400">แนบไฟล์ INV ด้านบน ระบบจะอ่านเลขมาเติมให้อัตโนมัติ (ไฟล์สแกน/รูปต้องพิมพ์เอง) · บันทึกพร้อมปุ่ม Save</p>
+                  </div>
                   <details className="border border-gray-200 rounded-xl">
                     <summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold text-gray-600 bg-gray-50 rounded-t-xl select-none">📋 ดู SO / PO ในเอกสาร ({openReq.items.length} รายการ)</summary>
                     <div className="overflow-x-auto">
@@ -653,7 +719,41 @@ export default function PurchasePage() {
             </div>
           )
         })()}
-      </>
+        {/* Confirm what the reader found before it touches the form — OCR can misread a digit. */}
+      {invConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setInvConfirm(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b flex items-center justify-between">
+              <div className="font-bold text-gray-900">🧾 ยืนยันเลข INV ที่อ่านได้</div>
+              <span className="text-[11px] text-gray-400">{invConfirm.length} รายการ</span>
+            </div>
+            <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                ระบบอ่านจากไฟล์ให้ — <b>ตรวจก่อนว่าถูกต้อง</b> แก้ได้เลยถ้าอ่านผิด หรือติ๊กออกถ้าไม่ต้องการใช้
+              </p>
+              {invConfirm.map((r, i) => (
+                <div key={r.po} className={`rounded-xl border p-3 ${r.use ? "border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-gray-50 opacity-70"}`}>
+                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                    <input type="checkbox" checked={r.use} onChange={e => setInvConfirm(rows => (rows || []).map((x, j) => (j === i ? { ...x, use: e.target.checked } : x)))} className="w-4 h-4 accent-emerald-600" />
+                    <span className="text-xs font-bold text-gray-700">PO {r.po}</span>
+                    <span className="ml-auto text-[10px] text-gray-400 truncate max-w-[180px]" title={r.from}>จาก {r.from}</span>
+                  </label>
+                  <input value={r.inv} onChange={e => setInvConfirm(rows => (rows || []).map((x, j) => (j === i ? { ...x, inv: e.target.value } : x)))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
+              <button onClick={() => setInvConfirm(null)} className="px-4 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ยกเลิก (คีย์เอง)</button>
+              <button onClick={applyInvConfirm} className="px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: MAROON }}>
+                ✓ ใช้เลขที่เลือก ({invConfirm.filter(r => r.use && r.inv.trim()).length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </>
       )}
     </div>
   )
@@ -698,6 +798,7 @@ function Picker({ value, list, onChange, disabled, placeholder, typePlaceholder,
           <p className="text-[11px] text-amber-700 mt-1">⚠ ไม่มีในระบบ — LG จะได้รับอีเมลให้เพิ่ม rate ตอนกด Save</p>
         </div>
       )}
+
     </>
   )
 }

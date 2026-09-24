@@ -638,7 +638,7 @@ export default function DashboardPage() {
   const mpSoKey = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
   // mp_line data is NYG-only → the map toggle works ONLY on the NYG tab (where the whole page is already
   // scoped to NYG, so the numbers match the mp_line card). All BU / GW / TRM / EA stay the normal view.
-  const mpAllowed = activeBu === "NYG"
+  const mpAllowed = activeBu === "NYG" || activeBu === "ALL"  // map mp_line = NYG data; shown on NYG + All BU (never GW/TRM/EA)
   const mpActive = isAdmin && mpMode && mpAllowed
 
   const [requests, setRequests]   = useState<any[]>([])
@@ -1014,22 +1014,35 @@ export default function DashboardPage() {
       )}
 
       {/* ── Claim by department (each claim's share of the airfreight) ────── */}
-      {claimByDept.length>0 && (
+      {claimByDept.length>0 && (()=>{
+        const deptCards = claimByDept.filter(d=>!d.unassigned)   // real depts = cards
+        const un = claimByDept.find(d=>d.unassigned)             // unassigned = just a note, not a card
+        const barMax = Math.max(...deptCards.map(d=>d._mag), 1)
+        return (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-          <div className="flex items-baseline justify-between flex-wrap gap-1">
+          <div className="flex items-baseline justify-between flex-wrap gap-2">
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.15em]">Claim by department</p>
-            <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtSplit(claimAmtTotal,fmtK)} · Est {fmtSplit(claimEstTotal,fmtK)}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {un && (un.amt.THB||un.amt.USD) ? (
+                <span className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5 tabular-nums"
+                  title="Actual ของ SO ที่ยังไม่ได้เลือก claim dept (เช่น add auto) — ยังไม่รวมในกรมใด">
+                  ⚠ ยังไม่แบ่ง claim {fmtSplit(un.amt,fmtK)}
+                </span>
+              ) : null}
+              <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtSplit(claimAmtTotal,fmtK)} · Est {fmtSplit(claimEstTotal,fmtK)}</p>
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {(()=>{ const barMax = Math.max(...claimByDept.map(d=>d._mag), 1); return claimByDept.map(d=>{
-              // % label = this dept's share of the TOTAL claim (combined magnitude — all depts sum ~100%).
+          {/* single row — scroll sideways if it can't fit */}
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {deptCards.map(d=>{
+              // % label = this dept's share of the TOTAL claim (all depts + unassigned sum ~100%).
               const share = claimMagTotal>0 ? d._mag/claimMagTotal*100 : 0
               // Bar length = relative to the LARGEST dept (biggest = full) so the ranking reads at a glance.
               const barPct = d._mag/barMax*100
               const c = deptColor(d.dept)
               return (
                 <div key={d.dept} title={`${fmtNum(d.qty)} pcs · ${share.toFixed(0)}% of total claim`}
-                  className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-colors">
+                  className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-colors flex-1 min-w-[150px]">
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:c}}/>
                     <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide truncate">{d.dept}</span>
@@ -1044,10 +1057,11 @@ export default function DashboardPage() {
                   </div>
                 </div>
               )
-            }) })()}
+            })}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* ── Filters ──────────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border p-4 space-y-3">
