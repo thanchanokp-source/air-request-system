@@ -148,7 +148,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   // LG closes the doc ONCE (1 shipment / 1 doc): actual air freight + INV + HAWB at request level.
-  if ("actualAir" in body || "invoiceNo" in body || "hawbNo" in body || "mawbNo" in body || "flightEtd" in body || "flightEta" in body || "cfmInHouseDate" in body || "poInvoices" in body || "localChargeTh" in body || "preCost" in body) {
+  if ("actualAir" in body || "invoiceNo" in body || "hawbNo" in body || "mawbNo" in body || "flightEtd" in body || "flightEta" in body || "cfmInHouseDate" in body || "poInvoices" in body || "localChargeTh" in body || "preCost" in body || "fwdRemark" in body || "actualSource" in body) {
     await (prisma as any).pullMaterialRequest.update({
       where: { id },
       data: {
@@ -163,6 +163,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...("localChargeTh" in body ? { localChargeTh: num(body.localChargeTh) } : {}),
         ...("preCost" in body ? { preCost: num(body.preCost) } : {}),
         ...("preCostFwd" in body ? { preCostFwd: body.preCostFwd || null } : {}),
+        // Phase 2 — values that came back from the forwarder's workbook (LG still reviews & saves).
+        ...("fwdRemark" in body ? { fwdRemark: body.fwdRemark || null } : {}),
+        ...("actualSource" in body ? {
+          actualSource: body.actualSource === "FWD" ? "FWD" : "LG",
+          ...(body.actualSource === "FWD" ? { fwdImportedAt: new Date(), fwdImportedBy: actorEmail || null } : {}),
+        } : {}),
       },
     })
   }

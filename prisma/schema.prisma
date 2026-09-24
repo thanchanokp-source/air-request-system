@@ -383,6 +383,18 @@ model PullMaterialRequest {
   shipModeReason  String?   // why this mode (required when != AIR)
   approvedMode    String?   // snapshot of the mode at the moment of approval (to show "LG changed it")
   approvedEst     Float?    // landed-cost total (USD) of the approved mode
+  // ── Phase 2: Forwarder (FWD) fills the ACTUAL by Excel template ────────────────────────────
+  // LG mails the FWD a pre-filled workbook (doc data + empty green columns), the FWD returns it and
+  // LG imports it back here. Source of the actual is switchable: LG types it (Phase 1) or FWD file.
+  fwdName         String?   // forwarder the request was sent to
+  fwdEmail        String?
+  fwdSentAt       DateTime?
+  fwdSentBy       String?   // LG user who sent it
+  fwdSentCount    Int       @default(0)
+  fwdImportedAt   DateTime? // when LG imported the returned workbook
+  fwdImportedBy   String?
+  fwdRemark       String?   // remark the FWD wrote in the template
+  actualSource    String?   // LG | FWD — who the actual figures came from
   attachments    PullMaterialAttachment[]
   recallReason   String?
   recalledBy     String?
@@ -638,4 +650,17 @@ model PullShipModeLog {
 
   @@index([requestId])
   @@index([chosenAt])
+}
+
+// Forwarder contact master for Pull RM Phase 2 (LG mails the actual-entry template to these people).
+// Grows as LG uses it: sending to a new address upserts the contact here.
+model PullForwarder {
+  id          String   @id @default(cuid())
+  name        String   @unique // FWD short name, matches PullFreightAir.fwd where possible
+  email       String
+  contactName String?
+  tel         String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
