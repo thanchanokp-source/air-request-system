@@ -14,6 +14,22 @@ set -uo pipefail
 cd "$(dirname "$0")"
 APP="air-request"
 
+# Build on the Node version this project needs. Next 16.2.6 + Turbopack deterministically DROPS
+# SSR chunks on Node 20 (-> ChunkLoadError / incomplete build); Node 22 builds cleanly. .nvmrc pins 22.
+# If nvm is present we switch to it here so every deploy builds on the right Node automatically.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  . "$NVM_DIR/nvm.sh"
+  nvm use >/dev/null 2>&1 || nvm install >/dev/null 2>&1 || true
+fi
+NODE_MAJOR="$(node -v 2>/dev/null | sed 's/v\([0-9]*\).*/\1/')"
+echo "==> node $(node -v 2>/dev/null)  npm $(npm -v 2>/dev/null)"
+if [ "${NODE_MAJOR:-0}" -lt 22 ]; then
+  echo "!! Node ${NODE_MAJOR:-?} is too old — this project needs Node 22 (Turbopack drops chunks on Node 20)."
+  echo "   Install it once:  nvm install 22 && nvm alias default 22   — then re-run deploy. Nothing changed; site stays up."
+  exit 1
+fi
+
 echo "==> [1/5] Pull latest code"
 git -c http.sslVerify=false pull || { echo "!! git pull failed — aborting"; exit 1; }
 
