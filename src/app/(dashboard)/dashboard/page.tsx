@@ -633,10 +633,6 @@ export default function DashboardPage() {
   // Admin-only: mp_line reconcile summary (air req plan ↔ mp_line actual, NYG · SHIPPED · AIR PP).
   const isAdmin = (session?.user as any)?.role === "ADMIN"
   const [mpCounts, setMpCounts] = useState<any>(null)
-  useEffect(() => {
-    if (!isAdmin) return
-    fetch("/api/air-export-map").then(r => r.ok ? r.json() : null).then(d => setMpCounts(d?.counts || null)).catch(() => {})
-  }, [isAdmin])
 
   const [requests, setRequests]   = useState<any[]>([])
   const [loading,  setLoading]    = useState(true)
@@ -644,6 +640,13 @@ export default function DashboardPage() {
   const [monthFilter, setMonthFilter] = useState<string[]>([])
   const [statusFilter,setStatusFilter]= useState("")
   const [brandF, setBrandF] = useState<string[]>([])
+  // mp_line card follows the Brand filter → refetch when it changes (admin only).
+  const brandFKey = brandF.join(",")
+  useEffect(() => {
+    if (!isAdmin) return
+    const qs = brandFKey ? `?brand=${encodeURIComponent(brandFKey)}` : ""
+    fetch(`/api/air-export-map${qs}`).then(r => r.ok ? r.json() : null).then(d => setMpCounts(d?.counts || null)).catch(() => {})
+  }, [isAdmin, brandFKey])
   const [docF,  setDocF]  = useState<string[]>([])
   const [soF,  setSoF]  = useState<string[]>([])
   const [cpF,  setCpF]  = useState<string[]>([])

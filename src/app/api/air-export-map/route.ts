@@ -22,6 +22,12 @@ export async function GET(req: NextRequest) {
   const roles: string[] = [(session.user as any)?.role, ...(((session.user as any)?.roles) || [])].filter(Boolean)
   if (!roles.includes("ADMIN")) return NextResponse.json({ error: "Admin only", tabA: [], tabB: [], counts: {} }, { status: 403 })
 
+  // Optional brand filter (?brand=A,B) — normalized like the dashboard's brandKey (upper + single space).
+  const bk = (s: any) => String(s == null ? "" : s).trim().toUpperCase().replace(/\s+/g, " ")
+  const brandParam = req.nextUrl.searchParams.get("brand") || ""
+  const brandSet = new Set(brandParam.split(",").map(bk).filter(Boolean))
+  const brandOk = (b: any) => brandSet.size === 0 || brandSet.has(bk(b))
+
   // ── mp_line: actual AIR PP exports that have shipped ──
   let mp: any[] = []
   try {
@@ -36,6 +42,7 @@ export async function GET(req: NextRequest) {
   const mpBySo = new Map<string, { so: string; lines: any[]; pcs: number; brands: Set<string> }>()
   for (const r of mp) {
     const k = soN(r.so_no); if (!k) continue
+    if (!brandOk(r.brand)) continue // brand filter (export side)
     const g = mpBySo.get(k) || { so: String(r.so_no ?? ""), lines: [], pcs: 0, brands: new Set<string>() }
     g.lines.push({ sub: r.sub_no ?? "", inv: r.invoice_no ?? "", pcs: Number(r.final_pcs) || 0, style: r.style ?? "", etd: r.etd, forwarder: r.forwarder ?? "" })
     g.pcs += Number(r.final_pcs) || 0
@@ -52,6 +59,7 @@ export async function GET(req: NextRequest) {
   const airBySo = new Map<string, { so: string; qtyPlan: number; est: number; actual: number; brands: Set<string>; docs: Set<string>; invs: Set<string>; subs: Set<string> }>()
   for (const i of items) {
     const k = soN(i.so); if (!k) continue
+    if (!brandOk(i.brand)) continue // brand filter (air req side)
     const g = airBySo.get(k) || { so: i.so, qtyPlan: 0, est: 0, actual: 0, brands: new Set<string>(), docs: new Set<string>(), invs: new Set<string>(), subs: new Set<string>() }
     g.qtyPlan += Number(i.qtyRequestAir) || 0
     g.est += Number(i.airFreight) || 0
