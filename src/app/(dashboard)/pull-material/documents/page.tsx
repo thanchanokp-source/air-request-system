@@ -7,6 +7,7 @@ import { courierUsd, destForBu, seaUsd, pullLandedCost, cheapestMode, modeTotals
 import { pullReqType } from "@/lib/pull-reqtype"
 import LandedCostCompare from "@/components/pull/LandedCostCompare"
 import { FWD_SHEET, parseFwdRow } from "@/lib/pull-fwd-template"
+import { fwdMailSubject, fwdMailDetail } from "@/lib/pull-fwd-mail"
 import DateRangePicker from "@/components/pull/DateRangePicker"
 
 // Pre cost from the AIR master (same formula as EST: rate at weight-break × weight + origin cost),
@@ -57,9 +58,6 @@ export default function Page() {
   const [etcFrom, setEtcFrom] = useState("")
   const [etcTo, setEtcTo] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [bulkOpen, setBulkOpen] = useState(false)
-  const [bulk, setBulk] = useState<Record<string, string>>({})
-  const [bulkBusy, setBulkBusy] = useState(false)
   // edits[docId] = { hawbNo, mawbNo, invoiceNo, actualAir } — ONE set per document (1 shipment / 1 doc).
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
   const [uploading, setUploading] = useState("")
@@ -110,23 +108,20 @@ export default function Page() {
   // Mail wording LG sends to the forwarder — editable, and remembered per phase in this browser.
   const [fwdSubject, setFwdSubject] = useState("")
   const [fwdDetail, setFwdDetail] = useState("")
-  const defaultSubject = (phase: 1 | 2, n: number, docNo?: string) =>
-    `[Pull Material] ${phase === 1 ? "Air booking details" : "Air actual charges"} - ${n === 1 && docNo ? docNo : n + " shipments"}`
-  const defaultDetail = (phase: 1 | 2) => phase === 1
-    ? "Please complete the green columns in the attached file (MAWB / HAWB / Flight ETD / ETA / CFM in-house date / Air freight rate THB per kg / Supplier INV) and reply with the file attached.\nGrey columns are reference only - please keep them as they are."
-    : "The goods have arrived. Please fill in the green columns of the attached file (Actual air freight THB / Local charge TH THB / Remark) and reply with the file attached.\nGrey columns are reference only - please keep them as they are."
+  const defaultSubject = (phase: 1 | 2, _n?: number, _docNo?: string) => fwdMailSubject(phase)
+  const defaultDetail = (phase: 1 | 2) => fwdMailDetail(phase)
   // Load the remembered wording (or the default) whenever the phase changes.
   useEffect(() => {
     try {
-      const sj = localStorage.getItem("pullFwdSubject_" + fwdPhase) || ""
-      const dt = localStorage.getItem("pullFwdDetail_" + fwdPhase) || ""
+      const sj = localStorage.getItem("pullFwdSubject2_" + fwdPhase) || ""
+      const dt = localStorage.getItem("pullFwdDetail2_" + fwdPhase) || ""
       setFwdSubject(sj); setFwdDetail(dt || defaultDetail(fwdPhase))
     } catch { setFwdDetail(defaultDetail(fwdPhase)) }
   }, [fwdPhase]) // eslint-disable-line
   const rememberMail = () => {
     try {
-      localStorage.setItem("pullFwdSubject_" + fwdPhase, fwdSubject)
-      localStorage.setItem("pullFwdDetail_" + fwdPhase, fwdDetail)
+      localStorage.setItem("pullFwdSubject2_" + fwdPhase, fwdSubject)
+      localStorage.setItem("pullFwdDetail2_" + fwdPhase, fwdDetail)
     } catch { /* private mode — fine, defaults are used */ }
   }
   const [bulkFwd, setBulkFwd] = useState(false)          // list-level "send to FWD" dialog
@@ -657,21 +652,6 @@ export default function Page() {
 
   // #4 bulk fill: only the MAWB NO is shared across many docs (one master AWB per consolidation) —
   // HAWB / Pre cost / Actual / Local charge differ per document, so bulk only applies the MAWB.
-  const bulkApply = async () => {
-    const ids = [...selectedIds]
-    if (!ids.length) return alert("เลือกเอกสารก่อน")
-    const mawb = (bulk["mawbNo"] ?? "").trim()
-    if (!mawb) return alert("กรอกเลข MAWB ก่อน")
-    if (!confirm(`ใส่ MAWB "${mawb}" ให้ ${ids.length} เอกสารที่เลือก?`)) return
-    setBulkBusy(true)
-    try {
-      for (const id of ids) {
-        await fetch(`/api/pull-material/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mawbNo: mawb }) }).catch(() => {})
-      }
-      setBulkOpen(false); setBulk({}); setSelectedIds(new Set()); await load()
-      alert(`✅ ใส่ MAWB ให้ ${ids.length} เอกสารแล้ว`)
-    } finally { setBulkBusy(false) }
-  }
 
   const closePreview = () => { setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null }) }
   const downloadPreview = () => {
@@ -879,7 +859,6 @@ export default function Page() {
                 <>
                   <span className="text-gray-400">·</span>
                   <span className="text-gray-700 font-medium">เลือก {selectedIds.size} ใบ</span>
-                  <button onClick={() => setBulkOpen(true)} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white" style={{ background: MAROON }}>✍️ กรอกหลายใบพร้อมกัน</button>
                   {/* Send the ticked shipments to the forwarder in one mail (phase 1 or 2). */}
                   <button onClick={() => setBulkFwd(true)} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white" style={{ background: "#b45309" }}>📧 ส่งให้ FWD กรอก</button>
                   <button onClick={() => setSelectedIds(new Set())} className="text-xs text-gray-500 underline">ยกเลิกที่เลือก</button>
@@ -1480,28 +1459,6 @@ export default function Page() {
       )}
 
       {/* #4 bulk fill modal — apply the same LG values to every selected doc */}
-      {bulkOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => !bulkBusy && setBulkOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900">ใส่ MAWB ให้ {selectedIds.size} เอกสาร</h3>
-              <button onClick={() => setBulkOpen(false)} className="text-gray-400 hover:text-gray-700">✕</button>
-            </div>
-            <p className="text-[11px] text-gray-400">เฉพาะเลข <b>MAWB</b> เท่านั้นที่ใช้ร่วมกันได้หลายเอกสาร (master AWB ต่อ 1 เที่ยวบิน) — HAWB / Pre cost / Actual / Local charge ต่างกันต่อเอกสาร ให้กรอกในแต่ละเอกสารเอง</p>
-            <div>
-              <label className="text-[11px] font-semibold text-gray-600 block mb-1">MAWB NO</label>
-              <input type="text" value={bulk["mawbNo"] || ""} onChange={e => setBulk(p => ({ ...p, mawbNo: e.target.value }))} placeholder="เช่น 618-12345678"
-                className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-red-200" />
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => setBulkOpen(false)} disabled={bulkBusy}
-                className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">ยกเลิก</button>
-              <button onClick={() => bulkApply()} disabled={bulkBusy}
-                className="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>{bulkBusy ? "…" : "💾 ใส่ MAWB ให้ทุกเอกสาร"}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* PDF preview popup */}
       {previewUrl && (

@@ -8,16 +8,15 @@ const dt = (v: any) => { if (!v) return "-"; const d = new Date(v); return isNaN
 export const docsLabel = (docs: any[]) => (docs.length === 1 ? docs[0].documentNo : `${docs.length} shipments`)
 
 // Default subject — LG may override it in the send dialog.
-export function fwdMailSubject(phase: FwdPhase, docs: any[]): string {
-  return `[Pull Material] ${phase === 1 ? "Air booking details" : "Air actual charges"} — ${docsLabel(docs)}`
+export function fwdMailSubject(phase: FwdPhase, _docs: any[] = []): string {
+  return phase === 1 ? "Booking Air Shipment" : "Actual Air Shipment"
 }
 
-// Default opening paragraph (plain text) — also the placeholder LG edits.
+// Default opening paragraph (plain text) — also what the send dialog pre-fills for LG to edit.
 export function fwdMailDetail(phase: FwdPhase): string {
-  const cols = FILL_COLS.filter(c => c.phase === phase).map(c => c.header).join(" / ")
   return phase === 1
-    ? `Please complete the green columns in the attached file (${cols}) and reply with the file attached.\nGrey columns are reference only - please keep them as they are.`
-    : `The goods have arrived. Please fill in the green columns of the attached file (${cols}) and reply with the file attached.\nGrey columns are reference only - please keep them as they are.`
+    ? "Please complete the green columns in the attached file (MAWB / HAWB / Flight ETD / ETA / CFM in-house date / Air freight rate THB per kg / Supplier INV) and reply with the file attached."
+    : "The goods have arrived. Please complete the green columns in the attached file (Actual air freight THB / Local charge TH THB / Remark) and reply with the file attached."
 }
 
 // Full HTML body. `detail` / `note` are plain text typed by LG (escaped here).
