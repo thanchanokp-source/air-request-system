@@ -799,32 +799,75 @@ export default function Page() {
                 onChange={(f, t) => { setEtcFrom(f); setEtcTo(t); setSelectedIds(new Set()) }} />
               {(portF !== "ALL" || etcFrom || etcTo || q || brandF !== "ALL" || vendorF !== "ALL") &&
                 <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF("ALL"); setVendorF("ALL") }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
-              <div className="ml-auto flex items-center gap-2">
-                <span className="text-xs text-gray-400">{shown.length} ใบ</span>
-                {/* Confirm the shipping mode for everything on screen before mailing the forwarder. */}
-                <button onClick={() => setBulkMode({ mode: "AIR", reason: "" })} disabled={fwdBusy || shown.length === 0}
-                  className="px-3 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "#0369a1" }}
-                  title="ยืนยัน mode ขนส่งหลายใบพร้อมกัน (LG ชี้ขาด)">
-                  🚢 ยืนยัน mode ({selectedIds.size || shown.length})
-                </button>
-                {/* Mail every shipment the filters show (or just the ticked ones) to one forwarder. */}
-                <button onClick={() => setBulkFwd(true)} disabled={fwdBusy || shown.length === 0}
-                  className="px-3 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "#b45309" }}
-                  title="ส่งไฟล์ให้ Forwarder กรอก (ตามตัวกรองปัจจุบัน หรือเฉพาะใบที่ติ๊ก)">
-                  📧 ส่งให้ FWD ({selectedIds.size || shown.length})
-                </button>
-                <label className={`px-3 py-2 rounded-lg text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 cursor-pointer ${fwdBusy ? "opacity-50 pointer-events-none" : ""}`}>
-                  ⬆️ Import จาก FWD
-                  <input type="file" accept=".xlsx,.xls" hidden onChange={e => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) importFwdBulk(f) }} />
-                </label>
-                {/* The Excel that goes to the forwarder — same file the mail attaches, for the docs on screen. */}
-                <button onClick={previewFwdFile} disabled={fwdBusy || shown.length === 0}
-                  className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50"
-                  title="ดาวน์โหลดไฟล์ Excel ที่จะส่งให้ FWD (ตามตัวกรอง หรือเฉพาะใบที่ติ๊ก)">
-                  {fwdBusy ? "…" : `⬇️ Excel สำหรับ FWD (${selectedIds.size || shown.length})`}
-                </button>
-              </div>
+              <span className="ml-auto text-xs text-gray-400">{shown.length} ใบ</span>
             </div>
+
+          {/* ── The three steps of LG's day, in order, over whatever the filters show (or the ticked
+                 rows). Each step carries its own outstanding count so nothing silently piles up. ── */}
+          {lgTab !== "nomaster" && shown.length > 0 && (() => {
+            const scope = fwdTargets()
+            const needMode = scope.filter(r => !r.shipMode)
+            const air = scope.filter(r => r.shipMode === "AIR")
+            const readySend = air.filter(r => !r.fwdSentAt)
+            const waiting = scope.filter(r => r.fwdSentAt && r.actualAir == null)
+            const step = needMode.length ? 1 : readySend.length ? 2 : 3
+            const card = (n: number, on: boolean) =>
+              `flex-1 min-w-[210px] flex gap-3 items-start rounded-xl border p-3 ${on ? "border-amber-300 bg-amber-50" : "border-gray-200 bg-white"}`
+            const num = (n: number, on: boolean) => (
+              <span className={`w-6 h-6 rounded-full grid place-items-center text-[11px] font-bold shrink-0 ${on ? "text-white" : "bg-gray-800 text-white"}`}
+                style={on ? { background: "#b45309" } : undefined}>{n}</span>
+            )
+            return (
+              <div className="space-y-2">
+                <div className="text-[11px] text-gray-500">
+                  ทำกับ <b>{scope.length} ใบ</b>{selectedIds.size ? " ที่เลือกไว้" : " ตามตัวกรองปัจจุบัน"}
+                  {!selectedIds.size && (portF !== "ALL" || etcFrom || brandF !== "ALL" || vendorF !== "ALL" || q)
+                    ? ` (${[portF !== "ALL" ? `Port ${portF}` : "", brandF !== "ALL" ? brandF : "", vendorF !== "ALL" ? vendorF : "", etcFrom ? `ETC ${etcFrom.slice(5)}–${(etcTo || "").slice(5) || "…"}` : "", q ? `ค้นหา “${q}”` : ""].filter(Boolean).join(" · ")})`
+                    : ""}
+                </div>
+                <div className="flex flex-wrap gap-2.5">
+                  <div className={card(1, step === 1)}>
+                    {num(1, step === 1)}
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] font-bold text-gray-800">ยืนยัน mode ขนส่ง</div>
+                      <p className="text-[11.5px] text-gray-500 mt-0.5 mb-2">{needMode.length ? <>ค้าง <b>{needMode.length} ใบ</b> จาก {scope.length}</> : <>ครบแล้ว {scope.length} ใบ</>}</p>
+                      <button onClick={() => setBulkMode({ mode: "AIR", reason: "" })} disabled={fwdBusy}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 ${step === 1 ? "text-white" : "border border-gray-300 text-gray-600 bg-white hover:bg-gray-50"}`}
+                        style={step === 1 ? { background: MAROON } : undefined}>ยืนยัน mode</button>
+                    </div>
+                  </div>
+
+                  <div className={card(2, step === 2)}>
+                    {num(2, step === 2)}
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] font-bold text-gray-800">ส่งให้ FWD กรอก</div>
+                      <p className="text-[11.5px] text-gray-500 mt-0.5 mb-2">พร้อมส่ง <b>{readySend.length} ใบ</b>{air.length - readySend.length ? ` · ส่งแล้ว ${air.length - readySend.length} ใบ` : ""}</p>
+                      <div className="flex gap-1.5 flex-wrap">
+                        <button onClick={() => setBulkFwd(true)} disabled={fwdBusy || !air.length}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 ${step === 2 ? "text-white" : "border border-gray-300 text-gray-600 bg-white hover:bg-gray-50"}`}
+                          style={step === 2 ? { background: MAROON } : undefined}>ส่งให้ FWD</button>
+                        <button onClick={previewFwdFile} disabled={fwdBusy || !air.length}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">⬇️ ดูไฟล์</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={card(3, step === 3)}>
+                    {num(3, step === 3)}
+                    <div className="min-w-0">
+                      <div className="text-[12.5px] font-bold text-gray-800">รับผลกลับ &amp; ปิดงาน</div>
+                      <p className="text-[11.5px] text-gray-500 mt-0.5 mb-2">{waiting.length ? <>รอ FWD ตอบ <b>{waiting.length} ใบ</b></> : "ไม่มีใบที่รอ FWD"}</p>
+                      <label className={`inline-block px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${step === 3 ? "text-white" : "border border-gray-300 text-gray-600 bg-white hover:bg-gray-50"} ${fwdBusy ? "opacity-50 pointer-events-none" : ""}`}
+                        style={step === 3 ? { background: MAROON } : undefined}>
+                        ⬆️ Import จาก FWD
+                        <input type="file" accept=".xlsx,.xls" hidden onChange={e => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) importFwdBulk(f) }} />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {lgTab !== "nomaster" && selectableShown.length > 0 && (
             <div className="flex items-center gap-3 text-sm">
@@ -864,19 +907,18 @@ export default function Page() {
                       )}
                       <button onClick={() => setOpenId(rq.id)} className="flex-1 flex items-center justify-between gap-3 px-5 py-4 text-left min-w-0">
                         <div className="min-w-0">
+                          {/* One quiet line: a dot for the mode state, the doc no, then Est. Anything the
+                              tab already says (e.g. "รอกรอก Actual") is not repeated per row. */}
                           <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${rq.shipMode ? "bg-sky-500" : "bg-gray-300"}`}
+                              title={rq.shipMode ? `ยืนยัน mode แล้ว: ${rq.shipMode}` : "ยังไม่ยืนยัน mode"} />
                             <span className="font-bold text-gray-900">{rq.documentNo}</span>
-                            {rq.status === "PENDING_LG_RATE"
-                              ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold border border-red-200">⚠️ รอเติม Air rate (ยังไม่ส่ง approval)</span>
-                              : done
-                                ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✓ Actual entered</span>
-                                : <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">รอกรอก Actual</span>}
-                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">Est {fmt(estTotal)} USD</span>
-                            {/* Mode is what decides whether this shipment can go to the FWD at all. */}
-                            {rq.shipMode
-                              ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-semibold">{SHIP_MODE_LABEL[rq.shipMode as ShipMode]}</span>
-                              : <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">ยังไม่ยืนยัน mode</span>}
-                            {rq.fwdSentAt && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">📧 ส่ง FWD แล้ว (P{rq.fwdPhase || 1})</span>}
+                            <span className="text-xs text-gray-400">· Est {fmt(estTotal)} USD</span>
+                            {rq.shipMode && <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 font-semibold">{SHIP_MODE_LABEL[rq.shipMode as ShipMode]}</span>}
+                            {rq.status === "PENDING_LG_RATE" &&
+                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold border border-red-200">⚠️ รอเติม Air rate</span>}
+                            {done && <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✓ Actual</span>}
+                            {rq.fwdSentAt && <span className="text-[11px] text-amber-600" title={`ส่งให้ FWD แล้ว (phase ${rq.fwdPhase || 1})`}>✉️ P{rq.fwdPhase || 1}</span>}
                           </div>
                           <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · PO {pos || "-"}{ports ? ` · Port ${ports}` : ""}{etc0 ? ` · ETC ${String(etc0).slice(0, 10)}` : ""}</div>
                         </div>
