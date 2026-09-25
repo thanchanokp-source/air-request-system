@@ -634,7 +634,7 @@ export default function DashboardPage() {
   const isAdmin = (session?.user as any)?.role === "ADMIN"
   const [mpCounts, setMpCounts] = useState<any>(null)
   const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line)
-  const [mpMode, setMpMode] = useState(false) // default OFF (classic dashboard); toggle filters the WHOLE page to only mp_line-shipped SOs
+  const [mpMode, setMpMode] = useState(true) // default ON — dashboard opens in mp_line map mode (admin · NYG/All BU); toggle 🔗 turns it off
   const mpSoKey = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
   // mp_line data is NYG-only → the map toggle works ONLY on the NYG tab (where the whole page is already
   // scoped to NYG, so the numbers match the mp_line card). All BU / GW / TRM / EA stay the normal view.
