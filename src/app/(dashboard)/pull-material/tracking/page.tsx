@@ -7,6 +7,7 @@ import { pcApprover } from "@/lib/pull-approvers"
 import { pullReqType } from "@/lib/pull-reqtype"
 import { buildRequesters } from "@/lib/pull-requesters"
 import { MultiSelect } from "@/components/ui/multi-select"
+import { exportPullReport } from "@/lib/pull-report-xlsx"
 
 // Pipeline steps branch by request type. Each status maps to the CURRENT (in-progress) step index;
 // steps before it are done. cur >= steps.length → fully done.
@@ -59,6 +60,7 @@ export default function Page() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewName, setPreviewName] = useState("")
   const [viewRq, setViewRq] = useState<any>(null)   // read-only document view (like DVM Purchase)
+  const [exporting, setExporting] = useState(false) // full-data Excel report of whatever is filtered
   const [editRq, setEditRq] = useState<any>(null)   // edit a recalled doc before resubmit
   const [editForm, setEditForm] = useState<any>({})
   const [editPkgs, setEditPkgs] = useState<{ uom: string; qty: string }[]>([])
@@ -216,6 +218,13 @@ export default function Page() {
         </select>
         {(docF.length || poF.length || reqF.length || statusF || typeF !== "ALL") && <button onClick={() => { setDocF([]); setPoF([]); setReqF([]); setStatusF(""); setTypeF("ALL") }} className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-200 rounded-lg">Clear</button>}
         <span className="text-xs text-gray-400 ml-auto">{shown.length} / {reqs.length}</span>
+        {/* Full data report (1 row per PO, all est/actual/mode/FWD columns) for the current filter. */}
+        <button onClick={async () => { setExporting(true); try { await exportPullReport(shown) } finally { setExporting(false) } }}
+          disabled={exporting || shown.length === 0}
+          className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50"
+          title="ดาวน์โหลดข้อมูลทั้งหมดตามตัวกรองเป็น Excel">
+          {exporting ? "กำลังสร้าง…" : `📊 Export Excel (${shown.length})`}
+        </button>
       </div>
 
       {loading ? <p className="text-sm text-gray-400">Loading…</p> :

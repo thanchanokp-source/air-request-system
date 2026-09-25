@@ -786,8 +786,12 @@ export default function Page() {
                   ⬆️ Import จาก FWD
                   <input type="file" accept=".xlsx,.xls" hidden onChange={e => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) importFwdBulk(f) }} />
                 </label>
-                <a href="/pull-material/report" className="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 bg-white hover:bg-gray-50"
-                  title="ข้อมูลทั้งหมดทุกสถานะ + Export Excel อยู่ที่หน้า REPORT">📊 REPORT</a>
+                {/* The Excel that goes to the forwarder — same file the mail attaches, for the docs on screen. */}
+                <button onClick={previewFwdFile} disabled={fwdBusy || shown.length === 0}
+                  className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50"
+                  title="ดาวน์โหลดไฟล์ Excel ที่จะส่งให้ FWD (ตามตัวกรอง หรือเฉพาะใบที่ติ๊ก)">
+                  {fwdBusy ? "…" : `⬇️ Excel สำหรับ FWD (${selectedIds.size || shown.length})`}
+                </button>
               </div>
             </div>
 
