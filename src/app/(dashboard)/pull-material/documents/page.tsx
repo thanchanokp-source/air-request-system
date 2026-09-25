@@ -104,6 +104,10 @@ export default function Page() {
   const [fwdEmail, setFwdEmail] = useState("")
   const [fwdNote, setFwdNote] = useState("")
   const [fwdBusy, setFwdBusy] = useState(false)
+  // Which half of the template to ask for: 1 = booking info (MAWB/HAWB/ETD/ETA/rate), 2 = the actual
+  // once it has landed. A doc that already answered phase 1 defaults to phase 2.
+  const [fwdPhase, setFwdPhase] = useState<1 | 2>(1)
+  const [bulkFwd, setBulkFwd] = useState(false)          // list-level "send to FWD" dialog
   useEffect(() => {
     fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRates(d.rows || [])).catch(() => {})
@@ -242,6 +246,7 @@ export default function Page() {
     if (rq) setActCur(rq.actualCurrency === "USD" ? "USD" : "THB")
     if (!rq) { setFwdName(""); setFwdEmail(""); setFwdNote(""); return }
     const name = rq.fwdName || rq.preCostFwd || ""
+    setFwdPhase(rq.fwdPhase === 1 || rq.hawbNo ? 2 : 1)
     setFwdName(name)
     setFwdEmail(rq.fwdEmail || fwdEmailOf(name) || "")
     setFwdNote("")
@@ -253,9 +258,9 @@ export default function Page() {
     if (!confirm(`ส่งเมลพร้อมไฟล์ให้ ${fwdName || "FWD"} (${fwdEmail}) สำหรับ ${rq.documentNo}?`)) return
     setFwdBusy(true)
     try {
-      const r = await fetch(`/api/pull-material/${rq.id}/fwd-request`, {
+      const r = await fetch(`/api/pull-material/fwd-request`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), note: fwdNote.trim() }),
+        body: JSON.stringify({ ids: [rq.id], phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), note: fwdNote.trim() }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) { await load(); alert(`ส่งแล้ว → ${(d.sentTo || []).join(", ")}`) } else alert(d.error || "ส่งไม่สำเร็จ")
@@ -286,6 +291,60 @@ export default function Page() {
       await fetch(`/api/pull-material/${rq.id}/attachments`, { method: "POST", body: fd }).catch(() => {})
       await load()
       alert(`Import สำเร็จ ${Object.keys(vals).length} ช่อง — ตรวจค่าด้านล่างแล้วกด Save`)
+    } catch (e) { alert("Import ไม่สำเร็จ: " + String((e as any)?.message || e).slice(0, 160)) } finally { setFwdBusy(false) }
+  }
+
+  // ── Bulk: mail ONE template covering every ticked shipment (filtered by BU / ETC range / port…).
+  const sendFwdBulk = async () => {
+    const ids = [...selectedIds]
+    if (!ids.length) return alert("เลือกเอกสารก่อน")
+    if (!fwdEmail.trim()) return alert("กรอกอีเมล Forwarder ก่อน")
+    setFwdBusy(true)
+    try {
+      const r = await fetch("/api/pull-material/fwd-request", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), note: fwdNote.trim() }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok) {
+        setBulkFwd(false); setSelectedIds(new Set()); await load()
+        alert("ส่งแล้ว " + d.count + " ใบ (phase " + d.phase + ") → " + (d.sentTo || []).join(", ") + (d.skipped ? "\nข้าม " + d.skipped + " ใบ (ไม่ใช่ AIR)" : ""))
+      } else alert(d.error || "ส่งไม่สำเร็จ")
+    } catch (e) { alert("Error: " + String((e as any)?.message || e).slice(0, 160)) } finally { setFwdBusy(false) }
+  }
+
+  // ── Bulk import: one workbook, many shipments. Each row is matched back by its hidden _DOCID and
+  // written straight to that document (LG reviews the summary in the confirm dialog first).
+  const importFwdBulk = async (file: File) => {
+    setFwdBusy(true)
+    try {
+      const XLSX = await import("xlsx")
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
+      const ws = wb.Sheets[FWD_SHEET] || wb.Sheets[wb.SheetNames[0]]
+      if (!ws) return alert("อ่านไฟล์ไม่ได้ — ไม่พบ sheet")
+      const rows = (XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[]).filter(r => String(r._DOCID || "").trim())
+      if (!rows.length) return alert("ไม่พบคอลัมน์ _DOCID ในไฟล์ (ต้องใช้ไฟล์ที่ระบบส่งออกไป)")
+      const jobs = rows.map(r => ({ id: String(r._DOCID).trim(), vals: parseFwdRow(r) })).filter(j => Object.keys(j.vals).length)
+      if (!jobs.length) return alert("ไฟล์ยังไม่มีข้อมูลในคอลัมน์สีเขียว")
+      const known = jobs.filter(j => reqs.some(r => r.id === j.id))
+      if (!known.length) return alert("เอกสารในไฟล์ไม่ตรงกับรายการที่เปิดอยู่ (ลองสลับ BU / แท็บ)")
+      const names = known.map(j => reqs.find(r => r.id === j.id)?.documentNo).join(", ")
+      if (!confirm("นำเข้าข้อมูลจาก FWD " + known.length + " ใบ?" + "\n\n" + names)) return
+      let ok = 0
+      for (const j of known) {
+        const r = await fetch(`/api/pull-material/${j.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...j.vals, actualSource: "FWD" }),
+        })
+        if (r.ok) ok++
+        // keep the returned workbook on the first document as evidence
+        if (ok === 1) {
+          const fd = new FormData(); fd.append("file", file); fd.append("category", "FWD"); fd.append("source", "LG")
+          await fetch(`/api/pull-material/${j.id}/attachments`, { method: "POST", body: fd }).catch(() => {})
+        }
+      }
+      await load()
+      alert("นำเข้าสำเร็จ " + ok + " / " + known.length + " ใบ")
     } catch (e) { alert("Import ไม่สำเร็จ: " + String((e as any)?.message || e).slice(0, 160)) } finally { setFwdBusy(false) }
   }
 
@@ -614,12 +673,16 @@ export default function Page() {
                 <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF("ALL"); setVendorF("ALL") }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-xs text-gray-400">{shown.length} ใบ</span>
+                <label className={`px-3 py-2 rounded-lg text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 cursor-pointer ${fwdBusy ? "opacity-50 pointer-events-none" : ""}`}>
+                  ⬆️ Import จาก FWD
+                  <input type="file" accept=".xlsx,.xls" hidden onChange={e => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) importFwdBulk(f) }} />
+                </label>
                 <button onClick={() => exportExcelList(selectedIds.size ? shown.filter(r => selectedIds.has(r.id)) : shown)} disabled={exporting}
                   className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">{exporting ? "…" : `📊 Export Excel${selectedIds.size ? ` (${selectedIds.size})` : " (ทั้งหมด)"}`}</button>
               </div>
             </div>
 
-          {lgTab === "actual" && selectableShown.length > 0 && (
+          {lgTab !== "nomaster" && selectableShown.length > 0 && (
             <div className="flex items-center gap-3 text-sm">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-4 h-4 accent-red-700" />
@@ -630,6 +693,8 @@ export default function Page() {
                   <span className="text-gray-400">·</span>
                   <span className="text-gray-700 font-medium">เลือก {selectedIds.size} ใบ</span>
                   <button onClick={() => setBulkOpen(true)} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white" style={{ background: MAROON }}>✍️ กรอกหลายใบพร้อมกัน</button>
+                  {/* Send the ticked shipments to the forwarder in one mail (phase 1 or 2). */}
+                  <button onClick={() => setBulkFwd(true)} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white" style={{ background: "#b45309" }}>📧 ส่งให้ FWD กรอก</button>
                   <button onClick={() => setSelectedIds(new Set())} className="text-xs text-gray-500 underline">ยกเลิกที่เลือก</button>
                 </>
               )}
@@ -889,6 +954,17 @@ export default function Page() {
                         )}
                       </div>
                       <div>
+                        <label className="text-[11px] font-semibold text-amber-700 block mb-1">ขอข้อมูลรอบไหน</label>
+                        <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+                          {([[1, "① Booking (MAWB/HAWB/ETD/ETA/Rate)"], [2, "② Actual (ของถึงแล้ว)"]] as const).map(([v, label]) => (
+                            <button key={v} type="button" onClick={() => setFwdPhase(v as 1 | 2)}
+                              className={`px-3 py-1.5 text-[11px] font-semibold ${fwdPhase === v ? "text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+                              style={fwdPhase === v ? { background: "#b45309" } : undefined}>{label}</button>
+                          ))}
+                        </div>
+                        {rq.fwdPhase > 0 && <p className="mt-1 text-[10px] text-gray-400">ส่งรอบล่าสุด: phase {rq.fwdPhase}</p>}
+                      </div>
+                      <div>
                         <label className="text-[11px] font-semibold text-amber-700 block mb-1">ข้อความเพิ่มเติม (ถ้ามี)</label>
                         <input value={fwdNote} onChange={e => setFwdNote(e.target.value)} placeholder="เช่น ขอด่วนภายในวันนี้…" className={inp} />
                       </div>
@@ -1011,6 +1087,51 @@ export default function Page() {
           </div>
         )
       })()}
+
+      {/* Send the ticked shipments to one forwarder — pick the contact and which phase to ask for. */}
+      {bulkFwd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setBulkFwd(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b flex items-center justify-between">
+              <div className="font-bold text-gray-900">📧 ส่งให้ FWD กรอก</div>
+              <span className="text-[11px] text-gray-400">{selectedIds.size} ใบ</span>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-amber-700 block mb-1">ขอข้อมูลรอบไหน</label>
+                <div className="flex flex-col gap-1.5">
+                  {([[1, "① Booking — MAWB / HAWB / ETD / ETA / CFM in-house / Rate (THB/kg) / Supplier INV"], [2, "② Actual — ค่าขนส่งจริง (THB) / Local charge / Remark"]] as const).map(([v, label]) => (
+                    <button key={v} type="button" onClick={() => setFwdPhase(v as 1 | 2)}
+                      className={`text-left px-3 py-2 rounded-lg border text-[11px] ${fwdPhase === v ? "border-amber-400 bg-amber-50 text-amber-900 font-semibold" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-amber-700 block mb-1">FWD</label>
+                <input list="pull-fwd-list" value={fwdName} onChange={e => { const v = e.target.value; setFwdName(v); const em = fwdEmailOf(v); if (em) setFwdEmail(em) }} placeholder="ชื่อ Forwarder…" className={inp} />
+                <datalist id="pull-fwd-list">{forwarders.map((f: any) => <option key={f.id} value={f.name}>{f.email}</option>)}</datalist>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-amber-700 block mb-1">อีเมล FWD <span className="text-red-500">*</span></label>
+                <input value={fwdEmail} onChange={e => setFwdEmail(e.target.value)} placeholder="forwarder@company.com" className={inp} />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-amber-700 block mb-1">ข้อความเพิ่มเติม</label>
+                <input value={fwdNote} onChange={e => setFwdNote(e.target.value)} placeholder="เช่น ขอภายในวันศุกร์…" className={inp} />
+              </div>
+              <p className="text-[10px] text-gray-400">ไฟล์เดียวมีทุกใบที่เลือก (1 แถว = 1 shipment) · คอลัมน์ของอีกรอบจะถูกล็อกสีเทาไว้ · ใบที่ไม่ใช่ AIR จะถูกข้าม</p>
+            </div>
+            <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
+              <button onClick={() => setBulkFwd(false)} className="px-4 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ยกเลิก</button>
+              <button onClick={sendFwdBulk} disabled={fwdBusy} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#b45309" }}>
+                {fwdBusy ? "กำลังส่ง…" : `📧 ส่ง (${selectedIds.size} ใบ)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* #4 bulk fill modal — apply the same LG values to every selected doc */}
       {bulkOpen && (

@@ -394,6 +394,8 @@ model PullMaterialRequest {
   fwdImportedAt   DateTime? // when LG imported the returned workbook
   fwdImportedBy   String?
   fwdRemark       String?   // remark the FWD wrote in the template
+  fwdRateThbPerKg Float?    // air freight rate the FWD quoted (THB per kg, phase 1 of the template)
+  fwdPhase        Int       @default(0) // last template phase sent to the FWD (1 = booking info, 2 = actual)
   actualSource    String?   // LG | FWD — who the actual figures came from
   // Currency LG TYPED the actual in (THB is the normal case). actualAir / localChargeTh are ALWAYS
   // stored in USD (= typed THB / 32.5) so every comparison against Est stays in one unit.

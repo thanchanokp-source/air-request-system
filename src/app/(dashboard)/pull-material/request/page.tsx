@@ -114,6 +114,10 @@ export default function ScmRequestPage() {
   const [vendorMatched, setVendorMatched] = useState("")
   const [pickupEditing, setPickupEditing] = useState(false)
   const [vendorInfo, setVendorInfo] = useState({ email: "", contactName: "", tel: "" })
+  // Pickup address (where the forwarder collects, used for EX-WORK / FCA). Usually the vendor's own
+  // address, so it defaults to "same as vendor" and only needs typing when it differs.
+  const [pickupSame, setPickupSame] = useState(true)
+  const [pickupAddr, setPickupAddr] = useState("")
   // Per-PO invoice { po: inv } — read from an uploaded doc (Excel now / PDF+OCR later) or typed by hand.
   const [poInvMap, setPoInvMap] = useState<Record<string, string>>({})
   const [invReading, setInvReading] = useState(false)
@@ -608,7 +612,7 @@ export default function ScmRequestPage() {
       if (!pkgs.length) return stop("เพิ่ม Package อย่างน้อย 1 บรรทัด (UOM + จำนวน)")
       const pu = {
         country: c, port: p, seaPort: sp, incoterm: pcPur.incoterm,
-        pickupAddress: pcPur.pickup || "",
+        pickupAddress: (pickupSame ? pcPur.pickup : pickupAddr) || "",
         city: pcCity?.city || "", needDate: pcPur.needDate || "", etc: pcPur.etc || null,
         cartons: pkgs.reduce((s, x) => s + x.qty, 0), boxW: pcPur.boxW, boxL: pcPur.boxL, boxH: pcPur.boxH,
       }
@@ -823,7 +827,7 @@ export default function ScmRequestPage() {
             {pcVend ? (
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1 text-sm rounded-lg px-3 py-2 font-medium" style={{ background: "#fbf7ec", border: `1px solid ${GOLD_SOFT}66`, color: MAROON }}>🏭 {pcVend}</span>
-                <button onClick={() => { setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPickupEditing(false); setPcPur(p => ({ ...p, pickup: "" })); setVendorInfo({ email: "", contactName: "", tel: "" }); setVendorMatched("") }} className="text-xs text-gray-400 hover:text-red-500">เปลี่ยน vendor</button>
+                <button onClick={() => { setPcVend(""); setPcPos([]); setPcSelPos(new Set()); setPickupEditing(false); setPcPur(p => ({ ...p, pickup: "" })); setVendorInfo({ email: "", contactName: "", tel: "" }); setVendorMatched(""); setPickupSame(true); setPickupAddr("") }} className="text-xs text-gray-400 hover:text-red-500">เปลี่ยน vendor</button>
               </div>
             ) : (
               <>
@@ -844,7 +848,8 @@ export default function ScmRequestPage() {
 
           {/* Vendor / Pickup address — auto-filled from dc_vendor (contain match on vendor_name); "เปลี่ยน" to edit */}
           {pcVend && (
-            <div className="max-w-lg">
+            <div className="grid lg:grid-cols-2 gap-4 items-start max-w-4xl">
+             <div>
               <label className="text-[11px] font-bold uppercase tracking-wider block mb-1" style={{ color: GOLD }}>ที่อยู่ Vendor
                 {vendorAddrLoading && <span className="text-gray-400 normal-case font-normal">· กำลังดึง…</span>}
                 {!vendorAddrLoading && vendorMatched && <span className="text-emerald-600 normal-case font-normal"> · match: 🏭 {vendorMatched}</span>}
@@ -880,6 +885,29 @@ export default function ScmRequestPage() {
                     className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
                 </div>
               </div>
+             </div>
+
+             {/* Pickup address — where the FWD collects the goods (EX-WORK / FCA). Nine times out of ten
+                 it is the vendor's own address, so it starts ticked as "same as vendor". */}
+             <div>
+              <label className="text-[11px] font-bold uppercase tracking-wider block mb-1" style={{ color: GOLD }}>ที่อยู่รับของ (Pickup address)</label>
+              <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
+                <input type="checkbox" checked={pickupSame}
+                  onChange={e => { setPickupSame(e.target.checked); if (!e.target.checked && !pickupAddr) setPickupAddr(pcPur.pickup || "") }}
+                  className="w-4 h-4 accent-red-700" />
+                <span className="text-xs text-gray-700">เหมือนที่อยู่ vendor</span>
+              </label>
+              {pickupSame ? (
+                <div className="text-sm rounded-lg px-3 py-2 bg-emerald-50 border border-emerald-200 text-gray-700 whitespace-pre-wrap min-h-[38px]">
+                  {pcPur.pickup || <span className="text-gray-400">— ยังไม่มีที่อยู่ vendor —</span>}
+                </div>
+              ) : (
+                <textarea value={pickupAddr} onChange={e => setPickupAddr(e.target.value)} rows={4} autoFocus
+                  placeholder="ที่อยู่ที่ให้ FWD ไปรับของ (กรณีคนละที่กับ vendor)"
+                  className="w-full border border-amber-300 bg-amber-50 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200" />
+              )}
+              <p className="text-[10px] text-gray-400 mt-1">ใช้ตอน incoterm เป็น EX-WORK / FCA — ที่อยู่นี้จะถูกส่งให้ Forwarder ในไฟล์ขอ Actual</p>
+             </div>
             </div>
           )}
 
