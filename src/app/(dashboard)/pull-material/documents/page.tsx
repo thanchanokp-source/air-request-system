@@ -130,6 +130,7 @@ export default function Page() {
     } catch { /* private mode — fine, defaults are used */ }
   }
   const [bulkFwd, setBulkFwd] = useState(false)          // list-level "send to FWD" dialog
+  const [bulkMode, setBulkMode] = useState<null | { mode: ShipMode; reason: string }>(null) // list-level mode confirm
   // Parsed rows of a returned FWD workbook, waiting for LG to confirm before anything is written.
   const [fwdImport, setFwdImport] = useState<{ file: File; rows: { id: string | null; how: string; so?: string; po?: string; conflict?: boolean; vals: Record<string, any>; use: boolean }[] } | null>(null)
   useEffect(() => {
@@ -345,6 +346,30 @@ export default function Page() {
       a.download = `RM_AIR_FWD_P${fwdPhase}_preview.xlsx`
       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
     } catch (e) { alert("Error: " + String((e as any)?.message || e).slice(0, 160)) } finally { setFwdBusy(false) }
+  }
+
+  // Confirm the shipping mode for MANY documents at once (LG combines by port/ETC and ships them the
+  // same way). Same rules as the per-document confirm: a non-AIR pick needs a reason, every change is
+  // logged, and a doc that differs from what was approved mails the approver.
+  const confirmModeBulk = async (docs: any[], mode: ShipMode, reason: string) => {
+    if (!docs.length) return 0
+    if (mode !== "AIR" && !reason.trim()) { alert("เอกสารเป็นคำขอ AIR — เลือก mode อื่นต้องระบุเหตุผล"); return 0 }
+    let ok = 0
+    for (const rq of docs) {
+      const { d0, lc } = landedOf(rq)
+      const t = modeTotals(lc)
+      const r = await fetch(`/api/pull-material/${rq.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shipMode: mode, shipModeReason: reason.trim() || null, shipModeSource: "LG",
+          shipModeEst: { estAir: t.AIR, estSea: t.SEA, estCourier: t.COURIER, chosenEst: t[mode],
+            port: d0.port, seaPort: d0.seaPort, weightKg: d0.weight, brand: d0.brand, carrier: mode === "COURIER" ? "DHL" : null },
+        }),
+      })
+      if (r.ok) ok++
+    }
+    await load()
+    return ok
   }
 
   const sendFwdBulk = async () => {
@@ -776,6 +801,12 @@ export default function Page() {
                 <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF("ALL"); setVendorF("ALL") }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-xs text-gray-400">{shown.length} ใบ</span>
+                {/* Confirm the shipping mode for everything on screen before mailing the forwarder. */}
+                <button onClick={() => setBulkMode({ mode: "AIR", reason: "" })} disabled={fwdBusy || shown.length === 0}
+                  className="px-3 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "#0369a1" }}
+                  title="ยืนยัน mode ขนส่งหลายใบพร้อมกัน (LG ชี้ขาด)">
+                  🚢 ยืนยัน mode ({selectedIds.size || shown.length})
+                </button>
                 {/* Mail every shipment the filters show (or just the ticked ones) to one forwarder. */}
                 <button onClick={() => setBulkFwd(true)} disabled={fwdBusy || shown.length === 0}
                   className="px-3 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "#b45309" }}
@@ -841,6 +872,11 @@ export default function Page() {
                                 ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✓ Actual entered</span>
                                 : <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">รอกรอก Actual</span>}
                             <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">Est {fmt(estTotal)} USD</span>
+                            {/* Mode is what decides whether this shipment can go to the FWD at all. */}
+                            {rq.shipMode
+                              ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-semibold">{SHIP_MODE_LABEL[rq.shipMode as ShipMode]}</span>
+                              : <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">ยังไม่ยืนยัน mode</span>}
+                            {rq.fwdSentAt && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">📧 ส่ง FWD แล้ว (P{rq.fwdPhase || 1})</span>}
                           </div>
                           <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · PO {pos || "-"}{ports ? ` · Port ${ports}` : ""}{etc0 ? ` · ETC ${String(etc0).slice(0, 10)}` : ""}</div>
                         </div>
@@ -1281,6 +1317,54 @@ export default function Page() {
         </div>
       )}
 
+      {/* Confirm the shipping mode for several shipments at once (LG has the final say). */}
+      {bulkMode && (() => {
+        const docs = fwdTargets()
+        const noMode = docs.filter(d => !d.shipMode)
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setBulkMode(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-3 border-b flex items-center justify-between">
+                <div className="font-bold text-gray-900">🚢 ยืนยัน mode ขนส่ง</div>
+                <span className="text-[11px] text-gray-400">{docs.length} ใบ{selectedIds.size ? " (ที่เลือก)" : " (ตามตัวกรอง)"}</span>
+              </div>
+              <div className="p-5 space-y-3">
+                <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  ✈️ ทุกใบเป็นคำขอ <b>AIR</b> จากผู้ขอ — LG เป็นคนชี้ขาด · เลือก mode อื่นต้องระบุเหตุผล (บันทึกประวัติ + แจ้งผู้อนุมัติ)
+                </p>
+                <div className="flex gap-1.5">
+                  {(["AIR", "SEA", "COURIER"] as ShipMode[]).map(m => (
+                    <button key={m} type="button" onClick={() => setBulkMode(v => v && ({ ...v, mode: m }))}
+                      className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border ${bulkMode.mode === m ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                      style={bulkMode.mode === m ? { background: MAROON } : undefined}>{SHIP_MODE_LABEL[m]}</button>
+                  ))}
+                </div>
+                {bulkMode.mode !== "AIR" && (
+                  <input value={bulkMode.reason} onChange={e => setBulkMode(v => v && ({ ...v, reason: e.target.value }))}
+                    placeholder="เหตุผลที่ไม่ส่ง AIR (บังคับ)…" className={inp + " border-red-200"} />
+                )}
+                <p className="text-[11px] text-gray-500">
+                  ยังไม่ยืนยัน <b>{noMode.length}</b> ใบ · ยืนยันแล้ว {docs.length - noMode.length} ใบ (กดยืนยันจะทับ mode เดิมทั้งหมดที่เลือกไว้)
+                </p>
+              </div>
+              <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
+                <button onClick={() => setBulkMode(null)} className="px-4 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ยกเลิก</button>
+                {noMode.length > 0 && bulkMode.mode === "AIR" && (
+                  <button onClick={async () => { setFwdBusy(true); const n = await confirmModeBulk(noMode, "AIR", ""); setFwdBusy(false); setBulkMode(null); alert("ยืนยัน AIR แล้ว " + n + " ใบ (เฉพาะที่ยังไม่เคยยืนยัน)") }}
+                    disabled={fwdBusy} className="px-4 py-2 rounded-lg text-sm font-semibold border border-sky-300 text-sky-700 bg-white hover:bg-sky-50 disabled:opacity-50">
+                    ยืนยันเฉพาะที่ยังไม่ทำ ({noMode.length})
+                  </button>
+                )}
+                <button onClick={async () => { setFwdBusy(true); const n = await confirmModeBulk(docs, bulkMode.mode, bulkMode.reason); setFwdBusy(false); if (n) { setBulkMode(null); alert("ยืนยัน " + bulkMode.mode + " แล้ว " + n + " ใบ") } }}
+                  disabled={fwdBusy} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#0369a1" }}>
+                  {fwdBusy ? "…" : `✓ ยืนยันทั้งหมด (${docs.length})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Send the ticked shipments to one forwarder — pick the contact and which phase to ask for. */}
       {bulkFwd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setBulkFwd(false)}>
@@ -1331,9 +1415,11 @@ export default function Page() {
                 const sel = fwdTargets()
                 const nm = sel.filter(r => !r.shipMode)
                 return nm.length ? (
-                  <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                    ⚠️ {nm.length} ใบยังไม่ได้ยืนยัน mode ({nm.slice(0, 3).map(r => r.documentNo).join(", ")}{nm.length > 3 ? "…" : ""}) — เปิดเอกสารแล้วกด “ยืนยัน mode” ก่อน ไม่งั้นระบบจะข้ามให้
-                  </p>
+                  <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    ⚠️ {nm.length} ใบยังไม่ได้ยืนยัน mode ({nm.slice(0, 3).map(r => r.documentNo).join(", ")}{nm.length > 3 ? "…" : ""}) — ระบบจะข้ามให้
+                    <button onClick={async () => { setFwdBusy(true); const n = await confirmModeBulk(nm, "AIR", ""); setFwdBusy(false); alert("ยืนยัน AIR แล้ว " + n + " ใบ") }}
+                      disabled={fwdBusy} className="ml-2 underline font-bold hover:text-red-800 disabled:opacity-50">ยืนยันเป็น AIR ทั้งหมดเลย</button>
+                  </div>
                 ) : null
               })()}
               <p className="text-[10px] text-gray-400">ไฟล์เดียวมีทุกใบที่เลือก (1 แถว = 1 shipment) · คอลัมน์ของอีกรอบจะถูกล็อกสีเทาไว้ · ต้องยืนยัน mode = AIR ก่อนถึงจะส่งได้</p>
