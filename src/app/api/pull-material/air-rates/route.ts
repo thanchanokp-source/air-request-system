@@ -28,6 +28,13 @@ export async function PATCH(req: NextRequest) {
   }
   if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 })
   const data: any = { ...extra }
+  // Route meta (forwarder / airline / transit time) is editable too — a rate is unusable without
+  // knowing which FWD quoted it.
+  for (const k of ["fwd", "airline", "tt", "country", "origin", "destination"]) {
+    if (k in body) data[k] = body[k] === "" || body[k] == null ? null : String(body[k]).trim()
+  }
+  if (data.origin === null) delete data.origin           // never blank the key columns
+  if (data.destination === null) data.destination = "BKK"
   if (body.rates) data.rates = clean // only overwrite rates when the caller sent them
   const row = await (prisma as any).pullFreightAir.update({ where: { id: body.id }, data })
   return NextResponse.json({ ok: true, row })

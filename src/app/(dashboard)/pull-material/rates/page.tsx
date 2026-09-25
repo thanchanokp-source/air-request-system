@@ -492,9 +492,17 @@ export default function PullRatesPage() {
                     ? <input value={fieldVal(r, "origin")} placeholder="ORIGIN*" onChange={e => setCell(r.id, "origin", e.target.value)} className="w-20 border border-gray-200 rounded px-1.5 py-0.5 text-xs" />
                     : r.origin}</td>
                   <td className="px-3 py-1.5">{r.destination}</td>
-                  <td className="px-3 py-1.5">{r.fwd || "-"}</td>
-                  <td className="px-3 py-1.5">{r.airline || "-"}</td>
-                  <td className="px-3 py-1.5 whitespace-nowrap">{r.tt || "-"}</td>
+                  {/* FWD / airline / transit time — typable on a NEW row (and editable by admin later),
+                      because a rate without its forwarder cannot be quoted or mailed out. */}
+                  <td className="px-3 py-1.5">{r._new || isAdmin
+                    ? <input value={fieldVal(r, "fwd")} placeholder="FWD" onChange={e => setCell(r.id, "fwd", e.target.value)} className="w-20 border border-gray-200 rounded px-1.5 py-0.5 text-xs" />
+                    : (r.fwd || "-")}</td>
+                  <td className="px-3 py-1.5">{r._new || isAdmin
+                    ? <input value={fieldVal(r, "airline")} placeholder="A/L" onChange={e => setCell(r.id, "airline", e.target.value)} className="w-16 border border-gray-200 rounded px-1.5 py-0.5 text-xs" />
+                    : (r.airline || "-")}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">{r._new || isAdmin
+                    ? <input value={fieldVal(r, "tt")} placeholder="TT" onChange={e => setCell(r.id, "tt", e.target.value)} className="w-24 border border-gray-200 rounded px-1.5 py-0.5 text-xs" />
+                    : (r.tt || "-")}</td>
                   {FIELD_KEYS.map(fk => (
                     <td key={fk} className="px-2 py-1 text-right bg-amber-50/40">
                       {isAdmin

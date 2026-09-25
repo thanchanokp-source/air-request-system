@@ -254,6 +254,9 @@ export default function Page() {
 
   // Mail the forwarder this shipment's template (grey = our data, green = what they fill in).
   const sendFwd = async (rq: any) => {
+    // LG is the final say on the mode, and this template is an AIR template — confirm it first.
+    if (!rq.shipMode) return alert("กด “💾 ยืนยัน mode (LG ชี้ขาด)” ก่อนส่งให้ FWD")
+    if (rq.shipMode !== "AIR") return alert("เอกสารนี้ mode = " + rq.shipMode + " — ไฟล์ FWD ใช้กับ AIR เท่านั้น (mode อื่นให้ LG กรอก actual เอง)")
     if (!fwdEmail.trim()) return alert("กรอกอีเมล Forwarder ก่อน")
     if (!confirm(`ส่งเมลพร้อมไฟล์ให้ ${fwdName || "FWD"} (${fwdEmail}) สำหรับ ${rq.documentNo}?`)) return
     setFwdBusy(true)
@@ -308,7 +311,11 @@ export default function Page() {
       const d = await r.json().catch(() => ({}))
       if (r.ok) {
         setBulkFwd(false); setSelectedIds(new Set()); await load()
-        alert("ส่งแล้ว " + d.count + " ใบ (phase " + d.phase + ") → " + (d.sentTo || []).join(", ") + (d.skipped ? "\nข้าม " + d.skipped + " ใบ (ไม่ใช่ AIR)" : ""))
+        const warn = [
+          (d.skippedNoMode || []).length ? "ข้าม (ยังไม่ยืนยัน mode): " + d.skippedNoMode.join(", ") : "",
+          (d.skippedNotAir || []).length ? "ข้าม (ไม่ใช่ AIR): " + d.skippedNotAir.join(", ") : "",
+        ].filter(Boolean).join("\n")
+        alert("ส่งแล้ว " + d.count + " ใบ (phase " + d.phase + ") → " + (d.sentTo || []).join(", ") + (warn ? "\n\n" + warn : ""))
       } else alert(d.error || "ส่งไม่สำเร็จ")
     } catch (e) { alert("Error: " + String((e as any)?.message || e).slice(0, 160)) } finally { setFwdBusy(false) }
   }
@@ -1127,7 +1134,16 @@ export default function Page() {
                 <label className="text-[11px] font-semibold text-amber-700 block mb-1">ข้อความเพิ่มเติม</label>
                 <input value={fwdNote} onChange={e => setFwdNote(e.target.value)} placeholder="เช่น ขอภายในวันศุกร์…" className={inp} />
               </div>
-              <p className="text-[10px] text-gray-400">ไฟล์เดียวมีทุกใบที่เลือก (1 แถว = 1 shipment) · คอลัมน์ของอีกรอบจะถูกล็อกสีเทาไว้ · ใบที่ไม่ใช่ AIR จะถูกข้าม</p>
+              {(() => {
+                const sel = shown.filter(r => selectedIds.has(r.id))
+                const nm = sel.filter(r => !r.shipMode)
+                return nm.length ? (
+                  <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    ⚠️ {nm.length} ใบยังไม่ได้ยืนยัน mode ({nm.slice(0, 3).map(r => r.documentNo).join(", ")}{nm.length > 3 ? "…" : ""}) — เปิดเอกสารแล้วกด “ยืนยัน mode” ก่อน ไม่งั้นระบบจะข้ามให้
+                  </p>
+                ) : null
+              })()}
+              <p className="text-[10px] text-gray-400">ไฟล์เดียวมีทุกใบที่เลือก (1 แถว = 1 shipment) · คอลัมน์ของอีกรอบจะถูกล็อกสีเทาไว้ · ต้องยืนยัน mode = AIR ก่อนถึงจะส่งได้</p>
             </div>
             <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
               <button onClick={() => setBulkFwd(false)} className="px-4 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ยกเลิก</button>

@@ -79,8 +79,18 @@ export async function POST(req: NextRequest) {
 
   const docs = await (prisma as any).pullMaterialRequest.findMany({ where: { id: { in: ids } }, include: { items: true }, orderBy: { documentNo: "asc" } })
   if (!docs.length) return NextResponse.json({ error: "ไม่พบเอกสาร" }, { status: 404 })
-  const air = docs.filter((d: any) => (d.shipMode || d.approvedMode || "AIR") === "AIR")
-  if (!air.length) return NextResponse.json({ error: "เอกสารที่เลือกไม่มีใบที่เป็น AIR (Sea/Courier ให้ LG กรอกเอง)" }, { status: 400 })
+  // LG must have CONFIRMED the shipping mode first (they are the final say) — that decides whether the
+  // shipment even goes by air, and the whole template is an air template.
+  const noMode = docs.filter((d: any) => !d.shipMode)
+  const air = docs.filter((d: any) => d.shipMode === "AIR")
+  if (!air.length) {
+    return NextResponse.json({
+      error: noMode.length
+        ? `ยังไม่ได้ยืนยัน mode ขนส่ง ${noMode.length} ใบ — เปิดเอกสารแล้วกด “ยืนยัน mode (LG ชี้ขาด)” ก่อนส่งให้ FWD`
+        : "เอกสารที่เลือกไม่มีใบที่เป็น AIR (Sea/Courier ให้ LG กรอกเอง)",
+      noMode: noMode.map((d: any) => d.documentNo),
+    }, { status: 400 })
+  }
 
   const actorEmail = (session!.user as any).email as string | undefined
   const actorName = ((session!.user as any).name || actorEmail || "Logistics") as string
@@ -133,5 +143,10 @@ export async function POST(req: NextRequest) {
     await (prisma as any).pullForwarder.upsert({ where: { name: fwdName }, update: { email: fwdEmail }, create: { name: fwdName, email: fwdEmail } }).catch(() => {})
   }
 
-  return NextResponse.json({ ok: true, sentTo: to, fileName, count: air.length, skipped: docs.length - air.length, phase })
+  return NextResponse.json({
+    ok: true, sentTo: to, fileName, count: air.length, phase,
+    skipped: docs.length - air.length,
+    skippedNoMode: noMode.map((d: any) => d.documentNo),          // never confirmed by LG
+    skippedNotAir: docs.filter((d: any) => d.shipMode && d.shipMode !== "AIR").map((d: any) => d.documentNo),
+  })
 }
