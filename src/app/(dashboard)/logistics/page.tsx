@@ -113,9 +113,10 @@ export default function LgBookingPage() {
   }, [])
 
   const lgBus = useMemo(() => {
-    if (isAdmin) return new Set(["NYG", "EA", "TRM", "GW"])
+    // NYG books through LG AIR BOOKING now → LG BOOKING serves only EA / TRM / GW.
+    if (isAdmin) return new Set(["EA", "TRM", "GW"])
     const s = new Set<string>()
-    if (roles.includes("LOGISTICS") || roles.includes("LOGISTICS_SUB")) s.add(userBu === "EA" ? "EA" : "NYG")
+    if ((roles.includes("LOGISTICS") || roles.includes("LOGISTICS_SUB")) && userBu === "EA") s.add("EA")
     if (roles.includes("LOGISTICS_TRM")) s.add("TRM")
     if (roles.includes("LOGISTICS_GW")) s.add("GW")
     return s
@@ -224,7 +225,7 @@ export default function LgBookingPage() {
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 Search brand / SO / document no…"
           className="w-full sm:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
         <div className="flex gap-1.5">
-          {["", ...["NYG", "EA", "TRM", "GW"].filter(b => lgBus.has(b))].map(b => (
+          {["", ...["EA", "TRM", "GW"].filter(b => lgBus.has(b))].map(b => (
             <button key={b || "ALL"} onClick={() => setBuF(b)}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${buF === b ? "bg-blue-600 text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
               {b || "All BU"}
