@@ -44,18 +44,19 @@ export async function GET(_req: NextRequest) {
   // 2) Air Request items (NYG) → per-SO readiness + per SO+SUB planned air qty + the bookable item id.
   const items = await (prisma as any).airRequestItem.findMany({
     where: { request: { bu: "NYG", isTest: false } },
-    select: { id: true, requestId: true, so: true, sub: true, itemStatus: true, qtyRequestAir: true, airFreight: true },
+    select: { id: true, requestId: true, so: true, sub: true, itemStatus: true, qtyRequestAir: true, airFreight: true, hawbNo: true },
   }).catch(() => [])
   const subN = (s: any) => String(s == null ? "" : s).trim().toUpperCase()
   // Air req items grouped as a LIST per SO+SUB (NOT summed) — needed to PAIR each mp_line line to a
   // specific air req item when a SO+SUB has several planned lines with different qty.
-  type AirItem = { itemId: string; reqId: string; qty: number; est: number; ready: boolean }
+  type AirItem = { itemId: string; reqId: string; qty: number; est: number; ready: boolean; booked: boolean }
   const airItemsBySoSub = new Map<string, AirItem[]>()
   for (const it of items) {
     const k = soN(it.so); if (!k) continue
     const pk = `${k}|${subN(it.sub)}`
     const arr = airItemsBySoSub.get(pk) || []
-    arr.push({ itemId: it.id, reqId: it.requestId, qty: Number(it.qtyRequestAir) || 0, est: Number(it.airFreight) || 0, ready: READY.has(it.itemStatus) })
+    // booked = LG already keyed a HAWB on this item → the SO is done, drop it from the pick list.
+    arr.push({ itemId: it.id, reqId: it.requestId, qty: Number(it.qtyRequestAir) || 0, est: Number(it.airFreight) || 0, ready: READY.has(it.itemStatus), booked: !!(it.hawbNo && String(it.hawbNo).trim()) })
     airItemsBySoSub.set(pk, arr)
   }
 
@@ -93,13 +94,16 @@ export async function GET(_req: NextRequest) {
         l.reqId = l._pair.reqId
         l.air = l._pair.ready ? "ready" : "pending"
         l.qty = l.pcs === l._pair.qty ? "exactly" : "revise"
+        l._done = l._pair.booked   // already has a HAWB → hide it from the pick list
       } else { l.plan = null; l.est = null; l.itemId = null; l.reqId = null; l.air = "auto"; l.qty = "auto" }
     }
   }
 
-  // place paired lines into invMap (brand + invoice)
+  // place paired lines into invMap (brand + invoice) — SKIP lines already booked (have a HAWB), so a
+  // booked SO drops out and an INV whose SOs are all booked disappears from the page entirely.
   const invMap = new Map<string, { inv: string; brand: string; lines: Line[] }>()
   for (const l of allLines) {
+    if ((l as any)._done) continue
     const key = `${l.brand}||${l.inv}`
     const g = invMap.get(key) || { inv: l.inv, brand: l.brand, lines: [] as Line[] }
     g.lines.push(l)

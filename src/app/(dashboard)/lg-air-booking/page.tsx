@@ -107,7 +107,7 @@ export default function LgAirBookingPage() {
   // AUTO lines (mp_line SO with no air req item) are NOT written here — they need SCM first; we report them.
   const doBook = async () => {
     const hawbNo = hawbAll.trim()
-    const exp = parseFloat(expAll) || 0
+    const exp = parseFloat(String(expAll).replace(/,/g, "")) || 0  // strip thousands separators — parseFloat("295,312.44") would otherwise return 295
     if (!hawbNo) { alert("ใส่เลข HAWB ก่อน"); return }
     if (!exp) { alert("ใส่ EXPENSE/HAWB ก่อน"); return }
     if (hawbFiles.length === 0) { alert("ต้องแนบไฟล์เอกสาร (AWB) ของ HAWB นี้ก่อน"); return }
@@ -298,7 +298,7 @@ export default function LgAirBookingPage() {
       {data && step === 3 && (() => {
         const allLines = hawbGroups.flatMap(g => g.lines.map(l => ({ ...l, inv: g.inv })))
         const totalPcs = allLines.reduce((a, l) => a + l.pcs, 0)
-        const exp = parseFloat(expAll) || 0
+        const exp = parseFloat(String(expAll).replace(/,/g, "")) || 0  // strip commas (295,312.44 → 295312.44)
         const perUnit = totalPcs > 0 ? exp / totalPcs : 0
         return (
         <>
