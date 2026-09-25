@@ -25,6 +25,8 @@ export default function LandedCostCompare(p: LandedInput & {
   requestedMode?: ShipMode           // what the user asked for (always AIR for RM REQ AIR)
   needDate?: any                     // in-house need date — used for the lead-time warning
   leadTimeAir?: any; leadTimeSea?: any
+  // "no master" becomes a link straight to MASTER RATE with the missing port pre-created.
+  addRateHref?: (mode: ShipMode) => string
 }) {
   const lc = useMemo(() => pullLandedCost(p), [p.airRows, p.seaRows, p.courierRows, p.truckRows, p.port, p.seaPort, p.country, p.weight, p.incoterm, p.bu, p.factory])
   if (!lc) return null
@@ -103,7 +105,13 @@ export default function LandedCostCompare(p: LandedInput & {
                 <div className="flex justify-between border-t border-gray-100 pt-1 mt-1">
                   <span className="text-gray-600 font-semibold">Total <span className="text-[9px] font-normal text-gray-400">USD</span></span>
                   <span className={`font-bold tabular-nums ${isSel ? "" : best ? "text-emerald-700" : "text-gray-900"}`} style={isSel ? { color: MAROON } : undefined}>
-                    {c.market ? <span className="text-gray-300 font-normal">รอ</span> : c.d?.total != null ? fmt(c.d.total) : (c.over ? <span className="text-gray-400 text-[10px] font-normal">&gt;100kg</span> : <span className="text-amber-600 text-[10px] font-normal">no master</span>)}
+                    {c.market ? <span className="text-gray-300 font-normal">รอ</span> : c.d?.total != null ? fmt(c.d.total) : (c.over ? <span className="text-gray-400 text-[10px] font-normal">&gt;100kg</span> : (
+                      // No rate for this mode → click through to MASTER RATE (port pre-filled).
+                      p.addRateHref
+                        ? <a href={p.addRateHref(c.mode as ShipMode)} onClick={e => e.stopPropagation()} title="เพิ่ม rate ของ port นี้ใน MASTER RATE"
+                            className="text-amber-600 text-[10px] font-semibold underline hover:text-amber-700">+ เพิ่ม rate</a>
+                        : <span className="text-amber-600 text-[10px] font-normal">no master</span>
+                    ))}
                   </span>
                 </div>
                 {pick && !c.market && ltOf(c.mode as ShipMode) != null && (

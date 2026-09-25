@@ -855,6 +855,7 @@ export default function Page() {
                       <div className="mb-4 space-y-2">
                         <LandedCostCompare airRows={airRates} seaRows={seaRates} courierRows={courierRates} truckRows={truckRates}
                           port={d0.port} seaPort={d0.seaPort} country={d0.country} weight={d0.weight} incoterm={d0.incoterm} bu={rq.bu} factory={raw(rq, "factory") || d0.factory}
+                          addRateHref={(m) => m === "SEA" ? addLink("sea", d0.seaPort || d0.port) : m === "COURIER" ? addCourier("DHL") : addLink("air", d0.port)}
                           value={rq.status === "COMPLETED" ? (rq.shipMode as ShipMode) || null : lgMode}
                           onChange={rq.status === "COMPLETED" ? undefined : setLgMode}
                           requestedMode="AIR" needDate={d0.needDate} leadTimeAir={d0.leadTimeAir} leadTimeSea={d0.leadTimeSea} />
@@ -1061,7 +1062,12 @@ export default function Page() {
                       {money(rq, "localChargeTh") !== "" && <p className="mt-1 text-[10px] text-gray-400">{actCur === "THB" ? `≈ ${fmt(usdOf(money(rq, "localChargeTh")))} USD` : `≈ ${fmt(Number(money(rq, "localChargeTh")) * EXCHANGE_RATE)} THB`}</p>}</div>
                   </div>
                   <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
-                    <span className={estTotal ? "text-gray-500" : "text-amber-600 font-medium"}>{estTotal ? `Est ${fmt(estTotal)} USD` : "⚠️ ไม่มี rate — เพิ่ม Master Rate"}</span>
+                    {estTotal
+                      ? <span className="text-gray-500">Est {fmt(estTotal)} USD</span>
+                      : <a href={`/pull-material/rates?prefill=${encodeURIComponent(JSON.stringify([{ type: "air", country: d0.country || "", port: d0.port || "" }]))}`}
+                          className="text-amber-600 font-medium underline hover:text-amber-700" title="ไปหน้า MASTER RATE พร้อมสร้างแถว port นี้ไว้ให้">
+                          ⚠️ ไม่มี rate — เพิ่ม Master Rate
+                        </a>}
                     {actTotal > 0 && <span className={`px-2 py-0.5 rounded-full font-medium ${diff > 0 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>{diff > 0 ? "▲" : "▼"} {fmt(Math.abs(diff))}</span>}
                   </div>
                   <div className={`mt-3 pt-3 border-t border-gray-100 ${locked ? "opacity-50 pointer-events-none select-none" : ""}`}>
