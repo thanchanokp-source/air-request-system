@@ -1231,7 +1231,9 @@ export default function RequestDetailPage() {
   // (role=CLAIM_NEXT_APPROVER) OR logged in with my real role (VP_MER etc.) but hold the forward.
   const gwCurrentPos = actingAsClaimNext ? (myFwdRow?.position ?? 0) : 0
   const gwBranch: string | null = myFwdRow?.branch || null
-  const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos) : true
+  // BU-aware: NYG "SCM NYG" claim ends at VP SCM (Saji) — 2-step chain — so she FINISHES, no next
+  // position to pick. GW "SCM NYG" continues (VP PROD → EVP PROD), so it still forwards.
+  const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos, req?.bu) : true
   const gwNeedsBranch = gwFwdCanonicalDept ? positionHasBranch(gwFwdCanonicalDept, gwCurrentPos) : false
   // Last position in the chain (e.g. Commercial VP MER) has nothing after it → no forward.
   // Skip the "Send to next / Done" popup and finish directly.
