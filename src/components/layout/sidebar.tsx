@@ -33,6 +33,7 @@ const pullNav = [
   { href: "/pull-material/files", label: "ATTACH FILES", roles: ["ADMIN", "PURCHASING", "SCM_PULL", "LOGISTICS_IMPORT", ...MER_GROUP] },
   { href: "/pull-material/purchase", label: "รอจัดซื้อกรอก", roles: ["ADMIN", "PURCHASING"] },
   { href: "/pull-material/revise-stats", label: "REVISE STATS", roles: ["ADMIN", "PURCHASING", "DVM_PUR", "VP_PUR"] },
+  { href: "/pull-material/report", label: "REPORT (EXCEL)", roles: ["ADMIN", "LOGISTICS_IMPORT", "PURCHASING", "SCM_PULL", "DVM_PUR", "VP_PUR", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT"] },
   { href: "/pull-material/approval", label: "APPROVAL", roles: ["ADMIN", "PULL_DVM_SCM", "VP_SCM", "PULL_PRESIDENT", "DVM_PUR", "VP_PUR"] },
   { href: "/pull-material/documents", label: "LOGISTICS", roles: ["ADMIN", "LOGISTICS_IMPORT"] },
   { href: "/pull-material/rates", label: "MASTER RATE", roles: ["ADMIN", "LOGISTICS_IMPORT"] },

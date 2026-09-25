@@ -107,7 +107,31 @@ export default function Page() {
   // Which half of the template to ask for: 1 = booking info (MAWB/HAWB/ETD/ETA/rate), 2 = the actual
   // once it has landed. A doc that already answered phase 1 defaults to phase 2.
   const [fwdPhase, setFwdPhase] = useState<1 | 2>(1)
+  // Mail wording LG sends to the forwarder — editable, and remembered per phase in this browser.
+  const [fwdSubject, setFwdSubject] = useState("")
+  const [fwdDetail, setFwdDetail] = useState("")
+  const defaultSubject = (phase: 1 | 2, n: number, docNo?: string) =>
+    `[Pull Material] ${phase === 1 ? "Air booking details" : "Air actual charges"} - ${n === 1 && docNo ? docNo : n + " shipments"}`
+  const defaultDetail = (phase: 1 | 2) => phase === 1
+    ? "Please complete the green columns in the attached file (MAWB / HAWB / Flight ETD / ETA / CFM in-house date / Air freight rate THB per kg / Supplier INV) and reply with the file attached.\nGrey columns are reference only - please keep them as they are."
+    : "The goods have arrived. Please fill in the green columns of the attached file (Actual air freight THB / Local charge TH THB / Remark) and reply with the file attached.\nGrey columns are reference only - please keep them as they are."
+  // Load the remembered wording (or the default) whenever the phase changes.
+  useEffect(() => {
+    try {
+      const sj = localStorage.getItem("pullFwdSubject_" + fwdPhase) || ""
+      const dt = localStorage.getItem("pullFwdDetail_" + fwdPhase) || ""
+      setFwdSubject(sj); setFwdDetail(dt || defaultDetail(fwdPhase))
+    } catch { setFwdDetail(defaultDetail(fwdPhase)) }
+  }, [fwdPhase]) // eslint-disable-line
+  const rememberMail = () => {
+    try {
+      localStorage.setItem("pullFwdSubject_" + fwdPhase, fwdSubject)
+      localStorage.setItem("pullFwdDetail_" + fwdPhase, fwdDetail)
+    } catch { /* private mode — fine, defaults are used */ }
+  }
   const [bulkFwd, setBulkFwd] = useState(false)          // list-level "send to FWD" dialog
+  // Parsed rows of a returned FWD workbook, waiting for LG to confirm before anything is written.
+  const [fwdImport, setFwdImport] = useState<{ file: File; rows: { id: string | null; how: string; so?: string; po?: string; conflict?: boolean; vals: Record<string, any>; use: boolean }[] } | null>(null)
   useEffect(() => {
     fetch("/api/pull-material/courier-rates").then(r => r.json()).then(d => setCourierRates(d.rows || [])).catch(() => {})
     fetch("/api/pull-material/sea-rates").then(r => r.json()).then(d => setSeaRates(d.rows || [])).catch(() => {})
@@ -259,11 +283,13 @@ export default function Page() {
     if (rq.shipMode !== "AIR") return alert("เอกสารนี้ mode = " + rq.shipMode + " — ไฟล์ FWD ใช้กับ AIR เท่านั้น (mode อื่นให้ LG กรอก actual เอง)")
     if (!fwdEmail.trim()) return alert("กรอกอีเมล Forwarder ก่อน")
     if (!confirm(`ส่งเมลพร้อมไฟล์ให้ ${fwdName || "FWD"} (${fwdEmail}) สำหรับ ${rq.documentNo}?`)) return
+    rememberMail()
     setFwdBusy(true)
     try {
       const r = await fetch(`/api/pull-material/fwd-request`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: [rq.id], phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), note: fwdNote.trim() }),
+        body: JSON.stringify({ ids: [rq.id], phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), note: fwdNote.trim(),
+          subject: fwdSubject.trim() || defaultSubject(fwdPhase, 1, rq.documentNo), detail: fwdDetail.trim() }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) { await load(); alert(`ส่งแล้ว → ${(d.sentTo || []).join(", ")}`) } else alert(d.error || "ส่งไม่สำเร็จ")
@@ -298,15 +324,40 @@ export default function Page() {
   }
 
   // ── Bulk: mail ONE template covering every ticked shipment (filtered by BU / ETC range / port…).
-  const sendFwdBulk = async () => {
-    const ids = [...selectedIds]
-    if (!ids.length) return alert("เลือกเอกสารก่อน")
-    if (!fwdEmail.trim()) return alert("กรอกอีเมล Forwarder ก่อน")
+  // Which shipments the FWD mail covers: the ticked ones, or (when nothing is ticked) every document
+  // the current filters show — that is how LG combines "this port, this ETC range" in one go.
+  const fwdTargets = () => (selectedIds.size ? shown.filter(r => selectedIds.has(r.id)) : shown)
+
+  // Download the exact workbook that would be mailed, without sending anything.
+  const previewFwdFile = async () => {
+    const ids = fwdTargets().map(r => r.id)
+    if (!ids.length) return alert("ไม่มีเอกสารในรายการ")
     setFwdBusy(true)
     try {
       const r = await fetch("/api/pull-material/fwd-request", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids, phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), note: fwdNote.trim() }),
+        body: JSON.stringify({ ids, phase: fwdPhase, fwdEmail: fwdEmail.trim() || "preview@nanyangtextile.com", preview: true }),
+      })
+      if (!r.ok) { const d = await r.json().catch(() => ({})); return alert(d.error || "สร้างไฟล์ไม่สำเร็จ") }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a"); a.href = url
+      a.download = `RM_AIR_FWD_P${fwdPhase}_preview.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch (e) { alert("Error: " + String((e as any)?.message || e).slice(0, 160)) } finally { setFwdBusy(false) }
+  }
+
+  const sendFwdBulk = async () => {
+    const ids = fwdTargets().map(r => r.id)
+    if (!ids.length) return alert("ไม่มีเอกสารให้ส่ง")
+    if (!fwdEmail.trim()) return alert("กรอกอีเมล Forwarder ก่อน")
+    rememberMail()
+    setFwdBusy(true)
+    try {
+      const r = await fetch("/api/pull-material/fwd-request", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), note: fwdNote.trim(),
+          subject: fwdSubject.trim() || defaultSubject(fwdPhase, ids.length), detail: fwdDetail.trim() }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) {
@@ -322,6 +373,42 @@ export default function Page() {
 
   // ── Bulk import: one workbook, many shipments. Each row is matched back by its hidden _DOCID and
   // written straight to that document (LG reviews the summary in the confirm dialog first).
+  // ── Import what the FWD mailed back ───────────────────────────────────────────────────────────
+  // Matching is layered, because a forwarder may reply with our file, a copy of it, or their own sheet:
+  //   1. _DOCID (hidden key we sent)  → exact, always trusted
+  //   2. PO NO   → a PO belongs to one shipment; several POs may sit on one row
+  //   3. SO      → last resort
+  // Nothing is written until LG confirms the matched list (they can untick or re-point a row).
+  const fwdKeyNorm = (v: any) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "")
+  // Pull a list of keys out of a row cell ("FI2634201, FI2634202" → ["FI2634201","FI2634202"]).
+  const fwdCell = (row: any, names: string[]) => {
+    const want = names.map(n => n.replace(/[^A-Z]/g, ""))
+    const hit = Object.entries(row).find(([k]) => want.includes(String(k).toUpperCase().replace(/[^A-Z]/g, "")))
+    return String(hit?.[1] ?? "").split(/[,;/|]/).map(fwdKeyNorm).filter(Boolean)
+  }
+  // Which document a returned row belongs to. SO + PO are the REAL key (LG combines shipments by port
+  // and the FWD may re-arrange the sheet), with the hidden _DOCID kept only as a fallback / cross-check.
+  const matchDocFor = (row: any) => {
+    const pos = fwdCell(row, ["PO NO", "PONO", "PO"])
+    const sos = fwdCell(row, ["SO", "SO NO", "SONO"])
+    const docid = String(row._DOCID || "").trim()
+    const hasDoc = (r: any, keys: string[], field: string) => (r.items || []).some((i: any) => keys.includes(fwdKeyNorm(i[field])))
+    const byPo = pos.length ? reqs.filter(r => hasDoc(r, pos, "poNoDoc")) : []
+    const bySo = sos.length ? reqs.filter(r => hasDoc(r, sos, "soNoDoc")) : []
+    const both = byPo.filter(r => bySo.some(x => x.id === r.id))
+
+    let id: string | null = null, how = "ไม่พบ"
+    if (both.length === 1) { id = both[0].id; how = "SO+PO" }
+    else if (byPo.length === 1) { id = byPo[0].id; how = "PO" }
+    else if (bySo.length === 1) { id = bySo[0].id; how = "SO" }
+    else if (docid && reqs.some(r => r.id === docid)) { id = docid; how = "_DOCID" }
+    else if (byPo.length > 1 || bySo.length > 1 || both.length > 1) how = "ตรงหลายใบ — เลือกเอง"
+
+    // The sheet says one thing, the hidden key another → let LG decide instead of guessing.
+    const conflict = !!(id && docid && reqs.some(r => r.id === docid) && docid !== id)
+    return { id, how: conflict ? how + " ≠ _DOCID" : how, so: sos.join(", "), po: pos.join(", "), conflict }
+  }
+
   const importFwdBulk = async (file: File) => {
     setFwdBusy(true)
     try {
@@ -329,29 +416,38 @@ export default function Page() {
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" })
       const ws = wb.Sheets[FWD_SHEET] || wb.Sheets[wb.SheetNames[0]]
       if (!ws) return alert("อ่านไฟล์ไม่ได้ — ไม่พบ sheet")
-      const rows = (XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[]).filter(r => String(r._DOCID || "").trim())
-      if (!rows.length) return alert("ไม่พบคอลัมน์ _DOCID ในไฟล์ (ต้องใช้ไฟล์ที่ระบบส่งออกไป)")
-      const jobs = rows.map(r => ({ id: String(r._DOCID).trim(), vals: parseFwdRow(r) })).filter(j => Object.keys(j.vals).length)
-      if (!jobs.length) return alert("ไฟล์ยังไม่มีข้อมูลในคอลัมน์สีเขียว")
-      const known = jobs.filter(j => reqs.some(r => r.id === j.id))
-      if (!known.length) return alert("เอกสารในไฟล์ไม่ตรงกับรายการที่เปิดอยู่ (ลองสลับ BU / แท็บ)")
-      const names = known.map(j => reqs.find(r => r.id === j.id)?.documentNo).join(", ")
-      if (!confirm("นำเข้าข้อมูลจาก FWD " + known.length + " ใบ?" + "\n\n" + names)) return
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[]
+      const parsed = rows
+        .map(r => ({ vals: parseFwdRow(r), ...matchDocFor(r) }))
+        .filter(j => Object.keys(j.vals).length)                     // rows the FWD actually filled
+        .map(j => ({ ...j, use: !!j.id && !j.conflict }))   // a conflicting row must be confirmed by hand
+      if (!parsed.length) return alert("ไฟล์ยังไม่มีข้อมูลในคอลัมน์สีเขียว")
+      setFwdImport({ file, rows: parsed })
+    } catch (e) { alert("อ่านไฟล์ไม่สำเร็จ: " + String((e as any)?.message || e).slice(0, 160)) } finally { setFwdBusy(false) }
+  }
+
+  // Write the confirmed rows into their documents (+ keep the file on the first one as evidence).
+  const applyFwdImport = async () => {
+    const job = fwdImport
+    if (!job) return
+    const use = job.rows.filter(r => r.use && r.id)
+    if (!use.length) return alert("ยังไม่ได้เลือกแถวที่จะนำเข้า")
+    setFwdBusy(true)
+    try {
       let ok = 0
-      for (const j of known) {
+      for (const j of use) {
         const r = await fetch(`/api/pull-material/${j.id}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...j.vals, actualSource: "FWD" }),
         })
         if (r.ok) ok++
-        // keep the returned workbook on the first document as evidence
         if (ok === 1) {
-          const fd = new FormData(); fd.append("file", file); fd.append("category", "FWD"); fd.append("source", "LG")
+          const fd = new FormData(); fd.append("file", job.file); fd.append("category", "FWD"); fd.append("source", "LG")
           await fetch(`/api/pull-material/${j.id}/attachments`, { method: "POST", body: fd }).catch(() => {})
         }
       }
-      await load()
-      alert("นำเข้าสำเร็จ " + ok + " / " + known.length + " ใบ")
+      setFwdImport(null); await load()
+      alert("นำเข้าสำเร็จ " + ok + " / " + use.length + " ใบ")
     } catch (e) { alert("Import ไม่สำเร็จ: " + String((e as any)?.message || e).slice(0, 160)) } finally { setFwdBusy(false) }
   }
 
@@ -680,12 +776,18 @@ export default function Page() {
                 <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF("ALL"); setVendorF("ALL") }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-xs text-gray-400">{shown.length} ใบ</span>
+                {/* Mail every shipment the filters show (or just the ticked ones) to one forwarder. */}
+                <button onClick={() => setBulkFwd(true)} disabled={fwdBusy || shown.length === 0}
+                  className="px-3 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "#b45309" }}
+                  title="ส่งไฟล์ให้ Forwarder กรอก (ตามตัวกรองปัจจุบัน หรือเฉพาะใบที่ติ๊ก)">
+                  📧 ส่งให้ FWD ({selectedIds.size || shown.length})
+                </button>
                 <label className={`px-3 py-2 rounded-lg text-sm font-semibold border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 cursor-pointer ${fwdBusy ? "opacity-50 pointer-events-none" : ""}`}>
                   ⬆️ Import จาก FWD
                   <input type="file" accept=".xlsx,.xls" hidden onChange={e => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) importFwdBulk(f) }} />
                 </label>
-                <button onClick={() => exportExcelList(selectedIds.size ? shown.filter(r => selectedIds.has(r.id)) : shown)} disabled={exporting}
-                  className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">{exporting ? "…" : `📊 Export Excel${selectedIds.size ? ` (${selectedIds.size})` : " (ทั้งหมด)"}`}</button>
+                <a href="/pull-material/report" className="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-600 bg-white hover:bg-gray-50"
+                  title="ข้อมูลทั้งหมดทุกสถานะ + Export Excel อยู่ที่หน้า REPORT">📊 REPORT</a>
               </div>
             </div>
 
@@ -973,6 +1075,15 @@ export default function Page() {
                         {rq.fwdPhase > 0 && <p className="mt-1 text-[10px] text-gray-400">ส่งรอบล่าสุด: phase {rq.fwdPhase}</p>}
                       </div>
                       <div>
+                        <label className="text-[11px] font-semibold text-amber-700 block mb-1">หัวข้ออีเมล (Subject)</label>
+                        <input value={fwdSubject} onChange={e => setFwdSubject(e.target.value)} placeholder={defaultSubject(fwdPhase, 1, rq.documentNo)} className={inp} />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-amber-700 block mb-1">รายละเอียดในอีเมล (Detail)</label>
+                        <textarea value={fwdDetail} onChange={e => setFwdDetail(e.target.value)} rows={4} className={inp + " leading-relaxed"} />
+                        <button type="button" onClick={() => setFwdDetail(defaultDetail(fwdPhase))} className="mt-1 text-[10px] text-blue-600 underline">คืนค่าข้อความมาตรฐาน</button>
+                      </div>
+                      <div>
                         <label className="text-[11px] font-semibold text-amber-700 block mb-1">ข้อความเพิ่มเติม (ถ้ามี)</label>
                         <input value={fwdNote} onChange={e => setFwdNote(e.target.value)} placeholder="เช่น ขอด่วนภายในวันนี้…" className={inp} />
                       </div>
@@ -1101,13 +1212,78 @@ export default function Page() {
         )
       })()}
 
+      {/* Review what came back from the FWD before it is written to the documents. */}
+      {fwdImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setFwdImport(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b flex items-center justify-between">
+              <div className="font-bold text-gray-900">⬆️ ตรวจข้อมูลที่ FWD ส่งกลับ</div>
+              <span className="text-[11px] text-gray-400">{fwdImport.rows.length} แถว · {fwdImport.file.name}</span>
+            </div>
+            <div className="p-5 max-h-[60vh] overflow-y-auto">
+              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                จับคู่จาก <b>SO + PO</b> เป็นหลัก (รองรับไฟล์ที่รวมหลายใบ/หลาย port) → ถ้าไม่ชัดใช้ PO หรือ SO อย่างเดียว → สุดท้ายค่อยใช้ <b>_DOCID</b>
+                · แถวที่จับไม่ได้/ชนกัน เลือกเอกสารเองได้จากช่องถัดไป
+              </p>
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500">
+                  <tr>{["ใช้", "SO / PO ในไฟล์", "เอกสารที่จับได้", "จับคู่จาก", "ข้อมูลที่จะเขียน"].map(h => <th key={h} className="px-2 py-2 text-left font-medium">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {fwdImport.rows.map((r, i) => {
+                    const doc = reqs.find(x => x.id === r.id)
+                    const vals = Object.entries(r.vals).filter(([k]) => k !== "actualCurrency")
+                    return (
+                      <tr key={i} className={r.id ? "" : "bg-red-50/40"}>
+                        <td className="px-2 py-2 align-top">
+                          <input type="checkbox" checked={r.use} disabled={!r.id}
+                            onChange={e => setFwdImport(p => p && ({ ...p, rows: p.rows.map((x, j) => (j === i ? { ...x, use: e.target.checked } : x)) }))}
+                            className="w-4 h-4 accent-emerald-600" />
+                        </td>
+                        <td className="px-2 py-2 align-top text-gray-700 min-w-[150px]">
+                          <div className="font-semibold">{r.so || "-"}</div>
+                          <div className="text-[10px] text-gray-500">{r.po || "-"}</div>
+                        </td>
+                        <td className="px-2 py-2 align-top min-w-[190px]">
+                          <select value={r.id || ""}
+                            onChange={e => setFwdImport(p => p && ({ ...p, rows: p.rows.map((x, j) => (j === i ? { ...x, id: e.target.value || null, how: "เลือกเอง", use: !!e.target.value } : x)) }))}
+                            className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs bg-white">
+                            <option value="">— เลือกเอกสาร —</option>
+                            {shown.map(d => <option key={d.id} value={d.id}>{d.documentNo}</option>)}
+                          </select>
+                          {doc && <div className="text-[10px] text-gray-400 mt-0.5">PO {[...new Set((doc.items || []).map((it: any) => it.poNoDoc).filter(Boolean))].join(", ") || "-"}</div>}
+                        </td>
+                        <td className="px-2 py-2 align-top">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${!r.id || r.conflict ? "bg-red-100 text-red-700" : r.how === "SO+PO" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{r.how}</span>
+                          {r.conflict && <div className="text-[10px] text-red-600 mt-0.5">ไฟล์ชี้คนละใบกับ _DOCID — ตรวจก่อน</div>}
+                        </td>
+                        <td className="px-2 py-2 align-top text-gray-600">
+                          {vals.map(([k, v]) => <span key={k} className="inline-block mr-2 whitespace-nowrap"><span className="text-gray-400">{k}:</span> <b>{String(v)}</b></span>)}
+                          {r.vals.actualCurrency === "THB" && <div className="text-[10px] text-gray-400 mt-0.5">* เงินกรอกมาเป็น THB — ระบบแปลงเป็น USD ให้ (÷32.5)</div>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
+              <button onClick={() => setFwdImport(null)} className="px-4 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ยกเลิก</button>
+              <button onClick={applyFwdImport} disabled={fwdBusy} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>
+                {fwdBusy ? "…" : `นำเข้า (${fwdImport.rows.filter(r => r.use && r.id).length} ใบ)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Send the ticked shipments to one forwarder — pick the contact and which phase to ask for. */}
       {bulkFwd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setBulkFwd(false)}>
           <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-3 border-b flex items-center justify-between">
               <div className="font-bold text-gray-900">📧 ส่งให้ FWD กรอก</div>
-              <span className="text-[11px] text-gray-400">{selectedIds.size} ใบ</span>
+              <span className="text-[11px] text-gray-400">{fwdTargets().length} ใบ{selectedIds.size ? " (ที่เลือก)" : " (ตามตัวกรอง)"}</span>
             </div>
             <div className="p-5 space-y-3">
               <div>
@@ -1131,11 +1307,24 @@ export default function Page() {
                 <input value={fwdEmail} onChange={e => setFwdEmail(e.target.value)} placeholder="forwarder@company.com" className={inp} />
               </div>
               <div>
+                <label className="text-[11px] font-semibold text-amber-700 block mb-1">หัวข้ออีเมล (Subject)</label>
+                <input value={fwdSubject} onChange={e => setFwdSubject(e.target.value)} placeholder={defaultSubject(fwdPhase, selectedIds.size || 1)} className={inp} />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-amber-700 block mb-1">รายละเอียดในอีเมล (Detail)</label>
+                <textarea value={fwdDetail} onChange={e => setFwdDetail(e.target.value)} rows={4}
+                  className={inp + " leading-relaxed"} />
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[10px] text-gray-400">ระบบจำข้อความนี้ไว้ให้ครั้งหน้า (แยกตามรอบ)</span>
+                  <button type="button" onClick={() => setFwdDetail(defaultDetail(fwdPhase))} className="text-[10px] text-blue-600 underline">คืนค่าข้อความมาตรฐาน</button>
+                </div>
+              </div>
+              <div>
                 <label className="text-[11px] font-semibold text-amber-700 block mb-1">ข้อความเพิ่มเติม</label>
                 <input value={fwdNote} onChange={e => setFwdNote(e.target.value)} placeholder="เช่น ขอภายในวันศุกร์…" className={inp} />
               </div>
               {(() => {
-                const sel = shown.filter(r => selectedIds.has(r.id))
+                const sel = fwdTargets()
                 const nm = sel.filter(r => !r.shipMode)
                 return nm.length ? (
                   <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -1147,8 +1336,11 @@ export default function Page() {
             </div>
             <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
               <button onClick={() => setBulkFwd(false)} className="px-4 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ยกเลิก</button>
+              <button onClick={previewFwdFile} disabled={fwdBusy} className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50">
+                ⬇️ ดูไฟล์ที่จะส่ง
+              </button>
               <button onClick={sendFwdBulk} disabled={fwdBusy} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: "#b45309" }}>
-                {fwdBusy ? "กำลังส่ง…" : `📧 ส่ง (${selectedIds.size} ใบ)`}
+                {fwdBusy ? "กำลังส่ง…" : `📧 ส่ง (${fwdTargets().length} ใบ)`}
               </button>
             </div>
           </div>
