@@ -61,7 +61,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .then((u: any) => (Array.isArray(u?.roles) ? u.roles : []))
     .catch(() => [])
   const heldRoles: string[] = [role, ...dbUserRoles.filter((r: string) => r && r !== role)]
-  const isClaimRole = (r: string) => (r.startsWith("CLAIM_") && r !== "CLAIM_NEXT_APPROVER") || r.startsWith("DVM_") || r === "SCM_NYK" || r === "SCM_NYG"
+  // DPM_SCM / VP_SCM = the NYG "SCM NYG" claim 2-step (entry → VP). They must count as claim owners
+  // here or the entry (Sirinya, DPM_SCM) gets "Forbidden" when forwarding to VP SCM (Saji).
+  const isClaimRole = (r: string) => (r.startsWith("CLAIM_") && r !== "CLAIM_NEXT_APPROVER") || r.startsWith("DVM_") || r === "SCM_NYK" || r === "SCM_NYG" || r === "DPM_SCM" || r === "VP_SCM"
 
   // Must be a claim owner (master role, incl. via roles[]) or a forward recipient. A recipient is
   // matched by EMAIL, so they can act whether they logged in via the magic link (CLAIM_NEXT_APPROVER)
@@ -174,7 +176,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } else {
     // FORWARD to the NEXT position in the forced chain (person = free choice,
     // position = enforced). The last position must finish, not forward.
-    if (isLastPosition(forwarderDept, currentPos)) {
+    if (isLastPosition(forwarderDept, currentPos, (request as any).bu)) {
       return NextResponse.json({ error: "This is the final position — finish the process (cannot forward further)." }, { status: 400 })
     }
     if (!nextEmail) return NextResponse.json({ error: "nextEmail required" }, { status: 400 })
@@ -188,7 +190,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Normally advance one position; Procurement "approve-self" may skip Sourcing and
     // jump straight to VP (targetPos), so honor an explicit forward target when it is
     // ahead of the current position and within the chain.
-    const chainLen = chainFor(forwarderDept).length
+    const chainLen = chainFor(forwarderDept, (request as any).bu).length
     const wantPos = Number.isInteger(targetPos) ? Number(targetPos) : currentPos + 1
     const nextPos = wantPos > currentPos && wantPos < chainLen ? wantPos : currentPos + 1
     // Branch (Procurement route) chosen at the branch step; carried forward.

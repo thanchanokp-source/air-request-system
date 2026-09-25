@@ -5321,8 +5321,9 @@ export default function RequestDetailPage() {
                           title={claimBackGw ? "" : "กรณีไม่ใช่ claim ของเรา (claim ผิดแผนก) → ส่งกลับ SCM เลือกใหม่"}
                           className="px-3 py-1 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 disabled:opacity-50">{claimBackGw ? "Back to Merchandise" : "Back to SCM"}</button>
                       )}
-                      {/* NYG/EA/TRM only: flag THIS SO for MER to drop (data wrong). Doc stays at claim so other SOs keep flowing. */}
-                      {!claimBackGw && (item.dropRequested
+                      {/* NYG/EA/TRM claim depts only: flag THIS SO for MER to drop (data wrong). Doc stays at claim so other SOs keep flowing.
+                          Hidden for the SCM NYK / GW-side claim roles (isGwClaimP1Role) — they must use "Back to SCM", not the drop button (avoids the misclick that flags SOs for MER drop by mistake). */}
+                      {!claimBackGw && !isGwClaimP1Role && (item.dropRequested
                         ? <span className="px-3 py-1 bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-xs font-medium" title={item.dropReason || ""}>⏳ รอ MER drop</span>
                         : <button disabled={isSub}
                           title="กรณี data ผิด — ส่งให้ MER ลบ SO นี้ (SO อื่นเดินต่อได้)"

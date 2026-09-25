@@ -7,9 +7,10 @@ import { useEffect, useMemo, useState } from "react"
 // Data from /api/lg-inv-booking (admin-only). No writes — "ไปหน้าเพิ่ม HAWB" is a placeholder.
 const MAROON = "#6b1a1a"
 type Line = { so: string; sub: string; pcs: number; plan: number | null; est: number | null; qty: "exactly" | "revise" | "auto"; style: string; air: "ready" | "pending" | "auto"; itemId: string | null; reqId: string | null }
-// LG can tick "ready" (in air req, at LG) and "auto" (SUB not in air req → LG does actual, SCM later).
-// "pending" (in air req but not yet at LG) is locked.
-const canTick = (air: string) => air === "ready" || air === "auto"
+// LG can tick every shipped line: "ready" (in air req, at LG → book + advance to claim),
+// "pending" (in air req but not yet at LG → shipped already, so LG fills data EARLY as a draft while
+// approval keeps running normally), and "auto" (not in air req → prepaid doc → SCM selects claim).
+const canTick = (air: string) => air === "ready" || air === "auto" || air === "pending"
 const QTY: Record<string, { txt: string; cls: string }> = {
   exactly: { txt: "✓ exactly", cls: "bg-green-100 text-green-700" },
   revise:  { txt: "✏ revise",  cls: "bg-sky-100 text-sky-700" },
@@ -20,7 +21,7 @@ type Brand = { brand: string; invCount: number; readySo: number; invs: Inv[] }
 
 const AIR: Record<string, { txt: string; cls: string }> = {
   ready:   { txt: "✓ พร้อม (ถึงคิว LG)", cls: "bg-green-100 text-green-700" },
-  pending: { txt: "⏳ ยังไม่ถึงคิว LG",   cls: "bg-amber-100 text-amber-700" },
+  pending: { txt: "⏳ ยังไม่ถึงคิว · กรอกล่วงหน้าได้", cls: "bg-amber-100 text-amber-700" },
   auto:    { txt: "✚ auto add → SCM", cls: "bg-red-100 text-red-700" },
 }
 
@@ -114,36 +115,46 @@ export default function LgAirBookingPage() {
     const totalPcs = allLines.reduce((a, l) => a + l.pcs, 0)
     if (totalPcs <= 0) { alert("ไม่มี qty ให้คิด"); return }
     const perUnit = exp / totalPcs
-    const ready = allLines.filter(l => l.itemId && l.reqId)
-    const auto = allLines.filter(l => !l.itemId)
-    if (ready.length === 0 && auto.length === 0) { alert("ยังไม่มี SO ที่เลือก"); return }
-    if (!confirm(`บันทึก HAWB ${hawbNo}\n${ready.length ? `${ready.length} SO → ส่งต่อ claim\n` : ""}${auto.length ? `auto ${auto.length} SO → สร้างเอกสารส่ง SCM (Kimita) เลือก claim` : ""}`)) return
+    const ready = allLines.filter(l => l.air === "ready" && l.itemId && l.reqId)   // at LG → book + advance to claim
+    const pending = allLines.filter(l => l.air === "pending" && l.itemId && l.reqId) // shipped but pre-LG → save data only, approval keeps running
+    const auto = allLines.filter(l => !l.itemId)                                    // not in air req → prepaid doc → SCM
+    if (ready.length === 0 && pending.length === 0 && auto.length === 0) { alert("ยังไม่มี SO ที่เลือก"); return }
+    if (!confirm(`บันทึก HAWB ${hawbNo}\n${ready.length ? `${ready.length} SO → ส่งต่อ claim\n` : ""}${pending.length ? `${pending.length} SO → บันทึกข้อมูลล่วงหน้า (approval เดินปกติ)\n` : ""}${auto.length ? `auto ${auto.length} SO → สร้างเอกสารส่ง SCM (Kimita) เลือก claim` : ""}`)) return
 
     setSubmitting(true); setResult("")
     const today = new Date().toISOString().slice(0, 10)
-    try {
-      // 1) READY lines (already in air req) → book via the proven LG flow, advance to claim.
-      const byReq = new Map<string, typeof ready>()
-      for (const l of ready) { const a = byReq.get(l.reqId!) || []; a.push(l); byReq.set(l.reqId!, a) }
-      for (const [reqId, lines] of byReq) {
-        // Attach the AWB file(s) to this document FIRST (so the claim alert that fires on advance has them).
-        for (const f of hawbFiles) {
-          const form = new FormData(); form.append("file", f); form.append("category", `HAWB:${hawbNo}`)
-          await fetch(`/api/requests/${reqId}/attachments`, { method: "POST", body: form }).catch(() => {})
-        }
+    const attachTo = async (reqId: string) => {
+      for (const f of hawbFiles) {
+        const form = new FormData(); form.append("file", f); form.append("category", `HAWB:${hawbNo}`)
+        await fetch(`/api/requests/${reqId}/attachments`, { method: "POST", body: form }).catch(() => {})
+      }
+    }
+    // Save a set of lines to their air req items. advance=true → LG "Save & Send" (goes to claim);
+    // advance=false → save data ONLY (draft), so a shipped pre-LG SO gets its actual now while its
+    // approval (SCM → Saji) keeps running normally in parallel.
+    const saveGroup = async (lines: typeof ready, advance: boolean) => {
+      const byReq = new Map<string, typeof lines>()
+      for (const l of lines) { const a = byReq.get(l.reqId!) || []; a.push(l); byReq.set(l.reqId!, a) }
+      for (const [reqId, ls] of byReq) {
+        await attachTo(reqId)
         const itemLogistics: any = {}, itemActuals: any = {}, itemShipData: any = {}
-        for (const l of lines) {
+        for (const l of ls) {
           itemLogistics[l.itemId!] = { invoiceNo: l.inv, hawbNo, bookingDate: today }
           itemActuals[l.itemId!] = String(Math.round(l.pcs * perUnit * 100) / 100) // qty share of the HAWB expense
           itemShipData[l.itemId!] = { qtyRequestAir: l.pcs }                        // QTY follows mp_line (revise)
         }
         const res = await fetch(`/api/requests/${reqId}/approve`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "save_logistics_draft", itemLogistics, itemActuals, itemShipData, lgComplete: true }),
+          body: JSON.stringify({ action: "save_logistics_draft", itemLogistics, itemActuals, itemShipData, lgComplete: advance }),
         })
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
       }
-      // 2) AUTO lines (shipped but never in air req) → create ONE prepaid NYG doc at SCM claim-selection.
+      return byReq.size
+    }
+    try {
+      const readyDocs = await saveGroup(ready, true)      // ready → advance to claim
+      const pendingDocs = await saveGroup(pending, false) // pending → save data only, approval unchanged
+      // AUTO lines (shipped but never in air req) → create ONE prepaid NYG doc at SCM claim-selection.
       let autoDoc = ""
       if (auto.length > 0) {
         const ares = await fetch("/api/lg-inv-booking", {
@@ -155,7 +166,7 @@ export default function LgAirBookingPage() {
         autoDoc = aj?.documentNo || ""
         if (aj?.id) for (const f of hawbFiles) { const form = new FormData(); form.append("file", f); form.append("category", `HAWB:${hawbNo}`); await fetch(`/api/requests/${aj.id}/attachments`, { method: "POST", body: form }).catch(() => {}) }
       }
-      setResult(`✓ บันทึก HAWB ${hawbNo}${ready.length ? ` · ${ready.length} SO → claim (${byReq.size} เอกสาร)` : ""}${auto.length ? ` · auto ${auto.length} SO → สร้าง ${autoDoc} ส่ง SCM (Kimita) เลือก claim` : ""}`)
+      setResult(`✓ บันทึก HAWB ${hawbNo}${ready.length ? ` · ${ready.length} SO → claim (${readyDocs} เอกสาร)` : ""}${pending.length ? ` · ${pending.length} SO บันทึกล่วงหน้า (รอ approval, ${pendingDocs} เอกสาร)` : ""}${auto.length ? ` · auto ${auto.length} SO → สร้าง ${autoDoc} ส่ง SCM (Kimita)` : ""}`)
       setStep(1); setPickedInv(new Set()); setSel({}); setHawbAll(""); setExpAll(""); setHawbFiles([])
       reload()
     } catch (e: any) {

@@ -87,8 +87,10 @@ export async function GET(_req: NextRequest) {
     for (const l of lines) {
       if (l._pair) {
         l.plan = l._pair.qty; l.est = l._pair.est
-        l.itemId = l._pair.ready ? l._pair.itemId : null
-        l.reqId = l._pair.ready ? l._pair.reqId : null
+        // Both ready and pending carry the itemId/reqId now — pending SOs shipped already, so LG may
+        // enter their data EARLY (saved as draft) while approval keeps running normally in parallel.
+        l.itemId = l._pair.itemId
+        l.reqId = l._pair.reqId
         l.air = l._pair.ready ? "ready" : "pending"
         l.qty = l.pcs === l._pair.qty ? "exactly" : "revise"
       } else { l.plan = null; l.est = null; l.itemId = null; l.reqId = null; l.air = "auto"; l.qty = "auto" }

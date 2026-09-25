@@ -149,6 +149,8 @@ export function gwDeptsForRole(role: string, claimDept?: string | null): string[
 export function ownerCanonicalDept(role: string, claimDept?: string | null): string | null {
   if (role === "CLAIM_GW") return claimDept === "SUPPLIER" ? "SUPPLIER" : "GW"
   if (role === "SCM_NYG") return "SCM NYG"
+  // NYG "SCM NYG" claim 2-step: DPM_SCM (entry) → VP_SCM (VP) both own dept "SCM NYG".
+  if (role === "DPM_SCM" || role === "VP_SCM") return "SCM NYG"
   if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return "SCM NYK"
   // Commercial claim = MER's team (NYG DVM/VP MER, EA *_MER_EA, TRM *_MER_TRM) → dept COMMERCIAL.
   if (role === "DVM_MER" || role === "VP_MER" || role === "DVM_MER_EA" || role === "VP_MER_EA" || role === "DVM_MER_TRM" || role === "VP_MER_TRM") return "COMMERCIAL"
@@ -308,7 +310,14 @@ export function positionHasBranch(dept: string, pos: number): boolean {
   return !!chainFor(dept)[pos]?.branch
 }
 
-export function chainFor(dept: string): ClaimPosition[] {
+// NYG "SCM NYG" claim is a 2-step chain (DPM SCM → VP SCM). GW's "SCM NYG" is the longer chain in
+// CLAIM_CHAINS (SCM NYG → VP SCM NYG → VP PROD → EVP PROD), so the chain is BU-aware for this dept.
+const SCM_NYG_NYG_CHAIN: ClaimPosition[] = [
+  { label: "SCM NYG", role: "DPM_SCM" },
+  { label: "VP SCM NYG", role: "VP_SCM" },
+]
+export function chainFor(dept: string, bu?: string): ClaimPosition[] {
+  if (dept === "SCM NYG" && bu && bu !== "GW") return SCM_NYG_NYG_CHAIN
   return CLAIM_CHAINS[dept] || [{ label: dept }]
 }
 
@@ -389,8 +398,8 @@ export function nextPositionRole(dept: string, currentPos: number, factory?: str
 }
 
 // Is `currentPos` the last position of the dept's chain (→ finish, no forward)?
-export function isLastPosition(dept: string, currentPos: number): boolean {
-  return currentPos >= chainFor(dept).length - 1
+export function isLastPosition(dept: string, currentPos: number, bu?: string): boolean {
+  return currentPos >= chainFor(dept, bu).length - 1
 }
 
 // Does this item have a split for `dept` still awaiting finalization?

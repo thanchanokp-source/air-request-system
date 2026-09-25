@@ -1743,7 +1743,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const actAsNext = userRole === "CLAIM_NEXT_APPROVER" || myEmailFwds.length > 0
     // COMMERCIAL claim is approved by the MER team (DVM_MER / VP_MER, per CLAIM_DEPT_ROLE_MAP) — the
     // same people who approved the upload — so their roles must count as claim owners here too.
-    const CLAIM_OWNER_ROLES = ["CLAIM_GW", "SCM_NYG", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER",
+    const CLAIM_OWNER_ROLES = ["CLAIM_GW", "SCM_NYG", "DPM_SCM", "VP_SCM", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER",
       "DVM_MER", "DVM_MER_EA", "DVM_MER_TRM", "VP_MER", "VP_MER_EA", "VP_MER_TRM"]
     const isClaimOwnerRole = heldRoles.some(r => CLAIM_OWNER_ROLES.includes(r))
     if (!isClaimOwnerRole && !actAsNext) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -1785,7 +1785,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!dept) return NextResponse.json({ error: "Cannot determine your claim department" }, { status: 400 })
     // Forced chain: only the LAST position may finish. Earlier positions must
     // forward to the next position first (GW / SUPPLIER are single-position → ok).
-    if (!isLastPosition(dept, currentPos)) {
+    if (!isLastPosition(dept, currentPos, request.bu)) {
       return NextResponse.json({ error: "You must forward to the next position — only the final position can finish the process." }, { status: 400 })
     }
     const splitDepts = expandClaimDept(dept)
