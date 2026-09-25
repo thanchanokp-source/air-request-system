@@ -662,7 +662,8 @@ model PullShipModeLog {
 model PullForwarder {
   id          String   @id @default(cuid())
   name        String   @unique // FWD short name, matches PullFreightAir.fwd where possible
-  email       String
+  email       String   // main recipient (To)
+  ccEmails    String[] @default([]) // extra people at the same forwarder — always copied on the mail
   contactName String?
   tel         String?
   isActive    Boolean  @default(true)

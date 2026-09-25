@@ -15,7 +15,7 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState("")
   const [q, setQ] = useState("")
-  const [nw, setNw] = useState({ name: "", email: "", contactName: "", tel: "" })
+  const [nw, setNw] = useState({ name: "", email: "", ccEmails: "", contactName: "", tel: "" })
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({})
   // FWD names already used in the Air rate master — so LG can add the ones the system actually quotes.
   const [knownFwd, setKnownFwd] = useState<string[]>([])
@@ -34,9 +34,9 @@ export default function Page() {
     }).catch(() => {})
   }, [])
 
-  const val = (r: any, k: string) => edits[r.id]?.[k] ?? (r[k] != null ? String(r[k]) : "")
+  const val = (r: any, k: string) => edits[r.id]?.[k] ?? (Array.isArray(r[k]) ? r[k].join(", ") : r[k] != null ? String(r[k]) : "")
   const setVal = (id: string, k: string, v: string) => setEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }))
-  const dirty = (r: any) => !!edits[r.id] && Object.entries(edits[r.id]).some(([k, v]) => v !== (r[k] != null ? String(r[k]) : ""))
+  const dirty = (r: any) => !!edits[r.id] && Object.entries(edits[r.id]).some(([k, v]) => v !== (Array.isArray(r[k]) ? r[k].join(", ") : r[k] != null ? String(r[k]) : ""))
 
   const add = async () => {
     if (!nw.name.trim()) return alert("ใส่ชื่อ FWD ก่อน")
@@ -47,7 +47,7 @@ export default function Page() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(nw),
       })
       const d = await r.json().catch(() => ({}))
-      if (r.ok) { setNw({ name: "", email: "", contactName: "", tel: "" }); await load() } else alert(d.error || "เพิ่มไม่สำเร็จ")
+      if (r.ok) { setNw({ name: "", email: "", ccEmails: "", contactName: "", tel: "" }); await load() } else alert(d.error || "เพิ่มไม่สำเร็จ")
     } finally { setBusy("") }
   }
 
@@ -56,7 +56,7 @@ export default function Page() {
     try {
       const res = await fetch("/api/pull-material/forwarders", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: r.id, name: val(r, "name"), email: val(r, "email"), contactName: val(r, "contactName"), tel: val(r, "tel") }),
+        body: JSON.stringify({ id: r.id, name: val(r, "name"), email: val(r, "email"), ccEmails: val(r, "ccEmails"), contactName: val(r, "contactName"), tel: val(r, "tel") }),
       })
       const d = await res.json().catch(() => ({}))
       if (res.ok) await load(); else alert(d.error || "บันทึกไม่สำเร็จ")
@@ -97,7 +97,7 @@ export default function Page() {
       {/* Add a contact */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div className="text-sm font-bold text-gray-800 mb-3">➕ เพิ่ม Forwarder</div>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
           <div>
             <label className="text-[11px] font-semibold text-gray-500 block mb-1">ชื่อ FWD *</label>
             <input list="known-fwd" value={nw.name} onChange={e => setNw({ ...nw, name: e.target.value })} placeholder="BFI" className={inp} />
@@ -106,6 +106,10 @@ export default function Page() {
           <div>
             <label className="text-[11px] font-semibold text-gray-500 block mb-1">อีเมล *</label>
             <input value={nw.email} onChange={e => setNw({ ...nw, email: e.target.value })} placeholder="ops@forwarder.com" className={inp} />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-gray-500 block mb-1">อีเมลเพิ่ม (CC)</label>
+            <input value={nw.ccEmails} onChange={e => setNw({ ...nw, ccEmails: e.target.value })} placeholder="sales@… , doc@…" className={inp} />
           </div>
           <div>
             <label className="text-[11px] font-semibold text-gray-500 block mb-1">ผู้ติดต่อ</label>
@@ -139,13 +143,16 @@ export default function Page() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 text-xs">
-                  <tr>{["FWD", "อีเมล", "ผู้ติดต่อ", "เบอร์", "ใช้งาน", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr>
+                  <tr>{["FWD", "อีเมลหลัก (To)", "อีเมลเพิ่ม (CC)", "ผู้ติดต่อ", "เบอร์", "ใช้งาน", ""].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {shown.map(r => (
                     <tr key={r.id} className={`hover:bg-gray-50 ${r.isActive ? "" : "opacity-50"}`}>
                       <td className="px-3 py-2 min-w-[130px]"><input value={val(r, "name")} onChange={e => setVal(r.id, "name", e.target.value)} className={inp} /></td>
                       <td className="px-3 py-2 min-w-[220px]"><input value={val(r, "email")} onChange={e => setVal(r.id, "email", e.target.value)} className={inp} /></td>
+                      <td className="px-3 py-2 min-w-[230px]">
+                        <input value={val(r, "ccEmails")} onChange={e => setVal(r.id, "ccEmails", e.target.value)} placeholder="คั่นด้วย , (ไม่มีก็เว้นว่าง)" className={inp} />
+                      </td>
                       <td className="px-3 py-2 min-w-[150px]"><input value={val(r, "contactName")} onChange={e => setVal(r.id, "contactName", e.target.value)} className={inp} /></td>
                       <td className="px-3 py-2 min-w-[120px]"><input value={val(r, "tel")} onChange={e => setVal(r.id, "tel", e.target.value)} className={inp} /></td>
                       <td className="px-3 py-2">
@@ -169,7 +176,7 @@ export default function Page() {
             </div>
           )}
       </div>
-      <p className="text-[11px] text-gray-400">* ส่งเมลหา FWD รายใหม่จากหน้า LOGISTICS ระบบจะเก็บชื่อ+อีเมลเข้ามาที่นี่ให้อัตโนมัติ</p>
+      <p className="text-[11px] text-gray-400">* ส่งเมลหา FWD รายใหม่จากหน้า LOGISTICS ระบบจะเก็บชื่อ+อีเมลเข้ามาที่นี่ให้อัตโนมัติ · ใส่ได้หลายอีเมลในช่อง CC คั่นด้วย , (ทุกคนจะได้รับเมลขอ Actual พร้อมกัน)</p>
     </div>
   )
 }

@@ -7,6 +7,14 @@ import { prisma } from "@/lib/prisma"
 // template; sending to a brand-new address upserts it, so the list fills itself over time.
 const canEdit = (u: any) => !!u && (u.role === "ADMIN" || u.roles?.includes("LOGISTICS_IMPORT") || u.roles?.includes("ADMIN"))
 
+// "a@x.com, b@x.com; c@x.com" → ["a@x.com","b@x.com","c@x.com"] (invalid entries dropped).
+const parseEmails = (v: any): string[] => {
+  const list = Array.isArray(v) ? v : String(v || "").split(/[,;\s]+/)
+  const seen = new Set<string>()
+  return list.map(e => String(e || "").trim().toLowerCase())
+    .filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && !seen.has(e) && seen.add(e))
+}
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -27,8 +35,8 @@ export async function POST(req: NextRequest) {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: "invalid email" }, { status: 400 })
   const row = await (prisma as any).pullForwarder.upsert({
     where: { name },
-    update: { ...(email ? { email } : {}), ...(b.contactName !== undefined ? { contactName: b.contactName || null } : {}), ...(b.tel !== undefined ? { tel: b.tel || null } : {}), ...(b.isActive !== undefined ? { isActive: !!b.isActive } : {}) },
-    create: { name, email, contactName: b.contactName || null, tel: b.tel || null },
+    update: { ...(email ? { email } : {}), ...(b.ccEmails !== undefined ? { ccEmails: parseEmails(b.ccEmails) } : {}), ...(b.contactName !== undefined ? { contactName: b.contactName || null } : {}), ...(b.tel !== undefined ? { tel: b.tel || null } : {}), ...(b.isActive !== undefined ? { isActive: !!b.isActive } : {}) },
+    create: { name, email, ccEmails: parseEmails(b.ccEmails), contactName: b.contactName || null, tel: b.tel || null },
   })
   return NextResponse.json({ ok: true, row })
 }
@@ -47,6 +55,7 @@ export async function PATCH(req: NextRequest) {
     data: {
       ...(b.name !== undefined ? { name: String(b.name).trim() } : {}),
       ...(email !== undefined ? { email } : {}),
+      ...(b.ccEmails !== undefined ? { ccEmails: parseEmails(b.ccEmails) } : {}),
       ...(b.contactName !== undefined ? { contactName: b.contactName || null } : {}),
       ...(b.tel !== undefined ? { tel: b.tel || null } : {}),
       ...(b.isActive !== undefined ? { isActive: !!b.isActive } : {}),

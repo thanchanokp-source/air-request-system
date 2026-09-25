@@ -100,6 +100,7 @@ export default function Page() {
   const [forwarders, setForwarders] = useState<any[]>([])
   const [fwdName, setFwdName] = useState("")
   const [fwdEmail, setFwdEmail] = useState("")
+  const [fwdCc, setFwdCc] = useState("")          // extra recipients at the same forwarder
   const [fwdNote, setFwdNote] = useState("")
   const [fwdBusy, setFwdBusy] = useState(false)
   // Which half of the template to ask for: 1 = booking info (MAWB/HAWB/ETD/ETA/rate), 2 = the actual
@@ -258,6 +259,7 @@ export default function Page() {
   // "B.F.I" in the rate sheet still finds the "BFI" contact.
   const fwdKey = (s: any) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "")
   const fwdEmailOf = (name: any) => forwarders.find((f: any) => fwdKey(f.name) === fwdKey(name))?.email || ""
+  const fwdCcOf = (name: any) => (forwarders.find((f: any) => fwdKey(f.name) === fwdKey(name))?.ccEmails || []).join(", ")
 
   // Opening a doc → prefill the FWD box: what was used before, else the FWD behind the Pre cost,
   // and its email from the contact master.
@@ -269,6 +271,7 @@ export default function Page() {
     setFwdPhase(rq.fwdPhase === 1 || rq.hawbNo ? 2 : 1)
     setFwdName(name)
     setFwdEmail(rq.fwdEmail || fwdEmailOf(name) || "")
+    setFwdCc(fwdCcOf(name))
     setFwdNote("")
   }, [openId, reqs, forwarders]) // eslint-disable-line
 
@@ -284,7 +287,7 @@ export default function Page() {
     try {
       const r = await fetch(`/api/pull-material/fwd-request`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: [rq.id], phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), note: fwdNote.trim(),
+        body: JSON.stringify({ ids: [rq.id], phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), cc: fwdCc, note: fwdNote.trim(),
           subject: fwdSubject.trim() || defaultSubject(fwdPhase, 1, rq.documentNo), detail: fwdDetail.trim() }),
       })
       const d = await r.json().catch(() => ({}))
@@ -376,7 +379,7 @@ export default function Page() {
     try {
       const r = await fetch("/api/pull-material/fwd-request", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids, phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), note: fwdNote.trim(),
+        body: JSON.stringify({ ids, phase: fwdPhase, fwdName: fwdName.trim(), fwdEmail: fwdEmail.trim(), cc: fwdCc, note: fwdNote.trim(),
           subject: fwdSubject.trim() || defaultSubject(fwdPhase, ids.length), detail: fwdDetail.trim() }),
       })
       const d = await r.json().catch(() => ({}))
@@ -1111,13 +1114,14 @@ export default function Page() {
                     <div className="space-y-2.5">
                       <div>
                         <label className="text-[11px] font-semibold text-amber-700 block mb-1">FWD</label>
-                        <input list="pull-fwd-list" value={fwdName} onChange={e => { const v = e.target.value; setFwdName(v); const em = fwdEmailOf(v); if (em) setFwdEmail(em) }}
+                        <input list="pull-fwd-list" value={fwdName} onChange={e => { const v = e.target.value; setFwdName(v); const em = fwdEmailOf(v); if (em) setFwdEmail(em); setFwdCc(fwdCcOf(v)) }}
                           placeholder="ชื่อ Forwarder…" className={inp} />
                         <datalist id="pull-fwd-list">{forwarders.map((f: any) => <option key={f.id} value={f.name}>{f.email}</option>)}</datalist>
                       </div>
                       <div>
                         <label className="text-[11px] font-semibold text-amber-700 block mb-1">อีเมล FWD <span className="text-red-500">*</span></label>
                         <input value={fwdEmail} onChange={e => setFwdEmail(e.target.value)} placeholder="forwarder@company.com" className={inp} />
+                        <input value={fwdCc} onChange={e => setFwdCc(e.target.value)} placeholder="CC เพิ่ม (คั่นด้วย ,)" className={inp + " mt-1.5"} />
                         {/* New FWD in the rate master that nobody has an address for yet — say so instead of
                             failing at send time. Typing it here saves it into MASTER FWD automatically. */}
                         {fwdName && !fwdEmailOf(fwdName) && (
@@ -1408,12 +1412,13 @@ export default function Page() {
               </div>
               <div>
                 <label className="text-[11px] font-semibold text-amber-700 block mb-1">FWD</label>
-                <input list="pull-fwd-list" value={fwdName} onChange={e => { const v = e.target.value; setFwdName(v); const em = fwdEmailOf(v); if (em) setFwdEmail(em) }} placeholder="ชื่อ Forwarder…" className={inp} />
+                <input list="pull-fwd-list" value={fwdName} onChange={e => { const v = e.target.value; setFwdName(v); const em = fwdEmailOf(v); if (em) setFwdEmail(em); setFwdCc(fwdCcOf(v)) }} placeholder="ชื่อ Forwarder…" className={inp} />
                 <datalist id="pull-fwd-list">{forwarders.map((f: any) => <option key={f.id} value={f.name}>{f.email}</option>)}</datalist>
               </div>
               <div>
                 <label className="text-[11px] font-semibold text-amber-700 block mb-1">อีเมล FWD <span className="text-red-500">*</span></label>
                 <input value={fwdEmail} onChange={e => setFwdEmail(e.target.value)} placeholder="forwarder@company.com" className={inp} />
+                <input value={fwdCc} onChange={e => setFwdCc(e.target.value)} placeholder="CC เพิ่ม (คั่นด้วย ,)" className={inp + " mt-1.5"} />
               </div>
               <div>
                 <label className="text-[11px] font-semibold text-amber-700 block mb-1">หัวข้ออีเมล (Subject)</label>

@@ -73,7 +73,12 @@ export async function POST(req: NextRequest) {
     note: String(body.note || "").trim() || undefined,
   })
 
-  const to = [fwdEmail, ...(actorEmail ? [actorEmail] : [])]
+  // Everyone at the forwarder who should get it: the main address, the CC list LG keeps in MASTER FWD
+  // (or typed in the dialog), and the LG user themselves as a copy.
+  const ccList = (Array.isArray(body.cc) ? body.cc : String(body.cc || "").split(/[,;\s]+/))
+    .map((e: any) => String(e || "").trim().toLowerCase())
+    .filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e !== fwdEmail)
+  const to = [...new Set([fwdEmail, ...ccList, ...(actorEmail ? [actorEmail.toLowerCase()] : [])])]
   const testTo = air.every((d: any) => d.isTest) ? (actorEmail || null) : null
   await runWithTestMail(testTo, () =>
     sendMail(to, subject, html,
