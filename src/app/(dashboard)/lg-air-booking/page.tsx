@@ -202,7 +202,7 @@ export default function LgAirBookingPage() {
               <button key={b.brand} onClick={() => selectBrand(b.brand)}
                 className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold ${brand === b.brand ? "text-white border-transparent" : "bg-gray-50 text-gray-600 border-gray-200 hover:border-red-300"}`}
                 style={brand === b.brand ? { background: MAROON } : {}}>
-                {b.brand} <span className="text-[10px] opacity-70">{b.invCount} INV · พร้อม {b.readySo}</span>
+                {b.brand} <span className="text-[10px] opacity-70">{b.invCount} INV</span>
               </button>
             ))}
             {brands.length === 0 && <span className="text-xs text-gray-400">ไม่มีข้อมูล mp_line</span>}
