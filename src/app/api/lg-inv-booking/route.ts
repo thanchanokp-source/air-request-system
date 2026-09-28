@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange } from "@/lib/notify"
-import { recomputeRequestFreight } from "@/lib/freight"
+import { canonCountry } from "@/lib/freight"
 import { randomUUID } from "crypto"
 
 export const runtime = "nodejs"
@@ -179,8 +179,38 @@ export async function POST(req: NextRequest) {
   }
   const infoOf = (l: any) => infoByKey.get(`${so8k(l.so)}|${nrm(l.sub)}`) || infoBySo.get(so8k(l.so)) || { producttype: "", country: "" }
 
+  // EST for auto-add = mp_line ACTUAL weight/pc × freight rate (MasterDescription has no producttype
+  // names, so recompute would give 0). weight/pc = final_gw ÷ final_pcs (fallback plan_gw ÷ plan_pcs).
+  const soN2 = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
+  const wtBySo = new Map<string, number>()
+  const soDigitKeys = [...new Set(lines.map((l: any) => soN2(l.so)).filter(Boolean))]
+  if (soDigitKeys.length) {
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') AS so, sum(COALESCE(final_gw,0)) gw, sum(COALESCE(final_pcs,0)) pcs, sum(COALESCE(plan_gw,0)) pgw, sum(COALESCE(plan_pcs,0)) ppcs FROM public.mp_line WHERE ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') = ANY($1::text[]) GROUP BY 1`, soDigitKeys)
+      for (const r of rows) {
+        const gw = Number(r.gw) || 0, pcs = Number(r.pcs) || 0, pgw = Number(r.pgw) || 0, ppcs = Number(r.ppcs) || 0
+        const perPc = (pcs > 0 && gw > 0) ? gw / pcs : (ppcs > 0 && pgw > 0) ? pgw / ppcs : 0
+        if (perPc > 0) wtBySo.set(String(r.so), perPc)
+      }
+    } catch { /* mp_line weight unavailable → gross/EST 0 */ }
+  }
+  const rates: Record<string, number> = {}
+  try {
+    const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
+    for (const r of rateList) rates[canonCountry(r.country)] = r.ratePerKg
+  } catch { /* no rates → EST 0 */ }
+  const estOf = (l: any) => {
+    const pcs = Math.round(Number(l.pcs) || 0)
+    const wt = wtBySo.get(soN2(l.so)) || 0
+    const rate = rates[canonCountry(infoOf(l).country)] || 0
+    const gross = Math.round(pcs * wt * 1000) / 1000
+    return { gross, est: Math.round(gross * rate * 100) / 100, rate }
+  }
+
   const itemData = lines.map((l: any) => {
     const pcs = Math.round(Number(l.pcs) || 0)
+    const e = estOf(l)
     return {
       style: String(l.style || ""),
       so: String(l.so || ""),                    // already 8-digit from GET (so8)
@@ -196,9 +226,9 @@ export async function POST(req: NextRequest) {
       factory: "",
       country: infoOf(l).country || "",   // shipcountry from SO_ORDER → drives the freight rate (EST)
       port: "",
-      grossWeight: 0,
-      airFreight: 0,                             // no plan/est — never went through air req
-      marketRatePerKg: null,
+      grossWeight: e.gross,                      // mp_line actual weight (qty × final_gw/final_pcs)
+      airFreight: e.est,                         // EST = gross × freight rate (shipcountry)
+      marketRatePerKg: e.rate || null,
       invoiceNo: l.inv ? String(l.inv) : null,
       hawbNo,
       bookingDate,
@@ -230,8 +260,8 @@ export async function POST(req: NextRequest) {
     include: { items: true },
   })
 
-  // Compute gross (= qty × weight of the style_type) + EST (= gross × country rate) from the masters.
-  await recomputeRequestFreight(request.id).catch(() => {})
+  // gross/EST already set from mp_line weight × rate above (do NOT recompute — MasterDescription has no
+  // producttype names, so recompute would zero them).
   await notifyStatusChange(request.id, "PENDING_SCM").catch(() => {}) // alert SCM_USER (Kimita) to select claim
 
   return NextResponse.json({ id: request.id, documentNo: request.documentNo, items: request.items.length })

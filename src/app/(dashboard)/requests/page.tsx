@@ -577,7 +577,7 @@ export default function RequestsPage() {
           return (
             <div key={dg.request.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {/* Document header */}
-              <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 cursor-pointer hover:bg-gray-50 select-none bg-gray-50 border-b border-gray-100 min-w-0" onClick={() => toggleDoc(dg.request.id)}>
+              <div className="flex items-center gap-2 px-3 sm:px-4 py-3 cursor-pointer hover:bg-gray-50 select-none bg-gray-50 border-b border-gray-100 min-w-0 overflow-x-auto" onClick={() => toggleDoc(dg.request.id)}>
                 <span className="text-gray-400 text-xs w-4 shrink-0">{isDocExp ? "▼" : "▶"}</span>
                 <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
                   className="font-bold text-blue-700 hover:underline text-sm shrink-0">{dg.request.documentNo}</Link>
@@ -603,8 +603,8 @@ export default function RequestsPage() {
                 })()}
                 <span className="text-xs text-gray-500 truncate shrink-0">{dg.request.bu || dg.request.buName}</span>
                 {(dg.request.createdBy?.name || dg.request.createdBy?.email) && (
-                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap shrink-0" title="Uploaded by / Requested by">
-                    👤 {dg.request.createdBy.name || dg.request.createdBy.email}
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full truncate min-w-0 max-w-[150px] shrink" title={dg.request.createdBy.name || dg.request.createdBy.email}>
+                    👤 {String(dg.request.createdBy.name || dg.request.createdBy.email).split("@")[0]}
                   </span>
                 )}
                 {dg.request.createdAt && (
