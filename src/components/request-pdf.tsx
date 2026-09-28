@@ -488,7 +488,7 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
   // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
   // wrap, so a too-narrow column overflows and overlaps its neighbour. Fixed cols sum ≈ 482
   // → REASON (flex) gets the rest.
-  const C = { no: 14, so: 40, style: 40, sub: 16, desc: 20, fac: 28, ctry: 44, hawb: 34, inv: 38, qty: 32, gross: 38, est: 52, act: 52, claim: 46 }
+  const C = { no: 14, so: 40, style: 52, sub: 22, desc: 20, fac: 28, ctry: 44, hawb: 34, inv: 38, qty: 32, gross: 38, est: 50, act: 50, claim: 46 }
   const content = (
     <>
         {/* Letterhead */}
@@ -561,8 +561,8 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
             <View style={s.tr} key={idx} wrap={false}>
               <Text style={[s.td, { width: C.no }]}>{idx + 1}</Text>
               <Text style={[s.td, { width: C.so }]}>{item.so || "-"}</Text>
-              <Text style={[s.td, { width: C.style }]}>{item.style || "-"}</Text>
-              <Text style={[s.td, { width: C.sub }]}>{item.sub || "-"}</Text>
+              <Text style={[s.td, { width: C.style }]}>{softWrap(item.style)}</Text>
+              <Text style={[s.td, { width: C.sub }]}>{softWrap(item.sub)}</Text>
               <Text style={[s.td, { width: C.desc }]}>{descLabel(item.description)}</Text>
               <Text style={[s.td, { width: C.fac }]}>{item.factory || "-"}</Text>
               <Text style={[s.td, { width: C.ctry }]}>{item.country || "-"}</Text>
