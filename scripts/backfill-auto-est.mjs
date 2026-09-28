@@ -23,20 +23,16 @@ const items = await prisma.airRequestItem.findMany({
 if (!items.length) { console.log("No auto-add items found."); await prisma.$disconnect(); process.exit(0) }
 console.log(`Found ${items.length} auto-add item(s).`)
 
-// 2) master_style: style_code → style_type
-const codes = [...new Set(items.map(i => nrm(i.style)).filter(Boolean))]
-const styleType = new Map()
-if (codes.length) {
-  const rows = await prisma.$queryRawUnsafe(`SELECT UPPER(TRIM(style_code)) AS code, style_type FROM public.master_style WHERE UPPER(TRIM(style_code)) = ANY($1::text[])`, codes)
-  for (const r of rows) if (r.style_type) styleType.set(String(r.code), String(r.style_type))
+// 2) ReportDB.SO_ORDER_NYG_2020_present (so_no_doc→8 digits + sub_no, unique):
+//    producttype → description (→ weight) · shipcountry → country (→ rate)
+const so8k = (s) => { const d = String(s == null ? "" : s).replace(/\D/g, ""); return d ? d.padStart(8, "0") : "" }
+const infoByKey = new Map(), infoBySo = new Map()
+const so8keys = [...new Set(items.map(i => so8k(i.so)).filter(Boolean))]
+if (so8keys.length) {
+  const rows = await prisma.$queryRawUnsafe(`SELECT lpad(regexp_replace(COALESCE(so_no_doc,''),'\\D','','g'),8,'0') AS so8, UPPER(TRIM(COALESCE(sub_no,''))) AS sub, producttype, shipcountry FROM "ReportDB"."SO_ORDER_NYG_2020_present" WHERE lpad(regexp_replace(COALESCE(so_no_doc,''),'\\D','','g'),8,'0') = ANY($1::text[])`, so8keys)
+  for (const r of rows) { const info = { producttype: String(r.producttype || ""), country: String(r.shipcountry || "") }; const kk = `${r.so8}|${r.sub || ""}`; if (!infoByKey.has(kk)) infoByKey.set(kk, info); if (!infoBySo.has(String(r.so8))) infoBySo.set(String(r.so8), info) }
 }
-// 3) mp_line: SO → country
-const soKeys = [...new Set(items.map(i => soN(i.so)).filter(Boolean))]
-const countryBySo = new Map()
-if (soKeys.length) {
-  const rows = await prisma.$queryRawUnsafe(`SELECT ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') AS so, country FROM public.mp_line WHERE country IS NOT NULL AND TRIM(country) <> '' AND ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') = ANY($1::text[])`, soKeys)
-  for (const r of rows) if (r.so && !countryBySo.has(String(r.so))) countryBySo.set(String(r.so), String(r.country))
-}
+const infoOf = (it) => infoByKey.get(`${so8k(it.so)}|${nrm(it.sub)}`) || infoBySo.get(so8k(it.so)) || { producttype: "", country: "" }
 // 4) masters: weight (by description) + rate (by country)
 const descList = await prisma.masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
 const wts = {}; for (const d of descList) wts[descKey(d.name)] = d.weightPerUnit || 0
@@ -46,8 +42,9 @@ const rates = {}; for (const r of rateList) rates[canonCountry(r.country)] = r.r
 let filled = 0, stillZero = 0
 const updates = []
 for (const it of items) {
-  const desc = it.description && it.description.trim() ? it.description : (styleType.get(nrm(it.style)) || "")
-  const country = it.country && it.country.trim() ? it.country : (countryBySo.get(soN(it.so)) || "")
+  const info = infoOf(it)
+  const desc = it.description && it.description.trim() ? it.description : (info.producttype || "")
+  const country = it.country && it.country.trim() ? it.country : (info.country || "")
   const wt = wts[descKey(desc)] || 0
   const rate = rates[canonCountry(country)] || 0
   const qty = it.qtyRequestAir || it.qtyOriginalShipment || 0

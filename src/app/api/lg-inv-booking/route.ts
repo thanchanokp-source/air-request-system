@@ -155,30 +155,29 @@ export async function POST(req: NextRequest) {
   if (!hawbNo) return NextResponse.json({ error: "ต้องมี HAWB" }, { status: 400 })
   if (lines.length === 0) return NextResponse.json({ error: "ไม่มี auto line" }, { status: 400 })
 
-  // Map mp_line style → master_style.style_type, and use it as the DESCRIPTION so the app's weight
-  // master (MasterDescription, keyed by description) can price it → EST computes on recompute.
+  // Look up EST inputs from ReportDB.SO_ORDER_NYG_2020_present (keyed by so_no_doc→8 digits + sub_no,
+  // which is unique there): producttype → DESCRIPTION (→ weight from MasterDescription) and shipcountry
+  // → country (→ rate from MasterFreightRate). One join gives both → EST computes on recompute.
   const nrm = (s: any) => String(s == null ? "" : s).trim().toUpperCase()
-  const codes = [...new Set(lines.map((l: any) => nrm(l.style)).filter(Boolean))]
-  const styleType = new Map<string, string>()
-  if (codes.length) {
+  const so8k = (s: any) => { const d = String(s == null ? "" : s).replace(/\D/g, ""); return d ? d.padStart(8, "0") : "" }
+  const infoByKey = new Map<string, { producttype: string; country: string }>()
+  const infoBySo = new Map<string, { producttype: string; country: string }>()
+  const so8keys = [...new Set(lines.map((l: any) => so8k(l.so)).filter(Boolean))]
+  if (so8keys.length) {
     try {
       const rows = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT UPPER(TRIM(style_code)) AS code, style_type FROM public.master_style WHERE UPPER(TRIM(style_code)) = ANY($1::text[])`, codes)
-      for (const r of rows) if (r.style_type) styleType.set(String(r.code), String(r.style_type))
-    } catch { /* master_style unavailable → description stays blank, EST 0 */ }
+        `SELECT lpad(regexp_replace(COALESCE(so_no_doc,''),'\\D','','g'),8,'0') AS so8, UPPER(TRIM(COALESCE(sub_no,''))) AS sub, producttype, shipcountry
+         FROM "ReportDB"."SO_ORDER_NYG_2020_present"
+         WHERE lpad(regexp_replace(COALESCE(so_no_doc,''),'\\D','','g'),8,'0') = ANY($1::text[])`, so8keys)
+      for (const r of rows) {
+        const info = { producttype: String(r.producttype || ""), country: String(r.shipcountry || "") }
+        const kk = `${r.so8}|${r.sub || ""}`
+        if (!infoByKey.has(kk)) infoByKey.set(kk, info)
+        if (!infoBySo.has(String(r.so8))) infoBySo.set(String(r.so8), info)  // SO-only fallback (country is per SO)
+      }
+    } catch { /* ReportDB unavailable → description/country blank, EST 0 */ }
   }
-
-  // Country per SO from mp_line (its shipment destination) → needed for the freight RATE (→ EST).
-  const countryBySo = new Map<string, string>()
-  const soKeys = [...new Set(lines.map((l: any) => soN(l.so)).filter(Boolean))]
-  if (soKeys.length) {
-    try {
-      const rows = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') AS so, country FROM public.mp_line
-         WHERE country IS NOT NULL AND TRIM(country) <> '' AND ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') = ANY($1::text[])`, soKeys)
-      for (const r of rows) if (r.so && !countryBySo.has(String(r.so))) countryBySo.set(String(r.so), String(r.country))
-    } catch { /* mp_line country unavailable → country stays blank, rate/EST 0 */ }
-  }
+  const infoOf = (l: any) => infoByKey.get(`${so8k(l.so)}|${nrm(l.sub)}`) || infoBySo.get(so8k(l.so)) || { producttype: "", country: "" }
 
   const itemData = lines.map((l: any) => {
     const pcs = Math.round(Number(l.pcs) || 0)
@@ -188,14 +187,14 @@ export async function POST(req: NextRequest) {
       brand: brand || null,
       sub: l.sub ? String(l.sub) : null,
       customerPO: "",
-      description: styleType.get(nrm(l.style)) || "",  // style_type from master_style → drives weight/EST
+      description: infoOf(l).producttype || "",   // producttype from SO_ORDER → drives weight/EST
       originalShipmentDate: null,
       planShipmentDate: null,
       qtyOriginalShipment: pcs,
       qtyRequestAir: pcs,                         // QTY follows mp_line
       reasonDelay: "Auto-add (shipped, prepaid — no air request)",
       factory: "",
-      country: countryBySo.get(soN(l.so)) || "",   // from mp_line → drives the freight rate (EST)
+      country: infoOf(l).country || "",   // shipcountry from SO_ORDER → drives the freight rate (EST)
       port: "",
       grossWeight: 0,
       airFreight: 0,                             // no plan/est — never went through air req
