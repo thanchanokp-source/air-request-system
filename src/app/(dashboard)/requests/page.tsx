@@ -8,6 +8,19 @@ import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 import { ApprovalChain } from "@/components/ApprovalChain"
 import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 
+// Attachments grouped by stage for the popup: MER / SCM / LG / Claim (by uploader role + category).
+const ATT_STAGES = ["MER", "SCM", "LG", "Claim"] as const
+const attStageOf = (a: any): string => {
+  const cat = String(a?.category || "").toUpperCase()
+  if (["INV", "AWB", "EXPENSE", "COMBINE"].includes(cat) || cat.startsWith("HAWB")) return "LG"
+  const r = String(a?.uploadedBy?.role || "")
+  if (r === "SCM_USER" || r === "VP_SCM" || r === "DPM_SCM" || r === "SCM_PULL") return "SCM"
+  if (r.startsWith("LOGISTICS")) return "LG"
+  if (r.startsWith("CLAIM") || r.startsWith("DVM_PRO") || r.startsWith("VP_PRO") || r.startsWith("SCM_NY")) return "Claim"
+  return "MER" // MER_*/DVM_MER/VP_MER/ADMIN/GW-merch and any fallback
+}
+const ATT_META: Record<string, string> = { MER: "bg-blue-600", SCM: "bg-green-600", LG: "bg-orange-500", Claim: "bg-purple-600" }
+
 const STATUS_LABELS: Record<string, string> = {
   PENDING_DVM_MER: "Pending DVM Merchandise",
   PENDING_VP_MER: "Pending VP Merchandise", PENDING_SCM: "Pending SCM",
@@ -153,6 +166,7 @@ export default function RequestsPage() {
   const [recallDoc, setRecallDoc] = useState<any>(null)
   const [recallReason, setRecallReason] = useState("")
   const [recalling, setRecalling] = useState(false)
+  const [attDoc, setAttDoc] = useState<any>(null) // doc whose attachments popup is open
   // Statuses the CREATOR may still recall from — the merch-review window before VP MER / GM approves.
   const MER_RECALL_WINDOW = ["PENDING_DVM_MER", "PENDING_VP_MER", "PENDING_DVM_MER_EA", "PENDING_VP_MER_EA", "PENDING_DVM_MER_TRM", "PENDING_VP_MER_TRM", "PENDING_VP_MER_GW", "PENDING_GM_GW"]
   const canRecallDoc = (req: any) => {
@@ -600,25 +614,16 @@ export default function RequestsPage() {
                 <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium whitespace-nowrap shrink-0">ACT {groupSplit(dg.styles.flatMap((s: any) => s.rows), (r: any) => r.actualAirFreight)}</span>
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{dg.styles.length} style(s) · {dg.total} transactions</span>
                 {(() => {
-                  // Collapse multiple attachment chips → first file + "+N" so the row stays on ONE line.
-                  const atts = (dg.request.attachments || []).filter((a: any) => ["MER_USER","MER_GW","MER_EA","MER_TRM","VP_MER","ADMIN"].includes(a.uploadedBy?.role) && !["INV","AWB","EXPENSE","COMBINE"].includes(a.category))
+                  // ONE compact chip → opens a popup with every attachment grouped by stage (MER/SCM/LG/Claim).
+                  const atts = (dg.request.attachments || [])
                   if (!atts.length) return null
-                  const first = atts[0]
                   return (
-                    <>
-                      <a href={`/api/attachments/${first.id}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                        title={first.fileName}
-                        className="flex items-center gap-1 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full font-medium shrink-0 max-w-[130px] hover:bg-orange-100">
-                        <span className="shrink-0">📎</span><span className="truncate">{first.fileName}</span>
-                      </a>
-                      {atts.length > 1 && (
-                        <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
-                          title={atts.slice(1).map((a: any) => a.fileName).join("\n")}
-                          className="text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2 py-0.5 rounded-full font-medium shrink-0 hover:bg-orange-100 whitespace-nowrap">
-                          +{atts.length - 1}
-                        </Link>
-                      )}
-                    </>
+                    <button onClick={e => { e.stopPropagation(); setAttDoc(dg.request) }}
+                      title="ดูเอกสารแนบ"
+                      className="flex items-center gap-1.5 text-xs bg-orange-50 border border-orange-200 text-orange-700 px-2.5 py-0.5 rounded-full font-medium shrink-0 hover:bg-orange-100 whitespace-nowrap">
+                      <span>📎</span>attach file
+                      <span className="text-[10px] font-bold text-white bg-orange-600 rounded-full min-w-[16px] h-4 px-1 grid place-items-center">{atts.length}</span>
+                    </button>
                   )
                 })()}
                 {canRecallDoc(dg.request) && (
@@ -705,6 +710,41 @@ export default function RequestsPage() {
         })}
       </div>
       <p className="text-xs text-gray-400">{docGroups.length} document(s) · {filtered.length} transactions</p>
+
+      {/* Attachments popup — files grouped by stage (MER / SCM / LG / Claim) */}
+      {attDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setAttDoc(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[86vh] overflow-auto shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 px-5 py-3.5 border-b sticky top-0 bg-white">
+              <span className="text-sm font-bold text-gray-900">📎 เอกสารแนบ · {attDoc.documentNo}</span>
+              <span className="text-xs text-gray-400">{(attDoc.attachments || []).length} ไฟล์</span>
+              <button onClick={() => setAttDoc(null)} className="ml-auto w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500">✕</button>
+            </div>
+            <div className="p-4 space-y-3">
+              {ATT_STAGES.map(stage => {
+                const files = (attDoc.attachments || []).filter((a: any) => attStageOf(a) === stage)
+                return (
+                  <div key={stage} className="border rounded-xl overflow-hidden">
+                    <div className={`flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white ${files.length ? ATT_META[stage] : "bg-gray-400"}`}>
+                      {stage}<span className="ml-auto text-[11px] bg-white/25 rounded-full px-2 normal-case">{files.length}</span>
+                    </div>
+                    {files.length ? files.map((a: any) => (
+                      <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2.5 px-3 py-2 text-sm border-t hover:bg-gray-50">
+                        <span>📄</span>
+                        {a.category && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 border">{a.category}</span>}
+                        <span className="font-medium truncate flex-1 min-w-0 text-gray-800">{a.fileName}</span>
+                        <span className="text-[11px] text-gray-400 whitespace-nowrap">{a.uploadedBy?.name || ""}</span>
+                        <span className="text-[11px] font-semibold whitespace-nowrap" style={{ color: "#6b1a1a" }}>เปิด ↗</span>
+                      </a>
+                    )) : <div className="px-3 py-2.5 text-xs text-gray-400 border-t">— ยังไม่มีไฟล์ —</div>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Recall — reason modal (from the list) */}
       {recallDoc && (
