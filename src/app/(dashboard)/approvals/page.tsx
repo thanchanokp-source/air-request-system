@@ -118,7 +118,11 @@ export default function ApprovalsPage() {
       // once they approve their dept, the SO drops from their queue even if OTHER depts
       // on the same SO are still pending.
       const ss = deptSplitStatus(i, act.dept)
-      const statusOk = act.isVp ? ss === "CLAIM_PASSED" : (ss == null || ss === "CLAIM_PENDING")
+      // VP Procurement (prapakorn) sees the SO from the START (entry stage too) so he can short-circuit;
+      // every other VP only appears once entry handed off (CLAIM_PASSED).
+      const statusOk = act.isVp
+        ? (act.dept === "PROCUREMENT" ? (ss == null || ss === "CLAIM_PENDING" || ss === "CLAIM_PASSED") : ss === "CLAIM_PASSED")
+        : (ss == null || ss === "CLAIM_PENDING")
       if (!statusOk) return false
       // Forced-position forward: if this SO was forwarded within my dept, only the CURRENT
       // holder (the latest forward's recipient) keeps it in queue — whoever forwarded it

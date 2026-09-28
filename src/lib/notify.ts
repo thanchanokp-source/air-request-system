@@ -917,9 +917,9 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
             }
             // else: no assigned person → fall through to the generic role-priority branch below
           }
-          // Procurement entry goes to PURCHASING only (they decide: approve or forward to
-          // Sourcing). Sourcing is reached later via forward, not the initial alert.
-          const procEntryFilter = (!isVp && dept === "PROCUREMENT") ? { procurementType: "PURCHASING" } : {}
+          // Procurement is an OR-group now → alert ALL CLAIM_PROCUREMENT (nidcha/jarunee/sriputtra),
+          // not just PURCHASING. Any one of them can approve.
+          const procEntryFilter = {}
           const users = await prisma.user.findMany({
             where: {
               // Some claim roles are cross-BU (bu = "ALL") — match this BU OR "ALL".
@@ -1064,7 +1064,7 @@ async function notifyClaimEntryImpl(requestId: string, dept: string) {
       return
     }
     const roles = claimEntryRoles(dept)
-    const procFilter = dept === "PROCUREMENT" ? { procurementType: "PURCHASING" } : {}
+    const procFilter = {} // PROCUREMENT OR-group → all CLAIM_PROCUREMENT
     const us = await prisma.user.findMany({ where: { isActive: true, bu, ...procFilter, OR: [{ role: { in: roles } }, { roles: { hasSome: roles } }] } as any, select: { id: true, email: true, priority: true }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }] })
     const withP = us.filter((u: any) => u.priority != null)
     const first = withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : us.slice(0, 1)
@@ -1821,8 +1821,8 @@ async function claimEntryUsersForDept(req: any, dept: string, items: any[]): Pro
     }
     return out
   }
-  // PROCUREMENT entry → PURCHASING only; others → dept priority-1 batch.
-  const procFilter = dept === "PROCUREMENT" ? { procurementType: "PURCHASING" } : {}
+  // PROCUREMENT is an OR-group → alert all CLAIM_PROCUREMENT; others → dept priority-1 batch.
+  const procFilter = {}
   const users = await prisma.user.findMany({
     where: { isActive: true, bu: { in: [(req as any).bu, "ALL"] }, ...procFilter, OR: [{ role: { in: deptRoles } }, { roles: { hasSome: deptRoles } }] } as any,
     select: { id: true, email: true, priority: true }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }],

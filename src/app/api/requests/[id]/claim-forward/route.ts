@@ -192,7 +192,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // ahead of the current position and within the chain.
     const chainLen = chainFor(forwarderDept, (request as any).bu).length
     const wantPos = Number.isInteger(targetPos) ? Number(targetPos) : currentPos + 1
-    const nextPos = wantPos > currentPos && wantPos < chainLen ? wantPos : currentPos + 1
+    // PROCUREMENT peer-forward: hand the SO to a colleague at the SAME entry position (one of the 3
+    // CLAIM_PROCUREMENT). Every other dept keeps forward-to-a-later-position only.
+    const nextPos = (forwarderDept === "PROCUREMENT" && wantPos === currentPos) ? currentPos
+      : (wantPos > currentPos && wantPos < chainLen ? wantPos : currentPos + 1)
     // Branch (Procurement route) chosen at the branch step; carried forward.
     const branchVal = branch || ownerRow?.branch || null
     const token = randomBytes(32).toString("hex")

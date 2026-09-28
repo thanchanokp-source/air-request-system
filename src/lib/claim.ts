@@ -151,6 +151,8 @@ export function ownerCanonicalDept(role: string, claimDept?: string | null): str
   if (role === "SCM_NYG") return "SCM NYG"
   // NYG "SCM NYG" claim 2-step: DPM_SCM (entry) → VP_SCM (VP) both own dept "SCM NYG".
   if (role === "DPM_SCM" || role === "VP_SCM") return "SCM NYG"
+  // Procurement VP (prapakorn) owns dept PROCUREMENT so he can act directly (short-circuit).
+  if (role === "VP_PROCUREMENT") return "PROCUREMENT"
   if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return "SCM NYK"
   // Commercial claim = MER's team (NYG DVM/VP MER, EA *_MER_EA, TRM *_MER_TRM) → dept COMMERCIAL.
   if (role === "DVM_MER" || role === "VP_MER" || role === "DVM_MER_EA" || role === "VP_MER_EA" || role === "DVM_MER_TRM" || role === "VP_MER_TRM") return "COMMERCIAL"
@@ -261,12 +263,13 @@ export const CLAIM_CHAINS: Record<string, ClaimPosition[]> = {
   ],
   // Purchasing (entry, auto) chooses: forward to Sourcing (pos 1) OR approve-self and
   // skip straight to VP (pos 2). Sourcing then forwards to VP. All CLAIM_PROCUREMENT.
+  // OR-group model: the 3 CLAIM_PROCUREMENT people (nidcha/jarunee/sriputtra) are ONE entry position —
+  // any one approving finishes entry (→ VP). They can peer-forward among themselves. VP (prapakorn,
+  // VP_PROCUREMENT) is the last position and can short-circuit (approve first = done). No Purchasing/
+  // Sourcing branch anymore.
   "PROCUREMENT": [
-    { label: "DPM/DVM", role: "CLAIM_PROCUREMENT", priority: 1, branch: true, procurementType: "PURCHASING" },
-    { label: "Sourcing", role: "CLAIM_PROCUREMENT", priority: 1, procurementType: "SOURCING" },
-    // VP procurement = the dedicated VP_PROCUREMENT role (matches the auto-forward boss
-    // lookup + PENDING_VP_CLAIM notify). NOT CLAIM_PROCUREMENT priority 2.
-    { label: "VP", role: "VP_PROCUREMENT" },
+    { label: "Procurement", role: "CLAIM_PROCUREMENT", priority: 1 },
+    { label: "VP Procurement", role: "VP_PROCUREMENT" },
   ],
 }
 

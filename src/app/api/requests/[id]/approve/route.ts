@@ -1743,7 +1743,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const actAsNext = userRole === "CLAIM_NEXT_APPROVER" || myEmailFwds.length > 0
     // COMMERCIAL claim is approved by the MER team (DVM_MER / VP_MER, per CLAIM_DEPT_ROLE_MAP) — the
     // same people who approved the upload — so their roles must count as claim owners here too.
-    const CLAIM_OWNER_ROLES = ["CLAIM_GW", "SCM_NYG", "DPM_SCM", "VP_SCM", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "CLAIM_NEXT_APPROVER",
+    const CLAIM_OWNER_ROLES = ["CLAIM_GW", "SCM_NYG", "DPM_SCM", "VP_SCM", "CLAIM_COMMERCIAL", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT", "VP_PROCUREMENT", "CLAIM_NEXT_APPROVER",
       "DVM_MER", "DVM_MER_EA", "DVM_MER_TRM", "VP_MER", "VP_MER_EA", "VP_MER_TRM"]
     const isClaimOwnerRole = heldRoles.some(r => CLAIM_OWNER_ROLES.includes(r))
     if (!isClaimOwnerRole && !actAsNext) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -1783,9 +1783,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
     if (!dept) return NextResponse.json({ error: "Cannot determine your claim department" }, { status: 400 })
+    // PROCUREMENT OR-group: any 1 of the 3 CLAIM_PROCUREMENT "approves" → split CLAIM_PASSED (→ VP);
+    // VP_PROCUREMENT (prapakorn) completes directly (short-circuit). Both skip the "must forward /
+    // last position" rule below — which every OTHER dept still obeys.
+    const isProc = dept === "PROCUREMENT"
+    const procVp = isProc && [userRole, ...heldRoles].includes("VP_PROCUREMENT")
     // Forced chain: only the LAST position may finish. Earlier positions must
     // forward to the next position first (GW / SUPPLIER are single-position → ok).
-    if (!isLastPosition(dept, currentPos, request.bu)) {
+    if (!isProc && !isLastPosition(dept, currentPos, request.bu)) {
       return NextResponse.json({ error: "You must forward to the next position — only the final position can finish the process." }, { status: 400 })
     }
     const splitDepts = expandClaimDept(dept)
@@ -1816,7 +1821,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     let count = 0
     for (const it of items) {
       if (!selIds.includes(it.id) || !itemHasPendingDept(it, dept)) continue
-      const updated = approveGwDeptSplits(getSplits(it), splitDepts, undefined, doneStatus)
+      let updated: any
+      if (isProc) {
+        // entry (any 1 of 3) → CLAIM_PASSED (waiting VP); VP → COMPLETED. Never touch REJECTED/done.
+        const okFrom: (string | null)[] = procVp ? [null, "CLAIM_PENDING", "CLAIM_PASSED"] : [null, "CLAIM_PENDING"]
+        const target = procVp ? NYG_SPLIT.COMPLETED : NYG_SPLIT.CLAIM_PASSED
+        updated = getSplits(it).map((s: any) => s.dept === "PROCUREMENT" && okFrom.includes(s.status ?? null) ? { ...s, status: target } : s)
+        if (JSON.stringify(updated) === JSON.stringify(getSplits(it))) continue // nothing to change for this SO
+      } else {
+        updated = approveGwDeptSplits(getSplits(it), splitDepts, undefined, doneStatus)
+      }
       const itemStatus = isGW ? deriveGwItemStatus(updated, !!(request as any).logisticsSent, skipPres) : deriveNygItemStatus(updated, !!(request as any).logisticsSent)
       await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus, itemComment: comment || (it as any).itemComment } })
       count++
@@ -1836,6 +1850,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await prisma.airRequest.update({ where: { id }, data: { status: next } })
       await notifyStatusChange(id, next).catch(() => {})
     }
+    // Procurement entry approved → make sure VP Procurement (prapakorn) is alerted even if the doc
+    // status did not change (another dept was already at the VP stage).
+    if (isProc && !procVp) await notifyStatusChange(id, "PENDING_VP_CLAIM").catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

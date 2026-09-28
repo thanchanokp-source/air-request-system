@@ -1062,7 +1062,8 @@ export default function RequestDetailPage() {
   const gwFwdCanonicalDept: string | null =
     claimRole === "CLAIM_NEXT_APPROVER" ? (myFwdRow0?.dept || myClaimDept || null)
     // NYG entry approver → the dept they act on (forward-direction mapping).
-    : (!isGWRequest && nygActing && !nygActing.isVp) ? nygActing.dept
+    // VP Procurement (prapakorn) is included too so he can act directly on PROCUREMENT (short-circuit).
+    : (!isGWRequest && nygActing && (!nygActing.isVp || nygActing.dept === "PROCUREMENT")) ? nygActing.dept
     : claimRole === "CLAIM_GW" ? (myClaimDept === "SUPPLIER" ? "SUPPLIER" : "GW")
     : claimRole === "SCM_NYG" ? "SCM NYG"
     : claimRole === "CLAIM_COMMERCIAL" ? "COMMERCIAL"
@@ -1077,7 +1078,7 @@ export default function RequestDetailPage() {
   // → approves & picks the next position (VP MER / EVP / VP Procurement) from a dropdown.
   const fwdEntryRole = isGWRequest
     ? (claimRole === "CLAIM_GW" || claimRole === "SCM_NYG")
-    : (!!nygActing && !nygActing.isVp)
+    : (!!nygActing && (!nygActing.isVp || nygActing.dept === "PROCUREMENT"))  // VP Procurement acts directly too
   // Claim stage spans PENDING_CLAIM and PENDING_VP_CLAIM for NYG (the doc rolls to
   // VP_CLAIM once every SO left is at the VP/EVP step) — the forced-position UI must
   // stay visible across both so a forwarded approver can always finish.
@@ -1233,7 +1234,11 @@ export default function RequestDetailPage() {
   const gwBranch: string | null = myFwdRow?.branch || null
   // BU-aware: NYG "SCM NYG" claim ends at VP SCM (Saji) — 2-step chain — so she FINISHES, no next
   // position to pick. GW "SCM NYG" continues (VP PROD → EVP PROD), so it still forwards.
-  const gwIsLastPos = gwFwdCanonicalDept ? isLastPosition(gwFwdCanonicalDept, gwCurrentPos, req?.bu) : true
+  // PROCUREMENT: everyone "Approves" directly (any entry person → CLAIM_PASSED→VP; VP → COMPLETED),
+  // so treat as last-position (no forced next-position pick); peer-forward is a separate optional action.
+  const gwIsLastPos = gwFwdCanonicalDept
+    ? (gwFwdCanonicalDept === "PROCUREMENT" ? true : isLastPosition(gwFwdCanonicalDept, gwCurrentPos, req?.bu))
+    : true
   const gwNeedsBranch = gwFwdCanonicalDept ? positionHasBranch(gwFwdCanonicalDept, gwCurrentPos) : false
   // Last position in the chain (e.g. Commercial VP MER) has nothing after it → no forward.
   // Skip the "Send to next / Done" popup and finish directly.
