@@ -1290,7 +1290,9 @@ export default function ScmRequestPage() {
                       {cols.map(c => {
                         const best = c.d?.total != null && c.d.total === cheapest
                         const mode = c.market ? "" : c.key.toUpperCase()   // AIR | SEA | COURIER
-                        const canPick = !!mode && c.d?.total != null
+                        // A preference is a request to LG, not a costed decision: every real mode can be
+                        // picked even when its rate is missing (LG fills it later) or out of range.
+                        const canPick = !!mode
                         const picked = !!mode && prefMode === mode
                         return (
                           <div key={c.key}

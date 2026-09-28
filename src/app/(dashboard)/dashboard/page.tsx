@@ -663,6 +663,8 @@ export default function DashboardPage() {
   const [countryFilter, setCountryFilter] = useState("")
   const [claimF, setClaimF] = useState<string[]>([])
   const [hawbF, setHawbF] = useState<string[]>([])
+  // "" = every SO · HAS = actual air filled (shipped & costed) · NONE = still waiting for the actual
+  const [actualF, setActualF] = useState<"" | "HAS" | "NONE">("")
   const [drillCountry, setDrillCountry]   = useState<string|null>(null)
 
   const [poMap, setPoMap] = useState<Record<string,string>>({})
@@ -703,8 +705,9 @@ export default function DashboardPage() {
            (!countryFilter|| countryKey(row.country)===countryFilter) &&
            (!claimF.length|| claimF.includes(row.claimDepartment)) &&
            (!hawbF.length || hawbF.includes(row.hawbNo)) &&
+           (!actualF || (actualF === "HAS" ? row.actualAirFreight != null : row.actualAirFreight == null)) &&
            (!mpActive || mpSoSet.has(mpSoKey(row.so)))   // 🔗 map mode (NYG/All only) → only SOs shipped in mp_line
-  }), [allSOs,yearFilter,monthFilter,statusFilter,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF,mpActive,mpSoSet])
+  }), [allSOs,yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF,mpActive,mpSoSet])
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
@@ -868,8 +871,8 @@ export default function DashboardPage() {
   const hawbs    = [...new Set(allSOs.map((r:any)=>r.hawbNo).filter(Boolean))].sort()
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
   const countries= [...new Set(allSOs.map(r=>countryKey(r.country)).filter(Boolean))].sort()
-  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||brandF.length||docF.length||soF.length||cpF.length||portFilter||countryFilter||claimF.length||hawbF.length)
-  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setBrandF([]); setDocF([]); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]); setHawbF([]) }
+  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||actualF||brandF.length||docF.length||soF.length||cpF.length||portFilter||countryFilter||claimF.length||hawbF.length)
+  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setActualF(""); setBrandF([]); setDocF([]); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]); setHawbF([]) }
 
   const H = 210
 
@@ -1087,6 +1090,13 @@ export default function DashboardPage() {
             <option value="PENDING">Pending</option>
             <option value="COMPLETED">Completed</option>
             <option value="REJECTED">Rejected</option>
+          </select>
+          {/* Actual air = the SO has been shipped and costed. Filtering on it is how you compare
+              like with like (est vs actual) instead of dragging in SOs nobody has billed yet. */}
+          <select value={actualF} onChange={e=>setActualF(e.target.value as "" | "HAS" | "NONE")} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Actual: ทั้งหมด</option>
+            <option value="HAS">เฉพาะที่มี Actual</option>
+            <option value="NONE">ยังไม่มี Actual</option>
           </select>
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF}/>
           <MultiSelect label="Doc No..." options={docNos} value={docF} onChange={setDocF}/>
