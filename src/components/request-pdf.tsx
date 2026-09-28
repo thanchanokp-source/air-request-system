@@ -573,7 +573,7 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
               <Text style={[s.td, { width: C.gross }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
               <Text style={[s.tdR, { width: C.est, fontSize: 6.8 }]}>{fmtNum(item.airFreight)}</Text>
               <Text style={[s.tdR, { width: C.act, fontSize: 6.8 }]}>{item.actualAirFreight != null ? fmtNum(item.actualAirFreight) : "-"}</Text>
-              <Text style={[s.tdL, { width: C.claim, borderRightWidth: 0 }]}>{claimOf(item)}</Text>
+              <Text style={[s.tdL, { width: C.claim, borderRightWidth: 0, ...(String(item.reasonDelay || "").startsWith("Auto-add") && (!claimOf(item) || claimOf(item) === "-") ? { color: "#b91c1c", fontSize: 6.3 } : {}) }]}>{(String(item.reasonDelay || "").startsWith("Auto-add") && (!claimOf(item) || claimOf(item) === "-")) ? "MER delay update air req" : claimOf(item)}</Text>
             </View>
           ))}
           <View style={s.totalRow}>
