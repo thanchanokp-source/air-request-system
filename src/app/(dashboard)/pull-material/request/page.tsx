@@ -1332,6 +1332,15 @@ export default function ScmRequestPage() {
                         {prefMode && <button type="button" onClick={() => { setPrefMode(""); setPrefNote("") }} className="text-[11px] text-gray-400 underline">ล้าง</button>}
                         <span className="ml-auto text-[10px] text-gray-400">คลิกที่การ์ดด้านบนเพื่อเลือก · LG เป็นผู้ตัดสินใจขั้นสุดท้าย</span>
                       </div>
+                      {prefMode && (() => {
+                        // A wished mode with no price is fine (LG fills the rate) but say so up front.
+                        const d = prefMode === "AIR" ? pcCompare.air : prefMode === "SEA" ? pcCompare.sea : pcCompare.courier
+                        if (d?.total != null) return null
+                        const why = prefMode === "COURIER" && pcCompare.over
+                          ? "น้ำหนักเกิน 100 kg — courier ปกติรับไม่ได้ ถ้ายังต้องการให้ระบุเหตุผลให้ LG ทราบ"
+                          : "ยังไม่มี rate ของ port นี้ใน Master — LG จะเติม rate ให้ก่อนคิดราคา"
+                        return <p className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{"⚠️ " + why}</p>
+                      })()}
                       {prefMode && (
                         <input value={prefNote} onChange={e => setPrefNote(e.target.value)}
                           placeholder="เหตุผล/หมายเหตุถึง LG (เช่น supplier ส่ง DHL เท่านั้น · ของด่วนใช้ courier เร็วกว่า)"
