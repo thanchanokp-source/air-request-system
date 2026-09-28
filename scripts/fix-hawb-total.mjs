@@ -24,6 +24,11 @@ const totq = items.reduce((s, i) => s + (i.qtyRequestAir || 0), 0)
 if (totq <= 0) { console.log("Total qty is 0 — cannot distribute."); await prisma.$disconnect(); process.exit(1) }
 const perUnit = total / totq
 const rows = items.map(i => ({ doc: i.request.documentNo, so: i.so, sub: i.sub, qty: i.qtyRequestAir || 0, old: i.actualAirFreight, neu: Math.round((i.qtyRequestAir || 0) * perUnit * 100) / 100, id: i.id }))
+// Make the sum EXACTLY the HAWB total (no rounding drift): the last SO absorbs the remainder.
+if (rows.length) {
+  const rest = rows.slice(0, -1).reduce((s, r) => s + r.neu, 0)
+  rows[rows.length - 1].neu = Math.round((total - rest) * 100) / 100
+}
 
 console.log(`\nHAWB ${hawbDigits} · ${items.length} SO · qty ${totq} · target total ${total.toLocaleString()} · per pc ${Math.round(perUnit * 100) / 100}`)
 console.table(rows.map(r => ({ doc: r.doc, so: r.so, sub: r.sub, qty: r.qty, old_actual: r.old, new_actual: r.neu })))

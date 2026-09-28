@@ -115,6 +115,13 @@ export default function LgAirBookingPage() {
     const totalPcs = allLines.reduce((a, l) => a + l.pcs, 0)
     if (totalPcs <= 0) { alert("ไม่มี qty ให้คิด"); return }
     const perUnit = exp / totalPcs
+    // exact-sum: distribute expense by qty; the LAST selected line absorbs the rounding remainder so
+    // Σ actual === expense to the satang (no drift). Each line's share is stored on l.actual.
+    let _acc = 0
+    allLines.forEach((l: any, i) => {
+      if (i < allLines.length - 1) { l.actual = Math.round(l.pcs * perUnit * 100) / 100; _acc += l.actual }
+      else { l.actual = Math.round((exp - _acc) * 100) / 100 }
+    })
     const ready = allLines.filter(l => l.air === "ready" && l.itemId && l.reqId)   // at LG → book + advance to claim
     const pending = allLines.filter(l => l.air === "pending" && l.itemId && l.reqId) // shipped but pre-LG → save data only, approval keeps running
     const auto = allLines.filter(l => !l.itemId)                                    // not in air req → prepaid doc → SCM
@@ -140,7 +147,7 @@ export default function LgAirBookingPage() {
         const itemLogistics: any = {}, itemActuals: any = {}, itemShipData: any = {}
         for (const l of ls) {
           itemLogistics[l.itemId!] = { invoiceNo: l.inv, hawbNo, bookingDate: today }
-          itemActuals[l.itemId!] = String(Math.round(l.pcs * perUnit * 100) / 100) // qty share of the HAWB expense
+          itemActuals[l.itemId!] = String((l as any).actual) // qty share of the HAWB expense (exact-sum)
           itemShipData[l.itemId!] = { qtyRequestAir: l.pcs }                        // QTY follows mp_line (revise)
         }
         const res = await fetch(`/api/requests/${reqId}/approve`, {
@@ -159,7 +166,7 @@ export default function LgAirBookingPage() {
       if (auto.length > 0) {
         const ares = await fetch("/api/lg-inv-booking", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ brand, hawbNo, bookingDate: today, lines: auto.map(l => ({ so: l.so, sub: l.sub, inv: l.inv, pcs: l.pcs, style: l.style, actual: Math.round(l.pcs * perUnit * 100) / 100 })) }),
+          body: JSON.stringify({ brand, hawbNo, bookingDate: today, lines: auto.map(l => ({ so: l.so, sub: l.sub, inv: l.inv, pcs: l.pcs, style: l.style, actual: (l as any).actual })) }),
         })
         if (!ares.ok) { const e = await ares.json().catch(() => ({})); throw new Error(`auto-add: ${e.error || ares.status}`) }
         const aj = await ares.json().catch(() => ({}))
