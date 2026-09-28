@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { generateDocumentNo } from "@/lib/docno"
 import { notifyStatusChange } from "@/lib/notify"
+import { recomputeRequestFreight } from "@/lib/freight"
 import { randomUUID } from "crypto"
 
 export const runtime = "nodejs"
@@ -154,6 +155,31 @@ export async function POST(req: NextRequest) {
   if (!hawbNo) return NextResponse.json({ error: "ต้องมี HAWB" }, { status: 400 })
   if (lines.length === 0) return NextResponse.json({ error: "ไม่มี auto line" }, { status: 400 })
 
+  // Map mp_line style → master_style.style_type, and use it as the DESCRIPTION so the app's weight
+  // master (MasterDescription, keyed by description) can price it → EST computes on recompute.
+  const nrm = (s: any) => String(s == null ? "" : s).trim().toUpperCase()
+  const codes = [...new Set(lines.map((l: any) => nrm(l.style)).filter(Boolean))]
+  const styleType = new Map<string, string>()
+  if (codes.length) {
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT UPPER(TRIM(style_code)) AS code, style_type FROM public.master_style WHERE UPPER(TRIM(style_code)) = ANY($1::text[])`, codes)
+      for (const r of rows) if (r.style_type) styleType.set(String(r.code), String(r.style_type))
+    } catch { /* master_style unavailable → description stays blank, EST 0 */ }
+  }
+
+  // Country per SO from mp_line (its shipment destination) → needed for the freight RATE (→ EST).
+  const countryBySo = new Map<string, string>()
+  const soKeys = [...new Set(lines.map((l: any) => soN(l.so)).filter(Boolean))]
+  if (soKeys.length) {
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') AS so, country FROM public.mp_line
+         WHERE country IS NOT NULL AND TRIM(country) <> '' AND ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') = ANY($1::text[])`, soKeys)
+      for (const r of rows) if (r.so && !countryBySo.has(String(r.so))) countryBySo.set(String(r.so), String(r.country))
+    } catch { /* mp_line country unavailable → country stays blank, rate/EST 0 */ }
+  }
+
   const itemData = lines.map((l: any) => {
     const pcs = Math.round(Number(l.pcs) || 0)
     return {
@@ -162,14 +188,14 @@ export async function POST(req: NextRequest) {
       brand: brand || null,
       sub: l.sub ? String(l.sub) : null,
       customerPO: "",
-      description: "",
+      description: styleType.get(nrm(l.style)) || "",  // style_type from master_style → drives weight/EST
       originalShipmentDate: null,
       planShipmentDate: null,
       qtyOriginalShipment: pcs,
       qtyRequestAir: pcs,                         // QTY follows mp_line
       reasonDelay: "Auto-add (shipped, prepaid — no air request)",
       factory: "",
-      country: "",
+      country: countryBySo.get(soN(l.so)) || "",   // from mp_line → drives the freight rate (EST)
       port: "",
       grossWeight: 0,
       airFreight: 0,                             // no plan/est — never went through air req
@@ -205,6 +231,8 @@ export async function POST(req: NextRequest) {
     include: { items: true },
   })
 
+  // Compute gross (= qty × weight of the style_type) + EST (= gross × country rate) from the masters.
+  await recomputeRequestFreight(request.id).catch(() => {})
   await notifyStatusChange(request.id, "PENDING_SCM").catch(() => {}) // alert SCM_USER (Kimita) to select claim
 
   return NextResponse.json({ id: request.id, documentNo: request.documentNo, items: request.items.length })
