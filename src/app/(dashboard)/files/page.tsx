@@ -24,13 +24,14 @@ const BOOK_READY_STATUSES = [
 ]
 
 // A document appears once it is approved for booking (VP SCM / GM).
-// EXCEPTION: auto-add prepaid docs (shipped, HAWB already known) surface here even while the
-// claim dept is still being picked at SCM (Kimita) — otherwise Logistics can't find/print their HAWB.
-function isAutoAddDoc(req: any): boolean {
-  return (req?.items || []).some((i: any) => String(i?.reasonDelay || "").startsWith("Auto-add"))
+// EXCEPTION: any doc that already has a HAWB entered surfaces here regardless of status —
+// once Logistics has keyed a HAWB the shipment is real and must be findable/printable, even if
+// the claim dept is still being picked at SCM (Kimita) or the doc is an auto-add prepaid doc.
+function hasHawb(req: any): boolean {
+  return (req?.items || []).some((i: any) => String(i?.hawbNo || "").trim() !== "")
 }
 function qualifies(req: any): boolean {
-  return BOOK_READY_STATUSES.includes(req.status) || isAutoAddDoc(req)
+  return BOOK_READY_STATUSES.includes(req.status) || hasHawb(req)
 }
 
 // Pipeline stage of a document (all in one folder, distinguished by a badge).
