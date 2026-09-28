@@ -582,6 +582,11 @@ export default function RequestsPage() {
                 <Link href={`/requests/${dg.request.id}`} onClick={e => e.stopPropagation()}
                   className="font-bold text-blue-700 hover:underline text-sm shrink-0">{dg.request.documentNo}</Link>
                 <AggBadge rows={dg.styles.flatMap((s: any) => s.rows)} docStatus={dg.request.status} />
+                {/* AUTO-ADD marker: doc created by LG for SOs that shipped but were never in an air request. */}
+                {dg.styles.flatMap((s: any) => s.rows).some((r: any) => String(r.reasonDelay || "").startsWith("Auto-add")) && (
+                  <span title="Auto-add: SO ส่งออกแล้วแต่ไม่มีใน air req (สร้างจาก LG AIR BOOKING)"
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-300 shrink-0 whitespace-nowrap">🅰 AUTO-ADD</span>
+                )}
                 {/* Returned reason (Back to Merchandise / SCM) — shown on the card so MER/SCM sees WHY before opening. */}
                 {["PENDING_MER", "PENDING_MER_GW", "PENDING_SCM"].includes(dg.request.status) && dg.request.rejectionReason && (
                   <span onClick={e => e.stopPropagation()} title={dg.request.rejectionReason}
