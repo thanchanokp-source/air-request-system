@@ -639,7 +639,7 @@ export default function DashboardPage() {
   // mp_line data is NYG-only → the map toggle works ONLY on the NYG tab (where the whole page is already
   // scoped to NYG, so the numbers match the mp_line card). All BU / GW / TRM / EA stay the normal view.
   const mpAllowed = activeBu === "NYG" || activeBu === "ALL"  // map mp_line = NYG data; shown on NYG + All BU (never GW/TRM/EA)
-  const mpActive = isAdmin && mpMode && mpAllowed
+  const mpActive = mpMode && mpAllowed  // map mp_line mode — open to everyone (NYG/All BU tab)
 
   const [requests, setRequests]   = useState<any[]>([])
   const [loading,  setLoading]    = useState(true)
@@ -647,16 +647,15 @@ export default function DashboardPage() {
   const [monthFilter, setMonthFilter] = useState<string[]>([])
   const [statusFilter,setStatusFilter]= useState("")
   const [brandF, setBrandF] = useState<string[]>([])
-  // mp_line card follows the Brand filter → refetch when it changes (admin only).
+  // mp_line card follows the Brand filter → refetch when it changes (open to everyone now).
   const brandFKey = brandF.join(",")
   useEffect(() => {
-    if (!isAdmin) return
     const qs = brandFKey ? `?brand=${encodeURIComponent(brandFKey)}` : ""
     fetch(`/api/air-export-map${qs}`).then(r => r.ok ? r.json() : null).then(d => {
       setMpCounts(d?.counts || null)
       setMpSoSet(new Set(((d?.tabA || []) as any[]).map(r => mpSoKey(r.so)).filter(Boolean)))
     }).catch(() => {})
-  }, [isAdmin, brandFKey])
+  }, [brandFKey])
   const [docF,  setDocF]  = useState<string[]>([])
   const [soF,  setSoF]  = useState<string[]>([])
   const [cpF,  setCpF]  = useState<string[]>([])
@@ -930,7 +929,7 @@ export default function DashboardPage() {
           </div>
         )}
         {/* Admin toggle (NYG / All BU only — mp_line is NYG data): filter the whole page to mp_line-shipped SOs. */}
-        {isAdmin && mpAllowed && (
+        {mpAllowed && (
           <button onClick={() => setMpMode(v => !v)}
             className={`ml-auto text-xs font-bold px-4 py-1.5 rounded-lg border transition-colors ${mpActive ? "bg-teal-600 text-white border-transparent" : "bg-white text-teal-700 border-teal-300 hover:bg-teal-50"}`}
             title="กรองทั้งหน้าให้เหลือเฉพาะ SO ที่ส่งออกจริง (map กับ mp_line) — เฉพาะ NYG">

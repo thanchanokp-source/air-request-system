@@ -19,8 +19,7 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   // Admin-only preview (phase 1) — everyone else gets an empty, harmless payload.
-  const roles: string[] = [(session.user as any)?.role, ...(((session.user as any)?.roles) || [])].filter(Boolean)
-  if (!roles.includes("ADMIN")) return NextResponse.json({ error: "Admin only", tabA: [], tabB: [], counts: {} }, { status: 403 })
+  // Read-only mp_line reconcile — open to every signed-in user (dashboard map mode is now for everyone).
 
   // Optional brand filter (?brand=A,B) — normalized like the dashboard's brandKey (upper + single space).
   // mp_line stores SHORT brand names ("LULULEMON") while air req stores the FULL name
