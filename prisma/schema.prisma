@@ -342,6 +342,8 @@ model PullMaterialRequest {
   status         String             @default("PENDING_LOGISTICS")
   requestType    String             @default("SCM") // SCM (SCM-initiated → VP SCM → President) | PURCHASING (PC-initiated → DVM Pur → VP Pur)
   modeReason     String?            // why this doc skipped approval (required when mode = REGULAR)
+  preferredMode  String?            // AIR | SEA | COURIER — the mode Purchasing asks for (a wish, not a decision)
+  preferredNote  String?            // why they want it (e.g. "supplier ships DHL only")
   mode           String             @default("IRREGULAR") // REGULAR (fast-track, no wait for approval) | IRREGULAR (full approval). Auto-suggested from SO prefix / port / weight; editable per doc.
   isTest         Boolean            @default(false) // admin TEST doc: every email reroutes to the creator (monitor-only), shows "meant for"
   requesterName  String

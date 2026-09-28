@@ -319,6 +319,12 @@ export default function Page() {
                         {/* Full LANDED-COST compare (Air / Courier / Sea + Market) — all USD, shared with request & LG.
                             Here it is a PICKER: the approver chooses the shipping mode; LG still has the final say. */}
                         <div className="mb-4">
+                          {openReq.preferredMode && (
+                            <div className="mb-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-[11px] text-violet-900">
+                              🙋 <b>จัดซื้อขอให้ส่งทาง {openReq.preferredMode === "AIR" ? "✈️ Air" : openReq.preferredMode === "SEA" ? "🚢 Sea (LCL)" : "📦 Courier (DHL)"}</b>
+                              {openReq.preferredNote ? ` — ${openReq.preferredNote}` : ""}
+                            </div>
+                          )}
                           <LandedCostCompare airRows={airRates} seaRows={seaRates} courierRows={courierRates} truckRows={truckRates}
                             port={s0.port} seaPort={s0.seaPort} country={s0.country} weight={s0.weight} incoterm={s0.incoterm} bu={openReq.bu} factory={openReq.factory || s0.factory}
                             value={canApprove(openReq.status, openReq.bu) ? mode : (openReq.shipMode as ShipMode) || null}

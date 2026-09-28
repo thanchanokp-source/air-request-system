@@ -74,6 +74,8 @@ export async function POST(req: NextRequest) {
       // SCM requests land at Purchasing (they fill Country/Port/Incoterm/Weight there).
       // PURCHASING (PC) requests fill all that ON the request page → straight to DPM approval.
       modeReason: mode === "REGULAR" ? String(body.modeReason || "").trim() || null : null,
+      preferredMode: ["AIR", "SEA", "COURIER"].includes(body.preferredMode) ? body.preferredMode : null,
+      preferredNote: String(body.preferredNote || "").trim() || null,
       // REGULAR = urgent, agreed to skip the approval chain -> hand it straight to Logistics.
       status: mode === "REGULAR" && requestType === "PURCHASING" ? "APPROVED"
         : requestType === "PURCHASING" ? "PENDING_VP_PUR" : "PENDING_PURCHASING",

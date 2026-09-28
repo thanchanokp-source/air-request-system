@@ -177,6 +177,9 @@ export default function ScmRequestPage() {
   // Default is ALWAYS "Irregular" (full approval). The SO-02 / light-weight rule is only a hint shown
   // next to the buttons — skipping approval has to be a deliberate choice with a reason.
   const [modeReason, setModeReason] = useState("")
+  // What Purchasing WANTS the shipment to go by (a request to LG, not a decision — LG still rules).
+  const [prefMode, setPrefMode] = useState<"AIR" | "SEA" | "COURIER" | "">("")
+  const [prefNote, setPrefNote] = useState("")
   const [modeAsk, setModeAsk] = useState(false)   // reason popup before a REGULAR submit
 
   const sync = (() => {
@@ -629,7 +632,7 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode: reqType === "PURCHASING" ? mode : "IRREGULAR", modeReason: mode === "REGULAR" ? modeReason.trim() : null, factory: pcFactory || null, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())), vendorEmail: vendorInfo.email, vendorContact: vendorInfo.contactName, vendorTel: vendorInfo.tel }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode: reqType === "PURCHASING" ? mode : "IRREGULAR", modeReason: mode === "REGULAR" ? modeReason.trim() : null, preferredMode: prefMode || null, preferredNote: prefNote.trim() || null, factory: pcFactory || null, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())), vendorEmail: vendorInfo.email, vendorContact: vendorInfo.contactName, vendorTel: vendorInfo.tel }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) {
@@ -1286,10 +1289,22 @@ export default function ScmRequestPage() {
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                       {cols.map(c => {
                         const best = c.d?.total != null && c.d.total === cheapest
+                        const mode = c.market ? "" : c.key.toUpperCase()   // AIR | SEA | COURIER
+                        const canPick = !!mode && c.d?.total != null
+                        const picked = !!mode && prefMode === mode
                         return (
-                          <div key={c.key} className={`rounded-xl border p-3 ${best ? "ring-2 ring-emerald-300 border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}>
-                            <div className="text-xs font-semibold mb-1.5 flex items-center justify-between" style={{ color: c.accent }}>
-                              <span>{c.label}</span>{best && <span className="text-[10px] text-emerald-600">ถูกสุด</span>}
+                          <div key={c.key}
+                            role={canPick ? "button" : undefined} tabIndex={canPick ? 0 : undefined}
+                            onClick={canPick ? () => setPrefMode(picked ? "" : mode as any) : undefined}
+                            onKeyDown={canPick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setPrefMode(picked ? "" : mode as any) } } : undefined}
+                            className={`rounded-xl border p-3 transition ${canPick ? "cursor-pointer hover:shadow-md" : ""} ${picked ? "ring-2 ring-offset-1 border-transparent bg-white shadow-md" : best ? "ring-2 ring-emerald-300 border-emerald-200 bg-emerald-50/40" : "border-gray-200 bg-white"}`}
+                            style={picked ? { ["--tw-ring-color" as any]: MAROON } : undefined}>
+                            <div className="text-xs font-semibold mb-1.5 flex items-center justify-between gap-1" style={{ color: c.accent }}>
+                              <span className="inline-flex items-center gap-1">
+                                {canPick && <span className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 ${picked ? "border-transparent" : "border-gray-300"}`} style={picked ? { background: MAROON } : undefined} />}
+                                {c.label}
+                              </span>
+                              {best && <span className="text-[10px] text-emerald-600 shrink-0">ถูกสุด</span>}
                             </div>
                             <div className="space-y-0.5 text-[11px]">
                               {rows.map(([label, f]) => (
@@ -1306,6 +1321,22 @@ export default function ScmRequestPage() {
                           </div>
                         )
                       })}
+                    </div>
+                    {/* The wish travels with the document so LG sees what Purchasing had in mind. */}
+                    <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-semibold text-gray-600">อยากให้ส่งทาง:</span>
+                        <span className="text-[11px] font-bold" style={{ color: MAROON }}>
+                          {prefMode === "AIR" ? "✈️ Air" : prefMode === "SEA" ? "🚢 Sea (LCL)" : prefMode === "COURIER" ? "📦 Courier (DHL)" : "— ยังไม่ระบุ (ให้ LG พิจารณาเอง) —"}
+                        </span>
+                        {prefMode && <button type="button" onClick={() => { setPrefMode(""); setPrefNote("") }} className="text-[11px] text-gray-400 underline">ล้าง</button>}
+                        <span className="ml-auto text-[10px] text-gray-400">คลิกที่การ์ดด้านบนเพื่อเลือก · LG เป็นผู้ตัดสินใจขั้นสุดท้าย</span>
+                      </div>
+                      {prefMode && (
+                        <input value={prefNote} onChange={e => setPrefNote(e.target.value)}
+                          placeholder="เหตุผล/หมายเหตุถึง LG (เช่น supplier ส่ง DHL เท่านั้น · ของด่วนใช้ courier เร็วกว่า)"
+                          className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200" />
+                      )}
                     </div>
                     <div className="text-[10px] text-gray-400 mt-1.5">* Transport = ค่ารถ→โรงงาน จาก Truck master (ตาม Factory + น้ำหนัก) · Market price กรอกทีหลัง</div>
                   </div>

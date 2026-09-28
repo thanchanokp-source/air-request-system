@@ -900,6 +900,8 @@ export default function Page() {
                             {rq.status === "PENDING_LG_RATE" &&
                               <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold border border-red-200">⚠️ รอเติม Air rate</span>}
                             {done && <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✓ Actual</span>}
+                            {rq.preferredMode && rq.preferredMode !== rq.shipMode &&
+                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 font-semibold" title={rq.preferredNote || "จัดซื้อแจ้งความต้องการ"}>🙋 จัดซื้อขอ {rq.preferredMode === "AIR" ? "✈️ Air" : rq.preferredMode === "SEA" ? "🚢 Sea" : "📦 Courier"}</span>}
                             {rq.fwdSentAt && <span className="text-[11px] text-amber-600" title={`ส่งให้ FWD แล้ว (phase ${rq.fwdPhase || 1})`}>✉️ P{rq.fwdPhase || 1}</span>}
                           </div>
                           <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · PO {pos || "-"}{ports ? ` · Port ${ports}` : ""}{etc0 ? ` · ETC ${String(etc0).slice(0, 10)}` : ""}</div>
@@ -1043,6 +1045,11 @@ export default function Page() {
                             <span className="text-[11px] text-sky-900">
                               🚚 LG เลือก: <b>{lgMode ? SHIP_MODE_LABEL[lgMode] : "—"}</b>
                             </span>
+                            {rq.preferredMode && (
+                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 font-semibold" title={rq.preferredNote || ""}>
+                                🙋 จัดซื้อขอ: {rq.preferredMode === "AIR" ? "✈️ Air" : rq.preferredMode === "SEA" ? "🚢 Sea (LCL)" : "📦 Courier (DHL)"}{rq.preferredNote ? ` · ${rq.preferredNote}` : ""}
+                              </span>
+                            )}
                             {rq.approvedMode && lgMode && rq.approvedMode !== lgMode && (
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">LG เปลี่ยนจาก {rq.approvedMode} → {lgMode}</span>
                             )}
