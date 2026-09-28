@@ -398,12 +398,8 @@ export default function FilesPage() {
       ])
       const element = React.createElement(CombinedPdfDocument as any, { pages })
       const blob = await (pdf(element as any) as any).toBlob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `Combined_${pages.length}SO.pdf`
-      document.body.appendChild(a); a.click()
-      document.body.removeChild(a); URL.revokeObjectURL(url)
+      // Open the PREVIEW window first (it has a ⬇ Download button) instead of downloading straight away.
+      setPreview({ url: URL.createObjectURL(blob), name: `Combined_${pages.length}SO.pdf` })
     } catch (e) { console.error("PDF error (combined):", e); alert("Combined PDF generation failed: " + ((e as any)?.message || String(e))) }
     finally { setCombineLoading(false) }
   }
@@ -433,12 +429,8 @@ export default function FilesPage() {
       ])
       const element = React.createElement(CombinedPdfDocument as any, { pages })
       const blob = await (pdf(element as any) as any).toBlob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `Combined_filtered_${pages.length}SO.pdf`
-      document.body.appendChild(a); a.click()
-      document.body.removeChild(a); URL.revokeObjectURL(url)
+      // Open the PREVIEW window first (it has a ⬇ Download button) instead of downloading straight away.
+      setPreview({ url: URL.createObjectURL(blob), name: `Combined_filtered_${pages.length}SO.pdf` })
     } catch (e) { console.error("PDF error (all-filtered):", e); alert("PDF generation failed: " + ((e as any)?.message || String(e))) }
     finally { setCombineLoading(false) }
   }
