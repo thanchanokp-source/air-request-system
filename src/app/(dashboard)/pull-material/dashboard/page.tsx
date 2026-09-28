@@ -21,12 +21,15 @@ export default function Page() {
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { load() }, [bu]) // eslint-disable-line
 
-  if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
 
   // Filter options (Doc No / PO / จัดซื้อ) + apply SCM/Purchasing + those filters to EVERY metric below.
   const { options: reqOptions, displayOf } = useMemo(() => buildRequesters(reqs), [reqs])
   const docNos = useMemo(() => [...new Set(reqs.map((r: any) => r.documentNo).filter(Boolean))].sort(), [reqs])
   const poNos = useMemo(() => [...new Set(reqs.flatMap((r: any) => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort(), [reqs])
+
+  // Every hook must run on every render — this early return has to stay BELOW them, otherwise the
+  // first render (session still "loading") runs fewer hooks than the next one: React error #310.
+  if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
   const fReqs = reqs.filter((r: any) => {
     if (typeF !== "ALL" && reqTypeOf(r) !== typeF) return false
     if (docF.length && !docF.includes(r.documentNo)) return false

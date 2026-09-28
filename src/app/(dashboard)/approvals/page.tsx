@@ -32,6 +32,7 @@ export default function ApprovalsPage() {
   const [hawbF, setHawbF] = useState<string[]>([])
   const [reasonF, setReasonF] = useState<string[]>([])
   const [detailF, setDetailF] = useState<string[]>([])
+  const [docF, setDocF] = useState<string[]>([])
   const [stageF, setStageF] = useState<string[]>([])
   const [personQ, setPersonQ] = useState("")
   const [buApprovalView, setBuApprovalView] = useState<string>("ALL")
@@ -347,6 +348,7 @@ export default function ApprovalsPage() {
   // Claim delay Reason (code) + Detail come from each SO's claim splits.
   const reasons = [...new Set(allRows.flatMap(r => getSplits(r).map((s: any) => s.reason).filter(Boolean)))].sort()
   const details = [...new Set(allRows.flatMap(r => getSplits(r).map((s: any) => s.detail).filter(Boolean)))].sort()
+  const docNos = [...new Set(allRows.map(r => r.request?.documentNo).filter(Boolean))].sort()
 
   // Stage options scoped to the CURRENT BU tab (don't show GW-only stages while viewing NYG, etc.)
   const stageOptions = [...new Set(myRequests
@@ -365,7 +367,8 @@ export default function ApprovalsPage() {
       (!invoiceF.length || invoiceF.includes(row.invoiceNo)) &&
       (!hawbF.length || hawbF.includes(row.hawbNo)) &&
       (!reasonF.length || getSplits(row).some((s: any) => reasonF.includes(s.reason))) &&
-      (!detailF.length || getSplits(row).some((s: any) => detailF.includes(s.detail)))
+      (!detailF.length || getSplits(row).some((s: any) => detailF.includes(s.detail))) &&
+      (!docF.length || docF.includes(row.request?.documentNo))
   })
 
   // Admin person-search: find every in-flight doc that a given person is on / assigned to (creator,
@@ -482,14 +485,15 @@ export default function ApprovalsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {(stageF.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length || reasonF.length || detailF.length) && (
-            <button onClick={() => { setStageF([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]); setReasonF([]); setDetailF([]) }}
+          {(docF.length || stageF.length || brandF.length || styleF.length || soF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length || reasonF.length || detailF.length) && (
+            <button onClick={() => { setDocF([]); setStageF([]); setBrandF([]); setStyleF([]); setSoF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]); setReasonF([]); setDetailF([]) }}
               className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
               Clear All
             </button>
           )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-10 gap-1.5">
+          <MultiSelect label="Doc No..." options={docNos} value={docF} onChange={setDocF} />
           <MultiSelect label="All Stage" options={stageOptions} value={stageF} onChange={setStageF} />
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF} />
           <MultiSelect label="All Style" options={styles} value={styleF} onChange={setStyleF} />
