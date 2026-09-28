@@ -25,16 +25,20 @@ export default function DropQueuePage() {
   }
   useEffect(() => { if (allowed) load() }, [allowed]) // eslint-disable-line
 
-  const act = async (r: Row, action: "delete_item" | "unflag_drop_so") => {
+  const act = async (r: Row, action: "delete_item" | "unflag_drop_so" | "back_to_scm_so") => {
     const msg = action === "delete_item"
       ? `ลบ SO ${r.so} (${r.documentNo}) ออกจากเอกสาร?\nลบเฉพาะ SO นี้ · เอกสารยังอยู่ · ย้อนกลับไม่ได้`
+      : action === "back_to_scm_so"
+      ? `ส่ง SO ${r.so} กลับ SCM ให้เลือก claim ใหม่?\n(เอกสารกลับไปขั้น SCM · เคลียร์ drop)`
       : `ยกเลิก drop SO ${r.so}? (เก็บ SO นี้ไว้)`
     if (!confirm(msg)) return
     setBusy(r.itemId)
     try {
+      const body: any = { action, itemId: r.itemId }
+      if (action === "back_to_scm_so") body.comment = `ส่งกลับ SCM จาก DROP QUEUE${r.reason ? ` (${r.reason})` : ""}`
       const res = await fetch(`/api/requests/${r.requestId}/approve`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, itemId: r.itemId }),
+        body: JSON.stringify(body),
       })
       if (res.ok) setRows(prev => prev.filter(x => x.itemId !== r.itemId))
       else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
@@ -51,7 +55,7 @@ export default function DropQueuePage() {
     <div className="p-5 md:p-8 max-w-[1100px] mx-auto space-y-5">
       <div>
         <h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>DROP QUEUE <span className="text-base font-normal text-gray-400">({rows.length})</span></h1>
-        <p className="text-xs text-gray-400 mt-0.5">SO ที่ claim ส่งมาให้ MER ลบ (data ผิด) — <b>Drop</b> = ลบ SO นั้น (เอกสารยังอยู่) · <b>Keep</b> = ยกเลิก drop</p>
+        <p className="text-xs text-gray-400 mt-0.5">SO ที่ claim ส่งมาให้ MER ลบ (data ผิด) — <b>Drop</b> = ลบ SO นั้น (เอกสารยังอยู่) · <b className="text-orange-600">↩ SCM</b> = ส่งกลับ SCM ให้เลือก claim ใหม่ (กรณี claim กดผิด ควรเด้ง SCM ไม่ใช่ลบ) · <b>Keep</b> = ยกเลิก drop</p>
       </div>
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔎 ค้นหา SO / Doc / Brand"
@@ -80,6 +84,8 @@ export default function DropQueuePage() {
                   <td className="px-3 py-2 whitespace-nowrap">
                     <button onClick={() => act(r, "delete_item")} disabled={busy === r.itemId}
                       className="px-3 py-1 rounded-lg text-white text-xs font-semibold bg-rose-600 hover:bg-rose-700 disabled:opacity-40">{busy === r.itemId ? "…" : "🗑 Drop"}</button>
+                    <button onClick={() => act(r, "back_to_scm_so")} disabled={busy === r.itemId}
+                      className="ml-2 px-3 py-1 rounded-lg text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40">↩ SCM</button>
                     <button onClick={() => act(r, "unflag_drop_so")} disabled={busy === r.itemId}
                       className="ml-2 px-3 py-1 rounded-lg text-xs font-semibold border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40">Keep</button>
                   </td>

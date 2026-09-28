@@ -1259,7 +1259,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await (prisma as any).claimApproval.deleteMany({ where: { itemId } })
     await prisma.airRequestItem.update({
       where: { id: itemId },
-      data: { itemStatus: "PENDING", claimDepartment: null, claimDepts: null, itemComment: comment || null } as any
+      // Also clear any MER-drop flag — sending back to SCM removes it from the DROP QUEUE.
+      data: { itemStatus: "PENDING", claimDepartment: null, claimDepts: null, itemComment: comment || null, dropRequested: false, dropReason: null, dropRequestedBy: null } as any
     })
     await prisma.approvalLog.create({
       data: {
