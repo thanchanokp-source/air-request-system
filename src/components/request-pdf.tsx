@@ -62,6 +62,19 @@ const vpMerFor = (items: any[] | undefined, brandName?: string) => {
   if (brands.length === 0 && brandName) brands.push(brandName)
   return brands.length > 0 && brands.every(isNuttBrand) ? "Nuttareeporn H" : "Isawaruk T"
 }
+// Look up a master signature by approver name, tolerant of small spelling/spacing differences
+// in the master list. Exact match first; else match on the normalized first-name token
+// (Nuttareeporn / Isawaruk are unambiguous among the VP Merchandise approvers).
+const findMasterSig = (masterSigs: Record<string, string> | undefined, name: string): string | null => {
+  if (!masterSigs || !name) return null
+  if (masterSigs[name]) return masterSigs[name]
+  const norm = (s: string) => String(s || "").trim().toLowerCase().replace(/[^a-z]/g, "")
+  const first = (s: string) => norm(String(s || "").trim().split(/\s+/)[0] || "")
+  const want = first(name)
+  if (!want) return null
+  for (const [k, v] of Object.entries(masterSigs)) if (v && first(k) === want) return v
+  return null
+}
 const expectedApprover = (label: string, brand?: string) =>
   label === "VP Merchandise" ? vpMerByBrand(brand)
   : label === "VP SCM" ? "Saji T"
@@ -257,8 +270,9 @@ function computeSigners(req: any, brandItems?: any[], masterSigs?: Record<string
       const log = approveLogs.find((l: any) => l.fromStatus === status)
       const fallbackName = label === "VP Merchandise" ? vpMerFor(brandItems || req?.items, req?.brandName) : expectedApprover(label, req?.brandName)
       // VP Merchandise not-yet-signed (e.g. auto-add docs) → stamp the expected VP MER's MASTER signature
-      // so LG can process without waiting. Matched by name (Nuttareeporn H / Isawaruk T).
-      const injectedSig = (label === "VP Merchandise" && !log && masterSigs) ? (masterSigs[fallbackName] || null) : null
+      // so LG can process without waiting. Matched by name (Nuttareeporn H / Isawaruk T), tolerant of
+      // small name differences in the master list (matches on the first-name token).
+      const injectedSig = (label === "VP Merchandise" && !log && masterSigs) ? findMasterSig(masterSigs, fallbackName) : null
       signers.push({ title: label, name: log?.user?.name || fallbackName, date: log?.createdAt, verb: log ? "Approved" : "", sig: injectedSig })
     }
   }
