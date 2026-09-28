@@ -182,7 +182,7 @@ type Signer = { title: string; name: string; date: any; verb: string; sig?: stri
 // Approval signers for a request: real e-sign snapshots (image + name + position +
 // datetime + CR), falling back to the expected approver chain (name only) for
 // documents signed before e-signatures existed. Same for every SO of one document.
-function computeSigners(req: any, brandItems?: any[]): Signer[] {
+function computeSigners(req: any, brandItems?: any[], masterSigs?: Record<string, string>): Signer[] {
   const isGW = req?.bu === "GW"
   const approveLogs = (req?.approvalLogs || []).filter((l: any) => l.action === "APPROVE")
   let sigList: any[] = ((req?.approvalSignatures || []) as any[])
@@ -256,7 +256,10 @@ function computeSigners(req: any, brandItems?: any[]): Signer[] {
     for (const [status, label] of chain) {
       const log = approveLogs.find((l: any) => l.fromStatus === status)
       const fallbackName = label === "VP Merchandise" ? vpMerFor(brandItems || req?.items, req?.brandName) : expectedApprover(label, req?.brandName)
-      signers.push({ title: label, name: log?.user?.name || fallbackName, date: log?.createdAt, verb: log ? "Approved" : "" })
+      // VP Merchandise not-yet-signed (e.g. auto-add docs) → stamp the expected VP MER's MASTER signature
+      // so LG can process without waiting. Matched by name (Nuttareeporn H / Isawaruk T).
+      const injectedSig = (label === "VP Merchandise" && !log && masterSigs) ? (masterSigs[fallbackName] || null) : null
+      signers.push({ title: label, name: log?.user?.name || fallbackName, date: log?.createdAt, verb: log ? "Approved" : "", sig: injectedSig })
     }
   }
   return signers
@@ -428,15 +431,15 @@ export function RequestPdfDocument({ req, item }: { req: any; item: any }) {
 // one DETAILS table where every SO is a row carrying Factory/Country/Reason/Claim,
 // descriptions listed once up top (A, B, C…) and referenced by letter, one grand
 // total, and the signature ONCE at the end (all SO share the same approvers).
-export function CombinedPdfDocument({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbNo?: string }) {
+export function CombinedPdfDocument({ pages, hawbNo, masterSigs }: { pages: { req: any; item: any }[]; hawbNo?: string; masterSigs?: Record<string, string> }) {
   // ALL SOs (across every document) flow into ONE continuous table under a single header.
   // The header lists every document number and the TOTAL sums exactly these pages (the filtered set).
   const docNos = [...new Set(pages.map(p => p.req?.documentNo).filter(Boolean))]
   const title = docNos.length <= 1 ? `${docNos[0] || "Combined"}` : `Combined_${docNos.length}docs`
-  return <Document title={title}><DocSection pages={pages} hawbNo={hawbNo} /></Document>
+  return <Document title={title}><DocSection pages={pages} hawbNo={hawbNo} masterSigs={masterSigs} /></Document>
 }
 
-function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbNo?: string }) {
+function DocSection({ pages, hawbNo, masterSigs }: { pages: { req: any; item: any }[]; hawbNo?: string; masterSigs?: Record<string, string> }) {
   const req = pages[0]?.req || {}
   // Header spans every source document (the SOs may come from several docs, one continuous table).
   const allDocNos = [...new Set(pages.map(p => p.req?.documentNo).filter(Boolean))]
@@ -445,7 +448,7 @@ function DocSection({ pages, hawbNo }: { pages: { req: any; item: any }[]; hawbN
   const isGW = req.bu === "GW"
   const dept = isGW ? "GW" : "NYG"
   const rows = pages.map(p => p.item)
-  const signers = computeSigners(req, rows)
+  const signers = computeSigners(req, rows, masterSigs)
   const requestBy = requestByFor(req)
   // Unique descriptions → labelled A, B, C… and referenced by letter in the table.
   const descList: string[] = []

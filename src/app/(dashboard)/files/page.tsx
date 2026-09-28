@@ -115,6 +115,9 @@ export default function FilesPage() {
   const [pdfLoading, setPdfLoading] = useState<string | null>(null)
   const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
   const closePreview = () => setPreview(p => { if (p) URL.revokeObjectURL(p.url); return null })
+  // VP MER master signatures (name → data URI) — stamped on PDFs when the doc isn't formally signed yet.
+  const [masterSigs, setMasterSigs] = useState<Record<string, string>>({})
+  useEffect(() => { fetch("/api/signature/masters").then(r => r.json()).then(d => setMasterSigs(d?.signatures || {})).catch(() => {}) }, [])
   const [combineMode, setCombineMode] = useState(false)
   const [hawbLoading, setHawbLoading] = useState(false)
   const [hawbQuery, setHawbQuery] = useState("")
@@ -337,7 +340,7 @@ export default function FilesPage() {
       import("@/components/request-pdf"),
     ])
     const pages = items.map((item: any) => ({ req: fullReq, item }))
-    const element = React.createElement(CombinedPdfDocument as any, { pages })
+    const element = React.createElement(CombinedPdfDocument as any, { pages, masterSigs })
     const blob = await (pdf(element as any) as any).toBlob()
     return { blob, name: `${fullReq.documentNo}.pdf` }
   }
@@ -396,7 +399,7 @@ export default function FilesPage() {
         import("@react-pdf/renderer"),
         import("@/components/request-pdf"),
       ])
-      const element = React.createElement(CombinedPdfDocument as any, { pages })
+      const element = React.createElement(CombinedPdfDocument as any, { pages, masterSigs })
       const blob = await (pdf(element as any) as any).toBlob()
       // Open the PREVIEW window first (it has a ⬇ Download button) instead of downloading straight away.
       setPreview({ url: URL.createObjectURL(blob), name: `Combined_${pages.length}SO.pdf` })
@@ -427,7 +430,7 @@ export default function FilesPage() {
         import("@react-pdf/renderer"),
         import("@/components/request-pdf"),
       ])
-      const element = React.createElement(CombinedPdfDocument as any, { pages })
+      const element = React.createElement(CombinedPdfDocument as any, { pages, masterSigs })
       const blob = await (pdf(element as any) as any).toBlob()
       // Open the PREVIEW window first (it has a ⬇ Download button) instead of downloading straight away.
       setPreview({ url: URL.createObjectURL(blob), name: `Combined_filtered_${pages.length}SO.pdf` })
