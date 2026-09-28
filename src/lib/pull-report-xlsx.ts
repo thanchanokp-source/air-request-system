@@ -1,7 +1,19 @@
 // Full Pull RM data export — one row per PO, every column a report needs (est/actual/mode/FWD…).
 // Lives here so any page (TRACKING today, others later) exports exactly the same workbook.
 import { pullReqType } from "@/lib/pull-reqtype"
-import { STATUS_LABEL } from "@/app/(dashboard)/pull-material/_StageWork"
+
+// Status wording is kept here on purpose: importing it from the page module would drag that whole
+// "use client" component graph (next-auth hooks and all) into this lib and break the RSC build for
+// every page in the module.
+const STATUS_LABEL: Record<string, string> = {
+  PENDING_LOGISTICS: "Pending Logistics", PENDING_PURCHASING: "Pending Purchasing",
+  PENDING_SCM_DECISION: "Pending SCM Decision", PENDING_PC_DECISION: "Pending Purchase Decision",
+  PENDING_LG_RATE: "รอ LG เติม Air rate", PENDING_DVM_SCM: "Pending Approval",
+  PENDING_VP_SCM: "Pending Approval", PENDING_FINAL: "Pending Approval",
+  PENDING_DVM_PUR: "Pending Approval", PENDING_VP_PUR: "Pending Approval",
+  PENDING_APPROVAL: "Pending Approval", PC_REVISE: "Returned to Purchasing",
+  APPROVED: "Approved", NO_AIR: "No Air", COMPLETED: "Completed", RECALLED: "Recalled", REJECTED: "Rejected",
+}
 
 const dstr = (v: any) => (v ? String(v).slice(0, 10) : "")
 const earliestD = (arr: any[]) => { const t = arr.map(v => (v ? new Date(v).getTime() : NaN)).filter(n => !isNaN(n)); return t.length ? new Date(Math.min(...t)).toISOString().slice(0, 10) : "" }
