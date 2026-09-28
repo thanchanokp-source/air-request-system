@@ -200,6 +200,16 @@ export async function POST(req: NextRequest) {
     const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
     for (const r of rateList) rates[canonCountry(r.country)] = r.ratePerKg
   } catch { /* no rates → EST 0 */ }
+  // ORIG DATE = mp_line.original_hod_date · PLAN DATE = mp_line.hod_date (by SO+SUB).
+  const dateBy = new Map<string, { orig: Date | null; plan: Date | null }>()
+  if (soDigitKeys.length) {
+    try {
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') AS so, UPPER(TRIM(COALESCE(sub_no,''))) AS sub, max(original_hod_date) AS orig, max(hod_date) AS plan FROM public.mp_line WHERE ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') = ANY($1::text[]) GROUP BY 1,2`, soDigitKeys)
+      for (const r of rows) { const k = `${r.so}|${r.sub || ""}`; if (!dateBy.has(k)) dateBy.set(k, { orig: r.orig ? new Date(r.orig) : null, plan: r.plan ? new Date(r.plan) : null }) }
+    } catch { /* dates unavailable */ }
+  }
+  const datesOf = (l: any) => dateBy.get(`${soN2(l.so)}|${nrm(l.sub)}`) || { orig: null, plan: null }
   const estOf = (l: any) => {
     const pcs = Math.round(Number(l.pcs) || 0)
     const wt = wtBySo.get(soN2(l.so)) || 0
@@ -218,8 +228,8 @@ export async function POST(req: NextRequest) {
       sub: l.sub ? String(l.sub) : null,
       customerPO: "",
       description: infoOf(l).producttype || "",   // producttype from SO_ORDER → drives weight/EST
-      originalShipmentDate: null,
-      planShipmentDate: null,
+      originalShipmentDate: datesOf(l).orig,       // mp_line.original_hod_date
+      planShipmentDate: datesOf(l).plan,           // mp_line.hod_date
       qtyOriginalShipment: pcs,
       qtyRequestAir: pcs,                         // QTY follows mp_line
       reasonDelay: "Auto-add (shipped, prepaid — no air request)",

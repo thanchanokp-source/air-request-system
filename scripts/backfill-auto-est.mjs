@@ -47,6 +47,13 @@ if (mpKeys.length) {
   }
 }
 const wtPerPcOf = (it) => wtByKey.get(`${soN(it.so)}|${nrm(it.sub)}`) || wtBySo.get(soN(it.so)) || 0
+// 2c) dates: ORIG = original_hod_date · PLAN = hod_date (by SO+SUB)
+const dateByKey = new Map()
+if (mpKeys.length) {
+  const rows = await prisma.$queryRawUnsafe(`SELECT ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') AS so, UPPER(TRIM(COALESCE(sub_no,''))) AS sub, max(original_hod_date) orig, max(hod_date) plan FROM public.mp_line WHERE ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') = ANY($1::text[]) GROUP BY 1,2`, mpKeys)
+  for (const r of rows) { const k = `${r.so}|${r.sub}`; if (!dateByKey.has(k)) dateByKey.set(k, { orig: r.orig ? new Date(r.orig) : null, plan: r.plan ? new Date(r.plan) : null }) }
+}
+const datesOf = (it) => dateByKey.get(`${soN(it.so)}|${nrm(it.sub)}`) || { orig: null, plan: null }
 // 4) masters: weight (by description) + rate (by country)
 const descList = await prisma.masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
 const wts = {}; for (const d of descList) wts[descKey(d.name)] = d.weightPerUnit || 0
@@ -66,7 +73,8 @@ for (const it of items) {
   const est = gross * rate
   const note = wt === 0 ? "⚠ no weight (mp_line + master)" : rate === 0 ? "⚠ no rate for country" : "ok"
   if (est > 0) filled++; else stillZero++
-  updates.push({ id: it.id, doc: it.request.documentNo, so: it.so, style: it.style, desc, country, qty, gross: Math.round(gross * 100) / 100, est: Math.round(est * 100) / 100, note })
+  const dt = datesOf(it)
+  updates.push({ id: it.id, doc: it.request.documentNo, so: it.so, style: it.style, desc, country, qty, gross: Math.round(gross * 100) / 100, est: Math.round(est * 100) / 100, note, orig: dt.orig, plan: dt.plan })
 }
 
 console.table(updates.map(u => ({ doc: u.doc, so: u.so, style: u.style, desc: u.desc.slice(0, 28), country: u.country, qty: u.qty, gross: u.gross, est: u.est, note: u.note })))
@@ -78,7 +86,7 @@ let n = 0
 for (const u of updates) {
   await prisma.airRequestItem.update({
     where: { id: u.id },
-    data: { description: u.desc || null, country: u.country || null, grossWeight: u.gross, airFreight: u.est, marketRatePerKg: (u.est > 0 ? rates[canonCountry(u.country)] : null) },
+    data: { description: u.desc || null, country: u.country || null, grossWeight: u.gross, airFreight: u.est, marketRatePerKg: (u.est > 0 ? rates[canonCountry(u.country)] : null), ...(u.orig ? { originalShipmentDate: u.orig } : {}), ...(u.plan ? { planShipmentDate: u.plan } : {}) },
   }).catch((e) => console.log(`  ! ${u.doc}/${u.so}: ${e.message}`))
   n++
 }
