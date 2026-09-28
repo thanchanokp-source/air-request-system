@@ -574,9 +574,11 @@ function DocSection({ pages, hawbNo, masterSigs }: { pages: { req: any; item: an
             <Text style={[s.th, { width: C.act }]}>ACTUAL</Text>
             <Text style={[s.th, { width: C.claim, borderRightWidth: 0 }]}>CLAIM</Text>
           </View>
-          {rows.map((item, idx) => (
-            <View style={s.tr} key={idx} wrap={false}>
-              <Text style={[s.td, { width: C.no }]}>{idx + 1}</Text>
+          {rows.map((item, idx) => {
+            const isAuto = String(item.reasonDelay || "").startsWith("Auto-add")
+            return (
+            <View style={[s.tr, ...(isAuto ? [{ backgroundColor: "#fff1f2" }] : [])]} key={idx} wrap={false}>
+              <Text style={[s.td, { width: C.no, ...(isAuto ? { color: "#b91c1c", fontFamily: "SarabunB" } : {}) }]}>{idx + 1}{isAuto ? " *" : ""}</Text>
               <Text style={[s.td, { width: C.so }]}>{item.so || "-"}</Text>
               <Text style={[s.td, { width: C.style }]}>{softWrap(item.style)}</Text>
               <Text style={[s.td, { width: C.sub }]}>{softWrap(item.sub)}</Text>
@@ -590,9 +592,9 @@ function DocSection({ pages, hawbNo, masterSigs }: { pages: { req: any; item: an
               <Text style={[s.td, { width: C.gross }]}>{item.grossWeight != null ? fmtNum(item.grossWeight, 2) : "-"}</Text>
               <Text style={[s.tdR, { width: C.est, fontSize: 6.8 }]}>{fmtNum(item.airFreight)}</Text>
               <Text style={[s.tdR, { width: C.act, fontSize: 6.8 }]}>{item.actualAirFreight != null ? fmtNum(item.actualAirFreight) : "-"}</Text>
-              <Text style={[s.tdL, { width: C.claim, borderRightWidth: 0, ...(String(item.reasonDelay || "").startsWith("Auto-add") && (!claimOf(item) || claimOf(item) === "-") ? { color: "#b91c1c", fontSize: 6.3 } : {}) }]}>{(String(item.reasonDelay || "").startsWith("Auto-add") && (!claimOf(item) || claimOf(item) === "-")) ? "MER delay update air req" : claimOf(item)}</Text>
+              <Text style={[s.tdL, { width: C.claim, borderRightWidth: 0, ...(isAuto && (!claimOf(item) || claimOf(item) === "-") ? { color: "#b91c1c", fontSize: 6.3 } : {}) }]}>{(isAuto && (!claimOf(item) || claimOf(item) === "-")) ? "MER delay update air req" : claimOf(item)}</Text>
             </View>
-          ))}
+          )})}
           <View style={s.totalRow}>
             <Text style={[s.tdR, { flex: 1, fontFamily: "SarabunB" }]}>TOTAL</Text>
             <Text style={[s.td, { width: C.qty, fontFamily: "SarabunB", fontSize: 6.8 }]}>{fmtNum(totQty)}</Text>
