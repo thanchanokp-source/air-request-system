@@ -33,6 +33,20 @@ if (so8keys.length) {
   for (const r of rows) { const info = { producttype: String(r.producttype || ""), country: String(r.shipcountry || "") }; const kk = `${r.so8}|${r.sub || ""}`; if (!infoByKey.has(kk)) infoByKey.set(kk, info); if (!infoBySo.has(String(r.so8))) infoBySo.set(String(r.so8), info) }
 }
 const infoOf = (it) => infoByKey.get(`${so8k(it.so)}|${nrm(it.sub)}`) || infoBySo.get(so8k(it.so)) || { producttype: "", country: "" }
+
+// 2b) mp_line ACTUAL shipped weight → weight per pc (gross source; avoids master word-matching).
+//     weight/pc = final_gw ÷ final_pcs (fall back to plan_gw ÷ plan_pcs), grouped by SO+SUB.
+const mpKeys = [...new Set(items.map(i => soN(i.so)).filter(Boolean))]
+const wtByKey = new Map(), wtBySo = new Map()
+if (mpKeys.length) {
+  const rows = await prisma.$queryRawUnsafe(`SELECT ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') AS so, UPPER(TRIM(COALESCE(sub_no,''))) AS sub, sum(COALESCE(final_gw,0)) gw, sum(COALESCE(final_pcs,0)) pcs, sum(COALESCE(plan_gw,0)) pgw, sum(COALESCE(plan_pcs,0)) ppcs FROM public.mp_line WHERE ltrim(regexp_replace(COALESCE(so_no,''),'\\D','','g'),'0') = ANY($1::text[]) GROUP BY 1,2`, mpKeys)
+  for (const r of rows) {
+    const gw = Number(r.gw) || 0, pcs = Number(r.pcs) || 0, pgw = Number(r.pgw) || 0, ppcs = Number(r.ppcs) || 0
+    const perPc = (pcs > 0 && gw > 0) ? gw / pcs : (ppcs > 0 && pgw > 0) ? pgw / ppcs : 0
+    if (perPc > 0) { const k = `${r.so}|${r.sub}`; if (!wtByKey.has(k)) wtByKey.set(k, perPc); if (!wtBySo.has(String(r.so))) wtBySo.set(String(r.so), perPc) }
+  }
+}
+const wtPerPcOf = (it) => wtByKey.get(`${soN(it.so)}|${nrm(it.sub)}`) || wtBySo.get(soN(it.so)) || 0
 // 4) masters: weight (by description) + rate (by country)
 const descList = await prisma.masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
 const wts = {}; for (const d of descList) wts[descKey(d.name)] = d.weightPerUnit || 0
@@ -45,12 +59,12 @@ for (const it of items) {
   const info = infoOf(it)
   const desc = it.description && it.description.trim() ? it.description : (info.producttype || "")
   const country = it.country && it.country.trim() ? it.country : (info.country || "")
-  const wt = wts[descKey(desc)] || 0
+  const wt = wtPerPcOf(it) || wts[descKey(desc)] || 0   // prefer mp_line actual weight/pc; fall back to master
   const rate = rates[canonCountry(country)] || 0
   const qty = it.qtyRequestAir || it.qtyOriginalShipment || 0
-  const gross = qty * wt
+  const gross = Math.round(qty * wt * 1000) / 1000
   const est = gross * rate
-  const note = wt === 0 ? "⚠ no weight for style_type" : rate === 0 ? "⚠ no rate for country" : "ok"
+  const note = wt === 0 ? "⚠ no weight (mp_line + master)" : rate === 0 ? "⚠ no rate for country" : "ok"
   if (est > 0) filled++; else stillZero++
   updates.push({ id: it.id, doc: it.request.documentNo, so: it.so, style: it.style, desc, country, qty, gross: Math.round(gross * 100) / 100, est: Math.round(est * 100) / 100, note })
 }
