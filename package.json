@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "prisma generate && next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check": "node scripts/check.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",

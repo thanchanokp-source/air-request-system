@@ -174,7 +174,10 @@ export default function ScmRequestPage() {
   }, [])
 
   // Keep the mode following the auto-suggestion until the user overrides it manually.
-  useEffect(() => { if (!modeTouched) setMode(suggestRegular ? "REGULAR" : "IRREGULAR") }, [suggestRegular, modeTouched])
+  // Default is ALWAYS "Irregular" (full approval). The SO-02 / light-weight rule is only a hint shown
+  // next to the buttons — skipping approval has to be a deliberate choice with a reason.
+  const [modeReason, setModeReason] = useState("")
+  const [modeAsk, setModeAsk] = useState(false)   // reason popup before a REGULAR submit
 
   const sync = (() => {
     if (!lastSync) return null
@@ -566,6 +569,8 @@ export default function ScmRequestPage() {
   const submit = async () => {
     const stop = (m: string) => { showToast(`⚠ ${m}`, false); return undefined }
     if (!requesterName.trim()) return stop("No signed-in user found.")
+    // Regular = skip the approval chain and go straight to Logistics -> say why, on the record.
+    if (mode === "REGULAR" && !modeReason.trim()) { setModeAsk(true); return }
 
     // SAMPLE (MER): items come from the Brand/Supplier/Item lines (no BOM/SO). Submit → auto-approve flow.
     if (reqType === "SAMPLE") {
@@ -624,7 +629,7 @@ export default function ScmRequestPage() {
     try {
       const r = await fetch("/api/pull-material", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode: reqType === "PURCHASING" ? mode : "IRREGULAR", factory: pcFactory || null, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())), vendorEmail: vendorInfo.email, vendorContact: vendorInfo.contactName, vendorTel: vendorInfo.tel }),
+        body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark, items, requestType: reqType, isTest, mode: reqType === "PURCHASING" ? mode : "IRREGULAR", modeReason: mode === "REGULAR" ? modeReason.trim() : null, factory: pcFactory || null, packages: pkgs, poInvoices: Object.fromEntries(Object.entries(poInvMap).filter(([, v]) => v && v.trim())), vendorEmail: vendorInfo.email, vendorContact: vendorInfo.contactName, vendorTel: vendorInfo.tel }),
       })
       const d = await r.json().catch(() => ({}))
       if (r.ok) {
@@ -662,6 +667,40 @@ export default function ScmRequestPage() {
   return (
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">
       {/* Full-screen loading overlay while the request is being submitted (+ files uploading) */}
+      {/* Regular skips every approver, so the reason is captured before the document is created. */}
+      {modeAsk && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setModeAsk(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b">
+              <div className="font-bold text-gray-900">⚡ Regular — ข้ามขั้นอนุมัติ</div>
+              <p className="text-[11px] text-gray-500 mt-0.5">เอกสารจะถูกส่งตรงถึง Logistics ทันที ไม่ผ่านผู้อนุมัติ</p>
+            </div>
+            <div className="p-5 space-y-3">
+              <label className="text-[11px] font-semibold text-gray-600 block">เหตุผลที่ไม่ต้องรออนุมัติ <span className="text-red-500">*</span></label>
+              <textarea value={modeReason} onChange={e => setModeReason(e.target.value)} rows={3} autoFocus
+                placeholder="เช่น ของด่วนเข้าไลน์ผลิต 30/09 · ตกลงกับ DVM แล้ว"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+              <div className="flex flex-wrap gap-1.5">
+                {["ของด่วนเข้าไลน์ผลิต", "ตกลงกับผู้อนุมัติแล้ว", "SO 02 ตามเกณฑ์ Regular", "น้ำหนักน้อย ค่าขนส่งต่ำ"].map(t => (
+                  <button key={t} type="button" onClick={() => setModeReason(t)}
+                    className="px-2.5 py-1 rounded-full text-[11px] border border-gray-200 text-gray-600 hover:bg-gray-50">{t}</button>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-400">เหตุผลนี้จะถูกบันทึกไว้กับเอกสารและเห็นได้ที่หน้า Tracking / Logistics</p>
+            </div>
+            <div className="px-5 py-3 border-t flex items-center justify-between gap-2">
+              <button onClick={() => { setMode("IRREGULAR"); setModeTouched(true); setModeAsk(false) }}
+                className="px-3 py-2 rounded-lg text-xs text-gray-500 border border-gray-200 hover:bg-gray-50">เปลี่ยนเป็น Irregular (ขออนุมัติตามปกติ)</button>
+              <button onClick={() => { if (!modeReason.trim()) return; setModeAsk(false); submit() }}
+                disabled={!modeReason.trim()}
+                className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: "#15803d" }}>
+                ✦ ยืนยัน & Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {submitting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
           <div className="bg-white rounded-2xl shadow-xl px-8 py-6 flex flex-col items-center gap-3">
@@ -1509,12 +1548,20 @@ export default function ScmRequestPage() {
                 {m === "REGULAR" ? "🟢 Regular (ไม่ต้องรออนุมัติ)" : "🟠 Irregular (อนุมัติเต็ม)"}
               </button>
             ))}
-            {!modeTouched && cart.length > 0 && (
-              <span className="text-[11px] text-gray-400">· auto: {suggestRegular ? "Regular (SO ขึ้นต้น 02)" : "Irregular"}</span>
+            {cart.length > 0 && suggestRegular && mode === "IRREGULAR" && (
+              <span className="text-[11px] text-gray-400">· เข้าเกณฑ์ Regular (SO ขึ้นต้น 02) — เลือกเองได้</span>
             )}
           </div>
+          {mode === "REGULAR" && (
+            <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900">
+              ⚡ ข้ามขั้นอนุมัติ — ส่งตรงถึง <b>Logistics</b> ทันทีที่กด Submit
+              {modeReason.trim()
+                ? <> · เหตุผล: <b>{modeReason.trim()}</b> <button onClick={() => setModeAsk(true)} className="underline ml-1">แก้</button></>
+                : <> · <button onClick={() => setModeAsk(true)} className="underline font-semibold">ใส่เหตุผลก่อน Submit</button></>}
+            </div>
+          )}
           <p className="mt-1.5 text-[11px] text-gray-400">
-            Regular = SO ขึ้นต้น <b>02</b> (ทุก port) · หรือ SO <b>01</b> จาก port <b>ฮ่องกง</b> · หรือ SO <b>01</b> น้ำหนัก <b>&lt; 45 kg</b> — ระบบแนะนำให้จาก SO แต่แก้เองได้
+            ค่าเริ่มต้นคือ <b>Irregular (อนุมัติเต็ม)</b> · Regular ใช้กับงานด่วนที่ตกลงกันแล้วว่าไม่ต้องรออนุมัติ (SO ขึ้นต้น <b>02</b> · SO <b>01</b> จากฮ่องกง · SO <b>01</b> น้ำหนัก &lt; 45 kg) — ต้องระบุเหตุผลทุกครั้ง
           </p>
         </div>
         )}

@@ -38,6 +38,9 @@ if [ "${PUSH_DB:-0}" = "1" ]; then
   npx prisma db push || { echo "!! prisma db push failed — aborting (nothing restarted)"; exit 1; }
 fi
 
+echo "==> [1c] Pre-deploy checks (hooks rules / lib-imports-app / typescript)"
+node scripts/check.mjs || { echo "!! checks failed - nothing built, site untouched"; exit 1; }
+
 echo "==> [2/5] Back up current build"
 rm -rf .next.bak
 [ -d .next ] && cp -a .next .next.bak

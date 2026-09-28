@@ -73,7 +73,10 @@ export async function POST(req: NextRequest) {
       isTest,
       // SCM requests land at Purchasing (they fill Country/Port/Incoterm/Weight there).
       // PURCHASING (PC) requests fill all that ON the request page → straight to DPM approval.
-      status: requestType === "PURCHASING" ? "PENDING_VP_PUR" : "PENDING_PURCHASING",
+      modeReason: mode === "REGULAR" ? String(body.modeReason || "").trim() || null : null,
+      // REGULAR = urgent, agreed to skip the approval chain -> hand it straight to Logistics.
+      status: mode === "REGULAR" && requestType === "PURCHASING" ? "APPROVED"
+        : requestType === "PURCHASING" ? "PENDING_VP_PUR" : "PENDING_PURCHASING",
       items: {
         create: items.map((i: any) => ({
           soNoDoc: String(i.soNoDoc || ""),
