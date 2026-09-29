@@ -635,7 +635,15 @@ export default function DashboardPage() {
   const [mpCounts, setMpCounts] = useState<any>(null)
   const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line)
   const [mpQtyBySo, setMpQtyBySo] = useState<Record<string, number>>({}) // SO → actual shipped qty (mp_line final_pcs)
-  const [mpMode, setMpMode] = useState(true) // default ON — dashboard opens in mp_line map mode (admin · NYG/All BU); toggle 🔗 turns it off
+  // default ON — dashboard opens in mp_line map mode (NYG/All BU); toggle 🔗 turns it off.
+  // Persist the choice so it stays ON across reloads (stored per browser).
+  const [mpMode, setMpMode] = useState(true)
+  useEffect(() => {
+    try { const v = localStorage.getItem("dash_mpMode"); if (v === "0") setMpMode(false) } catch {}
+  }, [])
+  useEffect(() => {
+    try { localStorage.setItem("dash_mpMode", mpMode ? "1" : "0") } catch {}
+  }, [mpMode])
   const mpSoKey = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
   // mp_line data is NYG-only → the map toggle works ONLY on the NYG tab (where the whole page is already
   // scoped to NYG, so the numbers match the mp_line card). All BU / GW / TRM / EA stay the normal view.
