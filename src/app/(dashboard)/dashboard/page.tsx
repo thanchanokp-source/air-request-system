@@ -703,7 +703,9 @@ export default function DashboardPage() {
   const buRequests = useMemo(()=>requests.filter(r=> requestInBu(r, activeBu) && !r.isTest), [requests, activeBu])
   const allSOs = useMemo(()=>buRequests.flatMap(r=>(r.items||[]).map((item:any)=>({...item,request:r}))), [buRequests])
 
-  const filtered = useMemo(()=>allSOs.filter(row=>{
+  // Base = every filter EXCEPT the mp_line scope (that scope is applied differently for the whole
+  // page vs. the data table, so it's layered on afterwards).
+  const baseFiltered = useMemo(()=>allSOs.filter(row=>{
     // Period filter is by ACTUAL ship = Plan Shipment Date (not the original date).
     const d = row.planShipmentDate ? new Date(row.planShipmentDate) : null
     const yr = d&&!isNaN(d.getTime()) ? String(d.getFullYear()) : ""
@@ -723,9 +725,14 @@ export default function DashboardPage() {
            (!countryFilter|| countryKey(row.country)===countryFilter) &&
            (!claimF.length|| claimF.includes(row.claimDepartment)) &&
            (!hawbF.length || hawbF.includes(row.hawbNo)) &&
-           (!actualF || (actualF === "HAS" ? row.actualAirFreight != null : row.actualAirFreight == null)) &&
-           (!mpActive || mpSoSet.has(mpSoKey(row.so)))   // 🔗 map mode (NYG/All only) → only SOs shipped in mp_line
-  }), [allSOs,yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF,mpActive,mpSoSet])
+           (!actualF || (actualF === "HAS" ? row.actualAirFreight != null : row.actualAirFreight == null))
+  }), [allSOs,yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF])
+  // Whole page (KPI · charts): follows the page-wide 🔗 map toggle.
+  const filtered = useMemo(()=> mpActive ? baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so))) : baseFiltered, [baseFiltered, mpActive, mpSoSet])
+  // Data table ONLY: its own view — "SHIPPED" = ส่งออกจริง (mp_line) · "ALL" = แพลนทั้งหมด.
+  const [tableView, setTableView] = useState<"SHIPPED"|"ALL">("SHIPPED")
+  const tableRows = useMemo(()=> tableView==="ALL" ? baseFiltered : baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so))), [baseFiltered, tableView, mpSoSet])
+  const tableShipped = tableView==="SHIPPED"
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
@@ -733,12 +740,17 @@ export default function DashboardPage() {
   const totalQAir  = filtered.reduce((s,r)=>s+(Number(r.qtyRequestAir)||0),0)
   const totalEst   = filtered.reduce((s,r)=>s+(r.airFreight||0),0)
   const totalAct   = filtered.reduce((s,r)=>s+(r.actualAirFreight||0),0)
-  // QTY AIR total for the data-table footer: in map mode the column shows mp_line's per-SO qty,
-  // so sum each SO's mp_line qty ONCE (dedup) to avoid double-counting multi-sub rows.
-  const totalQAirDisplay = (() => {
-    if (!mpActive) return totalQAir
+  // ─── Data-table footer totals (based on the table's OWN view: SHIPPED vs ALL) ───
+  const tblSO    = tableRows.length
+  const tblQOrig = tableRows.reduce((s,r)=>s+(Number(r.qtyOriginalShipment)||0),0)
+  const tblEst   = tableRows.reduce((s,r)=>s+(r.airFreight||0),0)
+  const tblAct   = tableRows.reduce((s,r)=>s+(r.actualAirFreight||0),0)
+  // QTY AIR total: in "ส่งออกจริง" view the column shows mp_line's per-SO qty, so sum each SO ONCE
+  // (dedup) to avoid double-counting multi-sub rows; in "แพลนทั้งหมด" view sum the planned qty.
+  const tblQAir = (() => {
+    if (!tableShipped) return tableRows.reduce((s,r)=>s+(Number(r.qtyRequestAir)||0),0)
     let t = 0; const seen = new Set<string>()
-    for (const r of filtered) {
+    for (const r of tableRows) {
       const k = mpSoKey(r.so)
       if (mpQtyBySo[k] != null) { if (!seen.has(k)) { seen.add(k); t += Number(mpQtyBySo[k]) || 0 } }
       else t += Number(r.qtyRequestAir) || 0
@@ -897,7 +909,6 @@ export default function DashboardPage() {
   const brands   = [...new Set(allSOs.map((r:any)=>brandKey(r)).filter((b:string)=>b&&b!=="N/A"))].sort()
   const docNos   = [...new Set(allSOs.map((r:any)=>r.request.documentNo).filter(Boolean))].sort()
   const sos      = [...new Set(allSOs.map(r=>r.so).filter(Boolean))].sort()
-  const cps      = [...new Set(allSOs.map(r=>r.customerPO).filter(Boolean))].sort()
   const hawbs    = [...new Set(allSOs.map((r:any)=>r.hawbNo).filter(Boolean))].sort()
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
   const countries= [...new Set(allSOs.map(r=>countryKey(r.country)).filter(Boolean))].sort()
@@ -907,7 +918,7 @@ export default function DashboardPage() {
   const H = 210
 
   const exportExcel = () => {
-    const rows = filtered.map(row => {
+    const rows = tableRows.map(row => {
       const ar = row.qtyOriginalShipment > 0 ? row.qtyRequestAir / row.qtyOriginalShipment * 100 : 0
       const vp = row.airFreight > 0 && row.actualAirFreight > 0 ? (row.actualAirFreight - row.airFreight) / row.airFreight * 100 : null
       return {
@@ -922,7 +933,7 @@ export default function DashboardPage() {
         "ORIG. DATE":     fmtDate(row.originalShipmentDate),
         "PLAN DATE":      fmtDate(row.planShipmentDate),
         "QTY ORIG":       row.qtyOriginalShipment,
-        "QTY AIR":        mpActive && mpQtyBySo[mpSoKey(row.so)] != null ? mpQtyBySo[mpSoKey(row.so)] : row.qtyRequestAir,
+        "QTY AIR":        tableShipped && mpQtyBySo[mpSoKey(row.so)] != null ? mpQtyBySo[mpSoKey(row.so)] : row.qtyRequestAir,
         "AIR RATE%":      Number(ar.toFixed(1)),
         [`EST. (${CUR})`]:     row.airFreight ?? 0,
         [`ACTUAL (${CUR})`]:   row.actualAirFreight ?? 0,
@@ -1125,13 +1136,12 @@ export default function DashboardPage() {
               like with like (est vs actual) instead of dragging in SOs nobody has billed yet. */}
           <select value={actualF} onChange={e=>setActualF(e.target.value as "" | "HAS" | "NONE")} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
             <option value="">Actual: ALL</option>
-            <option value="HAS">เฉพาะที่มี Actual</option>
-            <option value="NONE">ยังไม่มี Actual</option>
+            <option value="HAS">มีข้อมูลค่าแอร์</option>
+            <option value="NONE">ไม่มีข้อมูลค่าแอร์</option>
           </select>
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF}/>
           <MultiSelect label="Doc No..." options={docNos} value={docF} onChange={setDocF}/>
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF}/>
-          <MultiSelect label="Customer PO..." options={cps} value={cpF} onChange={setCpF}/>
           <select value={countryFilter} onChange={e=>setCountryFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
             <option value="">All Country</option>
             {countries.map((c:any)=><option key={c} value={c}>{c}</option>)}
@@ -1200,7 +1210,16 @@ export default function DashboardPage() {
         <div className="px-5 py-3 flex justify-between items-center" style={{background:"#a03535"}}>
           <h2 className="font-bold text-[11px] uppercase tracking-widest text-white">DATA TABLE</h2>
           <div className="flex items-center gap-3">
-            <span className="text-xs font-medium" style={{color:"#fde8e8"}}>{filtered.length} SO(s)</span>
+            {/* Table-only view toggle: ส่งออกจริง (mp_line) vs แพลนทั้งหมด — independent of the page-wide 🔗 mode */}
+            <div className="flex rounded-md overflow-hidden text-[11px] font-semibold" style={{border:"1px solid #ffffff55"}}>
+              <button onClick={()=>setTableView("SHIPPED")}
+                className="px-2.5 py-1 transition-colors"
+                style={tableView==="SHIPPED"?{background:"#fff",color:"#a03535"}:{background:"transparent",color:"#fff"}}>ส่งออกจริง</button>
+              <button onClick={()=>setTableView("ALL")}
+                className="px-2.5 py-1 transition-colors"
+                style={tableView==="ALL"?{background:"#fff",color:"#a03535"}:{background:"transparent",color:"#fff"}}>แพลนทั้งหมด</button>
+            </div>
+            <span className="text-xs font-medium" style={{color:"#fde8e8"}}>{tableRows.length} SO(s)</span>
             <button onClick={exportExcel}
               className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-md transition-colors"
               style={{background:"#ffffff22",color:"#fff",border:"1px solid #ffffff44"}}
@@ -1222,7 +1241,7 @@ export default function DashboardPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading && <tr><td colSpan={25} className="text-center py-10 text-gray-400">Loading...</td></tr>}
-              {!loading && filtered.map((row,i)=>{
+              {!loading && tableRows.map((row,i)=>{
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
                 return (
                   <tr key={i} className="hover:bg-gray-50">
@@ -1239,7 +1258,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
                     <td className="px-3 py-1.5">{row.qtyOriginalShipment}</td>
-                    <td className="px-3 py-1.5 font-semibold" title={mpActive && mpQtyBySo[mpSoKey(row.so)] != null ? "ยอด ship จริงจาก mp_line (รวมทั้ง SO)" : "QTY AIR (แผน)"}>{mpActive && mpQtyBySo[mpSoKey(row.so)] != null ? Number(mpQtyBySo[mpSoKey(row.so)]).toLocaleString() : row.qtyRequestAir}</td>
+                    <td className="px-3 py-1.5 font-semibold" title={tableShipped && mpQtyBySo[mpSoKey(row.so)] != null ? "ยอด ship จริงจาก mp_line (รวมทั้ง SO)" : "QTY AIR (แผน)"}>{tableShipped && mpQtyBySo[mpSoKey(row.so)] != null ? Number(mpQtyBySo[mpSoKey(row.so)]).toLocaleString() : row.qtyRequestAir}</td>
                     <td className="px-3 py-1.5 text-blue-700">{fmtNum(row.airFreight)}</td>
                     <td className="px-3 py-1.5 text-green-700 font-medium">{fmtNum(row.actualAirFreight)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}</td>
@@ -1256,16 +1275,16 @@ export default function DashboardPage() {
                   </tr>
                 )
               })}
-              {!loading&&filtered.length===0&&<tr><td colSpan={24} className="text-center py-10 text-gray-400">No data</td></tr>}
+              {!loading&&tableRows.length===0&&<tr><td colSpan={24} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
-            {filtered.length>0&&(
+            {tableRows.length>0&&(
               <tfoot className="sticky bottom-0">
                 <tr className="bg-gray-100 font-bold text-gray-800 border-t-2 border-gray-300">
-                  <td className="px-3 py-2 text-right whitespace-nowrap" colSpan={12}>TOTAL ({totalSO.toLocaleString()} SO)</td>
-                  <td className="px-3 py-2">{totalQOrig.toLocaleString()}</td>
-                  <td className="px-3 py-2">{totalQAirDisplay.toLocaleString()}</td>
-                  <td className="px-3 py-2 text-blue-700">{fmtNum(totalEst)}</td>
-                  <td className="px-3 py-2 text-green-700">{fmtNum(totalAct)}</td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap" colSpan={12}>TOTAL ({tblSO.toLocaleString()} SO · {tableShipped?"ส่งออกจริง":"แพลนทั้งหมด"})</td>
+                  <td className="px-3 py-2">{tblQOrig.toLocaleString()}</td>
+                  <td className="px-3 py-2">{tblQAir.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-blue-700">{fmtNum(tblEst)}</td>
+                  <td className="px-3 py-2 text-green-700">{fmtNum(tblAct)}</td>
                   <td className="px-3 py-2" colSpan={9}></td>
                 </tr>
               </tfoot>
