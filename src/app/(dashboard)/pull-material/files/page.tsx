@@ -28,7 +28,7 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [onlyMissing, setOnlyMissing] = useState(false)
-  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE">("ALL")
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE" | "PPC">("ALL")
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
@@ -147,7 +147,7 @@ export default function Page() {
 
       {/* Branch filter — separate SCM requests from Purchasing requests */}
       <div className="flex gap-2 border-b border-gray-200">
-        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM req"], ["PURCHASING", "🛒 Purchase req"], ["SAMPLE", "🧪 Sample"]] as const).map(([v, label]) => {
+        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM req"], ["PURCHASING", "🛒 Purchase req"], ["SAMPLE", "🧪 Sample"], ["PPC", "🏭 PPC"]] as const).map(([v, label]) => {
           const n = v === "ALL" ? reqs.length : reqs.filter(r => reqTypeOf(r) === v).length
           return (
             <button key={v} onClick={() => setTypeF(v)}

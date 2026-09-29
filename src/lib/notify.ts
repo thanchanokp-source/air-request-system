@@ -1354,13 +1354,17 @@ export async function notifyRejectionToCreator(requestId: string, style: string,
 
 // GW "Back to Merchandise" — DPM/GM sent the whole document back to the MER (GW) to fix and
 // re-submit (NOT a hard reject). Emails the MER creator with the reason + the full SO list.
-export async function notifyBackToMerGw(requestId: string, reason: string, byName?: string) {
+export async function notifyBackToMerGw(requestId: string, reason: string, byName?: string, includeAdmins = false) {
   try {
     const req: any = await prisma.airRequest.findUnique({
       where: { id: requestId },
       include: { items: true, createdBy: { select: { name: true, email: true } } },
     })
-    if (!req?.createdBy?.email) return
+    // Auto-add docs have no real Merchandise owner → the send-back must reach the admins who manage them.
+    const adminEmails: string[] = includeAdmins
+      ? ((await (prisma.user as any).findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } }).catch(() => [])) as any[]).map(u => u.email).filter(Boolean)
+      : []
+    if (!req?.createdBy?.email && adminEmails.length === 0) return
     const items = (req.items as any[]).filter(i => i.itemStatus !== "REJECTED")
     const cell = (v: any, right = false) => `<td style="padding:6px 10px;border-bottom:1px solid #eee${right ? ";text-align:right" : ""}">${v}</td>`
     const rows = items.map(i => `<tr>${cell(i.so)}${cell(i.style)}${cell(i.customerPO || "-")}${cell(i.description || "-")}${cell((i.qtyRequestAir || 0).toLocaleString(), true)}</tr>`).join("")
@@ -1389,7 +1393,8 @@ export async function notifyBackToMerGw(requestId: string, reason: string, byNam
       <p style="margin:0;color:#94a3b8;font-size:11px;font-family:Arial">Air Request System · Nan Yang Textile Group</p></td></tr>
   </table>
 </td></tr></table></body></html>`
-    await sendMail([req.createdBy.email], `[Air Request · Back to Merchandise] ${req.documentNo}`, html)
+    const recipients = [...new Set([req.createdBy?.email, ...adminEmails].filter(Boolean))] as string[]
+    if (recipients.length) await sendMail(recipients, `[Air Request · Back to Merchandise] ${req.documentNo}`, html)
   } catch (e) { console.error("[notify] back-to-mer (GW) failed:", e) }
 }
 

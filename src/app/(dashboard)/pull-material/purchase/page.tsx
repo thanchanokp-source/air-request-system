@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, buColor } from "../_StageWork"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { buildRequesters } from "@/lib/pull-requesters"
+import { pullReqType, isSampleLike } from "@/lib/pull-reqtype"
 
 const INCOTERMS = ["FOB", "CIF", "EX-WORK", "FCA"]
 // Incoterms that require a pickup / supplier address (buyer arranges pickup at origin).
@@ -54,7 +55,8 @@ export default function PurchasePage() {
     const initial = parts.length > 1 ? parts[1][0].toLowerCase().replace(/[^a-z0-9]/g, "") : ""
     return `${first}${initial ? "." + initial : ""}@nanyangtextile.com`
   }
-  const isMerDoc = (rq: any) => rq.requestType === "SAMPLE" || String(rq.documentNo || "").startsWith("MER_")
+  // MER Sample and PPC behave the same here: free-text lines, auto-approve straight to Logistics.
+  const isMerDoc = (rq: any) => isSampleLike(pullReqType(rq))
   // A doc is "mine" if its purchaserEmail is me, or (when unset) any item's PO-owner resolves to my email.
   // Mirrors pull-notify PENDING_PURCHASING routing EXACTLY: SCM docs with NO derivable PO owner fall back
   // to the whole Purchasing pool (server emails everyone) → must stay visible to every purchaser here too.
@@ -296,7 +298,7 @@ export default function PurchasePage() {
       // the air decision (SCM or PC). LG only enters ACTUAL later, after approval.
       // A RETURNED doc (PC_REVISE) goes STRAIGHT back to LG (APPROVED) — no re-approval — per the flow.
       // SAMPLE (MER) auto-approves after Purchase fills → straight to LG (booking + actual). No approval chain.
-      const isSample = rq.requestType === "SAMPLE" || String(rq.documentNo || "").startsWith("MER_")
+      const isSample = isSampleLike(pullReqType(rq))
       const next = rq.status === "PC_REVISE" ? "APPROVED"
         : isSample ? "APPROVED"
         : rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION"
@@ -442,7 +444,7 @@ export default function PurchasePage() {
 
   return (
     <div className="p-5 md:p-8 max-w-[1000px] mx-auto space-y-5">
-      <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>รอจัดซื้อกรอก <span className="text-base font-normal text-gray-400">(งานจาก {openReq ? ((openReq.requestType === "SAMPLE" || String(openReq.documentNo || "").startsWith("MER_")) ? "MER" : "SCM") : "SCM / MER"})</span></h1></div>
+      <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>รอจัดซื้อกรอก <span className="text-base font-normal text-gray-400">(งานจาก {openReq ? (pullReqType(openReq) === "SAMPLE" ? "MER" : pullReqType(openReq) === "PPC" ? "PPC" : "SCM") : "SCM / MER / PPC"})</span></h1></div>
 
       {(
       <>
@@ -460,7 +462,7 @@ export default function PurchasePage() {
                 <div className="text-xs text-gray-400">{openReq.requesterName} · {openReq.items.length} items</div>
                 <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                   {/* SAMPLE (MER) docs auto-approve after Purchase saves — no Regular/Irregular choice. */}
-                  {(openReq.requestType === "SAMPLE" || String(openReq.documentNo || "").startsWith("MER_")) ? (
+                  {isSampleLike(pullReqType(openReq)) ? (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-white" style={{ background: "#6b1a1a" }}>✦ Sample (MER) · auto-approve</span>
                   ) : (
                     <>
@@ -624,7 +626,9 @@ export default function PurchasePage() {
                         <thead className="bg-gray-50 text-gray-500"><tr>
                           <th className="px-3 py-2 text-left font-medium whitespace-nowrap">SO</th>
                           <th className="px-3 py-2 text-left font-medium whitespace-nowrap">PO No</th>
-                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Material</th>
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Brand</th>
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Supplier</th>
+                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap">Material / Item Desc</th>
                           <th className="px-3 py-2 text-right font-medium whitespace-nowrap">จำนวน PO</th>
                           <th className="px-3 py-2 text-right font-medium whitespace-nowrap">Cons.</th>
                           <th className="px-3 py-2 text-right font-medium whitespace-nowrap">PULL (ระบบ)</th>
@@ -636,7 +640,9 @@ export default function PurchasePage() {
                             <tr key={it.id} className="hover:bg-gray-50">
                               <td className="px-3 py-1.5"><span className="text-[11px] font-bold text-white px-1.5 py-0.5 rounded" style={{ background: MAROON }}>{it.soNoDoc}</span></td>
                               <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{it.poNoDoc || "-"}</td>
-                              <td className="px-3 py-1.5 text-gray-700 max-w-[240px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || "-"}</td>
+                              <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{it.brand || "-"}</td>
+                              <td className="px-3 py-1.5 text-gray-600 max-w-[180px] truncate" title={it.vendorName || ""}>{it.vendorName || "-"}</td>
+                              <td className="px-3 py-1.5 text-gray-700 max-w-[240px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || <span className="text-amber-600">— ไม่ได้ระบุ —</span>}</td>
                               <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-600">{it.orderQty != null ? fmt(it.orderQty) : "-"}</td>
                               <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-600">{it.consumption != null ? fmt(it.consumption) : "-"}</td>
                               <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-700 font-medium">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>

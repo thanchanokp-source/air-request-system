@@ -763,14 +763,25 @@ export default function DashboardPage() {
     {label:"REASON",         get:r=>[...new Set(getSplits(r).map((s:any)=>s.reason).filter(Boolean))].join(" ")},
     {label:"อยู่ที่ใคร",       get:r=>Array.isArray(r.request?.pendingWith)?r.request.pendingWith.join(" "):""},
   ], [poMap, mpQtyBySo, tableShipped, CUR])
-  // Per-column filter values, keyed by column index (substring match, case-insensitive).
-  const [colF, setColF] = useState<Record<number,string>>({})
+  // Rows after the view toggle (SHIPPED/ALL) but BEFORE the per-column filters — the dropdowns list
+  // their options from these, so choosing a value in one column doesn't empty the others.
+  const tableViewRows = useMemo(()=> tableView==="ALL" ? baseFiltered : baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so))), [baseFiltered, tableView, mpSoSet])
+  // Excel-style per-column filters: colF[idx] = the SET of allowed values for that column (checked in
+  // its dropdown). Empty/absent = no filter on that column.
+  const [colF, setColF] = useState<Record<number,string[]>>({})
+  const [colMenu, setColMenu] = useState<{idx:number; x:number; y:number}|null>(null)
+  const [colSearch, setColSearch] = useState("")
+  const colOptions = (idx:number) => [...new Set(tableViewRows.map(r=>String(COLS[idx]?.get(r) ?? "")))].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}))
+  const toggleColVal = (idx:number, opt:string) => setColF(f=>{
+    const cur = new Set(f[idx]||[]); cur.has(opt)?cur.delete(opt):cur.add(opt)
+    const arr=[...cur]; const n={...f}; if(arr.length) n[idx]=arr; else delete n[idx]; return n
+  })
+  const clearColVal = (idx:number) => setColF(f=>{ const n={...f}; delete n[idx]; return n })
   const tableRows = useMemo(()=>{
-    const byView = tableView==="ALL" ? baseFiltered : baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so)))
-    const active = Object.entries(colF).filter(([,v])=>String(v).trim()!=="")
-    if (!active.length) return byView
-    return byView.filter(row => active.every(([idx,v])=> String(COLS[Number(idx)]?.get(row) ?? "").toLowerCase().includes(String(v).trim().toLowerCase())))
-  }, [baseFiltered, tableView, mpSoSet, colF, COLS])
+    const active = Object.entries(colF).filter(([,v])=>Array.isArray(v)&&v.length>0)
+    if (!active.length) return tableViewRows
+    return tableViewRows.filter(row => active.every(([idx,vals])=> (vals as string[]).includes(String(COLS[Number(idx)]?.get(row) ?? ""))))
+  }, [tableViewRows, colF, COLS])
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
@@ -1273,14 +1284,19 @@ export default function DashboardPage() {
         <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
-              <tr style={{background:"#c87070"}}>{COLS.map((c,idx)=>
-                <th key={idx} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{c.label}</th>)}
-              </tr>
-              <tr style={{background:"#d08a8a"}}>{COLS.map((c,idx)=>
-                <th key={idx} style={{background:"#d08a8a"}} className="px-1.5 py-1">
-                  <input value={colF[idx]||""} onChange={e=>setColF(f=>({...f,[idx]:e.target.value}))} placeholder="กรอง…"
-                    className="w-full min-w-[64px] px-1.5 py-0.5 rounded text-[10px] font-normal text-gray-800 bg-white border border-white/50 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-white"/>
-                </th>)}
+              <tr style={{background:"#c87070"}}>{COLS.map((c,idx)=>{
+                const activeF = (colF[idx]?.length||0) > 0
+                return (
+                <th key={idx} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">
+                  <div className="flex items-center gap-1">
+                    <span>{c.label}</span>
+                    <button
+                      onClick={(e)=>{ const r=(e.currentTarget as HTMLElement).getBoundingClientRect(); setColSearch(""); setColMenu(colMenu?.idx===idx?null:{idx, x:r.left, y:r.bottom}) }}
+                      className={`ml-auto shrink-0 rounded px-1 leading-none text-[11px] ${activeF?"bg-white text-[#a03535]":"text-white/70 hover:text-white hover:bg-white/20"}`}
+                      title="กรองคอลัมน์นี้">▾</button>
+                  </div>
+                </th>)
+              })}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -1336,6 +1352,40 @@ export default function DashboardPage() {
           </table>
         </div>
       </div>
+
+      {/* Excel-style column filter dropdown (fixed position so it isn't clipped by the table scroll box) */}
+      {colMenu && (()=>{
+        const idx = colMenu.idx
+        const all = colOptions(idx)
+        const opts = all.filter(o=>!colSearch || o.toLowerCase().includes(colSearch.toLowerCase()))
+        const winW = typeof window!=="undefined" ? window.innerWidth : 1200
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={()=>setColMenu(null)}/>
+            <div className="fixed z-50 bg-white rounded-lg shadow-2xl border border-gray-200 w-60 p-2 text-gray-800 flex flex-col"
+              style={{left:Math.min(colMenu.x, winW-248), top:colMenu.y+4, maxHeight:340}}>
+              <div className="flex items-center gap-1 mb-1.5">
+                <span className="text-[11px] font-bold text-gray-500 truncate">{COLS[idx]?.label}</span>
+                <button onClick={()=>{clearColVal(idx); setColMenu(null)}} className="ml-auto text-[10px] text-gray-500 hover:text-red-600">ล้างตัวกรอง</button>
+              </div>
+              <input autoFocus value={colSearch} onChange={e=>setColSearch(e.target.value)} placeholder="ค้นหา..." className="w-full mb-1.5 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-red-300"/>
+              <div className="overflow-auto" style={{maxHeight:250}}>
+                {opts.length===0 && <p className="text-[11px] text-gray-400 px-1 py-2">ไม่พบข้อมูล</p>}
+                {opts.map(opt=>{
+                  const checked = colF[idx]?.includes(opt) ?? false
+                  return (
+                    <label key={opt} className="flex items-center gap-1.5 py-0.5 px-1 text-xs cursor-pointer hover:bg-gray-50 rounded">
+                      <input type="checkbox" checked={checked} onChange={()=>toggleColVal(idx,opt)}/>
+                      <span className="truncate" title={opt||"(ว่าง)"}>{opt||"(ว่าง)"}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="text-[10px] text-gray-400 mt-1 px-1 border-t pt-1">ติ๊กค่าที่ต้องการ · ไม่ติ๊ก = แสดงทั้งหมด</div>
+            </div>
+          </>
+        )
+      })()}
     </div>
   )
 }

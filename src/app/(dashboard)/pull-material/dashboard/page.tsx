@@ -12,7 +12,7 @@ export default function Page() {
   const [bu, setBu] = useState("NYG")
   const [reqs, setReqs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE">("ALL")
+  const [typeF, setTypeF] = useState<"ALL" | "SCM" | "PURCHASING" | "SAMPLE" | "PPC">("ALL")
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
@@ -186,7 +186,7 @@ export default function Page() {
 
       {/* Branch filter — every metric below reflects the chosen branch (SCM vs Purchasing) */}
       <div className="flex gap-2 border-b border-gray-200">
-        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM"], ["PURCHASING", "🛒 จัดซื้อ"], ["SAMPLE", "🧪 Sample"]] as const).map(([v, label]) => {
+        {([["ALL", "📁 ทั้งหมด"], ["SCM", "🧾 SCM"], ["PURCHASING", "🛒 จัดซื้อ"], ["SAMPLE", "🧪 Sample"], ["PPC", "🏭 PPC"]] as const).map(([v, label]) => {
           const n = v === "ALL" ? reqs.length : reqs.filter((r: any) => reqTypeOf(r) === v).length
           return (
             <button key={v} onClick={() => setTypeF(v)}

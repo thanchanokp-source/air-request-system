@@ -61,16 +61,20 @@ export default function ScmRequestPage() {
   const canScm = roles.includes("ADMIN") || roles.includes("SCM_PULL")
   const canPc = roles.includes("ADMIN") || roles.includes("PURCHASING")
   const canMer = roles.some((r: string) => /^(MER_|DVM_MER|VP_MER)/.test(r)) // whole Merchandise family → Sample
-  const isAdmin = canScm || canPc || canMer // gate: SCM_PULL / PURCHASING / MER / ADMIN can create a request
+  const canPpc = roles.includes("PPC_PULL")   // production planning — same free-text form as Sample
+  const isAdmin = canScm || canPc || canMer || canPpc // gate: SCM_PULL / PURCHASING / MER / ADMIN can create a request
   // requestType decides the approval TAIL (SCM → VP SCM → President · PC → DVM Pur → VP Pur).
   // Real users: derived from role (no toggle). Admin: a toggle to preview BOTH request UIs.
   const isRealAdmin = roles.includes("ADMIN")
   // The whole Merchandise family (MER_* / DVM_MER* / VP_MER*) keys a SAMPLE — auto-approves after Purchase.
-  const derivedReqType: "SCM" | "PURCHASING" | "SAMPLE" =
-    canMer && !roles.includes("SCM_PULL") && !roles.includes("PURCHASING") ? "SAMPLE"
+  const derivedReqType: "SCM" | "PURCHASING" | "SAMPLE" | "PPC" =
+    canPpc && !roles.includes("SCM_PULL") && !roles.includes("PURCHASING") ? "PPC"
+    : canMer && !roles.includes("SCM_PULL") && !roles.includes("PURCHASING") ? "SAMPLE"
     : roles.includes("PURCHASING") && !roles.includes("SCM_PULL") ? "PURCHASING" : "SCM"
-  const [adminReqType, setAdminReqType] = useState<"SCM" | "PURCHASING" | "SAMPLE">("SCM")
-  const reqType: "SCM" | "PURCHASING" | "SAMPLE" = isRealAdmin ? adminReqType : derivedReqType
+  const [adminReqType, setAdminReqType] = useState<"SCM" | "PURCHASING" | "SAMPLE" | "PPC">("SCM")
+  const reqType: "SCM" | "PURCHASING" | "SAMPLE" | "PPC" = isRealAdmin ? adminReqType : derivedReqType
+  // PPC keys the same kind of free-text lines as a MER sample (and follows the same auto-approve flow).
+  const isFreeForm = reqType === "SAMPLE" || reqType === "PPC"
 
   const [bu, setBu] = useState("NYG")
   const [q, setQ] = useState("")
@@ -260,7 +264,7 @@ export default function ScmRequestPage() {
   }, [bu, reqType])
   // Sample (MER) dropdown options — distinct Brand / Supplier / Item desc from the BOM of this BU + purchasers.
   useEffect(() => {
-    if (reqType !== "SAMPLE") return
+    if (reqType !== "SAMPLE" && reqType !== "PPC") return
     fetch(`/api/bom?bu=${bu}&sampleOpts=1`).then(r => r.json()).then(d => setSmpOpts({ brands: d.brands || [], suppliers: d.suppliers || [], items: d.items || [] })).catch(() => {})
     fetch("/api/pull-material/approvers").then(r => r.json()).then(d => {
       const purs = (d.users || []).filter((u: any) => [u.role, ...(u.roles || [])].includes("PURCHASING")).map((u: any) => ({ name: u.name || u.email, email: u.email }))
@@ -270,7 +274,7 @@ export default function ScmRequestPage() {
   // Sample SO dropdown — refetch (debounced) whenever the picked Brand / Supplier / Item changes,
   // so the SO list only shows SOs that match the line being entered.
   useEffect(() => {
-    if (reqType !== "SAMPLE") { setSmpSos([]); return }
+    if (reqType !== "SAMPLE" && reqType !== "PPC") { setSmpSos([]); return }
     const t = setTimeout(() => {
       const qs = new URLSearchParams({ bu, sampleSo: "1" })
       if (smpNew.brand.trim()) qs.set("brand", smpNew.brand.trim())
@@ -576,10 +580,12 @@ export default function ScmRequestPage() {
     if (mode === "REGULAR" && !modeReason.trim()) { setModeAsk(true); return }
 
     // SAMPLE (MER): items come from the Brand/Supplier/Item lines (no BOM/SO). Submit → auto-approve flow.
-    if (reqType === "SAMPLE") {
+    if (isFreeForm) {
       if (smpLines.length === 0) return stop("เพิ่มรายการ Sample อย่างน้อย 1 บรรทัด (Brand / Supplier / Item)")
       // Resolve the picked "Name · email@…" (or a free-typed email) to a plain purchaser email.
       const purEmail = (() => { const s = smpPurEmail.trim(); const m = s.match(/[\w.+-]+@nanyangtextile\.com/i); return m ? m[0].toLowerCase() : "" })()
+      // Without it the system has to fall back to alerting every Purchasing user — so it is required.
+      if (!purEmail) return stop("เลือกผู้จัดซื้อที่จะส่งงานให้ (อีเมล) — ระบบจะแจ้งเตือนเฉพาะคนนั้น")
       const sampleItems = smpLines.map(l => ({
         soNoDoc: l.so || "", brand: l.brand || null, vendorName: l.supplier || null, itemName: l.item || null,
         partDesc: null, pullMaterialQty: l.qty ? Number(l.qty) : null,
@@ -588,7 +594,7 @@ export default function ScmRequestPage() {
       try {
         const r = await fetch("/api/pull-material", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark: remark || null, items: sampleItems, requestType: "SAMPLE", isTest, purchaserEmail: purEmail || null }),
+          body: JSON.stringify({ bu, requesterName, requesterEmail: (session?.user as any)?.email, remark: remark || null, items: sampleItems, requestType: reqType, isTest, purchaserEmail: purEmail || null }),
         })
         const d = await r.json().catch(() => ({}))
         if (!r.ok) return stop(d.error || "ส่ง Sample ไม่สำเร็จ")
@@ -757,16 +763,16 @@ export default function ScmRequestPage() {
         Request type:
         {isRealAdmin ? (
           <span className="inline-flex gap-1">
-            {(["SCM", "PURCHASING", "SAMPLE"] as const).map(t => (
+            {(["SCM", "PURCHASING", "SAMPLE", "PPC"] as const).map(t => (
               <button key={t} onClick={() => setAdminReqType(t)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${reqType === t ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
-                style={reqType === t ? { background: MAROON } : undefined}>{t === "SCM" ? "SCM request" : t === "PURCHASING" ? "Purchasing request" : "Sample (MER)"}</button>
+                style={reqType === t ? { background: MAROON } : undefined}>{t === "SCM" ? "SCM request" : t === "PURCHASING" ? "Purchasing request" : t === "PPC" ? "PPC request" : "Sample (MER)"}</button>
             ))}
             <span className="ml-1 self-center text-amber-600">· admin preview all</span>
           </span>
         ) : (
           <>
-            <span className="font-semibold text-gray-600">{reqType === "SCM" ? "SCM" : reqType === "SAMPLE" ? "Sample (MER)" : "Purchasing"}</span>
+            <span className="font-semibold text-gray-600">{reqType === "SCM" ? "SCM" : reqType === "SAMPLE" ? "Sample (MER)" : reqType === "PPC" ? "PPC" : "Purchasing"}</span>
             <span>{reqType === "SCM" ? "→ VP SCM → President" : reqType === "SAMPLE" ? "→ จัดซื้อกรอก → auto-approve → LG" : "→ DVM Pur → VP Pur"}</span>
           </>
         )}
@@ -778,7 +784,8 @@ export default function ScmRequestPage() {
           const sInp = "w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200"
           const lab = "text-[11px] font-semibold text-gray-600 block mb-1"
           const addLine = () => {
-            if (!smpNew.brand.trim() && !smpNew.supplier.trim() && !smpNew.item.trim()) return showToast("⚠ กรอก Brand / Supplier / Item อย่างน้อย 1 ช่อง", false)
+            if (!smpNew.item.trim()) return showToast("⚠ กรอก Item Desc — จัดซื้อใช้ช่องนี้ในการสั่งของ", false)
+            if (!smpNew.qty.trim() || !(Number(smpNew.qty) > 0)) return showToast("⚠ กรอกจำนวน (Qty) ของรายการนี้", false)
             setSmpLines(p => [...p, { ...smpNew }]); setSmpNew({ brand: "", supplier: "", item: "", so: "", qty: "" })
           }
           return (
@@ -792,7 +799,7 @@ export default function ScmRequestPage() {
               </div>
               <div className="md:col-span-2"><label className={lab}>Brand</label><ComboBox value={smpNew.brand} onChange={v => setSmpNew(p => ({ ...p, brand: v }))} options={smpOpts.brands} placeholder="ค้นหา Brand" /></div>
               <div className="md:col-span-2"><label className={lab}>Supplier</label><ComboBox value={smpNew.supplier} onChange={v => setSmpNew(p => ({ ...p, supplier: v }))} options={smpOpts.suppliers} placeholder="ค้นหา Supplier" /></div>
-              <div className="md:col-span-2"><label className={lab}>Item Desc</label><ComboBox value={smpNew.item} onChange={v => setSmpNew(p => ({ ...p, item: v }))} options={smpOpts.items} placeholder="ค้นหา Item" /></div>
+              <div className="md:col-span-2"><label className={lab}>Item Desc <span className="text-red-500">*</span></label><ComboBox value={smpNew.item} onChange={v => setSmpNew(p => ({ ...p, item: v }))} options={smpOpts.items} placeholder="ค้นหา Item" /></div>
               <div className="md:col-span-2">
                 <label className={lab}>Qty</label>
                 <div className="relative">

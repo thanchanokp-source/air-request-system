@@ -620,7 +620,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: { requestId: id, userId, action: "BACK_TO_MER", fromStatus: request.status, toStatus: "PENDING_MER", comment: `Back to Merchandise: ${comment}` }
     })
     await prisma.airRequest.update({ where: { id }, data: { status: "PENDING_MER", rejectionReason: comment } })
-    await notifyBackToMerGw(id, comment, session.user?.name || session.user?.email || undefined).catch(() => {})
+    // Auto-add docs have no real Merchandise owner → also alert the admins who manage them.
+    const isAutoAddDoc = (request.items || []).some((i: any) => String(i.reasonDelay || "").startsWith("Auto-add"))
+    await notifyBackToMerGw(id, comment, session.user?.name || session.user?.email || undefined, isAutoAddDoc).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
