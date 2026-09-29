@@ -85,6 +85,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     country: (v) => v || null, incoterm: (v) => v || null, port: (v) => v || null, seaPort: (v) => v || null,
     pickupAddress: (v) => v || null, needDate: dt, cartons: num, boxW: num, boxL: num, boxH: num, etc: dt,
     poPullQty: num, // PO PULL quantity entered by Purchasing (per PO line)
+    // Purchasing may also fix the material name (MER/PPC lines sometimes arrive without one).
+    itemName: (v) => v || null,
     // SCM decision
     airDecision: (v) => v || null,
     reasonAirPick: (v) => v || null,

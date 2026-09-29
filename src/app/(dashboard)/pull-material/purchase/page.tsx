@@ -293,7 +293,7 @@ export default function PurchasePage() {
       }
       const packages = pkgs.map(x => ({ uom: x.uom.trim(), qty: Number(x.qty) || 0 })).filter(x => x.uom && x.uom !== "__OTHER__" && x.qty > 0)
       const cartons = packages.reduce((a, x) => a + x.qty, 0)
-      const itemUpdates = rq.items.map((it: any, i: number) => ({ id: it.id, ...shared, cartons: i === 0 ? String(cartons || "") : "", weight: i === 0 ? pf("weight") : "", poPullQty: valOf(it, "poPullQty") }))
+      const itemUpdates = rq.items.map((it: any, i: number) => ({ id: it.id, ...shared, cartons: i === 0 ? String(cartons || "") : "", weight: i === 0 ? pf("weight") : "", poPullQty: valOf(it, "poPullQty"), itemName: valOf(it, "itemName") }))
       // No manual Logistics step anymore: server auto-computes Est Air + Air L/T, then goes straight to
       // the air decision (SCM or PC). LG only enters ACTUAL later, after approval.
       // A RETURNED doc (PC_REVISE) goes STRAIGHT back to LG (APPROVED) — no re-approval — per the flow.
@@ -642,7 +642,13 @@ export default function PurchasePage() {
                               <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{it.poNoDoc || "-"}</td>
                               <td className="px-3 py-1.5 text-gray-600 whitespace-nowrap">{it.brand || "-"}</td>
                               <td className="px-3 py-1.5 text-gray-600 max-w-[180px] truncate" title={it.vendorName || ""}>{it.vendorName || "-"}</td>
-                              <td className="px-3 py-1.5 text-gray-700 max-w-[240px] truncate" title={it.itemName || it.itemCode || ""}>{it.itemName || it.itemCode || <span className="text-amber-600">— ไม่ได้ระบุ —</span>}</td>
+                              {/* Editable: a MER/PPC line can arrive without a material name, and Purchasing
+                                  is the one who knows what is actually being bought. */}
+                              <td className="px-3 py-1.5 min-w-[220px]" onClick={e => e.stopPropagation()}>
+                                <input value={valOf(it, "itemName") || it.itemCode || ""} onChange={e => setVal(it.id, "itemName", e.target.value)}
+                                  placeholder="— ไม่ได้ระบุ — พิมพ์ชื่อวัสดุ"
+                                  className={`w-full border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200 ${it.itemName || valOf(it, "itemName") ? "border-gray-200 bg-white" : "border-amber-300 bg-amber-50 placeholder:text-amber-600"}`} />
+                              </td>
                               <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-600">{it.orderQty != null ? fmt(it.orderQty) : "-"}</td>
                               <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-600">{it.consumption != null ? fmt(it.consumption) : "-"}</td>
                               <td className="px-3 py-1.5 text-right whitespace-nowrap text-gray-700 font-medium">{fmt(it.pullMaterialQty)} {it.bomUom || ""}</td>
