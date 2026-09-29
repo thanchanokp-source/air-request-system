@@ -630,7 +630,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // the DVM/VP Merchandise re-approval. If it was recalled from an early merch stage instead,
     // restart from the first merch approver. Decide by where the last send-back came FROM.
     const lastBack = await (prisma.approvalLog as any).findFirst({ where: { requestId: id, toStatus: "PENDING_MER" }, orderBy: { createdAt: "desc" } })
-    const cameFromScm = lastBack?.fromStatus === "PENDING_SCM"
+    // Auto-add docs never needed merch approval (they enter at SCM) → on resubmit ALWAYS skip the
+    // DVM/VP Merchandise chain and go straight back to SCM, even if the send-back came from elsewhere.
+    const isAutoAdd = (request.items || []).some((i: any) => String(i.reasonDelay || "").startsWith("Auto-add"))
+    const cameFromScm = lastBack?.fromStatus === "PENDING_SCM" || isAutoAdd
     const firstStatus = cameFromScm ? "PENDING_SCM"
       : request.bu === "EA" ? "PENDING_DVM_MER_EA" : request.bu === "TRM" ? "PENDING_DVM_MER_TRM" : "PENDING_DVM_MER"
     await prisma.airRequestItem.updateMany({

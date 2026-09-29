@@ -612,13 +612,14 @@ export default function DashboardPage() {
   const { data: session } = useSession()
   // Which BU(s) this viewer may toggle between. ADMIN + jariya → all BUs (+ "All BU");
   // everyone else → only their own BU(s). Forward-compatible: add TRM/EA in @/lib/bu.
-  const { bus: viewBus, canAll } = useMemo(() => viewableBus(session?.user), [session])
-  const buTabs = useMemo(() => [
-    ...(canAll ? [{ v: "ALL", label: "All BU", active: "bg-gray-700 text-white" }] : []),
-    ...viewBus.map(b => ({ v: b as string, label: BU_META[b].label, active: BU_META[b].active })),
-  ], [viewBus, canAll])
+  const { bus: viewBus } = useMemo(() => viewableBus(session?.user), [session])
+  // "All BU" is intentionally omitted here: the dashboard is mp_line-centric and mp_line holds NYG
+  // data only, so an "All BU" view would mix BUs the map can't reconcile. Per-BU tabs only.
+  const buTabs = useMemo(() =>
+    viewBus.map(b => ({ v: b as string, label: BU_META[b].label, active: BU_META[b].active }))
+  , [viewBus])
 
-  const [activeBu, setActiveBu] = useState<string>("ALL")
+  const [activeBu, setActiveBu] = useState<string>("NYG")
   // EA amounts are stored in USD; every other BU is THB. Label-only — numbers are unchanged.
   const CUR = activeBu === "EA" ? "USD" : "THB"
   // Session loads after first render — default the active BU to the viewer's first allowed
@@ -626,9 +627,9 @@ export default function DashboardPage() {
   const buInit = useRef(false)
   useEffect(() => {
     if (buInit.current || !session?.user) return
-    setActiveBu(canAll ? "ALL" : (viewBus[0] || "NYG"))
+    setActiveBu(viewBus.includes("NYG") ? "NYG" : (viewBus[0] || "NYG"))
     buInit.current = true
-  }, [session, canAll, viewBus])
+  }, [session, viewBus])
 
   // Admin-only: mp_line reconcile summary (air req plan ↔ mp_line actual, NYG · SHIPPED · AIR PP).
   const isAdmin = (session?.user as any)?.role === "ADMIN"
@@ -731,8 +732,45 @@ export default function DashboardPage() {
   const filtered = useMemo(()=> mpActive ? baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so))) : baseFiltered, [baseFiltered, mpActive, mpSoSet])
   // Data table ONLY: its own view — "SHIPPED" = ส่งออกจริง (mp_line) · "ALL" = แพลนทั้งหมด.
   const [tableView, setTableView] = useState<"SHIPPED"|"ALL">("SHIPPED")
-  const tableRows = useMemo(()=> tableView==="ALL" ? baseFiltered : baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so))), [baseFiltered, tableView, mpSoSet])
   const tableShipped = tableView==="SHIPPED"
+  const qtyAirDisp = (r:any) => tableShipped && mpQtyBySo[mpSoKey(r.so)] != null ? mpQtyBySo[mpSoKey(r.so)] : r.qtyRequestAir
+  // Column definitions — shared by the header, the per-column filter row, and the data cells so they
+  // always line up. `get` returns the value used both for the filter's substring match and export.
+  const COLS = useMemo<{label:string; get:(r:any)=>any}[]>(()=>[
+    {label:"DOC NO",         get:r=>r.request?.documentNo||""},
+    {label:"SO",             get:r=>r.so||""},
+    {label:"PO",             get:r=>poMap[r.so]||""},
+    {label:"STYLE",          get:r=>r.style||""},
+    {label:"SUB",            get:r=>r.sub||""},
+    {label:"DESCRIPTION",    get:r=>r.description||""},
+    {label:"CUSTOMER PO",    get:r=>r.customerPO||""},
+    {label:"BRAND",          get:r=>soBrand(r)},
+    {label:"BU",             get:r=>r.request?.buName||""},
+    {label:"STATUS",         get:r=>soStage(r)},
+    {label:"ORIG. DATE",     get:r=>fmtDate(r.originalShipmentDate)},
+    {label:"PLAN DATE",      get:r=>fmtDate(r.planShipmentDate)},
+    {label:"QTY ORIG",       get:r=>r.qtyOriginalShipment},
+    {label:"QTY AIR",        get:r=>qtyAirDisp(r)},
+    {label:`EST. (${CUR})`,  get:r=>r.airFreight},
+    {label:`ACTUAL (${CUR})`,get:r=>r.actualAirFreight},
+    {label:"INV NO",         get:r=>r.invoiceNo||""},
+    {label:"HAWB NO",        get:r=>r.hawbNo||""},
+    {label:"VAR%",           get:r=>{const vp=r.airFreight>0&&r.actualAirFreight>0?(r.actualAirFreight-r.airFreight)/r.airFreight*100:null; return vp==null?"":vp.toFixed(1)}},
+    {label:"FACTORY",        get:r=>r.factory||""},
+    {label:"COUNTRY",        get:r=>r.country||""},
+    {label:"CLAIM DEPT",     get:r=>{const sp=getSplits(r); return sp.length?sp.map((s:any)=>deptLabel(s.dept)).join(" "):(r.claimDepartment||"")}},
+    {label:"CLAIM %",        get:r=>{const sp=getSplits(r); return sp.length?sp.map((s:any)=>s.pct!=null?`${s.pct}%`:"").join(" "):""}},
+    {label:"REASON",         get:r=>[...new Set(getSplits(r).map((s:any)=>s.reason).filter(Boolean))].join(" ")},
+    {label:"อยู่ที่ใคร",       get:r=>Array.isArray(r.request?.pendingWith)?r.request.pendingWith.join(" "):""},
+  ], [poMap, mpQtyBySo, tableShipped, CUR])
+  // Per-column filter values, keyed by column index (substring match, case-insensitive).
+  const [colF, setColF] = useState<Record<number,string>>({})
+  const tableRows = useMemo(()=>{
+    const byView = tableView==="ALL" ? baseFiltered : baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so)))
+    const active = Object.entries(colF).filter(([,v])=>String(v).trim()!=="")
+    if (!active.length) return byView
+    return byView.filter(row => active.every(([idx,v])=> String(COLS[Number(idx)]?.get(row) ?? "").toLowerCase().includes(String(v).trim().toLowerCase())))
+  }, [baseFiltered, tableView, mpSoSet, colF, COLS])
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
@@ -913,7 +951,7 @@ export default function DashboardPage() {
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
   const countries= [...new Set(allSOs.map(r=>countryKey(r.country)).filter(Boolean))].sort()
   const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||actualF||brandF.length||docF.length||soF.length||cpF.length||portFilter||countryFilter||claimF.length||hawbF.length)
-  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setActualF(""); setBrandF([]); setDocF([]); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]); setHawbF([]) }
+  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setActualF(""); setBrandF([]); setDocF([]); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]); setHawbF([]); setColF({}) }
 
   const H = 210
 
@@ -1235,8 +1273,14 @@ export default function DashboardPage() {
         <div className="overflow-auto max-h-[380px]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
-              <tr style={{background:"#c87070"}}>{["DOC NO","SO","PO","STYLE","SUB","DESCRIPTION","CUSTOMER PO","BRAND","BU","STATUS","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR",`EST. (${CUR})`,`ACTUAL (${CUR})`,"INV NO","HAWB NO","VAR%","FACTORY","COUNTRY","CLAIM DEPT","CLAIM %","REASON","อยู่ที่ใคร"].map(h=>
-                <th key={h} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{h}</th>)}
+              <tr style={{background:"#c87070"}}>{COLS.map((c,idx)=>
+                <th key={idx} style={{background:"#c87070"}} className="px-3 py-2 text-left whitespace-nowrap font-semibold text-[11px] tracking-wide text-white">{c.label}</th>)}
+              </tr>
+              <tr style={{background:"#d08a8a"}}>{COLS.map((c,idx)=>
+                <th key={idx} style={{background:"#d08a8a"}} className="px-1.5 py-1">
+                  <input value={colF[idx]||""} onChange={e=>setColF(f=>({...f,[idx]:e.target.value}))} placeholder="กรอง…"
+                    className="w-full min-w-[64px] px-1.5 py-0.5 rounded text-[10px] font-normal text-gray-800 bg-white border border-white/50 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-white"/>
+                </th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -1275,7 +1319,7 @@ export default function DashboardPage() {
                   </tr>
                 )
               })}
-              {!loading&&tableRows.length===0&&<tr><td colSpan={24} className="text-center py-10 text-gray-400">No data</td></tr>}
+              {!loading&&tableRows.length===0&&<tr><td colSpan={25} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
             {tableRows.length>0&&(
               <tfoot className="sticky bottom-0">
