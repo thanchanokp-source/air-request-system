@@ -725,6 +725,18 @@ export default function DashboardPage() {
   const totalQAir  = filtered.reduce((s,r)=>s+(Number(r.qtyRequestAir)||0),0)
   const totalEst   = filtered.reduce((s,r)=>s+(r.airFreight||0),0)
   const totalAct   = filtered.reduce((s,r)=>s+(r.actualAirFreight||0),0)
+  // QTY AIR total for the data-table footer: in map mode the column shows mp_line's per-SO qty,
+  // so sum each SO's mp_line qty ONCE (dedup) to avoid double-counting multi-sub rows.
+  const totalQAirDisplay = (() => {
+    if (!mpActive) return totalQAir
+    let t = 0; const seen = new Set<string>()
+    for (const r of filtered) {
+      const k = mpSoKey(r.so)
+      if (mpQtyBySo[k] != null) { if (!seen.has(k)) { seen.add(k); t += Number(mpQtyBySo[k]) || 0 } }
+      else t += Number(r.qtyRequestAir) || 0
+    }
+    return t
+  })()
   // Currency is per-SO (EA / GW-RHONE → USD, else THB); a doc can mix. Totals are split so THB and
   // USD are never summed. Charts label their axis with the single currency present, or "mixed".
   const rowCur = (r:any) => soCurrency(r.request?.bu ?? r.bu, r.brand ?? r.request?.brandName)
@@ -1238,6 +1250,18 @@ export default function DashboardPage() {
               })}
               {!loading&&filtered.length===0&&<tr><td colSpan={24} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
+            {filtered.length>0&&(
+              <tfoot className="sticky bottom-0">
+                <tr className="bg-gray-100 font-bold text-gray-800 border-t-2 border-gray-300">
+                  <td className="px-3 py-2 text-right whitespace-nowrap" colSpan={12}>TOTAL ({totalSO.toLocaleString()} SO)</td>
+                  <td className="px-3 py-2">{totalQOrig.toLocaleString()}</td>
+                  <td className="px-3 py-2">{totalQAirDisplay.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-blue-700">{fmtNum(totalEst)}</td>
+                  <td className="px-3 py-2 text-green-700">{fmtNum(totalAct)}</td>
+                  <td className="px-3 py-2" colSpan={9}></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
