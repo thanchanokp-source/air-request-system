@@ -135,6 +135,15 @@ export default function PurchasePage() {
   const [invMap, setInvMap] = useState<Record<string, string>>({})
   const [invReading, setInvReading] = useState(false)
   const setInv = (po: string, v: string) => setInvMap(p => ({ ...p, [po]: v }))
+  // Package (หีบห่อ): MER/Sample docs arrive without one, so Purchasing enters it here; a PC request
+  // already carries lines, which are loaded for editing instead of being asked for twice.
+  const [pkgs, setPkgs] = useState<{ uom: string; qty: string }[]>([{ uom: "", qty: "" }])
+  useEffect(() => {
+    const rq = reqs.find(r => r.id === openId)
+    setInvMap(rq ? { ...(rq.poInvoices || {}) } : {})
+    const ex = Array.isArray(rq?.packages) ? rq!.packages : []
+    setPkgs(ex.length ? ex.map((x: any) => ({ uom: String(x.uom || ""), qty: String(x.qty ?? "") })) : [{ uom: "", qty: "" }])
+  }, [openId, reqs])
   // OCR is best-effort, so nothing it reads is written straight into the form: Purchasing confirms
   // (and may correct) every number first. Rows sit in this dialog until they do.
   const [invConfirm, setInvConfirm] = useState<{ po: string; inv: string; from: string; use: boolean }[] | null>(null)
@@ -280,7 +289,9 @@ export default function PurchasePage() {
         needDate: pf("needDate"), etc: pf("etc"),
         boxW: pf("boxW"), boxL: pf("boxL"), boxH: pf("boxH"),
       }
-      const itemUpdates = rq.items.map((it: any, i: number) => ({ id: it.id, ...shared, weight: i === 0 ? pf("weight") : "", poPullQty: valOf(it, "poPullQty") }))
+      const packages = pkgs.map(x => ({ uom: x.uom.trim(), qty: Number(x.qty) || 0 })).filter(x => x.uom && x.uom !== "__OTHER__" && x.qty > 0)
+      const cartons = packages.reduce((a, x) => a + x.qty, 0)
+      const itemUpdates = rq.items.map((it: any, i: number) => ({ id: it.id, ...shared, cartons: i === 0 ? String(cartons || "") : "", weight: i === 0 ? pf("weight") : "", poPullQty: valOf(it, "poPullQty") }))
       // No manual Logistics step anymore: server auto-computes Est Air + Air L/T, then goes straight to
       // the air decision (SCM or PC). LG only enters ACTUAL later, after approval.
       // A RETURNED doc (PC_REVISE) goes STRAIGHT back to LG (APPROVED) — no re-approval — per the flow.
@@ -291,7 +302,7 @@ export default function PurchasePage() {
         : rq.requestType === "PURCHASING" ? "PENDING_PC_DECISION" : "PENDING_SCM_DECISION"
       const r = await fetch(`/api/pull-material/${rq.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemUpdates, status: next, otherPorts, poInvoices: { ...(rq.poInvoices || {}), ...Object.fromEntries(Object.entries(invMap).filter(([, v]) => v && v.trim())) } }),
+        body: JSON.stringify({ itemUpdates, status: next, otherPorts, packages, poInvoices: { ...(rq.poInvoices || {}), ...Object.fromEntries(Object.entries(invMap).filter(([, v]) => v && v.trim())) } }),
       })
       if (r.ok) { setEdits({}); setOpenId(null); await load() } else alert("Error")
     } finally { setBusy(null) }
@@ -545,6 +556,30 @@ export default function PurchasePage() {
                       <input type="date" value={pf("needDate")} onChange={e => setPf("needDate", e.target.value)} className={sel} /></div>
                     <div><label className={lab}>ETC <span className="text-red-500">*</span></label>
                       <input type="date" value={pf("etc")} onChange={e => setPf("etc", e.target.value)} className={sel} /></div>
+                    {/* Package lines (UOM + qty) — what LG and the forwarder need to book the shipment. */}
+                    <div className="sm:col-span-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className={lab}>Package (หีบห่อ) <span className="text-gray-400 font-normal">· เช่น 4 CTN · 2 ROL</span></label>
+                        <button type="button" onClick={() => setPkgs(p => [...p, { uom: "", qty: "" }])}
+                          className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50">+ เพิ่ม</button>
+                      </div>
+                      <div className="space-y-2">
+                        {pkgs.map((pk, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <input list="pkg-uom-list" value={pk.uom} onChange={e => setPkgs(p => p.map((x, j) => (j === i ? { ...x, uom: e.target.value } : x)))}
+                              placeholder="UOM (CTN / ROL / PALLET…)" className="w-48 border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200" />
+                            <input type="number" min={0} value={pk.qty} onChange={e => setPkgs(p => p.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
+                              placeholder="จำนวน" className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-red-200" />
+                            <button type="button" onClick={() => setPkgs(p => (p.length > 1 ? p.filter((_, j) => j !== i) : [{ uom: "", qty: "" }]))}
+                              className="text-gray-300 hover:text-red-500 px-1" title="ลบแถวนี้">✕</button>
+                          </div>
+                        ))}
+                      </div>
+                      <datalist id="pkg-uom-list">
+                        {[...new Set([...(openReq.items || []).map((i: any) => i.bomUom).filter(Boolean), "CTN", "ROL", "PALLET", "BOX", "BAG"])].map((u: any) => <option key={u} value={u} />)}
+                      </datalist>
+                      <p className="text-[11px] text-gray-400 mt-1">รวมทั้งหมด <b>{pkgs.reduce((a, x) => a + (Number(x.qty) || 0), 0)}</b> หีบห่อ — ตัวเลขนี้จะไปเป็น Cartons ของเอกสาร</p>
+                    </div>
                     <div className="sm:col-span-3"><label className={lab}>Dimension ก×ย×ส (cm) <span className="text-gray-300">— ไม่บังคับ</span></label>
                       <div className="flex items-center gap-1.5">
                         <input type="number" value={pf("boxW")} onChange={e => setPf("boxW", e.target.value)} placeholder="ก" className={dimc} />
