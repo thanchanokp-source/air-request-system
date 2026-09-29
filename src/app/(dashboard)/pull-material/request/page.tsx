@@ -726,7 +726,7 @@ export default function ScmRequestPage() {
         </div>
       )}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>{reqType === "PURCHASING" ? "PURCHASING REQUEST AIR" : reqType === "SAMPLE" ? "SAMPLE" : "SCM — RM REQ AIR"}</h1>
+        <h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>{reqType === "PURCHASING" ? "PURCHASING REQUEST AIR" : reqType === "SAMPLE" ? "SAMPLE" : reqType === "PPC" ? "PPC REQUEST" : "SCM — RM REQ AIR"}</h1>
       </div>
 
       {/* Sub-tabs — only SCM has a "Send Approve" step; Purchasing & Sample are single direct forms (no tabs). */}
@@ -773,13 +773,14 @@ export default function ScmRequestPage() {
         ) : (
           <>
             <span className="font-semibold text-gray-600">{reqType === "SCM" ? "SCM" : reqType === "SAMPLE" ? "Sample (MER)" : reqType === "PPC" ? "PPC" : "Purchasing"}</span>
-            <span>{reqType === "SCM" ? "→ VP SCM → President" : reqType === "SAMPLE" ? "→ จัดซื้อกรอก → auto-approve → LG" : "→ DVM Pur → VP Pur"}</span>
+            <span>{reqType === "SCM" ? "→ VP SCM → President" : isFreeForm ? "→ จัดซื้อกรอก → auto-approve → LG" : "→ DVM Pur → VP Pur"}</span>
           </>
         )}
       </div>
 
-      {reqType === "SAMPLE" ? (
-        /* ── MER SAMPLE: pick Brand / Supplier / Item desc (search from BOM) + Qty + Remark → many lines ── */
+      {isFreeForm ? (
+        /* ── Free-form branch (MER Sample · PPC): Brand / Supplier / Item desc (searched from BOM) +
+             Qty + Remark → many lines, then Purchasing fills the shipment and it auto-approves. ── */
         (() => {
           const sInp = "w-full border border-gray-200 rounded-lg px-2.5 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200"
           const lab = "text-[11px] font-semibold text-gray-600 block mb-1"
@@ -840,7 +841,7 @@ export default function ScmRequestPage() {
 
           <div>
             <label className={lab}>Remark รวม (ทั้งใบ) <span className="text-gray-300">— ไม่บังคับ</span></label>
-            <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="หมายเหตุรวมของ Sample นี้…" className={sInp} />
+            <textarea value={remark} onChange={e => setRemark(e.target.value)} rows={2} placeholder="หมายเหตุรวมของงานนี้…" className={sInp} />
           </div>
 
           <div>
@@ -1220,7 +1221,7 @@ export default function ScmRequestPage() {
       </>)}
 
       {/* Cart — SCM / Purchasing only (Sample has its own form above) */}
-      {reqType !== "SAMPLE" && (
+      {!isFreeForm && (
       <div className="bg-white rounded-xl border p-4">
         <h2 className="font-semibold text-gray-800">Items to pull {reqType === "PURCHASING" ? `(${new Set(cart.map(c => c.poNoDoc || "-")).size} PO · ${cart.length} material)` : `(${cart.length})`}</h2>
         <p className="text-xs text-gray-500 mt-1">Requester: <span className="font-medium text-gray-700">{requesterName || "-"}</span></p>

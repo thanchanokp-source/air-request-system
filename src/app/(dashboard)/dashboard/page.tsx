@@ -1369,6 +1369,19 @@ export default function DashboardPage() {
                 <button onClick={()=>{clearColVal(idx); setColMenu(null)}} className="ml-auto text-[10px] text-gray-500 hover:text-red-600">ล้างตัวกรอง</button>
               </div>
               <input autoFocus value={colSearch} onChange={e=>setColSearch(e.target.value)} placeholder="ค้นหา..." className="w-full mb-1.5 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-red-300"/>
+              {opts.length>0 && (()=>{
+                const allChecked = opts.every(o=>colF[idx]?.includes(o))
+                return (
+                  <label className="flex items-center gap-1.5 py-0.5 px-1 text-xs font-semibold cursor-pointer hover:bg-gray-50 rounded border-b mb-0.5">
+                    <input type="checkbox" checked={allChecked} onChange={()=>setColF(f=>{
+                      const cur = new Set(f[idx]||[])
+                      if (allChecked) opts.forEach(o=>cur.delete(o)); else opts.forEach(o=>cur.add(o))
+                      const arr=[...cur]; const n={...f}; if(arr.length) n[idx]=arr; else delete n[idx]; return n
+                    })}/>
+                    <span>(เลือกทั้งหมด)</span>
+                  </label>
+                )
+              })()}
               <div className="overflow-auto" style={{maxHeight:250}}>
                 {opts.length===0 && <p className="text-[11px] text-gray-400 px-1 py-2">ไม่พบข้อมูล</p>}
                 {opts.map(opt=>{
