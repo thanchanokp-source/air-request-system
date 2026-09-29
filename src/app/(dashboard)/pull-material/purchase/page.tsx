@@ -558,11 +558,7 @@ export default function PurchasePage() {
                       <input type="date" value={pf("etc")} onChange={e => setPf("etc", e.target.value)} className={sel} /></div>
                     {/* Package lines (UOM + qty) — what LG and the forwarder need to book the shipment. */}
                     <div className="sm:col-span-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className={lab}>Package (หีบห่อ) <span className="text-gray-400 font-normal">· เช่น 4 CTN · 2 ROL</span></label>
-                        <button type="button" onClick={() => setPkgs(p => [...p, { uom: "", qty: "" }])}
-                          className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50">+ เพิ่ม</button>
-                      </div>
+                      <label className={lab}>Package (หีบห่อ) <span className="text-gray-400 font-normal">· ใส่ได้หลายแบบ เช่น 4 CTN + 2 ROL</span></label>
                       <div className="space-y-2">
                         {pkgs.map((pk, i) => (
                           <div key={i} className="flex items-center gap-2">
@@ -575,6 +571,10 @@ export default function PurchasePage() {
                           </div>
                         ))}
                       </div>
+                      <button type="button" onClick={() => setPkgs(p => [...p, { uom: "", qty: "" }])}
+                        className="mt-2 w-full sm:w-auto px-3 py-1.5 rounded-lg text-xs font-semibold border border-dashed border-emerald-400 text-emerald-700 bg-white hover:bg-emerald-50">
+                        ＋ เพิ่มบรรทัดหีบห่อ
+                      </button>
                       <datalist id="pkg-uom-list">
                         {[...new Set([...(openReq.items || []).map((i: any) => i.bomUom).filter(Boolean), "CTN", "ROL", "PALLET", "BOX", "BAG"])].map((u: any) => <option key={u} value={u} />)}
                       </datalist>
