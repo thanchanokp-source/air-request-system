@@ -15,6 +15,14 @@ Font.registerHyphenationCallback((word: string) => [word]) // avoid breaking Tha
 // lines within its own column instead of bleeding out.
 const ZWSP = String.fromCharCode(0x200B)
 const softWrap = (v: any) => { const s = String(v ?? "").trim(); return s ? s.replace(/(.{4})/g, "$1" + ZWSP) : "-" }
+// REASON text can contain long single tokens with no spaces (e.g. "F_Embellishment") that @react-pdf
+// can't break → they overflow into the HAWB/INVOICE columns. Insert break opportunities after
+// separators (_ - / .) and inside long runs so the text wraps within its own column.
+const reasonWrap = (v: any) => {
+  const s = String(v ?? "").trim()
+  if (!s) return "-"
+  return s.replace(/([_\-/.])/g, "$1" + ZWSP).replace(/([A-Za-z0-9]{6})(?=[A-Za-z0-9])/g, "$1" + ZWSP)
+}
 
 // Company letterhead — edit here if the legal entity / address changes.
 const COMPANY = {
@@ -506,7 +514,7 @@ function DocSection({ pages, hawbNo, masterSigs, hidePresident }: { pages: { req
   // Widths must fit each column's content: STYLE/DESC/FACTORY are single tokens that CAN'T
   // wrap, so a too-narrow column overflows and overlaps its neighbour. Fixed cols sum ≈ 482
   // → REASON (flex) gets the rest.
-  const C = { no: 14, so: 40, style: 52, sub: 22, desc: 20, fac: 28, ctry: 44, hawb: 34, inv: 38, qty: 32, gross: 38, est: 50, act: 50, claim: 46 }
+  const C = { no: 14, so: 40, style: 50, sub: 22, desc: 20, fac: 26, ctry: 42, hawb: 40, inv: 44, qty: 30, gross: 36, est: 44, act: 44, claim: 44 }
   const content = (
     <>
         {/* Letterhead */}
@@ -586,7 +594,7 @@ function DocSection({ pages, hawbNo, masterSigs, hidePresident }: { pages: { req
               <Text style={[s.td, { width: C.desc }]}>{descLabel(item.description)}</Text>
               <Text style={[s.td, { width: C.fac }]}>{item.factory || "-"}</Text>
               <Text style={[s.td, { width: C.ctry }]}>{item.country || "-"}</Text>
-              <Text style={[s.tdL, { flex: 1 }]}>{reasonOf(item)}</Text>
+              <Text style={[s.tdL, { flex: 1 }]}>{reasonWrap(reasonOf(item))}</Text>
               <Text style={[s.td, { width: C.hawb }]}>{softWrap(item.hawbNo)}</Text>
               <Text style={[s.td, { width: C.inv }]}>{softWrap(item.invoiceNo)}</Text>
               <Text style={[s.td, { width: C.qty }]}>{fmtNum(item.qtyRequestAir)}</Text>
