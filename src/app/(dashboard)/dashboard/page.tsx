@@ -634,6 +634,7 @@ export default function DashboardPage() {
   const isAdmin = (session?.user as any)?.role === "ADMIN"
   const [mpCounts, setMpCounts] = useState<any>(null)
   const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line)
+  const [mpQtyBySo, setMpQtyBySo] = useState<Record<string, number>>({}) // SO → actual shipped qty (mp_line final_pcs)
   const [mpMode, setMpMode] = useState(true) // default ON — dashboard opens in mp_line map mode (admin · NYG/All BU); toggle 🔗 turns it off
   const mpSoKey = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
   // mp_line data is NYG-only → the map toggle works ONLY on the NYG tab (where the whole page is already
@@ -656,9 +657,13 @@ export default function DashboardPage() {
     if (brandFKey) p.set("brand", brandFKey)
     if (actualF) p.set("actual", actualF)
     const qs = p.toString() ? `?${p.toString()}` : ""
-    fetch(`/api/air-export-map${qs}`).then(r => r.ok ? r.json() : null).then(d => {
+    fetch(`/api/air-export-map${qs}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => {
       setMpCounts(d?.counts || null)
       setMpSoSet(new Set(((d?.tabA || []) as any[]).map(r => mpSoKey(r.so)).filter(Boolean)))
+      // SO → actual shipped qty from mp_line (final_pcs), for the data table's QTY AIR column.
+      const qm: Record<string, number> = {}
+      for (const r of ((d?.tabA || []) as any[])) { const k = mpSoKey(r.so); if (k) qm[k] = Number(r.qtyAirMap) || 0 }
+      setMpQtyBySo(qm)
     }).catch(() => {})
   }, [brandFKey, actualF])
   const [docF,  setDocF]  = useState<string[]>([])
@@ -897,7 +902,7 @@ export default function DashboardPage() {
         "ORIG. DATE":     fmtDate(row.originalShipmentDate),
         "PLAN DATE":      fmtDate(row.planShipmentDate),
         "QTY ORIG":       row.qtyOriginalShipment,
-        "QTY AIR":        row.qtyRequestAir,
+        "QTY AIR":        mpActive && mpQtyBySo[mpSoKey(row.so)] != null ? mpQtyBySo[mpSoKey(row.so)] : row.qtyRequestAir,
         "AIR RATE%":      Number(ar.toFixed(1)),
         [`EST. (${CUR})`]:     row.airFreight ?? 0,
         [`ACTUAL (${CUR})`]:   row.actualAirFreight ?? 0,
@@ -1214,7 +1219,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
                     <td className="px-3 py-1.5">{row.qtyOriginalShipment}</td>
-                    <td className="px-3 py-1.5 font-semibold">{row.qtyRequestAir}</td>
+                    <td className="px-3 py-1.5 font-semibold" title={mpActive && mpQtyBySo[mpSoKey(row.so)] != null ? "ยอด ship จริงจาก mp_line (รวมทั้ง SO)" : "QTY AIR (แผน)"}>{mpActive && mpQtyBySo[mpSoKey(row.so)] != null ? Number(mpQtyBySo[mpSoKey(row.so)]).toLocaleString() : row.qtyRequestAir}</td>
                     <td className="px-3 py-1.5 text-blue-700">{fmtNum(row.airFreight)}</td>
                     <td className="px-3 py-1.5 text-green-700 font-medium">{fmtNum(row.actualAirFreight)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}</td>
