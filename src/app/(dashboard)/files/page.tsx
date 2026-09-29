@@ -302,7 +302,7 @@ export default function FilesPage() {
         import("@react-pdf/renderer"),
         import("@/components/request-pdf"),
       ])
-      const el = React.createElement(CombinedPdfDocument as any, { pages, hawbNo: hawb, masterSigs })
+      const el = React.createElement(CombinedPdfDocument as any, { pages, hawbNo: hawb, masterSigs, hidePresident: true })
       const blob = await (pdf(el as any) as any).toBlob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a"); a.href = url; a.download = `HAWB_${hawb}.pdf`
@@ -346,7 +346,7 @@ export default function FilesPage() {
       import("@/components/request-pdf"),
     ])
     const pages = items.map((item: any) => ({ req: fullReq, item }))
-    const element = React.createElement(CombinedPdfDocument as any, { pages, masterSigs })
+    const element = React.createElement(CombinedPdfDocument as any, { pages, masterSigs, hidePresident: true })
     const blob = await (pdf(element as any) as any).toBlob()
     return { blob, name: `${fullReq.documentNo}.pdf` }
   }
@@ -405,7 +405,7 @@ export default function FilesPage() {
         import("@react-pdf/renderer"),
         import("@/components/request-pdf"),
       ])
-      const element = React.createElement(CombinedPdfDocument as any, { pages, masterSigs })
+      const element = React.createElement(CombinedPdfDocument as any, { pages, masterSigs, hidePresident: true })
       const blob = await (pdf(element as any) as any).toBlob()
       // Open the PREVIEW window first (it has a ⬇ Download button) instead of downloading straight away.
       setPreview({ url: URL.createObjectURL(blob), name: `Combined_${pages.length}SO.pdf` })
@@ -436,7 +436,7 @@ export default function FilesPage() {
         import("@react-pdf/renderer"),
         import("@/components/request-pdf"),
       ])
-      const element = React.createElement(CombinedPdfDocument as any, { pages, masterSigs })
+      const element = React.createElement(CombinedPdfDocument as any, { pages, masterSigs, hidePresident: true })
       const blob = await (pdf(element as any) as any).toBlob()
       // Open the PREVIEW window first (it has a ⬇ Download button) instead of downloading straight away.
       setPreview({ url: URL.createObjectURL(blob), name: `Combined_filtered_${pages.length}SO.pdf` })

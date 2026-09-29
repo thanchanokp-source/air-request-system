@@ -445,15 +445,15 @@ export function RequestPdfDocument({ req, item }: { req: any; item: any }) {
 // one DETAILS table where every SO is a row carrying Factory/Country/Reason/Claim,
 // descriptions listed once up top (A, B, C…) and referenced by letter, one grand
 // total, and the signature ONCE at the end (all SO share the same approvers).
-export function CombinedPdfDocument({ pages, hawbNo, masterSigs }: { pages: { req: any; item: any }[]; hawbNo?: string; masterSigs?: Record<string, string> }) {
+export function CombinedPdfDocument({ pages, hawbNo, masterSigs, hidePresident }: { pages: { req: any; item: any }[]; hawbNo?: string; masterSigs?: Record<string, string>; hidePresident?: boolean }) {
   // ALL SOs (across every document) flow into ONE continuous table under a single header.
   // The header lists every document number and the TOTAL sums exactly these pages (the filtered set).
   const docNos = [...new Set(pages.map(p => p.req?.documentNo).filter(Boolean))]
   const title = docNos.length <= 1 ? `${docNos[0] || "Combined"}` : `Combined_${docNos.length}docs`
-  return <Document title={title}><DocSection pages={pages} hawbNo={hawbNo} masterSigs={masterSigs} /></Document>
+  return <Document title={title}><DocSection pages={pages} hawbNo={hawbNo} masterSigs={masterSigs} hidePresident={hidePresident} /></Document>
 }
 
-function DocSection({ pages, hawbNo, masterSigs }: { pages: { req: any; item: any }[]; hawbNo?: string; masterSigs?: Record<string, string> }) {
+function DocSection({ pages, hawbNo, masterSigs, hidePresident }: { pages: { req: any; item: any }[]; hawbNo?: string; masterSigs?: Record<string, string>; hidePresident?: boolean }) {
   const req = pages[0]?.req || {}
   // Header spans every source document (the SOs may come from several docs, one continuous table).
   const allDocNos = [...new Set(pages.map(p => p.req?.documentNo).filter(Boolean))]
@@ -462,7 +462,8 @@ function DocSection({ pages, hawbNo, masterSigs }: { pages: { req: any; item: an
   const isGW = req.bu === "GW"
   const dept = isGW ? "GW" : "NYG"
   const rows = pages.map(p => p.item)
-  const signers = computeSigners(req, rows, masterSigs)
+  // Document-for-Logistics PDF: LG only needs the merchandise/SCM sign-off — drop the President box.
+  const signers = computeSigners(req, rows, masterSigs).filter(sg => !(hidePresident && /president/i.test(String(sg.title || ""))))
   const requestBy = requestByFor(req)
   // Unique descriptions → labelled A, B, C… and referenced by letter in the table.
   const descList: string[] = []
