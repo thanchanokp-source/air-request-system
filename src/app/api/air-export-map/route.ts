@@ -25,6 +25,10 @@ export async function GET(req: NextRequest) {
   // mp_line stores SHORT brand names ("LULULEMON") while air req stores the FULL name
   // ("LULULEMON ATHLETICA CANADA INC."), so match tolerantly: equal OR one is a prefix of the other.
   const bk = (s: any) => String(s == null ? "" : s).trim().toUpperCase().replace(/\s+/g, " ")
+  // Optional actual filter (?actual=HAS|NONE) — narrows the SUMMARY CARD totals to SOs that have
+  // (HAS) / don't have (NONE) an actual air freight entered. tabA (the map SO set) is left whole
+  // so the data table's own actual filter isn't applied twice.
+  const actualParam = (req.nextUrl.searchParams.get("actual") || "").toUpperCase()
   const brandParam = req.nextUrl.searchParams.get("brand") || ""
   const brandSet = [...new Set(brandParam.split(",").map(bk).filter(Boolean))]
   const brandOk = (b: any) => {
@@ -87,18 +91,25 @@ export async function GET(req: NextRequest) {
   let matchedEst = 0, matchedActual = 0
   let filledEst = 0 // EST of ONLY the SOs that already have actual filled (fair vs actual comparison)
   let actualFilledSo = 0, actualWaitingSo = 0 // matched SOs: LG has entered actual vs still waiting
+  let countedSo = 0 // SOs actually included in the card totals (after the actual filter)
   for (const [k, m] of mpBySo) {
     const a = airBySo.get(k)
     const qtyAirMap = m.pcs
-    shippedPcs += qtyAirMap
+    // Actual filter gates only the CARD totals (not tabA): HAS = SO has actual, NONE = SO has none.
+    const hasActual = !!(a && a.actual > 0)
+    const countThis = actualParam === "HAS" ? hasActual : actualParam === "NONE" ? !hasActual : true
+    if (countThis) { shippedPcs += qtyAirMap; countedSo++ }
     if (a) {
-      matchedEst += a.est; matchedActual += a.actual
-      if (a.actual > 0) { actualFilledSo++; filledEst += a.est } else actualWaitingSo++
+      if (countThis) {
+        matchedEst += a.est; matchedActual += a.actual
+        if (a.actual > 0) { actualFilledSo++; filledEst += a.est } else actualWaitingSo++
+        const status = a.qtyPlan === qtyAirMap ? "exactly" : "revise"
+        if (status === "exactly") { exactly++; exactlyPcs += qtyAirMap } else { revise++; revisePcs += qtyAirMap }
+      }
       const status = a.qtyPlan === qtyAirMap ? "exactly" : "revise"
-      if (status === "exactly") { exactly++; exactlyPcs += qtyAirMap } else { revise++; revisePcs += qtyAirMap }
       tabA.push({ status, so: m.so, brand: [...(a.brands.size ? a.brands : m.brands)].slice(0, 2), qtyPlan: a.qtyPlan, qtyAirMap, lines: m.lines, docs: [...a.docs].slice(0, 3), airInv: [...a.invs].slice(0, 3), subs: [...(a.subs.size ? a.subs : new Set(mpSubs(m)))] })
     } else {
-      prepaid++; prepaidPcs += qtyAirMap
+      if (countThis) { prepaid++; prepaidPcs += qtyAirMap }
       tabA.push({ status: "auto_air_prepaid_mapping", so: m.so, brand: [...m.brands].slice(0, 2), qtyPlan: null, qtyAirMap, lines: m.lines, docs: [], airInv: [], subs: mpSubs(m) })
     }
   }
@@ -113,7 +124,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     tabA, tabB,
     counts: {
-      tabA: tabA.length, tabB: tabB.length, exactly, revise, prepaid, noship: tabB.length, mpKeys: mpBySo.size, airKeys: airBySo.size,
+      tabA: tabA.length, tabB: tabB.length, exactly, revise, prepaid, noship: tabB.length, mpKeys: mpBySo.size, countedSo, airKeys: airBySo.size,
       // pcs totals — actual exported qty from mp_line
       shippedPcs, exactlyPcs, revisePcs, prepaidPcs, matchedPcs: exactlyPcs + revisePcs, matchedSo: exactly + revise,
       // freight totals (THB) for matched SOs

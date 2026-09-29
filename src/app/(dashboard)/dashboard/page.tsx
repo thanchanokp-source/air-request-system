@@ -649,13 +649,18 @@ export default function DashboardPage() {
   const [brandF, setBrandF] = useState<string[]>([])
   // mp_line card follows the Brand filter → refetch when it changes (open to everyone now).
   const brandFKey = brandF.join(",")
+  // Card totals also follow the Actual filter (ALL / HAS / NONE) — refetch when it changes.
+  const [actualF, setActualF] = useState<"" | "HAS" | "NONE">("")
   useEffect(() => {
-    const qs = brandFKey ? `?brand=${encodeURIComponent(brandFKey)}` : ""
+    const p = new URLSearchParams()
+    if (brandFKey) p.set("brand", brandFKey)
+    if (actualF) p.set("actual", actualF)
+    const qs = p.toString() ? `?${p.toString()}` : ""
     fetch(`/api/air-export-map${qs}`).then(r => r.ok ? r.json() : null).then(d => {
       setMpCounts(d?.counts || null)
       setMpSoSet(new Set(((d?.tabA || []) as any[]).map(r => mpSoKey(r.so)).filter(Boolean)))
     }).catch(() => {})
-  }, [brandFKey])
+  }, [brandFKey, actualF])
   const [docF,  setDocF]  = useState<string[]>([])
   const [soF,  setSoF]  = useState<string[]>([])
   const [cpF,  setCpF]  = useState<string[]>([])
@@ -664,7 +669,7 @@ export default function DashboardPage() {
   const [claimF, setClaimF] = useState<string[]>([])
   const [hawbF, setHawbF] = useState<string[]>([])
   // "" = every SO · HAS = actual air filled (shipped & costed) · NONE = still waiting for the actual
-  const [actualF, setActualF] = useState<"" | "HAS" | "NONE">("")
+  // (actualF is declared above, next to the mp_line card fetch it drives)
   const [drillCountry, setDrillCountry]   = useState<string|null>(null)
 
   const [poMap, setPoMap] = useState<Record<string,string>>({})
@@ -966,7 +971,7 @@ export default function DashboardPage() {
               <div className="rounded-lg border p-3 bg-teal-50 border-teal-200">
                 <p className="text-[11px] text-gray-500">📦 ส่งออกจริง (pcs)</p>
                 <p className="text-2xl font-bold tabular-nums text-teal-700">{Number(mpCounts.shippedPcs || 0).toLocaleString()}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">{mpCounts.mpKeys ?? 0} SO ใน mp_line</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{Number(actualF ? (mpCounts.countedSo ?? 0) : (mpCounts.mpKeys ?? 0)).toLocaleString()} SO ใน mp_line{actualF ? ` (${actualF === "HAS" ? "มี Actual" : "ยังไม่มี Actual"})` : ""}</p>
               </div>
               {/* 2) EST air — total + EST of the filled SOs (fair vs actual) */}
               <div className="rounded-lg border p-3 bg-sky-50 border-sky-200">
@@ -1094,7 +1099,7 @@ export default function DashboardPage() {
           {/* Actual air = the SO has been shipped and costed. Filtering on it is how you compare
               like with like (est vs actual) instead of dragging in SOs nobody has billed yet. */}
           <select value={actualF} onChange={e=>setActualF(e.target.value as "" | "HAS" | "NONE")} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
-            <option value="">Actual: ทั้งหมด</option>
+            <option value="">Actual: ALL</option>
             <option value="HAS">เฉพาะที่มี Actual</option>
             <option value="NONE">ยังไม่มี Actual</option>
           </select>
