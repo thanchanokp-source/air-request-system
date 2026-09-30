@@ -980,8 +980,6 @@ export default function DashboardPage() {
     })
     return arr.sort((a,b)=>b._mag-a._mag)
   },[filtered])
-  const claimAmtTotal = claimByDept.reduce((s,d)=>({THB:s.THB+d.amt.THB,USD:s.USD+d.amt.USD}),{THB:0,USD:0})
-  const claimEstTotal = claimByDept.reduce((s,d)=>({THB:s.THB+d.est.THB,USD:s.USD+d.est.USD}),{THB:0,USD:0})
   const claimMagTotal = claimByDept.reduce((s,d)=>s+d._mag,0)
 
   const monthlyDelay = useMemo(()=>{
@@ -1148,7 +1146,7 @@ export default function DashboardPage() {
           {unClaimAmt > 0 && (
             <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-gray-700">
               <span className="text-[15px]">⚠️</span>
-              <span>ยังไม่แบ่งแผนกเคลม <b className="text-red-600 tabular-nums">{fmtNum(unClaimAmt)} THB</b> <span className="text-gray-400 tabular-nums">(est {fmtNum(unClaimEst)} THB)</span> — รอ SCM ระบุแผนก</span>
+              <span>ยังไม่แบ่งแผนกเคลม <b className="text-red-600 tabular-nums">{fmtNum(unClaimAmt)} THB</b> <span className="text-gray-400 tabular-nums">(est {fmtNum(unClaimEst)} THB)</span></span>
             </div>
           )}
         </div>
@@ -1176,21 +1174,11 @@ export default function DashboardPage() {
       {/* ── Claim by department (each claim's share of the airfreight) ────── */}
       {claimByDept.length>0 && (()=>{
         const deptCards = claimByDept.filter(d=>!d.unassigned)   // real depts = cards
-        const un = claimByDept.find(d=>d.unassigned)             // unassigned = just a note, not a card
         const barMax = Math.max(...deptCards.map(d=>d._mag), 1)
         return (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
           <div className="flex items-baseline justify-between flex-wrap gap-2">
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.15em]">Claim by department</p>
-            <div className="flex items-center gap-3 flex-wrap">
-              {un && (un.amt.THB||un.amt.USD||un.est.THB||un.est.USD) ? (
-                <span className="text-[11px] text-gray-400 tabular-nums"
-                  title="Actual/Est ของ SO ที่ยังไม่ได้เลือก claim dept (เช่น add auto) — ยังไม่รวมในกรมใด">
-                  ยังไม่แบ่ง claim <span className="font-medium text-gray-500">{fmtSplit(un.amt,fmtK)}</span> <span className="text-gray-300">(est {fmtSplit(un.est,fmtK)})</span>
-                </span>
-              ) : null}
-              <p className="text-[11px] text-gray-400 tabular-nums">Actual {fmtSplit(claimAmtTotal,fmtK)} · Est {fmtSplit(claimEstTotal,fmtK)}</p>
-            </div>
           </div>
           {/* single row — scroll sideways if it can't fit */}
           <div className="flex gap-3 overflow-x-auto pb-1">
