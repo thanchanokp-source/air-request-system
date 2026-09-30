@@ -63,7 +63,23 @@ export default function LgAirBookingPage() {
   // / FANATICS-BRANDS) so their INVs list together. Their combined INVs feed the rest of the flow.
   const selBrands = useMemo(() => new Set((brand ? brand.split("\u0001") : []).filter(Boolean)), [brand])
   const brandLabel = useMemo(() => [...selBrands].join(", "), [selBrands])
-  const selInvs = useMemo(() => brands.filter(b => selBrands.has(b.brand)).flatMap(b => b.invs), [brands, selBrands])
+  // Combine INVs of all selected brands, DEDUPED by invoice no (same INV must appear once → no React
+  // key clash / broken checkbox). Merge each invoice's SO lines across sources.
+  const selInvs = useMemo(() => {
+    const byInv = new Map<string, Inv>()
+    for (const b of brands) {
+      if (!selBrands.has(b.brand)) continue
+      for (const iv of b.invs) {
+        const ex = byInv.get(iv.inv)
+        if (!ex) { byInv.set(iv.inv, { ...iv, sos: [...iv.sos] }); continue }
+        // same INV in another selected brand → merge unique SO+SUB lines
+        const seen = new Set(ex.sos.map(l => `${l.so}|${l.sub}`))
+        for (const l of iv.sos) { const k = `${l.so}|${l.sub}`; if (!seen.has(k)) { seen.add(k); ex.sos.push(l) } }
+        ex.total = ex.sos.length; ex.ready = ex.sos.filter((l: any) => canTick(l.air)).length
+      }
+    }
+    return [...byInv.values()]
+  }, [brands, selBrands])
   const qq = q.trim().toLowerCase()
   const invList = useMemo(() => selInvs.filter(iv => !qq || iv.inv.toLowerCase().includes(qq)), [selInvs, qq])
 
