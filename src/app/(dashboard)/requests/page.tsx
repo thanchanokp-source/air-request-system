@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState, useRef, Fragment } from "react"
+import * as XLSX from "xlsx"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { MultiSelect } from "@/components/ui/multi-select"
@@ -350,6 +351,43 @@ export default function RequestsPage() {
   const toggleDoc = (id: string) => setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   const toggleStyle = (k: string) => setExpandedStyles(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })
 
+  // Export the CURRENTLY FILTERED transactions (one row per SO line) to Excel.
+  const exportExcel = () => {
+    const rows = filtered.map((r: any) => {
+      const sp = getSplits(r)
+      return {
+        "DOC NO": r.request?.documentNo || "",
+        "SO": r.so || "",
+        "SUB": r.sub || "",
+        "STYLE": r.style || "",
+        "DESCRIPTION": r.description || "",
+        "CUSTOMER PO": r.customerPO || "",
+        "BRAND": r.request?.brandName || r.brand || "",
+        "BU": r.request?.buName || r.request?.bu || "",
+        "STATUS": r.itemStatus || "",
+        "ORIG DATE": fmtDate(r.originalShipmentDate),
+        "PLAN DATE": fmtDate(r.planShipmentDate),
+        "QTY ORIG": r.qtyOriginalShipment ?? "",
+        "QTY AIR": r.qtyRequestAir ?? "",
+        "EST": r.airFreight ?? 0,
+        "ACTUAL": r.actualAirFreight ?? 0,
+        "INV NO": r.invoiceNo || "",
+        "HAWB NO": r.hawbNo || "",
+        "COUNTRY": r.country || "",
+        "FACTORY": r.factory || "",
+        "CLAIM DEPT": sp.map((s: any) => deptLabel(s.dept)).join(" · ") || r.claimDepartment || "",
+        "CLAIM %": sp.map((s: any) => s.pct != null ? `${s.pct}%` : "").filter(Boolean).join(" · "),
+        "REASON": r.reasonDelay || "",
+        "CREATED BY": creatorLabel(r.request),
+      }
+    })
+    if (!rows.length) { alert("ไม่มีข้อมูลให้ export (ลองปรับ filter)"); return }
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Air Requests")
+    XLSX.writeFile(wb, `air-requests-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
   const deleteRequest = async (reqId: string) => {
     if (!confirm("Delete this request?")) return
     const res = await fetch(`/api/requests/${reqId}`, { method: "DELETE" })
@@ -542,12 +580,19 @@ export default function RequestsPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-semibold text-gray-500">FILTERS</p>
-          {!!(stageF.length || statusFilter.length || brandF.length || styleF.length || soF.length || subF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length || docNoF.length || createdByF.length || descF.length) && (
-            <button onClick={() => { setStageF([]); setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setSubF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]); setDocNoF([]); setCreatedByF([]); setDescF([]) }}
-              className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
-              Clear All
+          <div className="flex items-center gap-2">
+            <button onClick={exportExcel} title="Export ผลที่กรองอยู่เป็น Excel"
+              className="flex items-center gap-1.5 text-xs bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 font-medium">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Export Excel ({filtered.length})
             </button>
-          )}
+            {!!(stageF.length || statusFilter.length || brandF.length || styleF.length || soF.length || subF.length || cpF.length || portF.length || countryF.length || claimF.length || invoiceF.length || hawbF.length || docNoF.length || createdByF.length || descF.length) && (
+              <button onClick={() => { setStageF([]); setStatusFilter([]); setBrandF([]); setStyleF([]); setSoF([]); setSubF([]); setCpF([]); setPortF([]); setCountryF([]); setClaimF([]); setInvoiceF([]); setHawbF([]); setDocNoF([]); setCreatedByF([]); setDescF([]) }}
+                className="text-xs bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-medium">
+                Clear All
+              </button>
+            )}
+          </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-1.5">
           <MultiSelect label="Doc No..." options={docNos} value={docNoF} onChange={setDocNoF} />

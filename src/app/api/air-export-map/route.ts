@@ -59,6 +59,29 @@ export async function GET(req: NextRequest) {
     mpBySo.set(k, g)
   }
 
+  // ── Actual shipped qty per SO+SUB, with SOURCE ──────────────────────────────
+  // mp_line covers ~mid-Sept onward; older AIR shipments live in sq_report.export_row (AIR PREPAID).
+  // Prefer mp_line for any SO+SUB it has; fall back to sq_report for the rest → no double-count.
+  const subActual: Record<string, { qty: number; src: string }> = {}
+  for (const [k, m] of mpBySo) {
+    for (const ln of m.lines) {
+      const sk = `${k}|${up(ln.sub)}`
+      if (!subActual[sk]) subActual[sk] = { qty: 0, src: "mp_line" }
+      subActual[sk].qty += Number(ln.pcs) || 0
+    }
+  }
+  try {
+    const sq = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT so_no, sub_no, qty_pcs FROM sq_report.export_row WHERE UPPER(TRIM(ship_mode)) = 'AIR PREPAID'`)
+    for (const r of sq) {
+      const k = soN(r.so_no); if (!k) continue
+      const sk = `${k}|${up(r.sub_no)}`
+      if (subActual[sk]?.src === "mp_line") continue      // mp_line wins for overlapping subs
+      if (!subActual[sk]) subActual[sk] = { qty: 0, src: "export" }
+      subActual[sk].qty += Number(r.qty_pcs) || 0
+    }
+  } catch { /* sq_report.export_row unavailable → mp_line only */ }
+
   // ── Air Request items (NYG, non-test) ──
   const items = await (prisma as any).airRequestItem.findMany({
     where: { request: { bu: "NYG", isTest: false } },
@@ -122,7 +145,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    tabA, tabB,
+    tabA, tabB, subActual,
     counts: {
       tabA: tabA.length, tabB: tabB.length, exactly, revise, prepaid, noship: tabB.length, mpKeys: mpBySo.size, countedSo, airKeys: airBySo.size,
       // pcs totals — actual exported qty from mp_line

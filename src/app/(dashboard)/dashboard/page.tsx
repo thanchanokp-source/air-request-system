@@ -643,8 +643,8 @@ export default function DashboardPage() {
   const isAdmin = (session?.user as any)?.role === "ADMIN"
   const [mpCounts, setMpCounts] = useState<any>(null)
   const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line) — SO-level (page-wide map)
-  const [mpQtyBySub, setMpQtyBySub] = useState<Record<string, number>>({}) // "SOkey|SUB" → mp_line actual qty (per sub)
-  const [mpSubSet, setMpSubSet] = useState<Set<string>>(new Set())         // "SOkey|SUB" that shipped (per sub)
+  const [mpQtyBySub, setMpQtyBySub] = useState<Record<string, number>>({}) // "SOkey|SUB" → actual shipped qty (mp_line or export)
+  const [mpSrcBySub, setMpSrcBySub] = useState<Record<string, string>>({}) // "SOkey|SUB" → source: "mp_line" | "export"
   // default ON — dashboard opens in mp_line map mode (NYG/All BU); toggle 🔗 turns it off.
   // Persist the choice so it stays ON across reloads (stored per browser).
   const [mpMode, setMpMode] = useState(true)
@@ -682,18 +682,11 @@ export default function DashboardPage() {
     fetch(`/api/air-export-map${qs}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => {
       setMpCounts(d?.counts || null)
       setMpSoSet(new Set(((d?.tabA || []) as any[]).map(r => mpSoKey(r.so)).filter(Boolean)))
-      // mp_line actual qty per SO+SUB → matched onto air-req rows (data table QTY AIR when ส่งออกจริง).
-      const subQm: Record<string, number> = {}
-      const subSet = new Set<string>()
-      for (const r of ((d?.tabA || []) as any[])) {
-        const k = mpSoKey(r.so); if (!k) continue
-        for (const ln of ((r.lines || []) as any[])) {
-          const sk = `${k}|${String(ln.sub ?? "").trim().toUpperCase()}`
-          subQm[sk] = (subQm[sk] || 0) + (Number(ln.pcs) || 0)
-          subSet.add(sk)
-        }
-      }
-      setMpQtyBySub(subQm); setMpSubSet(subSet)
+      // Actual shipped qty per SO+SUB (mp_line preferred, else sq_report export) + its source.
+      const sa = (d?.subActual || {}) as Record<string, { qty: number; src: string }>
+      const subQm: Record<string, number> = {}, subSrc: Record<string, string> = {}
+      for (const [sk, v] of Object.entries(sa)) { subQm[sk] = Number(v?.qty) || 0; subSrc[sk] = v?.src || "" }
+      setMpQtyBySub(subQm); setMpSrcBySub(subSrc)
     }).catch(() => {})
   }, [brandFKey, actualF])
   const [docF,  setDocF]  = useState<string[]>([])
@@ -757,23 +750,24 @@ export default function DashboardPage() {
   // Data table view — "SHIPPED" = ส่งออกจริง (mp_line lines) · "UNSHIPPED" = ยังไม่มีการส่ง (air-req not in mp_line).
   const [tableView, setTableView] = useState<"SHIPPED"|"UNSHIPPED">("SHIPPED")
   const tableShipped = tableView==="SHIPPED"
-  // ส่งออกจริง = air-req rows (by document) ที่ SO+SUB ตรง mp_line — DEDUPE เหลือ 1 แถว/SO+SUB
-  // (air-req อาจมี SO+SUB ซ้ำในหลาย doc → เก็บแถวที่ "ไปไกลสุดใน flow": มี actual > ไม่ reject > doc ล่าสุด)
-  // กันยอดเบิ้ลเมื่อ MER อัพซ้ำแล้ว map ติด mp_line เดียวกัน.
+  // "ส่งออกแล้ว" = air-req row ที่มี HAWB (LG เติมแล้ว = ship จริง).
+  const hasHawb = (r:any) => String(r?.hawbNo ?? "").trim() !== ""
+  // ส่งออกจริง = air-req rows ที่มี HAWB — DEDUPE เหลือ 1 แถว/SO+SUB (กันยอดเบิ้ลเมื่อ SO+SUB ซ้ำหลาย doc):
+  // เก็บแถวที่ "ไปไกลสุดใน flow" (มี actual > ไม่ reject > doc ล่าสุด).
   const shippedRows = useMemo(()=>{
     const score = (r:any) => (r.actualAirFreight!=null?1000:0) + (r.itemStatus==="REJECTED"?-1000:0)
     const best = new Map<string, any>()
     for (const r of baseFiltered) {
-      if (!mpSubSet.has(subKey(r))) continue
+      if (!hasHawb(r)) continue
       const k = subKey(r); const cur = best.get(k)
       if (!cur) { best.set(k, r); continue }
       const sc = score(r), scCur = score(cur)
       if (sc > scCur || (sc===scCur && String(r.request?.documentNo||"") > String(cur.request?.documentNo||""))) best.set(k, r)
     }
     return [...best.values()]
-  }, [baseFiltered, mpSubSet])
-  // ยังไม่มีการส่ง = air-req rows ที่ SO+SUB ไม่มีใน mp_line (sub นั้นยังไม่ ship / map ไม่เจอ).
-  const unshippedRows = useMemo(()=> baseFiltered.filter(row=> !mpSubSet.has(subKey(row))), [baseFiltered, mpSubSet])
+  }, [baseFiltered])
+  // ยังไม่มีการส่ง = air-req rows ที่ยังไม่มี HAWB (ยังไม่ ship).
+  const unshippedRows = useMemo(()=> baseFiltered.filter(row=> !hasHawb(row)), [baseFiltered])
   const qtyAirDisp = (r:any) => tableShipped ? (Number(mpQtyBySub[subKey(r)]) || 0) : r.qtyRequestAir
   // Column definitions — shared by the header, the per-column filter row, and the data cells so they
   // always line up. `get` returns the value used both for the filter's substring match and export.
@@ -803,7 +797,9 @@ export default function DashboardPage() {
     {label:"CLAIM %",        get:r=>{const sp=getSplits(r); return sp.length?sp.map((s:any)=>s.pct!=null?`${s.pct}%`:"").join(" "):""}},
     {label:"REASON",         get:r=>[...new Set(getSplits(r).map((s:any)=>s.reason).filter(Boolean))].join(" ")},
     {label:"อยู่ที่ใคร",       get:r=>Array.isArray(r.request?.pendingWith)?r.request.pendingWith.join(" "):""},
-  ], [poMap, tableShipped, mpQtyBySub, CUR])
+    // SOURCE (admin only) — where the actual QTY came from: mp_line (ตั้งแต่ ก.ย.) หรือ export/sq_report (ก่อนหน้า)
+    ...(isAdmin ? [{label:"SOURCE", get:(r:any)=> tableShipped ? (mpSrcBySub[subKey(r)]||"") : ""}] : []),
+  ], [poMap, tableShipped, mpQtyBySub, mpSrcBySub, isAdmin, CUR])
   // Rows for the table before per-column filters. ส่งออกจริง = shipped air-req; ยังไม่มีการส่ง = unshipped air-req.
   const tableViewRows = useMemo(()=> tableShipped ? shippedRows : unshippedRows, [tableShipped, shippedRows, unshippedRows])
   // Excel-style per-column filters: colF[idx] = the SET of allowed values for that column (checked in
@@ -1014,6 +1010,7 @@ export default function DashboardPage() {
         "PLAN DATE":      fmtDate(row.planShipmentDate),
         "QTY ORIG":       row.qtyOriginalShipment,
         "QTY AIR":        tableShipped ? (Number(mpQtyBySub[subKey(row)]) || 0) : row.qtyRequestAir,
+        ...(isAdmin && tableShipped ? { "SOURCE": mpSrcBySub[subKey(row)] || "" } : {}),
         "AIR RATE%":      Number(ar.toFixed(1)),
         [`EST. (${CUR})`]:     row.airFreight ?? 0,
         [`ACTUAL (${CUR})`]:   row.actualAirFreight ?? 0,
@@ -1082,49 +1079,71 @@ export default function DashboardPage() {
         const unEst = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.airFreight)||0),0)
         const unAct = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.actualAirFreight)||0),0)
         const unQtyPlan = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.qtyRequestAir)||0),0) // QTY plan (air) ที่ MER กรอก
-        const unQtyOrig = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.qtyOriginalShipment)||0),0) // QTY original ที่ MER กรอก
         // ยังไม่แบ่งแผนกเคลม (จาก claimByDept)
         const unClaim = (claimByDept as any[]).find(d=>d.unassigned)
         const unClaimAmt = unClaim ? (unClaim.amt.THB + unClaim.amt.USD) : 0
         const unClaimEst = unClaim ? (unClaim.est.THB + unClaim.est.USD) : 0
+        // รวม = ส่งจริง + แผน
+        const totQty = shipQty + unQtyPlan, totEst = est + unEst, totAct = act + unAct, totSo = shipSo + unSo
+        const shipPct = totQty > 0 ? Math.round(shipQty / totQty * 100) : 0
+        const C4 = "sm:border-l sm:border-gray-200/70 sm:pl-3"  // 4th column (variance) divider
         return (
-        <div className="rounded-xl border-2 border-teal-200 bg-white p-3">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {/* การ์ด 1: ส่งออกจริง + variance rail (ขวาในการ์ด) */}
-            <div className="rounded-lg border border-teal-200 bg-teal-50 overflow-hidden">
-              <div className="px-3 py-2 flex items-center gap-2 text-teal-800 text-xs font-bold border-b border-teal-200 bg-teal-100/60">
-                <span className="w-2 h-2 rounded-full bg-teal-500"></span>✅ ส่งออกจริง
-                <span className="ml-auto font-medium text-teal-600/80 text-[11px] tabular-nums">{shipSo.toLocaleString()} SO</span>
+        <div className="space-y-2.5">
+          {/* ── ชั้น 1: รวมทั้งหมด ── */}
+          <div className="relative rounded-xl border border-gray-200 bg-white px-4 py-3 overflow-hidden shadow-sm">
+            <span className="absolute left-0 top-0 bottom-0 w-1.5 bg-teal-600"></span>
+            <div className="grid grid-cols-2 sm:grid-cols-[minmax(190px,1.2fr)_1fr_1fr_150px] gap-3 items-center pl-2">
+              <div>
+                <span className="inline-flex items-center text-[11px] font-bold text-teal-700 bg-teal-50 rounded-full px-2.5 py-0.5">รวมทั้งหมด · {totSo.toLocaleString()} SO</span>
+                <p className="text-2xl font-extrabold tabular-nums text-gray-900 mt-1.5 leading-none">{fmtNum(totQty)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">pcs · ส่งจริง + แผน</p>
               </div>
-              <div className="p-3 grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-center">
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY ส่งจริง (pcs)</p><p className="text-xl font-bold tabular-nums text-teal-700">{fmtNum(shipQty)}</p></div>
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Estimate air</p><p className="text-xl font-bold tabular-nums text-sky-700">{fmtNum(est)}</p></div>
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Actual air</p><p className="text-xl font-bold tabular-nums text-green-700">{fmtNum(act)}</p></div>
-                <div className="border-l border-teal-200 pl-3 text-center">
-                  <p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">vs EST</p>
-                  <p className={`text-xl font-bold tabular-nums ${varPct==null?"text-gray-400":varPct>0?"text-red-600":"text-green-600"}`}>{varPct==null?"—":(varPct>0?"↑":"↓")+Math.abs(varPct)+"%"}</p>
-                  <p className={`text-[10px] tabular-nums ${dVal>0?"text-red-500":"text-green-600"}`}>{(dVal>0?"+":"")+fmtNum(dVal)}</p>
-                </div>
+              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Est air</p><p className="text-lg font-bold tabular-nums text-sky-700">{fmtNum(totEst)}</p></div>
+              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air</p><p className="text-lg font-bold tabular-nums text-gray-800">{fmtNum(totAct)}</p></div>
+              <div className="hidden sm:block"></div>
+            </div>
+          </div>
+          {/* bar: เขียว = ส่งจริง · ส้ม = แผน */}
+          <div className="flex h-3.5 rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-green-500 to-green-600" style={{width:`${shipPct}%`}} title={`ส่งจริง ${shipPct}%`}></div>
+            <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500" style={{width:`${100-shipPct}%`}} title={`แผน ${100-shipPct}%`}></div>
+          </div>
+          {/* ── ชั้น 2: ส่งจริง ── */}
+          <div className="relative rounded-xl border border-green-200 bg-green-50/60 px-4 py-3 overflow-hidden shadow-sm">
+            <span className="absolute left-0 top-0 bottom-0 w-1.5 bg-green-500"></span>
+            <div className="grid grid-cols-2 sm:grid-cols-[minmax(190px,1.2fr)_1fr_1fr_150px] gap-3 items-center pl-2">
+              <div>
+                <span className="inline-flex items-center text-[11px] font-bold text-green-700 bg-green-100/70 rounded-full px-2.5 py-0.5">✅ ส่งจริง · {shipSo.toLocaleString()} SO</span>
+                <p className="text-2xl font-extrabold tabular-nums text-green-700 mt-1.5 leading-none">{fmtNum(shipQty)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">pcs · shipped</p>
+              </div>
+              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Est air</p><p className="text-lg font-bold tabular-nums text-sky-700">{fmtNum(est)}</p></div>
+              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air</p><p className="text-lg font-bold tabular-nums text-green-700">{fmtNum(act)}</p></div>
+              <div className={C4}>
+                <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">vs EST</p>
+                <p className={`text-lg font-bold tabular-nums ${varPct==null?"text-gray-400":varPct>0?"text-red-600":"text-green-600"}`}>{varPct==null?"—":(varPct>0?"↑":"↓")+Math.abs(varPct)+"%"}</p>
+                <p className={`text-[10px] tabular-nums ${dVal>0?"text-red-500":"text-green-600"}`}>{(dVal>0?"+":"")+fmtNum(dVal)} vs est</p>
               </div>
             </div>
-            {/* การ์ด 2: ยังไม่มีการส่งออก */}
-            <div className="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
-              <div className="px-3 py-2 flex items-center gap-2 text-amber-800 text-xs font-bold border-b border-amber-200 bg-amber-100/60">
-                <span className="w-2 h-2 rounded-full bg-amber-500"></span>⏳ ยังไม่มีการส่งออก
-                <span className="ml-auto font-medium text-amber-600/80 text-[11px] tabular-nums">{unSo.toLocaleString()} SO</span>
+          </div>
+          {/* ── ชั้น 3: แผนส่ง ── */}
+          <div className="relative rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 overflow-hidden shadow-sm">
+            <span className="absolute left-0 top-0 bottom-0 w-1.5 bg-amber-500"></span>
+            <div className="grid grid-cols-2 sm:grid-cols-[minmax(190px,1.2fr)_1fr_1fr_150px] gap-3 items-center pl-2">
+              <div>
+                <span className="inline-flex items-center text-[11px] font-bold text-amber-700 bg-amber-100/70 rounded-full px-2.5 py-0.5">⏳ แผนส่ง · {unSo.toLocaleString()} SO</span>
+                <p className="text-2xl font-extrabold tabular-nums text-amber-700 mt-1.5 leading-none">{fmtNum(unQtyPlan)}</p>
+                <p className="text-[10px] text-gray-400 mt-1">qty plan (MER) · ยังไม่ส่ง</p>
               </div>
-              <div className="p-3 grid grid-cols-4 gap-3 items-center">
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY original (MER)</p><p className="text-xl font-bold tabular-nums text-amber-700">{fmtNum(unQtyOrig)}</p></div>
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY plan air (MER)</p><p className="text-xl font-bold tabular-nums text-amber-700">{fmtNum(unQtyPlan)}</p></div>
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Estimate air</p><p className="text-xl font-bold tabular-nums text-sky-700">{fmtNum(unEst)}</p></div>
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Actual air</p><p className="text-xl font-bold tabular-nums text-gray-400">{fmtNum(unAct)}</p></div>
-              </div>
+              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Est air</p><p className="text-lg font-bold tabular-nums text-sky-700">{fmtNum(unEst)}</p></div>
+              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air</p><p className="text-lg font-bold tabular-nums text-gray-400">ยังไม่มี</p></div>
+              <div className="hidden sm:block"></div>
             </div>
           </div>
           {/* note: ยังไม่แบ่งแผนกเคลม */}
           {unClaimAmt > 0 && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-gray-700">
-              <span className="text-[15px]">⚠️</span>
+            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-gray-700">
+              <span className="w-5 h-5 rounded-md bg-red-500 text-white grid place-items-center text-[11px] shrink-0">!</span>
               <span>ยังไม่แบ่งแผนกเคลม <b className="text-red-600 tabular-nums">{fmtNum(unClaimAmt)} THB</b> <span className="text-gray-400 tabular-nums">(est {fmtNum(unClaimEst)} THB)</span></span>
             </div>
           )}
@@ -1335,7 +1354,7 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {loading && <tr><td colSpan={25} className="text-center py-10 text-gray-400">Loading...</td></tr>}
+              {loading && <tr><td colSpan={COLS.length} className="text-center py-10 text-gray-400">Loading...</td></tr>}
               {!loading && tableRows.map((row,i)=>{
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
                 return (
@@ -1367,10 +1386,11 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const sp=getSplits(row);return sp.length?sp.map((s:any)=>s.pct!=null?`${s.pct}%`:"-").join(" · "):"-"})()}</td>
                     <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const rs=[...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))];const txt=rs.length?rs.join(" · "):"-";return <span className="truncate block" title={txt}>{txt}</span>})()}</td>
                     <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const pw=Array.isArray(row.request.pendingWith)?row.request.pendingWith:[];const txt=pw.length?pw.join(", "):"-";return <span className="truncate block font-medium text-gray-700" title={txt}>{txt}</span>})()}</td>
+                    {isAdmin && <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const src=tableShipped?mpSrcBySub[subKey(row)]:"";return src?<span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${src==="mp_line"?"bg-teal-100 text-teal-700":"bg-amber-100 text-amber-700"}`}>{src==="mp_line"?"mp_line":"export"}</span>:<span className="text-gray-300">-</span>})()}</td>}
                   </tr>
                 )
               })}
-              {!loading&&tableRows.length===0&&<tr><td colSpan={25} className="text-center py-10 text-gray-400">No data</td></tr>}
+              {!loading&&tableRows.length===0&&<tr><td colSpan={COLS.length} className="text-center py-10 text-gray-400">No data</td></tr>}
             </tbody>
             {tableRows.length>0&&(
               <tfoot className="sticky bottom-0">
@@ -1380,7 +1400,7 @@ export default function DashboardPage() {
                   <td className="px-3 py-2">{tblQAir.toLocaleString()}</td>
                   <td className="px-3 py-2 text-blue-700">{fmtNum(tblEst)}</td>
                   <td className="px-3 py-2 text-green-700">{fmtNum(tblAct)}</td>
-                  <td className="px-3 py-2" colSpan={9}></td>
+                  <td className="px-3 py-2" colSpan={9 + (isAdmin ? 1 : 0)}></td>
                 </tr>
               </tfoot>
             )}
