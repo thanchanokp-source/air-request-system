@@ -1088,59 +1088,80 @@ export default function DashboardPage() {
         const unClaimEst = unClaim ? (unClaim.est.THB + unClaim.est.USD) : 0
         // รวม = ส่งจริง + แผน
         const totQty = shipQty + unQtyPlan, totEst = est + unEst, totAct = act + unAct, totSo = shipSo + unSo
-        const shipPct = totQty > 0 ? Math.round(shipQty / totQty * 100) : 0
-        const C4 = "sm:border-l sm:border-gray-200/70 sm:pl-3"  // 4th column (variance) divider
+        const shipPctEst = totEst > 0 ? (est / totEst * 100) : 0   // สัดส่วน bar คิดจาก est cost
+        const planPctEst = 100 - shipPctEst
+        const fmtM = (n:number) => n >= 1e6 ? (n/1e6).toFixed(2)+"M" : fmtNum(n)
         return (
         <div className="space-y-2.5">
-          {/* ── ชั้น 1: รวมทั้งหมด ── */}
-          <div className="relative rounded-xl border border-gray-200 bg-white px-4 py-3 overflow-hidden shadow-sm">
-            <span className="absolute left-0 top-0 bottom-0 w-1.5 bg-teal-600"></span>
-            <div className="grid grid-cols-2 sm:grid-cols-[minmax(190px,1.2fr)_1fr_1fr_150px] gap-3 items-center pl-2">
+          {/* ── การ์ดภาพรวม (เต็มความกว้าง) ── */}
+          <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
+            <p className="text-[11px] font-semibold text-gray-400">ภาพรวม · {totSo.toLocaleString()} SO</p>
+            <p className="text-base font-extrabold text-gray-900 mb-3">ส่งแอร์ทั้งหมด</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <span className="inline-flex items-center text-[11px] font-bold text-teal-700 bg-teal-50 rounded-full px-2.5 py-0.5">รวมทั้งหมด · {totSo.toLocaleString()} SO</span>
-                <p className="text-2xl font-extrabold tabular-nums text-gray-900 mt-1.5 leading-none">{fmtNum(totQty)}</p>
-                <p className="text-[10px] text-gray-400 mt-1">pcs · ส่งจริง + แผน</p>
+                <p className="text-[11px] text-gray-400 font-semibold">จำนวน</p>
+                <p className="text-3xl font-extrabold tabular-nums text-gray-900 leading-none mt-0.5">{fmtNum(totQty)}</p>
+                <p className="text-[11px] text-gray-400 mt-1">pcs</p>
               </div>
-              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Est air</p><p className="text-lg font-bold tabular-nums text-sky-700">{fmtNum(totEst)}</p></div>
-              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air</p><p className="text-lg font-bold tabular-nums text-gray-800">{fmtNum(totAct)}</p></div>
-              <div className="hidden sm:block"></div>
-            </div>
-          </div>
-          {/* bar: เขียว = ส่งจริง · ส้ม = แผน */}
-          <div className="flex h-3.5 rounded-full bg-gray-100 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-green-500 to-green-600" style={{width:`${shipPct}%`}} title={`ส่งจริง ${shipPct}%`}></div>
-            <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500" style={{width:`${100-shipPct}%`}} title={`แผน ${100-shipPct}%`}></div>
-          </div>
-          {/* ── ชั้น 2: ส่งจริง ── */}
-          <div className="relative rounded-xl border border-green-200 bg-green-50/60 px-4 py-3 overflow-hidden shadow-sm">
-            <span className="absolute left-0 top-0 bottom-0 w-1.5 bg-green-500"></span>
-            <div className="grid grid-cols-2 sm:grid-cols-[minmax(190px,1.2fr)_1fr_1fr_150px] gap-3 items-center pl-2">
               <div>
-                <span className="inline-flex items-center text-[11px] font-bold text-green-700 bg-green-100/70 rounded-full px-2.5 py-0.5">✅ ส่งจริง · {shipSo.toLocaleString()} SO</span>
-                <p className="text-2xl font-extrabold tabular-nums text-green-700 mt-1.5 leading-none">{fmtNum(shipQty)}</p>
-                <p className="text-[10px] text-gray-400 mt-1">pcs · shipped</p>
+                <p className="text-[11px] text-gray-400 font-semibold">Est air cost</p>
+                <p className="text-3xl font-extrabold tabular-nums text-sky-700 leading-none mt-0.5">{fmtM(totEst)}</p>
+                <p className="text-[11px] text-gray-400 mt-1 tabular-nums">{fmtNum(totEst)} THB</p>
               </div>
-              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Est air</p><p className="text-lg font-bold tabular-nums text-sky-700">{fmtNum(est)}</p></div>
-              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air</p><p className="text-lg font-bold tabular-nums text-green-700">{fmtNum(act)}</p></div>
-              <div className={C4}>
-                <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">vs EST</p>
-                <p className={`text-lg font-bold tabular-nums ${varPct==null?"text-gray-400":varPct>0?"text-red-600":"text-green-600"}`}>{varPct==null?"—":(varPct>0?"↑":"↓")+Math.abs(varPct)+"%"}</p>
-                <p className={`text-[10px] tabular-nums ${dVal>0?"text-red-500":"text-green-600"}`}>{(dVal>0?"+":"")+fmtNum(dVal)} vs est</p>
+              <div>
+                <p className="text-[11px] text-gray-400 font-semibold">Actual air cost</p>
+                <p className="text-3xl font-extrabold tabular-nums text-gray-800 leading-none mt-0.5">{fmtM(totAct)}</p>
+                <p className="text-[11px] text-gray-400 mt-1 tabular-nums">{fmtNum(totAct)} THB · เฉพาะส่งจริง</p>
               </div>
             </div>
+            {/* progress bar (คิดจาก est cost) */}
+            <div className="flex h-2.5 rounded-full bg-gray-100 overflow-hidden mt-4">
+              <div className="h-full bg-gradient-to-r from-green-500 to-green-600" style={{width:`${shipPctEst}%`}} title={`ส่งจริง ${shipPctEst.toFixed(1)}%`}></div>
+              <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500" style={{width:`${planPctEst}%`}} title={`แผนส่ง ${planPctEst.toFixed(1)}%`}></div>
+            </div>
+            <div className="flex items-center justify-between mt-1.5 text-[11px]">
+              <span className="inline-flex items-center gap-1.5 font-semibold text-green-700"><span className="w-2 h-2 rounded-full bg-green-500"></span>ส่งจริง {shipPctEst.toFixed(1)}%</span>
+              <span className="text-gray-400">สัดส่วนตาม est cost</span>
+              <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700"><span className="w-2 h-2 rounded-full bg-amber-500"></span>แผนส่ง {planPctEst.toFixed(1)}%</span>
+            </div>
           </div>
-          {/* ── ชั้น 3: แผนส่ง ── */}
-          <div className="relative rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 overflow-hidden shadow-sm">
-            <span className="absolute left-0 top-0 bottom-0 w-1.5 bg-amber-500"></span>
-            <div className="grid grid-cols-2 sm:grid-cols-[minmax(190px,1.2fr)_1fr_1fr_150px] gap-3 items-center pl-2">
-              <div>
-                <span className="inline-flex items-center text-[11px] font-bold text-amber-700 bg-amber-100/70 rounded-full px-2.5 py-0.5">⏳ แผนส่ง · {unSo.toLocaleString()} SO</span>
-                <p className="text-2xl font-extrabold tabular-nums text-amber-700 mt-1.5 leading-none">{fmtNum(unQtyPlan)}</p>
-                <p className="text-[10px] text-gray-400 mt-1">qty plan (MER) · ยังไม่ส่ง</p>
+          {/* ── 2 การ์ด: ส่งจริง / แผนส่ง ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* ส่งจริง */}
+            <div className="rounded-xl border border-green-200 bg-green-50/60 px-5 py-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-extrabold text-green-800">⊘ ส่งจริง</span>
+                <span className="text-[11px] font-bold text-green-700 bg-white/70 border border-green-200 rounded-full px-2.5 py-0.5">{shipSo.toLocaleString()} SO</span>
               </div>
-              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Est air</p><p className="text-lg font-bold tabular-nums text-sky-700">{fmtNum(unEst)}</p></div>
-              <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air</p><p className="text-lg font-bold tabular-nums text-gray-400">ยังไม่มี</p></div>
-              <div className="hidden sm:block"></div>
+              <p className="text-[11px] text-gray-500 font-semibold mt-3">จำนวนส่งจริง (pcs)</p>
+              <p className="text-2xl font-extrabold tabular-nums text-green-800 leading-none mt-0.5">{fmtNum(shipQty)}</p>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Est air cost</p><p className="text-lg font-bold tabular-nums text-gray-700">{fmtNum(est)}</p></div>
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air cost</p><p className="text-lg font-bold tabular-nums text-green-700">{fmtNum(act)}</p></div>
+              </div>
+              <div className="flex items-center justify-between border-t border-green-200/70 mt-3 pt-2.5">
+                <span className="text-[11px] text-gray-500 font-semibold">เทียบ est</span>
+                <span className={`text-sm font-bold tabular-nums ${varPct==null?"text-gray-400":varPct>0?"text-red-600":"text-green-600"}`}>
+                  {varPct==null?"—":`${varPct>0?"↑":"↓"} ${Math.abs(varPct)}% · ${dVal>0?"+":""}${fmtNum(dVal)}`}
+                </span>
+              </div>
+            </div>
+            {/* แผนส่ง */}
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-5 py-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-extrabold text-amber-800">⊟ แผนส่ง</span>
+                <span className="text-[11px] font-bold text-amber-700 bg-white/70 border border-amber-200 rounded-full px-2.5 py-0.5">{unSo.toLocaleString()} SO</span>
+              </div>
+              <p className="text-[11px] text-gray-500 font-semibold mt-3">Qty plan air (MER)</p>
+              <p className="text-2xl font-extrabold tabular-nums text-amber-800 leading-none mt-0.5">{fmtNum(unQtyPlan)}</p>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Est air cost</p><p className="text-lg font-bold tabular-nums text-gray-700">{fmtNum(unEst)}</p></div>
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air cost</p><p className="text-lg font-bold tabular-nums text-gray-400">—</p></div>
+              </div>
+              <div className="flex items-center justify-between border-t border-amber-200/70 mt-3 pt-2.5">
+                <span className="text-[11px] text-gray-500 font-semibold">สถานะ</span>
+                <span className="text-sm font-bold text-amber-700">ยังไม่ส่งออก</span>
+              </div>
             </div>
           </div>
           {/* note: ยังไม่แบ่งแผนกเคลม */}
