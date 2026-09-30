@@ -59,25 +59,33 @@ export default function LgAirBookingPage() {
   }, [])
 
   const brands = data?.brands || []
-  const brandObj = useMemo(() => brands.find(b => b.brand === brand) || null, [brands, brand])
+  // Multi-select brand: pick several brand VARIANTS that are the same customer (e.g. FANATICS / FANATICS-NIKE
+  // / FANATICS-BRANDS) so their INVs list together. Their combined INVs feed the rest of the flow.
+  const selBrands = useMemo(() => new Set((brand ? brand.split("\u0001") : []).filter(Boolean)), [brand])
+  const brandLabel = useMemo(() => [...selBrands].join(", "), [selBrands])
+  const selInvs = useMemo(() => brands.filter(b => selBrands.has(b.brand)).flatMap(b => b.invs), [brands, selBrands])
   const qq = q.trim().toLowerCase()
-  const invList = useMemo(() => !brandObj ? [] : brandObj.invs.filter(iv => !qq || iv.inv.toLowerCase().includes(qq)), [brandObj, qq])
+  const invList = useMemo(() => selInvs.filter(iv => !qq || iv.inv.toLowerCase().includes(qq)), [selInvs, qq])
 
-  const selectBrand = (b: string) => { if (b !== brand) { setBrand(b); setPickedInv(new Set()) } }
+  const selectBrand = (b: string) => setBrand(prev => {
+    const s = new Set((prev ? prev.split("\u0001") : []).filter(Boolean))
+    s.has(b) ? s.delete(b) : s.add(b)
+    return [...s].join("\u0001") || null
+  })
   const toggleInv = (inv: string, on: boolean) => setPickedInv(p => { const s = new Set(p); on ? s.add(inv) : s.delete(inv); return s })
 
   const go2 = () => {
     if (!pickedInv.size) { alert("เลือก INV ก่อน"); return }
     // default-tick all ready lines of the picked INVs
     const next: Record<string, boolean> = {}
-    for (const iv of (brandObj?.invs || [])) {
+    for (const iv of selInvs) {
       if (!pickedInv.has(iv.inv)) continue
       for (const l of iv.sos) if (canTick(l.air)) next[`${iv.inv}|${l.so}|${l.sub}`] = true
     }
     setSel(next); setStep(2)
   }
 
-  const chosenInvs = useMemo(() => (brandObj?.invs || []).filter(iv => pickedInv.has(iv.inv)), [brandObj, pickedInv])
+  const chosenInvs = useMemo(() => selInvs.filter(iv => pickedInv.has(iv.inv)), [selInvs, pickedInv])
   const toggleLine = (inv: string, l: Line) => { const k = `${inv}|${l.so}|${l.sub}`; setSel(s => ({ ...s, [k]: !s[k] })) }
   const toggleAll = (iv: Inv, on: boolean) => setSel(s => { const n = { ...s }; for (const l of iv.sos) if (canTick(l.air)) n[`${iv.inv}|${l.so}|${l.sub}`] = on; return n })
 
@@ -166,7 +174,7 @@ export default function LgAirBookingPage() {
       if (auto.length > 0) {
         const ares = await fetch("/api/lg-inv-booking", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ brand, hawbNo, bookingDate: today, lines: auto.map(l => ({ so: l.so, sub: l.sub, inv: l.inv, pcs: l.pcs, style: l.style, actual: (l as any).actual })) }),
+          body: JSON.stringify({ brand: brandLabel, hawbNo, bookingDate: today, lines: auto.map(l => ({ so: l.so, sub: l.sub, inv: l.inv, pcs: l.pcs, style: l.style, actual: (l as any).actual })) }),
         })
         if (!ares.ok) { const e = await ares.json().catch(() => ({})); throw new Error(`auto-add: ${e.error || ares.status}`) }
         const aj = await ares.json().catch(() => ({}))
@@ -203,23 +211,27 @@ export default function LgAirBookingPage() {
 
       {data && step === 1 && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <label className="block text-xs font-semibold text-gray-600 mb-2">1) เลือก Brand <span className="text-gray-400 font-normal">— 1 HAWB = brand เดียว ทำทีละ brand</span></label>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">1) เลือก Brand <span className="text-gray-400 font-normal">— 1 HAWB = brand เดียว</span></label>
+          <p className="text-[11px] text-gray-400 mb-2">💡 เลือกได้มากกว่า 1 ถ้าเป็น brand เดียวกันแต่ชื่อ variant ต่างกัน (เช่น FANATICS · FANATICS-NIKE · FANATICS-BRANDS) — ต้องเป็นชื่อที่ใกล้เคียงกันเท่านั้น</p>
           <div className="flex flex-wrap gap-2">
-            {brands.map(b => (
+            {brands.map(b => {
+              const on = selBrands.has(b.brand)
+              return (
               <button key={b.brand} onClick={() => selectBrand(b.brand)}
-                className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold ${brand === b.brand ? "text-white border-transparent" : "bg-gray-50 text-gray-600 border-gray-200 hover:border-red-300"}`}
-                style={brand === b.brand ? { background: MAROON } : {}}>
-                {b.brand} <span className="text-[10px] opacity-70">{b.invCount} INV</span>
+                className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold ${on ? "text-white border-transparent" : "bg-gray-50 text-gray-600 border-gray-200 hover:border-red-300"}`}
+                style={on ? { background: MAROON } : {}}>
+                {on && <span className="text-[10px]">✓</span>}{b.brand} <span className="text-[10px] opacity-70">{b.invCount} INV</span>
               </button>
-            ))}
-            {brands.length === 0 && <span className="text-xs text-gray-400">ไม่มีข้อมูล mp_line</span>}
+            )})}
+            {brands.length === 0 && <span className="text-xs text-gray-400">ไม่มีข้อมูล</span>}
           </div>
+          {selBrands.size > 1 && <p className="text-[11px] text-teal-600 mt-1.5">เลือก {selBrands.size} brand: {brandLabel} ({selInvs.length} INV รวม)</p>}
 
           <label className="block text-xs font-semibold text-gray-600 mb-2 mt-5">2) ติ๊กเลือก INV ของ brand นี้</label>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหา INV ใน brand นี้…"
             className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-200" />
           <div className="mt-2.5 border border-gray-200 rounded-lg max-h-[40vh] overflow-auto">
-            {!brand ? <div className="p-4 text-center text-xs text-gray-400">⬆ เลือก brand ก่อน แล้ว INV จะขึ้นให้ติ๊ก</div>
+            {selBrands.size === 0 ? <div className="p-4 text-center text-xs text-gray-400">⬆ เลือก brand ก่อน แล้ว INV จะขึ้นให้ติ๊ก</div>
               : invList.length === 0 ? <div className="p-4 text-center text-xs text-gray-400">ไม่พบ INV ใน brand นี้</div>
               : invList.map(iv => { const on = pickedInv.has(iv.inv); return (
                 <label key={iv.inv} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 hover:bg-gray-50 ${on ? "bg-green-50/70" : ""}`}>
@@ -253,7 +265,7 @@ export default function LgAirBookingPage() {
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => setStep(1)} className="text-sm font-semibold px-4 py-2 rounded-lg border-2 text-gray-700 border-gray-300 hover:bg-gray-100">← แก้ INV</button>
-            <span className="text-lg font-bold text-gray-900">{brand}</span>
+            <span className="text-lg font-bold text-gray-900">{brandLabel}</span>
             <button onClick={goHawb}
               disabled={summary.selCnt === 0}
               className="ml-auto text-sm font-bold text-white px-4 py-1.5 rounded-lg disabled:opacity-40" style={{ background: "#15803d" }}>ไปหน้าเพิ่ม HAWB ({summary.selCnt})</button>
@@ -311,7 +323,7 @@ export default function LgAirBookingPage() {
         <>
           <div className="flex items-center gap-3 flex-wrap">
             <button onClick={() => setStep(2)} className="text-sm font-semibold px-4 py-2 rounded-lg border-2 text-gray-700 border-gray-300 hover:bg-gray-100">← กลับไปเลือก SO</button>
-            <span className="text-lg font-bold text-gray-900">{brand}</span>
+            <span className="text-lg font-bold text-gray-900">{brandLabel}</span>
           </div>
 
           {/* One HAWB for all selected INVs */}
