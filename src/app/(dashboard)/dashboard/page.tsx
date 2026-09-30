@@ -654,6 +654,8 @@ export default function DashboardPage() {
     try { localStorage.setItem("dash_mpMode", mpMode ? "1" : "0") } catch {}
   }, [mpMode])
   const mpSoKey = (s: any) => String(s == null ? "" : s).replace(/\D/g, "").replace(/^0+/, "")
+  // Display SO as 8 digits (pad leading zeros) so mp_line (7-digit) and air-req (8-digit) look consistent.
+  const so8 = (s: any) => { const d = String(s ?? "").replace(/\D/g, ""); return d ? d.padStart(8, "0") : (s || "-") }
   // mp_line data is NYG-only → the map toggle works ONLY on the NYG tab (where the whole page is already
   // scoped to NYG, so the numbers match the mp_line card). All BU / GW / TRM / EA stay the normal view.
   const mpAllowed = activeBu === "NYG" || activeBu === "ALL"  // map mp_line = NYG data; shown on NYG + All BU (never GW/TRM/EA)
@@ -803,7 +805,7 @@ export default function DashboardPage() {
   // always line up. `get` returns the value used both for the filter's substring match and export.
   const COLS = useMemo<{label:string; get:(r:any)=>any}[]>(()=>[
     {label:"DOC NO",         get:r=>r.request?.documentNo||""},
-    {label:"SO",             get:r=>r.so||""},
+    {label:"SO",             get:r=>so8(r.so)},
     {label:"PO",             get:r=>poMap[r.so]||""},
     {label:"STYLE",          get:r=>r.style||""},
     {label:"SUB",            get:r=>r.sub||""},
@@ -1027,7 +1029,7 @@ export default function DashboardPage() {
       const vp = row.airFreight > 0 && row.actualAirFreight > 0 ? (row.actualAirFreight - row.airFreight) / row.airFreight * 100 : null
       return {
         "DOC NO":         row.request.documentNo,
-        "SO":             row.so,
+        "SO":             so8(row.so),
         "STYLE":          row.style,
         "SUB":            row.sub ?? "",
         "DESCRIPTION":    row.description ?? "",
@@ -1099,11 +1101,11 @@ export default function DashboardPage() {
         const varPct = fEst > 0 ? Math.round((act - fEst) / fEst * 1000) / 10 : null
         const dVal = act - fEst
         // ยังไม่มีการส่งออก = air-req ที่ SO ไม่มีใน mp_line
-        const unCount = unshippedRows.length
         const unSo = new Set(unshippedRows.map((r:any)=>mpSoKey(r.so))).size
         const unEst = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.airFreight)||0),0)
         const unAct = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.actualAirFreight)||0),0)
-        const unQtyPlan = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.qtyRequestAir)||0),0) // QTY plan ที่ MER กรอก
+        const unQtyPlan = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.qtyRequestAir)||0),0) // QTY plan (air) ที่ MER กรอก
+        const unQtyOrig = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.qtyOriginalShipment)||0),0) // QTY original ที่ MER กรอก
         // ยังไม่แบ่งแผนกเคลม (จาก claimByDept)
         const unClaim = (claimByDept as any[]).find(d=>d.unassigned)
         const unClaimAmt = unClaim ? (unClaim.amt.THB + unClaim.amt.USD) : 0
@@ -1135,8 +1137,8 @@ export default function DashboardPage() {
                 <span className="ml-auto font-medium text-amber-600/80 text-[11px] tabular-nums">{unSo.toLocaleString()} SO</span>
               </div>
               <div className="p-3 grid grid-cols-4 gap-3 items-center">
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">จำนวน (tx)</p><p className="text-xl font-bold tabular-nums text-amber-700">{unCount.toLocaleString()}</p></div>
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY plan (MER)</p><p className="text-xl font-bold tabular-nums text-amber-700">{fmtNum(unQtyPlan)}</p></div>
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY original (MER)</p><p className="text-xl font-bold tabular-nums text-amber-700">{fmtNum(unQtyOrig)}</p></div>
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY plan air (MER)</p><p className="text-xl font-bold tabular-nums text-amber-700">{fmtNum(unQtyPlan)}</p></div>
                 <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Estimate air</p><p className="text-xl font-bold tabular-nums text-sky-700">{fmtNum(unEst)}</p></div>
                 <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Actual air</p><p className="text-xl font-bold tabular-nums text-gray-400">{fmtNum(unAct)}</p></div>
               </div>
@@ -1362,7 +1364,7 @@ export default function DashboardPage() {
                 return (
                   <tr key={i} className="hover:bg-gray-50">
                     <td className="px-3 py-1.5 font-medium whitespace-nowrap">{row.request.documentNo}</td>
-                    <td className="px-3 py-1.5 font-medium">{row.so}</td>
+                    <td className="px-3 py-1.5 font-medium tabular-nums">{so8(row.so)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{poMap[row.so] || "-"}</td>
                     <td className="px-3 py-1.5">{row.style}</td>
                     <td className="px-3 py-1.5">{row.sub || "-"}</td>
