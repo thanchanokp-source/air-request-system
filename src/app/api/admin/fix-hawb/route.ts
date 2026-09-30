@@ -52,35 +52,48 @@ export async function POST(req: NextRequest) {
   // mp_line (AIR PP) then sq_report.export_row (AIR PREPAID), matches NYG air-req items by SO+SUB
   // (unbooked, or already on this HAWB), and sets invoiceNo + hawbNo + actual qty. Then redistribute.
   if (action === "add_inv") {
-    const inv = String(body.inv || "").trim()
+    // รับได้หลาย INV — คั่นด้วย comma / เว้นวรรค / ขึ้นบรรทัดใหม่
+    const invs = [...new Set(String(body.inv || "").split(/[\s,;]+/).map((s: string) => s.trim()).filter(Boolean))]
     const hawb = String(body.hawb || "").trim()
-    if (!inv || !hawb) return NextResponse.json({ error: "inv + hawb required" }, { status: 400 })
+    if (!invs.length || !hawb) return NextResponse.json({ error: "inv + hawb required" }, { status: 400 })
     const soN = (s: any) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "")
     const subU = (s: any) => String(s ?? "").trim().toUpperCase()
-    let lines: any[] = [], src = "mp_line"
-    try { lines = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, final_pcs AS pcs FROM public.mp_line WHERE TRIM(invoice_no)=$1 AND UPPER(TRIM(status))='SHIPPED' AND UPPER(TRIM(ship_mode))='AIR PP'`, inv) } catch { /* */ }
-    if (!lines.length) { try { lines = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, qty_pcs AS pcs FROM sq_report.export_row WHERE TRIM(invoice_no)=$1 AND UPPER(TRIM(ship_mode))='AIR PREPAID'`, inv); src = "export" } catch { /* */ } }
-    if (!lines.length) return NextResponse.json({ error: `ไม่พบ INV "${inv}" ใน mp_line / export (AIR)` }, { status: 404 })
-    const qByKey = new Map<string, number>()
-    for (const l of lines) { const k = `${soN(l.so_no)}|${subU(l.sub_no)}`; qByKey.set(k, (qByKey.get(k) || 0) + (Number(l.pcs) || 0)) }
-    const sos8 = [...new Set(lines.map((l: any) => soN(l.so_no)).filter(Boolean))].map((s: string) => s.padStart(8, "0"))
+    const qByKey = new Map<string, number>()          // so|sub → qty รวม
+    const invByKey = new Map<string, string>()         // so|sub → INV ที่มาจาก (ตัวแรกที่เจอ)
+    const srcByInv: Record<string, string> = {}        // INV → mp_line / export
+    const notFound: string[] = []
+    for (const inv of invs as string[]) {
+      let lines: any[] = [], src = "mp_line"
+      try { lines = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, final_pcs AS pcs FROM public.mp_line WHERE TRIM(invoice_no)=$1 AND UPPER(TRIM(status))='SHIPPED' AND UPPER(TRIM(ship_mode))='AIR PP'`, inv) } catch { /* */ }
+      if (!lines.length) { try { lines = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, qty_pcs AS pcs FROM sq_report.export_row WHERE TRIM(invoice_no)=$1 AND UPPER(TRIM(ship_mode))='AIR PREPAID'`, inv); src = "export" } catch { /* */ } }
+      if (!lines.length) { notFound.push(inv); continue }
+      srcByInv[inv] = src
+      for (const l of lines) {
+        const k = `${soN(l.so_no)}|${subU(l.sub_no)}`
+        qByKey.set(k, (qByKey.get(k) || 0) + (Number(l.pcs) || 0))
+        if (!invByKey.has(k)) invByKey.set(k, inv)
+      }
+    }
+    if (!qByKey.size) return NextResponse.json({ error: `ไม่พบ INV ${invs.join(", ")} ใน mp_line / export (AIR)` }, { status: 404 })
+    const sos8 = [...new Set([...qByKey.keys()].map(k => k.split("|")[0]).filter(Boolean))].map((s: string) => s.padStart(8, "0"))
     const cand = await (prisma.airRequestItem as any).findMany({
       where: { so: { in: sos8 }, request: { bu: "NYG", isTest: false }, itemStatus: { not: "REJECTED" } },
       select: { id: true, so: true, sub: true, hawbNo: true },
     })
     const preview = !!body.preview
     const used = new Set<string>()
-    const toAttach: { itemId: string; so: string; sub: string; qty: number; documentNo?: string }[] = []
+    const toAttach: { itemId: string; so: string; sub: string; qty: number; inv: string }[] = []
     for (const it of cand) {
       const k = `${soN(it.so)}|${subU(it.sub)}`
       if (!qByKey.has(k) || used.has(k)) continue
       if (it.hawbNo && String(it.hawbNo).trim() && it.hawbNo !== hawb) continue  // booked to another HAWB → leave it
-      toAttach.push({ itemId: it.id, so: it.so, sub: it.sub, qty: qByKey.get(k) || 0 })
+      toAttach.push({ itemId: it.id, so: it.so, sub: it.sub, qty: qByKey.get(k) || 0, inv: invByKey.get(k) || (invs[0] as string) })
       used.add(k)
     }
-    if (preview) return NextResponse.json({ ok: true, preview: true, inv, hawb, src, foundSubs: qByKey.size, willAttach: toAttach })
-    for (const t of toAttach) await prisma.airRequestItem.update({ where: { id: t.itemId }, data: { invoiceNo: inv, hawbNo: hawb, qtyActualShip: t.qty } as any })
-    return NextResponse.json({ ok: true, added: toAttach.length, inv, hawb, src, foundSubs: qByKey.size })
+    const foundInvs = Object.keys(srcByInv)
+    if (preview) return NextResponse.json({ ok: true, preview: true, invs: foundInvs, notFound, hawb, srcByInv, foundSubs: qByKey.size, willAttach: toAttach })
+    for (const t of toAttach) await prisma.airRequestItem.update({ where: { id: t.itemId }, data: { invoiceNo: t.inv, hawbNo: hawb, qtyActualShip: t.qty } as any })
+    return NextResponse.json({ ok: true, added: toAttach.length, invs: foundInvs, notFound, hawb, srcByInv, foundSubs: qByKey.size })
   }
 
   if (action === "redistribute") {

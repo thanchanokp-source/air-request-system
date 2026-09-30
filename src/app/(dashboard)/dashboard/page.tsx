@@ -754,7 +754,8 @@ export default function DashboardPage() {
   const [tableView, setTableView] = useState<"SHIPPED"|"UNSHIPPED">("SHIPPED")
   const tableShipped = tableView==="SHIPPED"
   // "ส่งออกแล้ว" = air-req row ที่มี HAWB (LG เติมแล้ว = ship จริง).
-  const hasHawb = (r:any) => String(r?.hawbNo ?? "").trim() !== ""
+  // มี HAWB จริง = ไม่ว่าง และไม่ใช่ placeholder ("-", "N/A", ".", "0")
+  const hasHawb = (r:any) => { const h = String(r?.hawbNo ?? "").trim(); return h !== "" && !/^[-.–—\s]*$/.test(h) && !["n/a","na","0","null"].includes(h.toLowerCase()) }
   // ส่งออกจริง = air-req rows ที่มี HAWB — DEDUPE เหลือ 1 แถว/SO+SUB (กันยอดเบิ้ลเมื่อ SO+SUB ซ้ำหลาย doc):
   // เก็บแถวที่ "ไปไกลสุดใน flow" (มี actual > ไม่ reject > doc ล่าสุด).
   const shippedRows = useMemo(()=>{
