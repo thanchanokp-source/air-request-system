@@ -68,15 +68,19 @@ export async function POST(req: NextRequest) {
       where: { so: { in: sos8 }, request: { bu: "NYG", isTest: false }, itemStatus: { not: "REJECTED" } },
       select: { id: true, so: true, sub: true, hawbNo: true },
     })
-    const used = new Set<string>(); let added = 0
+    const preview = !!body.preview
+    const used = new Set<string>()
+    const toAttach: { itemId: string; so: string; sub: string; qty: number; documentNo?: string }[] = []
     for (const it of cand) {
       const k = `${soN(it.so)}|${subU(it.sub)}`
       if (!qByKey.has(k) || used.has(k)) continue
       if (it.hawbNo && String(it.hawbNo).trim() && it.hawbNo !== hawb) continue  // booked to another HAWB → leave it
-      await prisma.airRequestItem.update({ where: { id: it.id }, data: { invoiceNo: inv, hawbNo: hawb, qtyActualShip: qByKey.get(k) } as any })
-      used.add(k); added++
+      toAttach.push({ itemId: it.id, so: it.so, sub: it.sub, qty: qByKey.get(k) || 0 })
+      used.add(k)
     }
-    return NextResponse.json({ ok: true, added, inv, hawb, src, foundSubs: qByKey.size })
+    if (preview) return NextResponse.json({ ok: true, preview: true, inv, hawb, src, foundSubs: qByKey.size, willAttach: toAttach })
+    for (const t of toAttach) await prisma.airRequestItem.update({ where: { id: t.itemId }, data: { invoiceNo: inv, hawbNo: hawb, qtyActualShip: t.qty } as any })
+    return NextResponse.json({ ok: true, added: toAttach.length, inv, hawb, src, foundSubs: qByKey.size })
   }
 
   if (action === "redistribute") {

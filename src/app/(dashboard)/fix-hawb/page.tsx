@@ -13,6 +13,7 @@ export default function FixHawbPage() {
   const [newHawb, setNewHawb] = useState("")
   const [total, setTotal] = useState("")
   const [addInv, setAddInv] = useState("")
+  const [invPreview, setInvPreview] = useState<any | null>(null)
   const [busy, setBusy] = useState(false)
 
   const load = async (h?: string) => {
@@ -44,19 +45,31 @@ export default function FixHawbPage() {
     } finally { setBusy(false) }
   }
 
-  const doAddInv = async () => {
+  // ลองดูก่อน (ไม่บันทึก) — ดูว่า INV นี้จะผูก SO ไหนบ้าง
+  const doPreviewInv = async () => {
     const iv = addInv.trim()
     if (!iv || !data?.hawb) { setMsg("ใส่เลข INV ก่อน"); return }
-    if (!confirm(`เพิ่ม INV "${iv}" เข้า HAWB ${data.hawb} ? (จะจับ SO+SUB จาก mp_line/export มาผูก)`)) return
+    setBusy(true); setMsg(""); setInvPreview(null)
+    try {
+      const r = await fetch("/api/admin/fix-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add_inv", inv: iv, hawb: data.hawb, preview: true }) })
+      const d = await r.json()
+      if (!r.ok) { setMsg("ลองดูไม่สำเร็จ: " + (d.error || r.status)); return }
+      setInvPreview(d)
+      if (!d.willAttach?.length) setMsg(`⚠️ INV ${iv} เจอ ${d.foundSubs} sub ใน ${d.src} แต่ไม่มี air-req ที่ว่างให้ผูก`)
+    } finally { setBusy(false) }
+  }
+  // บันทึกจริง (commit)
+  const doAddInv = async () => {
+    const iv = addInv.trim()
+    if (!iv || !data?.hawb) return
+    if (!confirm(`บันทึก: ผูก ${invPreview?.willAttach?.length || "?"} SO ของ INV "${iv}" เข้า HAWB ${data.hawb} ?`)) return
     setBusy(true); setMsg("")
     try {
       const r = await fetch("/api/admin/fix-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add_inv", inv: iv, hawb: data.hawb }) })
       const d = await r.json()
-      if (!r.ok) { setMsg("เพิ่ม INV ไม่สำเร็จ: " + (d.error || r.status)); return }
-      setMsg(d.added > 0
-        ? `✓ เพิ่ม INV ${iv} → ผูก ${d.added} SO เข้า HAWB ${data.hawb} (จาก ${d.src}) · อย่าลืม "ตั้ง total + กระจาย" ใหม่`
-        : `⚠️ INV ${iv} เจอ ${d.foundSubs} sub ใน ${d.src} แต่ไม่มี air-req ที่ว่าง (อาจผูก HAWB อื่นอยู่แล้ว)`)
-      setAddInv("")
+      if (!r.ok) { setMsg("บันทึกไม่สำเร็จ: " + (d.error || r.status)); return }
+      setMsg(d.added > 0 ? `✓ บันทึกแล้ว: ผูก ${d.added} SO ของ INV ${iv} เข้า HAWB ${data.hawb} (จาก ${d.src}) · อย่าลืมกระจาย ② ใหม่` : `⚠️ ไม่มี SO ให้ผูก`)
+      setAddInv(""); setInvPreview(null)
       await load()
     } finally { setBusy(false) }
   }
@@ -141,11 +154,22 @@ export default function FixHawbPage() {
 
           <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
             <p className="font-semibold text-sm text-gray-800">③ เพิ่ม INV เข้า HAWB นี้ ({data.hawb})</p>
-            <p className="text-[11px] text-gray-400">ใส่เลข INV ที่ยังไม่ถูก generate → ระบบจับ SO+SUB จาก mp_line/export มาผูก HAWB นี้ (แล้วกดกระจาย ② ใหม่)</p>
+            <p className="text-[11px] text-gray-400">ใส่เลข INV → กด <b>ลองดู</b> (ยังไม่บันทึก) เพื่อดูว่าจะผูก SO ไหน → ถ้าถูกค่อยกด <b>บันทึก</b></p>
             <div className="flex gap-2">
-              <input value={addInv} onChange={e => setAddInv(e.target.value)} onKeyDown={e => e.key === "Enter" && doAddInv()} placeholder="INV เช่น G26227806735" className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono" />
-              <button onClick={doAddInv} disabled={busy || !addInv.trim()} className="text-sm px-4 py-1.5 rounded-lg bg-green-600 text-white font-semibold disabled:opacity-50">+ เพิ่ม INV</button>
+              <input value={addInv} onChange={e => { setAddInv(e.target.value); setInvPreview(null) }} onKeyDown={e => e.key === "Enter" && doPreviewInv()} placeholder="INV เช่น G26227806735" className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono" />
+              <button onClick={doPreviewInv} disabled={busy || !addInv.trim()} className="text-sm px-4 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-300 font-semibold disabled:opacity-50">👁 ลองดู</button>
+              <button onClick={doAddInv} disabled={busy || !invPreview?.willAttach?.length} className="text-sm px-4 py-1.5 rounded-lg bg-green-600 text-white font-semibold disabled:opacity-40">💾 บันทึก ({invPreview?.willAttach?.length || 0})</button>
             </div>
+            {invPreview && (
+              <div className="mt-1 border border-gray-200 rounded-lg overflow-hidden">
+                <div className="bg-gray-50 px-3 py-1.5 text-[11px] text-gray-500">ลองดู (ยังไม่บันทึก) · INV {invPreview.inv} · จาก <b>{invPreview.src}</b> · เจอ {invPreview.foundSubs} sub · จะผูก <b className="text-green-700">{invPreview.willAttach?.length || 0}</b> SO</div>
+                {invPreview.willAttach?.length > 0 && (
+                  <table className="w-full text-xs"><thead className="bg-white text-gray-400"><tr className="text-left"><th className="px-3 py-1 font-medium">SO</th><th className="px-3 py-1 font-medium">SUB</th><th className="px-3 py-1 font-medium text-right">QTY (จริง)</th></tr></thead>
+                    <tbody>{invPreview.willAttach.map((w: any, i: number) => (<tr key={i} className="border-t border-gray-50"><td className="px-3 py-1 font-mono">{w.so}</td><td className="px-3 py-1 font-mono">{w.sub || "-"}</td><td className="px-3 py-1 text-right tabular-nums">{n(w.qty)}</td></tr>))}</tbody>
+                  </table>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">

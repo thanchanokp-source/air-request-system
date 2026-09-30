@@ -653,6 +653,8 @@ export default function RequestDetailPage() {
   // Resubmit edit (at PENDING_MER / PENDING_MER_GW) — per-item field overrides the MER can change
   // before re-submitting. Empty = unchanged (reads from the item). GW also edits claim splits.
   const [editRows, setEditRows] = useState<Record<string, any>>({})
+  const [delItems, setDelItems] = useState<Set<string>>(new Set()) // rows marked to DELETE on Save
+  const toggleDel = (itemId: string) => setDelItems(p => { const s = new Set(p); s.has(itemId) ? s.delete(itemId) : s.add(itemId); return s })
   const [editingItems, setEditingItems] = useState(false)
   const [editSearch, setEditSearch] = useState("") // filter the resubmit edit table (huge docs = 100s of SOs)
   const [reviseReason, setReviseReason] = useState("") // MER/SCM revise note captured before Re-submit
@@ -1724,7 +1726,9 @@ export default function RequestDetailPage() {
     setEditRows(p => ({ ...p, [itemId]: { ...(p[itemId] || {}), claimDepts: rows } }))
 
   const saveEdits = async (isGWDoc: boolean) => {
+    const toDelete = [...delItems]
     const edits = (req.items || []).map((it: any) => {
+      if (delItems.has(it.id)) return null   // will be deleted → skip editing it
       const o = editRows[it.id]; if (!o) return null
       const e: any = { itemId: it.id }
       if ("so" in o) e.so = o.so
@@ -1736,7 +1740,8 @@ export default function RequestDetailPage() {
       if (isGWDoc && "claimDepts" in o) e.claimDepts = (o.claimDepts as any[]).map(r => ({ dept: r.dept, pct: Number(r.pct) || 0, reason: r.reason || null }))
       return Object.keys(e).length > 1 ? e : null
     }).filter(Boolean)
-    if (!edits.length) return
+    if (!edits.length && !toDelete.length) return
+    if (toDelete.length && !confirm(`ลบ ${toDelete.length} SO ออกจากเอกสารถาวร? (แก้กลับไม่ได้)`)) return
     // Client guard: GW claim % must total 100 per edited SO.
     if (isGWDoc) {
       for (const e of edits as any[]) {
@@ -1747,13 +1752,24 @@ export default function RequestDetailPage() {
       }
     }
     setEditingItems(true)
-    const res = await fetch(`/api/requests/${id}/approve`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "edit_items", edits })
-    })
-    if (res.ok) { setReq(await res.json()); setEditRows({}); setEditSaved(true); setTimeout(() => setEditSaved(false), 3000) }
-    else { const e = await res.json().catch(() => ({})); alert(e.error || "Save failed") }
-    setEditingItems(false)
+    try {
+      // 1) delete marked rows
+      if (toDelete.length) {
+        const res = await fetch(`/api/requests/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemIds: toDelete }) })
+        const d = await res.json().catch(() => ({}))
+        if (!res.ok) { alert(d.error || "ลบไม่สำเร็จ"); return }
+        if (d.docDeleted) { alert("ลบครบทุก SO → เอกสารถูกลบทั้งฉบับ"); window.location.href = "/requests"; return }
+      }
+      // 2) save edits of the remaining rows
+      if (edits.length) {
+        const res = await fetch(`/api/requests/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "edit_items", edits }) })
+        if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || "Save failed"); return }
+      }
+      // 3) reload fresh doc
+      const fresh = await fetch(`/api/requests/${id}`).then(r => r.json()).catch(() => null)
+      if (fresh && !fresh.error) setReq(fresh)
+      setEditRows({}); setDelItems(new Set()); setEditSaved(true); setTimeout(() => setEditSaved(false), 3000)
+    } finally { setEditingItems(false) }
   }
 
   // The editable SO table shown on the resubmit panel. NYG/EA: style/date/qty/factory/country.
@@ -1761,7 +1777,7 @@ export default function RequestDetailPage() {
   const renderEditTable = (isGWDoc: boolean) => {
     const allItems = (req?.items || []).filter((i: any) => i.itemStatus !== "REJECTED")
     if (!allItems.length) return null
-    const dirty = Object.keys(editRows).length > 0
+    const dirty = Object.keys(editRows).length > 0 || delItems.size > 0
     // Big documents can carry hundreds of SOs — rendering an editable input for every one freezes
     // the page (each keystroke re-renders all rows). Search to narrow; otherwise cap the rows shown.
     const ROW_CAP = 40
@@ -1780,7 +1796,8 @@ export default function RequestDetailPage() {
           <p className="text-xs font-semibold text-gray-700">แก้ไขข้อมูล SO (แล้วกด Save)</p>
           <div className="flex items-center gap-2">
             {editSaved && <span className="text-[11px] text-green-600 font-medium">✓ บันทึกแล้ว</span>}
-            {dirty && <button onClick={() => setEditRows({})} disabled={editingItems}
+            {delItems.size > 0 && <span className="text-[11px] text-red-600 font-semibold">🗑 ลบ {delItems.size} SO</span>}
+            {dirty && <button onClick={() => { setEditRows({}); setDelItems(new Set()) }} disabled={editingItems}
               className="text-[11px] text-gray-500 border border-gray-300 px-2 py-1 rounded-lg hover:bg-gray-50 disabled:opacity-50">ยกเลิกที่แก้</button>}
             <button onClick={() => saveEdits(isGWDoc)} disabled={editingItems || !dirty}
               className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-40">
@@ -1805,16 +1822,18 @@ export default function RequestDetailPage() {
                 <th className="px-2 py-1.5 font-medium">Factory</th>
                 <th className="px-2 py-1.5 font-medium">Country</th>
                 {isGWDoc && <th className="px-2 py-1.5 font-medium">Claim (dept / % / reason)</th>}
+                <th className="px-2 py-1.5 font-medium text-center">ลบ</th>
               </tr>
             </thead>
             <tbody>
               {items.map((it: any) => {
                 const rows = isGWDoc ? editSplits(it) : []
                 const sum = rows.reduce((a: number, r: any) => a + (Number(r.pct) || 0), 0)
+                const marked = delItems.has(it.id)
                 return (
-                  <tr key={it.id} className="border-t border-gray-100 align-top">
-                    <td className="px-2 py-1.5"><input value={editVal(it, "so")} onChange={e => setEdit(it.id, "so", e.target.value)}
-                      placeholder="SO" className="w-28 border border-gray-200 rounded px-1.5 py-1 font-mono" /></td>
+                  <tr key={it.id} className={`border-t border-gray-100 align-top ${marked ? "bg-red-50" : ""}`}>
+                    <td className="px-2 py-1.5"><input value={editVal(it, "so")} onChange={e => setEdit(it.id, "so", e.target.value)} disabled={marked}
+                      placeholder="SO" className={`w-28 border border-gray-200 rounded px-1.5 py-1 font-mono ${marked ? "line-through text-red-400" : ""}`} /></td>
                     <td className="px-2 py-1.5"><input value={editVal(it, "style")} onChange={e => setEdit(it.id, "style", e.target.value)}
                       className="w-24 border border-gray-200 rounded px-1.5 py-1" /></td>
                     <td className="px-2 py-1.5"><input type="date" value={editVal(it, "originalShipmentDate")} onChange={e => setEdit(it.id, "originalShipmentDate", e.target.value)}
@@ -1849,6 +1868,11 @@ export default function RequestDetailPage() {
                         </div>
                       </td>
                     )}
+                    <td className="px-2 py-1.5 text-center">
+                      <button onClick={() => toggleDel(it.id)} title={marked ? "ยกเลิกลบ" : "ลบ SO นี้"}
+                        className={`px-2 py-1 rounded text-xs font-bold ${marked ? "bg-gray-200 text-gray-600" : "text-red-600 hover:bg-red-50"}`}>
+                        {marked ? "↩ คืน" : "🗑"}</button>
+                    </td>
                   </tr>
                 )
               })}
