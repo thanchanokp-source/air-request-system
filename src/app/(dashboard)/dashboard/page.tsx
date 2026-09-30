@@ -1070,10 +1070,13 @@ export default function DashboardPage() {
       {/* ── mp_line reconcile (admin · NYG) — shows ONLY in map mode (replaces the KPI row) ──
            2 การ์ด: ส่งออกจริง (มี variance rail) + ยังไม่มีการส่งออก · note ยังไม่แบ่งเคลมด้านล่าง */}
       {mpActive && mpCounts && (() => {
-        const est = mpCounts.matchedEst ?? 0, act = mpCounts.matchedActual ?? 0
-        const fEst = mpCounts.filledEst ?? 0
-        const varPct = fEst > 0 ? Math.round((act - fEst) / fEst * 1000) / 10 : null
-        const dVal = act - fEst
+        // ส่งออกจริง card = คำนวณจาก shippedRows (ชุดเดียวกับตาราง) → ตัวเลขตรงกับ DATA TABLE เป๊ะ
+        const shipSo  = new Set(shippedRows.map((r:any)=>mpSoKey(r.so))).size
+        const shipQty = shippedRows.reduce((s:number,r:any)=>s+(Number(mpQtyBySub[subKey(r)])||0),0)
+        const est = shippedRows.reduce((s:number,r:any)=>s+(Number(r.airFreight)||0),0)
+        const act = shippedRows.reduce((s:number,r:any)=>s+(Number(r.actualAirFreight)||0),0)
+        const varPct = est > 0 ? Math.round((act - est) / est * 1000) / 10 : null
+        const dVal = act - est
         // ยังไม่มีการส่งออก = air-req ที่ SO ไม่มีใน mp_line
         const unSo = new Set(unshippedRows.map((r:any)=>mpSoKey(r.so))).size
         const unEst = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.airFreight)||0),0)
@@ -1091,10 +1094,10 @@ export default function DashboardPage() {
             <div className="rounded-lg border border-teal-200 bg-teal-50 overflow-hidden">
               <div className="px-3 py-2 flex items-center gap-2 text-teal-800 text-xs font-bold border-b border-teal-200 bg-teal-100/60">
                 <span className="w-2 h-2 rounded-full bg-teal-500"></span>✅ ส่งออกจริง
-                <span className="ml-auto font-medium text-teal-600/80 text-[11px] tabular-nums">{Number(mpCounts.mpKeys??0).toLocaleString()} SO</span>
+                <span className="ml-auto font-medium text-teal-600/80 text-[11px] tabular-nums">{shipSo.toLocaleString()} SO</span>
               </div>
               <div className="p-3 grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-center">
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY ส่งจริง (pcs)</p><p className="text-xl font-bold tabular-nums text-teal-700">{fmtNum(Number(mpCounts.shippedPcs||0))}</p></div>
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY ส่งจริง (pcs)</p><p className="text-xl font-bold tabular-nums text-teal-700">{fmtNum(shipQty)}</p></div>
                 <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Estimate air</p><p className="text-xl font-bold tabular-nums text-sky-700">{fmtNum(est)}</p></div>
                 <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Actual air</p><p className="text-xl font-bold tabular-nums text-green-700">{fmtNum(act)}</p></div>
                 <div className="border-l border-teal-200 pl-3 text-center">
