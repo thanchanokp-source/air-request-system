@@ -144,6 +144,28 @@ export async function POST(req: NextRequest) {
     }
     const numOf = (v: any) => { const n = parseFloat(String(v ?? "").replace(/,/g, "")); return isNaN(n) ? 0 : n }
 
+    // ── C: guard duplicate SO+SUB (NYG) ─────────────────────────────────────────
+    // The same SO+SUB in two active docs both map to ONE mp_line shipment → doubles the reported
+    // actual qty. Block the upload so MER removes the duplicate first. (NYG only — that's where the
+    // mp_line reconcile runs; historical imports and TEST docs are exempt.)
+    if (!isHistorical && !isTestDoc && bu === "NYG") {
+      const subN = (s: any) => String(s ?? "").trim().toUpperCase()
+      const pairOf = (so: any, sub: any) => `${normalizeSo(so)}|${subN(sub)}`
+      const incomingPairs = new Set(items.map((i: any) => pairOf(col(i, "SO"), col(i, "SUB"))))
+      const incomingSos = [...new Set(items.map((i: any) => normalizeSo(col(i, "SO"))).filter(Boolean))] as string[]
+      if (incomingSos.length) {
+        const existing = await (prisma.airRequestItem as any).findMany({
+          where: { so: { in: incomingSos }, itemStatus: { not: "REJECTED" }, request: { bu: "NYG", isTest: false } },
+          select: { so: true, sub: true, request: { select: { documentNo: true } } },
+        }).catch(() => [])
+        const dups = (existing as any[]).filter(e => incomingPairs.has(pairOf(e.so, e.sub)))
+        if (dups.length) {
+          const list = [...new Set(dups.map(d => `${d.so}/${subN(d.sub) || "-"} (${d.request?.documentNo || "-"})`))].slice(0, 8)
+          return NextResponse.json({ error: `SO+SUB ซ้ำกับเอกสารที่มีอยู่แล้ว ${dups.length} รายการ: ${list.join(", ")}${dups.length > 8 ? " …" : ""} — กรุณาลบรายการซ้ำก่อนส่ง (กันยอดเบิ้ลตอน map mp_line)` }, { status: 409 })
+        }
+      }
+    }
+
     // Freight rate is keyed by BRAND + COUNTRY (MER selects the country; the port
     // is not used). The same country can have different rates per brand.
     const rateKey = (country: string) => canonCountry(country)
