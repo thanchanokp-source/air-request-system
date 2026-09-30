@@ -48,6 +48,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, moved: r.count, newHawb })
   }
 
+  // Attach an INV's SO+SUB lines to this HAWB (for an INV that never got booked). Looks the INV up in
+  // mp_line (AIR PP) then sq_report.export_row (AIR PREPAID), matches NYG air-req items by SO+SUB
+  // (unbooked, or already on this HAWB), and sets invoiceNo + hawbNo + actual qty. Then redistribute.
+  if (action === "add_inv") {
+    const inv = String(body.inv || "").trim()
+    const hawb = String(body.hawb || "").trim()
+    if (!inv || !hawb) return NextResponse.json({ error: "inv + hawb required" }, { status: 400 })
+    const soN = (s: any) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "")
+    const subU = (s: any) => String(s ?? "").trim().toUpperCase()
+    let lines: any[] = [], src = "mp_line"
+    try { lines = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, final_pcs AS pcs FROM public.mp_line WHERE TRIM(invoice_no)=$1 AND UPPER(TRIM(status))='SHIPPED' AND UPPER(TRIM(ship_mode))='AIR PP'`, inv) } catch { /* */ }
+    if (!lines.length) { try { lines = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, qty_pcs AS pcs FROM sq_report.export_row WHERE TRIM(invoice_no)=$1 AND UPPER(TRIM(ship_mode))='AIR PREPAID'`, inv); src = "export" } catch { /* */ } }
+    if (!lines.length) return NextResponse.json({ error: `ไม่พบ INV "${inv}" ใน mp_line / export (AIR)` }, { status: 404 })
+    const qByKey = new Map<string, number>()
+    for (const l of lines) { const k = `${soN(l.so_no)}|${subU(l.sub_no)}`; qByKey.set(k, (qByKey.get(k) || 0) + (Number(l.pcs) || 0)) }
+    const sos8 = [...new Set(lines.map((l: any) => soN(l.so_no)).filter(Boolean))].map((s: string) => s.padStart(8, "0"))
+    const cand = await (prisma.airRequestItem as any).findMany({
+      where: { so: { in: sos8 }, request: { bu: "NYG", isTest: false }, itemStatus: { not: "REJECTED" } },
+      select: { id: true, so: true, sub: true, hawbNo: true },
+    })
+    const used = new Set<string>(); let added = 0
+    for (const it of cand) {
+      const k = `${soN(it.so)}|${subU(it.sub)}`
+      if (!qByKey.has(k) || used.has(k)) continue
+      if (it.hawbNo && String(it.hawbNo).trim() && it.hawbNo !== hawb) continue  // booked to another HAWB → leave it
+      await prisma.airRequestItem.update({ where: { id: it.id }, data: { invoiceNo: inv, hawbNo: hawb, qtyActualShip: qByKey.get(k) } as any })
+      used.add(k); added++
+    }
+    return NextResponse.json({ ok: true, added, inv, hawb, src, foundSubs: qByKey.size })
+  }
+
   if (action === "redistribute") {
     const hawb = String(body.hawb || "").trim()
     const total = Number(body.total)

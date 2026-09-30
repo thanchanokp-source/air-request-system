@@ -12,6 +12,7 @@ export default function FixHawbPage() {
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [newHawb, setNewHawb] = useState("")
   const [total, setTotal] = useState("")
+  const [addInv, setAddInv] = useState("")
   const [busy, setBusy] = useState(false)
 
   const load = async (h?: string) => {
@@ -39,6 +40,23 @@ export default function FixHawbPage() {
       const d = await r.json()
       if (!r.ok) { setMsg("ย้ายไม่สำเร็จ: " + (d.error || r.status)); return }
       setMsg(`✓ ย้าย ${d.moved} SO → ${d.newHawb} · อย่าลืม "ตั้ง total + กระจาย" ให้ทั้ง HAWB เดิมและ HAWB ใหม่`)
+      await load()
+    } finally { setBusy(false) }
+  }
+
+  const doAddInv = async () => {
+    const iv = addInv.trim()
+    if (!iv || !data?.hawb) { setMsg("ใส่เลข INV ก่อน"); return }
+    if (!confirm(`เพิ่ม INV "${iv}" เข้า HAWB ${data.hawb} ? (จะจับ SO+SUB จาก mp_line/export มาผูก)`)) return
+    setBusy(true); setMsg("")
+    try {
+      const r = await fetch("/api/admin/fix-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add_inv", inv: iv, hawb: data.hawb }) })
+      const d = await r.json()
+      if (!r.ok) { setMsg("เพิ่ม INV ไม่สำเร็จ: " + (d.error || r.status)); return }
+      setMsg(d.added > 0
+        ? `✓ เพิ่ม INV ${iv} → ผูก ${d.added} SO เข้า HAWB ${data.hawb} (จาก ${d.src}) · อย่าลืม "ตั้ง total + กระจาย" ใหม่`
+        : `⚠️ INV ${iv} เจอ ${d.foundSubs} sub ใน ${d.src} แต่ไม่มี air-req ที่ว่าง (อาจผูก HAWB อื่นอยู่แล้ว)`)
+      setAddInv("")
       await load()
     } finally { setBusy(false) }
   }
@@ -118,6 +136,15 @@ export default function FixHawbPage() {
                 <button onClick={() => doRedistribute(data.hawb)} disabled={busy} className="text-sm px-4 py-1.5 rounded-lg text-white font-semibold disabled:opacity-50" style={{ background: MAROON }}>กระจาย</button>
               </div>
               {newHawb.trim() && <button onClick={() => doRedistribute(newHawb.trim())} disabled={busy} className="text-xs text-blue-600 hover:underline">…หรือกระจายให้ HAWB ใหม่ ({newHawb.trim()}) ด้วย total นี้</button>}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+            <p className="font-semibold text-sm text-gray-800">③ เพิ่ม INV เข้า HAWB นี้ ({data.hawb})</p>
+            <p className="text-[11px] text-gray-400">ใส่เลข INV ที่ยังไม่ถูก generate → ระบบจับ SO+SUB จาก mp_line/export มาผูก HAWB นี้ (แล้วกดกระจาย ② ใหม่)</p>
+            <div className="flex gap-2">
+              <input value={addInv} onChange={e => setAddInv(e.target.value)} onKeyDown={e => e.key === "Enter" && doAddInv()} placeholder="INV เช่น G26227806735" className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono" />
+              <button onClick={doAddInv} disabled={busy || !addInv.trim()} className="text-sm px-4 py-1.5 rounded-lg bg-green-600 text-white font-semibold disabled:opacity-50">+ เพิ่ม INV</button>
             </div>
           </div>
 
