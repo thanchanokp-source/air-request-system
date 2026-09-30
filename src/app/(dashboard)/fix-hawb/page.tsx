@@ -58,17 +58,24 @@ export default function FixHawbPage() {
       if (!d.willAttach?.length) setMsg(`⚠️ INV ${iv} เจอ ${d.foundSubs} sub ใน ${d.src} แต่ไม่มี air-req ที่ว่างให้ผูก`)
     } finally { setBusy(false) }
   }
-  // บันทึกจริง (commit)
+  // บันทึกจริง (commit) — ผูก SO ของ INV เข้า HAWB แล้ว "กระจาย actual ใหม่" ให้ทุก SO (รวมที่เพิ่ง add)
   const doAddInv = async () => {
     const iv = addInv.trim()
     if (!iv || !data?.hawb) return
-    if (!confirm(`บันทึก: ผูก ${invPreview?.willAttach?.length || "?"} SO ของ INV "${iv}" เข้า HAWB ${data.hawb} ?`)) return
+    const curTotal = Number(data.totalActual) || 0
+    if (!confirm(`บันทึก: ผูก ${invPreview?.willAttach?.length || "?"} SO ของ INV "${iv}" เข้า HAWB ${data.hawb}\nแล้วกระจาย actual รวม ${curTotal.toLocaleString()} ให้ทุก SO ตาม qty ?`)) return
     setBusy(true); setMsg("")
     try {
       const r = await fetch("/api/admin/fix-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add_inv", inv: iv, hawb: data.hawb }) })
       const d = await r.json()
       if (!r.ok) { setMsg("บันทึกไม่สำเร็จ: " + (d.error || r.status)); return }
-      setMsg(d.added > 0 ? `✓ บันทึกแล้ว: ผูก ${d.added} SO ของ INV ${iv} เข้า HAWB ${data.hawb} (จาก ${d.src}) · อย่าลืมกระจาย ② ใหม่` : `⚠️ ไม่มี SO ให้ผูก`)
+      if (d.added > 0 && curTotal > 0) {
+        // re-divide the HAWB's existing total across ALL SO (old + newly added) by qty
+        await fetch("/api/admin/fix-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "redistribute", hawb: data.hawb, total: curTotal }) }).catch(() => {})
+      }
+      setMsg(d.added > 0
+        ? `✓ ผูก ${d.added} SO ของ INV ${iv} (จาก ${d.src}) + กระจาย actual ${curTotal.toLocaleString()} ใหม่แล้ว · ถ้า total ไม่ถูก ใส่ total ใหม่ที่ ② แล้วกระจายอีกที`
+        : `⚠️ ไม่มี SO ให้ผูก`)
       setAddInv(""); setInvPreview(null)
       await load()
     } finally { setBusy(false) }
