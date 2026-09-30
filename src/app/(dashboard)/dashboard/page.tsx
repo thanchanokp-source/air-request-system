@@ -1093,56 +1093,69 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── mp_line reconcile (admin · NYG) — shows ONLY in map mode (replaces the KPI row) ── */}
-      {mpActive && mpCounts && (
+      {/* ── mp_line reconcile (admin · NYG) — shows ONLY in map mode (replaces the KPI row) ──
+           2 การ์ด: ส่งออกจริง (มี variance rail) + ยังไม่มีการส่งออก · note ยังไม่แบ่งเคลมด้านล่าง */}
+      {mpActive && mpCounts && (() => {
+        const est = mpCounts.matchedEst ?? 0, act = mpCounts.matchedActual ?? 0
+        const fEst = mpCounts.filledEst ?? 0
+        const varPct = fEst > 0 ? Math.round((act - fEst) / fEst * 1000) / 10 : null
+        const dVal = act - fEst
+        // ยังไม่มีการส่งออก = air-req ที่ SO ไม่มีใน mp_line
+        const unCount = unshippedRows.length
+        const unSo = new Set(unshippedRows.map((r:any)=>mpSoKey(r.so))).size
+        const unEst = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.airFreight)||0),0)
+        const unAct = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.actualAirFreight)||0),0)
+        // ยังไม่แบ่งแผนกเคลม (จาก claimByDept)
+        const unClaim = (claimByDept as any[]).find(d=>d.unassigned)
+        const unClaimAmt = unClaim ? (unClaim.amt.THB + unClaim.amt.USD) : 0
+        const unClaimEst = unClaim ? (unClaim.est.THB + unClaim.est.USD) : 0
+        return (
         <div className="rounded-xl border-2 border-teal-200 bg-white p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm font-semibold text-gray-800">📦 ยอดส่งออกจริง (mp_line) · NYG</span>
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="text-sm font-semibold text-gray-800">📦 สรุปยอด (mp_line) · NYG</span>
             <span className="text-[11px] text-gray-400">SHIPPED · AIR PP · เฉพาะ admin</span>
             <a href="/qty-air-check" className="ml-auto text-[11px] text-blue-600 hover:underline">ดูรายละเอียด →</a>
           </div>
-          {/* 4 หลัก: (1) pcs ส่งออกจริง (2) EST air (3) Actual air + รอเติม (4) %var */}
-          {(() => {
-            const est = mpCounts.matchedEst ?? 0, act = mpCounts.matchedActual ?? 0
-            const fEst = mpCounts.filledEst ?? 0 // EST of only the SOs that have actual filled → fair vs actual
-            // Variance compares like-for-like: EST vs Actual of the SAME (filled) SOs.
-            const varPct = fEst > 0 ? Math.round((act - fEst) / fEst * 1000) / 10 : null
-            return (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* 1) exported pcs */}
-              <div className="rounded-lg border p-3 bg-teal-50 border-teal-200">
-                <p className="text-[11px] text-gray-500">📦 ส่งออกจริง (pcs)</p>
-                <p className="text-2xl font-bold tabular-nums text-teal-700">{Number(mpCounts.shippedPcs || 0).toLocaleString()}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">{Number(actualF ? (mpCounts.countedSo ?? 0) : (mpCounts.mpKeys ?? 0)).toLocaleString()} SO ใน mp_line{actualF ? ` (${actualF === "HAS" ? "มี Actual" : "ยังไม่มี Actual"})` : ""}</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {/* การ์ด 1: ส่งออกจริง + variance rail (ขวาในการ์ด) */}
+            <div className="rounded-lg border border-teal-200 bg-teal-50 overflow-hidden">
+              <div className="px-3 py-2 flex items-center gap-2 text-teal-800 text-xs font-bold border-b border-teal-200 bg-teal-100/60">
+                <span className="w-2 h-2 rounded-full bg-teal-500"></span>✅ ส่งออกจริง
+                <span className="ml-auto font-medium text-teal-600/80 text-[11px] tabular-nums">{Number(mpCounts.shippedPcs||0).toLocaleString()} pcs · {Number(mpCounts.mpKeys??0).toLocaleString()} SO</span>
               </div>
-              {/* 2) EST air — total + EST of the filled SOs (fair vs actual) */}
-              <div className="rounded-lg border p-3 bg-sky-50 border-sky-200">
-                <p className="text-[11px] text-gray-500">💠 Estimate air (THB)</p>
-                <p className="text-2xl font-bold tabular-nums text-sky-700">{est.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">EST ของ SO ที่กรอก actual: <b className="text-sky-700">{fEst.toLocaleString()}</b></p>
-              </div>
-              {/* 3) Actual air filled + waiting */}
-              <div className="rounded-lg border p-3 bg-green-50 border-green-200">
-                <p className="text-[11px] text-gray-500">✅ Actual air (THB)</p>
-                <p className="text-2xl font-bold tabular-nums text-green-700">{act.toLocaleString()}</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">เติมแล้ว <b className="text-green-700">{Number(mpCounts.actualFilledSo || 0).toLocaleString()}</b> SO · <span className="text-amber-700">รออีก <b>{Number(mpCounts.actualWaitingSo || 0).toLocaleString()}</b> SO</span></p>
-              </div>
-              {/* 4) % variance actual vs EST — SAME (filled) SOs only */}
-              <div className="rounded-lg border p-3 bg-gray-50 border-gray-200">
-                <p className="text-[11px] text-gray-500">📊 Actual vs EST <span className="text-gray-400">(SO ที่กรอกแล้ว)</span></p>
-                <p className={`text-2xl font-bold tabular-nums ${varPct == null ? "text-gray-400" : varPct > 0 ? "text-red-600" : "text-green-600"}`}>{varPct == null ? "—" : (varPct > 0 ? "↑" : "↓") + Math.abs(varPct) + "%"}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">Δ {(act - fEst > 0 ? "+" : "") + (act - fEst).toLocaleString()} THB (actual − est ที่กรอก)</p>
+              <div className="p-3 grid grid-cols-[1fr_1fr_auto] gap-3 items-center">
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Estimate air</p><p className="text-xl font-bold tabular-nums text-sky-700">{fmtNum(est)}</p></div>
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Actual air</p><p className="text-xl font-bold tabular-nums text-green-700">{fmtNum(act)}</p></div>
+                <div className="border-l border-teal-200 pl-3 text-center">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">vs EST</p>
+                  <p className={`text-xl font-bold tabular-nums ${varPct==null?"text-gray-400":varPct>0?"text-red-600":"text-green-600"}`}>{varPct==null?"—":(varPct>0?"↑":"↓")+Math.abs(varPct)+"%"}</p>
+                  <p className={`text-[10px] tabular-nums ${dVal>0?"text-red-500":"text-green-600"}`}>{(dVal>0?"+":"")+fmtNum(dVal)}</p>
+                </div>
               </div>
             </div>
-            )
-          })()}
-          {/* กล่องเทา: อยู่ใน air req แต่ยังไม่อยู่ใน mp_line */}
-          <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 inline-flex items-center gap-2">
-            <span className="text-[11px] text-gray-500">⏳ อยู่ใน air req แต่ยังไม่มีใน mp_line (ยังไม่ส่งออก):</span>
-            <span className="text-sm font-bold text-gray-700 tabular-nums">{Number(mpCounts.noship || 0).toLocaleString()} transaction</span>
+            {/* การ์ด 2: ยังไม่มีการส่งออก */}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
+              <div className="px-3 py-2 flex items-center gap-2 text-amber-800 text-xs font-bold border-b border-amber-200 bg-amber-100/60">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>⏳ ยังไม่มีการส่งออก
+                <span className="ml-auto font-medium text-amber-600/80 text-[11px] tabular-nums">{unSo.toLocaleString()} SO</span>
+              </div>
+              <div className="p-3 grid grid-cols-3 gap-3 items-center">
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">จำนวน (transaction)</p><p className="text-xl font-bold tabular-nums text-amber-700">{unCount.toLocaleString()}</p></div>
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Estimate air</p><p className="text-xl font-bold tabular-nums text-sky-700">{fmtNum(unEst)}</p></div>
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Actual air</p><p className="text-xl font-bold tabular-nums text-gray-400">{fmtNum(unAct)}</p></div>
+              </div>
+            </div>
           </div>
+          {/* note: ยังไม่แบ่งแผนกเคลม */}
+          {unClaimAmt > 0 && (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-gray-700">
+              <span className="text-[15px]">⚠️</span>
+              <span>ยังไม่แบ่งแผนกเคลม <b className="text-red-600 tabular-nums">{fmtNum(unClaimAmt)} THB</b> <span className="text-gray-400 tabular-nums">(est {fmtNum(unClaimEst)} THB)</span> — รอ SCM ระบุแผนก</span>
+            </div>
+          )}
         </div>
-      )}
+        )
+      })()}
 
       {/* ── KPI ── (hidden in map mode — the mp_line card above replaces it) ── */}
       {!mpActive && (
