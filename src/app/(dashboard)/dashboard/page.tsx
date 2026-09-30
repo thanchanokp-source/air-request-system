@@ -77,6 +77,12 @@ const soBrand = (r: any) => r?.brand || r?.request?.brandName || r?.brandName ||
 // Normalised brand key for matching — uppercase + collapse spaces so MER's inconsistent
 // entries ("rhone", "RHONE ", "RHONE  X") group together. Filtering uses CONTAINS on this.
 const brandKey = (r: any) => soBrand(r).trim().toUpperCase().replace(/\s+/g, " ")
+// Group-key that also merges company-suffix variants of the SAME brand
+// ("FANATICS" + "FANATICS, INC." → one), used where two spellings must sum together.
+const brandGroupKey = (r: any) => soBrand(r).toUpperCase()
+  .replace(/[.,]/g, " ")
+  .replace(/\b(INC|LTD|LIMITED|CO|COMPANY|CORP|CORPORATION|LLC|PLC)\b/g, " ")
+  .replace(/\s+/g, " ").trim()
 // Normalised country key — same idea, so "United States" and "UNITED STATES" group as one.
 const countryKey = (c: any) => String(c || "").trim().toUpperCase().replace(/\s+/g, " ")
 const CLAIM_DEPTS = ["COMMERCIAL","PROCUREMENT","NYK","NYG","PRODUCTION"]
@@ -502,14 +508,16 @@ function Paged({ data, size=5, fromEnd=false, children }: { data:any[]; size?:nu
 
 function LogisticsCostBar({ rows }: { rows:any[] }) {
   const data = useMemo(()=>{
-    const m:Record<string,{cost:number;qty:number;soCount:number;curs:Set<string>}>={}
+    const m:Record<string,{cost:number;qty:number;soCount:number;curs:Set<string>;disp:string}>={}
     rows.forEach(r=>{
       // Cost/Pcs must divide realized cost by the qty that actually shipped — so
       // both numerator and denominator count ONLY shipped rows (actualAirFreight set).
       // Projection rows (no actual yet) inflated the qty and understated Cost/Pcs.
       if(r.actualAirFreight==null) return
-      const k=soBrand(r)
-      if(!m[k])m[k]={cost:0,qty:0,soCount:0,curs:new Set<string>()}
+      // Merge company-suffix variants ("FANATICS" + "FANATICS, INC.") into one brand.
+      const k=brandGroupKey(r); const raw=soBrand(r)
+      if(!m[k])m[k]={cost:0,qty:0,soCount:0,curs:new Set<string>(),disp:raw}
+      if(raw.length < m[k].disp.length) m[k].disp = raw   // show the cleanest (shortest) name
       m[k].cost+=r.actualAirFreight||0
       m[k].qty+=Number(r.qtyActualShip??r.qtyRequestAir)||0
       m[k].soCount++
@@ -517,7 +525,7 @@ function LogisticsCostBar({ rows }: { rows:any[] }) {
     })
     return Object.entries(m)
       .filter(([,v])=>v.qty>0)
-      .map(([name,v])=>({name,costPerUnit:Math.round(v.cost/v.qty*100)/100,totalCost:Math.round(v.cost),totalQty:v.qty,soCount:v.soCount,cur:v.curs.size>1?"mixed":([...v.curs][0]||"THB")}))
+      .map(([,v])=>({name:v.disp,costPerUnit:Math.round(v.cost/v.qty*100)/100,totalCost:Math.round(v.cost),totalQty:v.qty,soCount:v.soCount,cur:v.curs.size>1?"mixed":([...v.curs][0]||"THB")}))
       .sort((a,b)=>b.totalCost-a.totalCost)
   },[rows])
 
@@ -634,8 +642,8 @@ export default function DashboardPage() {
   // Admin-only: mp_line reconcile summary (air req plan ↔ mp_line actual, NYG · SHIPPED · AIR PP).
   const isAdmin = (session?.user as any)?.role === "ADMIN"
   const [mpCounts, setMpCounts] = useState<any>(null)
-  const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line)
-  const [mpQtyBySo, setMpQtyBySo] = useState<Record<string, number>>({}) // SO → actual shipped qty (mp_line final_pcs)
+  const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line) — SO-level (page-wide map)
+  const [mpLines, setMpLines] = useState<any[]>([]) // flattened mp_line shipped lines (one per SO+SUB+INV) for the "ส่งออกจริง" view
   // default ON — dashboard opens in mp_line map mode (NYG/All BU); toggle 🔗 turns it off.
   // Persist the choice so it stays ON across reloads (stored per browser).
   const [mpMode, setMpMode] = useState(true)
@@ -669,10 +677,13 @@ export default function DashboardPage() {
     fetch(`/api/air-export-map${qs}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => {
       setMpCounts(d?.counts || null)
       setMpSoSet(new Set(((d?.tabA || []) as any[]).map(r => mpSoKey(r.so)).filter(Boolean)))
-      // SO → actual shipped qty from mp_line (final_pcs), for the data table's QTY AIR column.
-      const qm: Record<string, number> = {}
-      for (const r of ((d?.tabA || []) as any[])) { const k = mpSoKey(r.so); if (k) qm[k] = Number(r.qtyAirMap) || 0 }
-      setMpQtyBySo(qm)
+      // Flatten mp_line shipped lines (one per SO+SUB+INV) for the "ส่งออกจริง" data-table view.
+      const lines: any[] = []
+      for (const r of ((d?.tabA || []) as any[])) {
+        const k = mpSoKey(r.so); if (!k) continue
+        for (const ln of ((r.lines || []) as any[])) lines.push({ ...ln, so: r.so, soKey: k })
+      }
+      setMpLines(lines)
     }).catch(() => {})
   }, [brandFKey, actualF])
   const [docF,  setDocF]  = useState<string[]>([])
@@ -704,10 +715,10 @@ export default function DashboardPage() {
   const buRequests = useMemo(()=>requests.filter(r=> requestInBu(r, activeBu) && !r.isTest), [requests, activeBu])
   const allSOs = useMemo(()=>buRequests.flatMap(r=>(r.items||[]).map((item:any)=>({...item,request:r}))), [buRequests])
 
-  // Base = every filter EXCEPT the mp_line scope (that scope is applied differently for the whole
-  // page vs. the data table, so it's layered on afterwards).
-  const baseFiltered = useMemo(()=>allSOs.filter(row=>{
-    // Period filter is by ACTUAL ship = Plan Shipment Date (not the original date).
+  // Shared filter predicate (every filter EXCEPT the mp_line scope). Works on both air-req rows and
+  // the synthetic mp_line rows below (they carry the same field names). actualF is skipped for mp_line
+  // rows (they have no per-line air freight).
+  const passFilters = (row:any)=>{
     const d = row.planShipmentDate ? new Date(row.planShipmentDate) : null
     const yr = d&&!isNaN(d.getTime()) ? String(d.getFullYear()) : ""
     const mo = d&&!isNaN(d.getTime()) ? String(d.getMonth()+1).padStart(2,"0") : ""
@@ -719,21 +730,60 @@ export default function DashboardPage() {
              statusFilter==="REJECTED"  ? row.itemStatus === "REJECTED" : true
            )) &&
            (!brandF.length|| brandF.includes(brandKey(row))) &&
-           (!docF.length  || docF.includes(row.request.documentNo)) &&
+           (!docF.length  || docF.includes(row.request?.documentNo)) &&
            (!soF.length   || soF.includes(row.so)) &&
            (!cpF.length   || cpF.includes(row.customerPO)) &&
            (!portFilter   || row.port===portFilter) &&
            (!countryFilter|| countryKey(row.country)===countryFilter) &&
            (!claimF.length|| claimF.includes(row.claimDepartment)) &&
            (!hawbF.length || hawbF.includes(row.hawbNo)) &&
-           (!actualF || (actualF === "HAS" ? row.actualAirFreight != null : row.actualAirFreight == null))
-  }), [allSOs,yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF])
+           (!actualF || row.__mp || (actualF === "HAS" ? row.actualAirFreight != null : row.actualAirFreight == null))
+  }
+  const filterDeps = [yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF]
+  // Base = air-req rows after all filters (mp_line scope layered on afterwards).
+  const baseFiltered = useMemo(()=>allSOs.filter(passFilters), [allSOs, ...filterDeps])
   // Whole page (KPI · charts): follows the page-wide 🔗 map toggle.
   const filtered = useMemo(()=> mpActive ? baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so))) : baseFiltered, [baseFiltered, mpActive, mpSoSet])
-  // Data table ONLY: its own view — "SHIPPED" = ส่งออกจริง (mp_line) · "ALL" = แพลนทั้งหมด.
-  const [tableView, setTableView] = useState<"SHIPPED"|"ALL">("SHIPPED")
+  // Data table view — "SHIPPED" = ส่งออกจริง (mp_line lines) · "UNSHIPPED" = ยังไม่มีการส่ง (air-req not in mp_line).
+  const [tableView, setTableView] = useState<"SHIPPED"|"UNSHIPPED">("SHIPPED")
   const tableShipped = tableView==="SHIPPED"
-  const qtyAirDisp = (r:any) => tableShipped && mpQtyBySo[mpSoKey(r.so)] != null ? mpQtyBySo[mpSoKey(r.so)] : r.qtyRequestAir
+  // air-req info per SO — to enrich each mp_line line with doc no / customer PO / claim / country etc.
+  const airInfoBySo = useMemo(()=>{
+    const m: Record<string, any> = {}
+    for (const r of allSOs) {
+      const k = mpSoKey(r.so); if(!k) continue
+      const e = m[k] || { docNos:new Set<string>(), customerPO:"", description:"", brand:"", country:"", claimDepartment:"", hawbNo:"", buName:r.request?.buName||"NYG", itemStatus:r.itemStatus }
+      if(r.request?.documentNo) e.docNos.add(r.request.documentNo)
+      if(!e.customerPO && r.customerPO) e.customerPO=r.customerPO
+      if(!e.description && r.description) e.description=r.description
+      if(!e.brand) e.brand=soBrand(r)
+      if(!e.country && r.country) e.country=r.country
+      if(!e.claimDepartment && r.claimDepartment) e.claimDepartment=r.claimDepartment
+      if(!e.hawbNo && r.hawbNo) e.hawbNo=r.hawbNo
+      m[k]=e
+    }
+    return m
+  }, [allSOs])
+  // ส่งออกจริง rows = the actual mp_line shipped lines (real SO+SUB+pcs+dates), enriched by SO.
+  const shippedRows = useMemo(()=> mpLines.map(l=>{
+    const info = airInfoBySo[l.soKey] || {}
+    return {
+      __mp:true, __mpPcs: Number(l.pcs)||0,
+      so: l.so, sub: String(l.sub||""), style: l.style||"", invoiceNo: l.inv||"",
+      brand: l.brand || info.brand || "",
+      description: info.description || "",
+      customerPO: info.customerPO || "",
+      country: info.country || "", factory: "",
+      hawbNo: info.hawbNo || "", claimDepartment: info.claimDepartment || "", claimDepts: null,
+      planShipmentDate: l.planDate || null, originalShipmentDate: l.origDate || null,
+      qtyOriginalShipment: null, qtyRequestAir: Number(l.pcs)||0,
+      airFreight: null, actualAirFreight: null, itemStatus: info.itemStatus || "SHIPPED",
+      request: { documentNo: info.docNos ? [...info.docNos].join(", ") : "", buName: info.buName||"NYG", pendingWith: [] },
+    }
+  }).filter(passFilters), [mpLines, airInfoBySo, ...filterDeps])
+  // ยังไม่มีการส่ง = air-req rows whose SO is NOT in mp_line (not shipped yet).
+  const unshippedRows = useMemo(()=> baseFiltered.filter(row=> !mpSoSet.has(mpSoKey(row.so))), [baseFiltered, mpSoSet])
+  const qtyAirDisp = (r:any) => tableShipped ? (Number(r.__mpPcs) || 0) : r.qtyRequestAir
   // Column definitions — shared by the header, the per-column filter row, and the data cells so they
   // always line up. `get` returns the value used both for the filter's substring match and export.
   const COLS = useMemo<{label:string; get:(r:any)=>any}[]>(()=>[
@@ -762,10 +812,9 @@ export default function DashboardPage() {
     {label:"CLAIM %",        get:r=>{const sp=getSplits(r); return sp.length?sp.map((s:any)=>s.pct!=null?`${s.pct}%`:"").join(" "):""}},
     {label:"REASON",         get:r=>[...new Set(getSplits(r).map((s:any)=>s.reason).filter(Boolean))].join(" ")},
     {label:"อยู่ที่ใคร",       get:r=>Array.isArray(r.request?.pendingWith)?r.request.pendingWith.join(" "):""},
-  ], [poMap, mpQtyBySo, tableShipped, CUR])
-  // Rows after the view toggle (SHIPPED/ALL) but BEFORE the per-column filters — the dropdowns list
-  // their options from these, so choosing a value in one column doesn't empty the others.
-  const tableViewRows = useMemo(()=> tableView==="ALL" ? baseFiltered : baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so))), [baseFiltered, tableView, mpSoSet])
+  ], [poMap, tableShipped, CUR])
+  // Rows for the table before per-column filters. ส่งออกจริง = mp_line lines; ยังไม่มีการส่ง = unshipped air-req.
+  const tableViewRows = useMemo(()=> tableShipped ? shippedRows : unshippedRows, [tableShipped, shippedRows, unshippedRows])
   // Excel-style per-column filters: colF[idx] = the SET of allowed values for that column (checked in
   // its dropdown). Empty/absent = no filter on that column.
   const [colF, setColF] = useState<Record<number,string[]>>({})
@@ -794,18 +843,11 @@ export default function DashboardPage() {
   const tblQOrig = tableRows.reduce((s,r)=>s+(Number(r.qtyOriginalShipment)||0),0)
   const tblEst   = tableRows.reduce((s,r)=>s+(r.airFreight||0),0)
   const tblAct   = tableRows.reduce((s,r)=>s+(r.actualAirFreight||0),0)
-  // QTY AIR total: in "ส่งออกจริง" view the column shows mp_line's per-SO qty, so sum each SO ONCE
-  // (dedup) to avoid double-counting multi-sub rows; in "แพลนทั้งหมด" view sum the planned qty.
-  const tblQAir = (() => {
-    if (!tableShipped) return tableRows.reduce((s,r)=>s+(Number(r.qtyRequestAir)||0),0)
-    let t = 0; const seen = new Set<string>()
-    for (const r of tableRows) {
-      const k = mpSoKey(r.so)
-      if (mpQtyBySo[k] != null) { if (!seen.has(k)) { seen.add(k); t += Number(mpQtyBySo[k]) || 0 } }
-      else t += Number(r.qtyRequestAir) || 0
-    }
-    return t
-  })()
+  // QTY AIR total: "ส่งออกจริง" sums mp_line qty per SO+SUB (each row = one sub, no dedup needed);
+  // "แพลนทั้งหมด" sums the planned qty.
+  const tblQAir = tableShipped
+    ? tableRows.reduce((s,r)=> s + (Number(r.__mpPcs) || 0), 0)
+    : tableRows.reduce((s,r)=> s + (Number(r.qtyRequestAir) || 0), 0)
   // Currency is per-SO (EA / GW-RHONE → USD, else THB); a doc can mix. Totals are split so THB and
   // USD are never summed. Charts label their axis with the single currency present, or "mixed".
   const rowCur = (r:any) => soCurrency(r.request?.bu ?? r.bu, r.brand ?? r.request?.brandName)
@@ -982,7 +1024,7 @@ export default function DashboardPage() {
         "ORIG. DATE":     fmtDate(row.originalShipmentDate),
         "PLAN DATE":      fmtDate(row.planShipmentDate),
         "QTY ORIG":       row.qtyOriginalShipment,
-        "QTY AIR":        tableShipped && mpQtyBySo[mpSoKey(row.so)] != null ? mpQtyBySo[mpSoKey(row.so)] : row.qtyRequestAir,
+        "QTY AIR":        tableShipped ? (Number(row.__mpPcs) || 0) : row.qtyRequestAir,
         "AIR RATE%":      Number(ar.toFixed(1)),
         [`EST. (${CUR})`]:     row.airFreight ?? 0,
         [`ACTUAL (${CUR})`]:   row.actualAirFreight ?? 0,
@@ -1264,11 +1306,11 @@ export default function DashboardPage() {
               <button onClick={()=>setTableView("SHIPPED")}
                 className="px-2.5 py-1 transition-colors"
                 style={tableView==="SHIPPED"?{background:"#fff",color:"#a03535"}:{background:"transparent",color:"#fff"}}>ส่งออกจริง</button>
-              <button onClick={()=>setTableView("ALL")}
+              <button onClick={()=>setTableView("UNSHIPPED")}
                 className="px-2.5 py-1 transition-colors"
-                style={tableView==="ALL"?{background:"#fff",color:"#a03535"}:{background:"transparent",color:"#fff"}}>แพลนทั้งหมด</button>
+                style={tableView==="UNSHIPPED"?{background:"#fff",color:"#a03535"}:{background:"transparent",color:"#fff"}}>ยังไม่มีการส่ง</button>
             </div>
-            <span className="text-xs font-medium" style={{color:"#fde8e8"}}>{tableRows.length} SO(s)</span>
+            <span className="text-xs font-medium" style={{color:"#fde8e8"}}>{tableRows.length.toLocaleString()} {tableShipped?"lines":"SO(s)"}</span>
             <button onClick={exportExcel}
               className="flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-md transition-colors"
               style={{background:"#ffffff22",color:"#fff",border:"1px solid #ffffff44"}}
@@ -1318,7 +1360,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
                     <td className="px-3 py-1.5">{row.qtyOriginalShipment}</td>
-                    <td className="px-3 py-1.5 font-semibold" title={tableShipped && mpQtyBySo[mpSoKey(row.so)] != null ? "ยอด ship จริงจาก mp_line (รวมทั้ง SO)" : "QTY AIR (แผน)"}>{tableShipped && mpQtyBySo[mpSoKey(row.so)] != null ? Number(mpQtyBySo[mpSoKey(row.so)]).toLocaleString() : row.qtyRequestAir}</td>
+                    <td className="px-3 py-1.5 font-semibold" title={tableShipped ? "ยอด ship จริงจาก mp_line (ราย line)" : "QTY AIR (แผน)"}>{tableShipped ? Number(row.__mpPcs ?? 0).toLocaleString() : (row.qtyRequestAir ?? "-")}</td>
                     <td className="px-3 py-1.5 text-blue-700">{fmtNum(row.airFreight)}</td>
                     <td className="px-3 py-1.5 text-green-700 font-medium">{fmtNum(row.actualAirFreight)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}</td>
@@ -1340,7 +1382,7 @@ export default function DashboardPage() {
             {tableRows.length>0&&(
               <tfoot className="sticky bottom-0">
                 <tr className="bg-gray-100 font-bold text-gray-800 border-t-2 border-gray-300">
-                  <td className="px-3 py-2 text-right whitespace-nowrap" colSpan={12}>TOTAL ({tblSO.toLocaleString()} SO · {tableShipped?"ส่งออกจริง":"แพลนทั้งหมด"})</td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap" colSpan={12}>TOTAL ({tblSO.toLocaleString()} line{tableShipped?"":" (SO)"} · {tableShipped?"ส่งออกจริง":"ยังไม่มีการส่ง"})</td>
                   <td className="px-3 py-2">{tblQOrig.toLocaleString()}</td>
                   <td className="px-3 py-2">{tblQAir.toLocaleString()}</td>
                   <td className="px-3 py-2 text-blue-700">{fmtNum(tblEst)}</td>

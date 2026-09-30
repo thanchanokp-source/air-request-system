@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   let mp: any[] = []
   try {
     mp = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT so_no, sub_no, invoice_no, brand, style, final_pcs, etd, eta, forwarder, po_no
+      `SELECT so_no, sub_no, invoice_no, brand, style, final_pcs, etd, eta, forwarder, po_no, hod_date, original_hod_date
        FROM public.mp_line
        WHERE UPPER(TRIM(status)) = 'SHIPPED' AND UPPER(TRIM(ship_mode)) = 'AIR PP'`)
   } catch (e: any) {
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     const k = soN(r.so_no); if (!k) continue
     if (!brandOk(r.brand)) continue // brand filter (export side)
     const g = mpBySo.get(k) || { so: String(r.so_no ?? ""), lines: [], pcs: 0, brands: new Set<string>() }
-    g.lines.push({ sub: r.sub_no ?? "", inv: r.invoice_no ?? "", pcs: Number(r.final_pcs) || 0, style: r.style ?? "", etd: r.etd, forwarder: r.forwarder ?? "" })
+    g.lines.push({ sub: r.sub_no ?? "", inv: r.invoice_no ?? "", pcs: Number(r.final_pcs) || 0, style: r.style ?? "", brand: r.brand ?? "", etd: r.etd, forwarder: r.forwarder ?? "", planDate: r.hod_date ?? null, origDate: r.original_hod_date ?? null, po: r.po_no ?? "" })
     g.pcs += Number(r.final_pcs) || 0
     if (r.brand) g.brands.add(String(r.brand))
     mpBySo.set(k, g)
