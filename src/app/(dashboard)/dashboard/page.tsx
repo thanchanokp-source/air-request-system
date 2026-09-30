@@ -316,20 +316,23 @@ function ReasonPanel({ rows, height=200, cur="THB" }: { rows:any[]; height?:numb
   },[rows,mode])
   const drillReasonData = useMemo(()=>{
     if(!drillDept) return []
-    const m:Record<string,{cost:number;qty:number}>={}
-    rows.forEach(r=>rowReasonEntries(r).forEach(e=>{ if((e.dept||"-")!==drillDept) return; const k=(e.reason||"No Reason").trim(); if(!m[k])m[k]={cost:0,qty:0}; m[k].cost+=e.cost; m[k].qty+=e.qty }))
-    return Object.entries(m).map(([name,v])=>({name,cost:Math.round(v.cost),qty:Math.round(v.qty)})).sort((a,b)=>mode==='cost'?b.cost-a.cost:b.qty-a.qty)
+    const m:Record<string,{cost:number;qty:number;label:string}>={}
+    rows.forEach(r=>rowReasonEntries(r).forEach(e=>{ if((e.dept||"-")!==drillDept) return; const rk=(e.reason||"No Reason").trim(); const lk=_normReason(rk)||rk.toLowerCase(); if(!m[lk])m[lk]={cost:0,qty:0,label:rk}; m[lk].cost+=e.cost; m[lk].qty+=e.qty }))
+    return Object.values(m).map(v=>({name:v.label,cost:Math.round(v.cost),qty:Math.round(v.qty)})).sort((a,b)=>mode==='cost'?b.cost-a.cost:b.qty-a.qty)
   },[rows,mode,drillDept])
   // "Reason" mode: claim department first, then the reasons that make up each dept.
   const deptGroups = useMemo(()=>{
-    const m:Record<string,{qty:number;reasons:Record<string,number>}>={}
+    const m:Record<string,{qty:number;reasons:Record<string,{qty:number;label:string}>}>={}
     rows.forEach(r=>rowReasonEntries(r).forEach(e=>{
       const d=e.dept||"-"; if(!m[d])m[d]={qty:0,reasons:{}}; m[d].qty+=e.qty
-      const rk=(e.reason||"No Reason").trim(); m[d].reasons[rk]=(m[d].reasons[rk]||0)+e.qty
+      // group reasons case-insensitively so "Garment Quality" and "Garment quality" merge (keep first label)
+      const rk=(e.reason||"No Reason").trim(); const lk=_normReason(rk)||rk.toLowerCase()
+      if(!m[d].reasons[lk]) m[d].reasons[lk]={qty:0,label:rk}
+      m[d].reasons[lk].qty+=e.qty
     }))
     return Object.entries(m).map(([dept,v])=>({
       dept, qty:Math.round(v.qty),
-      reasons:Object.entries(v.reasons).map(([reason,q])=>({reason,qty:Math.round(q)})).sort((a,b)=>b.qty-a.qty),
+      reasons:Object.values(v.reasons).map(x=>({reason:x.label,qty:Math.round(x.qty)})).sort((a,b)=>b.qty-a.qty),
     })).sort((a,b)=>b.qty-a.qty)
   },[rows])
   const data = useMemo(()=>{
