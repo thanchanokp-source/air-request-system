@@ -747,40 +747,55 @@ export default function DashboardPage() {
   // Data table view — "SHIPPED" = ส่งออกจริง (mp_line lines) · "UNSHIPPED" = ยังไม่มีการส่ง (air-req not in mp_line).
   const [tableView, setTableView] = useState<"SHIPPED"|"UNSHIPPED">("SHIPPED")
   const tableShipped = tableView==="SHIPPED"
-  // air-req info per SO — to enrich each mp_line line with doc no / customer PO / claim / country etc.
+  // air-req info per SO — to enrich each mp_line line with doc no / customer PO / status / EST / ACT etc.
   const airInfoBySo = useMemo(()=>{
     const m: Record<string, any> = {}
     for (const r of allSOs) {
       const k = mpSoKey(r.so); if(!k) continue
-      const e = m[k] || { docNos:new Set<string>(), customerPO:"", description:"", brand:"", country:"", claimDepartment:"", hawbNo:"", buName:r.request?.buName||"NYG", itemStatus:r.itemStatus }
+      const e = m[k] || { docNos:new Set<string>(), customerPO:"", description:"", brand:"", country:"", claimDepartment:"", claimDepts:null, hawbNo:"", buName:r.request?.buName||"NYG", itemStatus:r.itemStatus, pendingWith:r.request?.pendingWith||[], est:0, act:0, qtyOrig:0 }
       if(r.request?.documentNo) e.docNos.add(r.request.documentNo)
       if(!e.customerPO && r.customerPO) e.customerPO=r.customerPO
       if(!e.description && r.description) e.description=r.description
       if(!e.brand) e.brand=soBrand(r)
       if(!e.country && r.country) e.country=r.country
       if(!e.claimDepartment && r.claimDepartment) e.claimDepartment=r.claimDepartment
+      if(!e.claimDepts && getSplits(r).length) e.claimDepts=r.claimDepts
       if(!e.hawbNo && r.hawbNo) e.hawbNo=r.hawbNo
+      e.est += Number(r.airFreight)||0
+      e.act += Number(r.actualAirFreight)||0
+      e.qtyOrig += Number(r.qtyOriginalShipment)||0
       m[k]=e
     }
     return m
   }, [allSOs])
-  // ส่งออกจริง rows = the actual mp_line shipped lines (real SO+SUB+pcs+dates), enriched by SO.
-  const shippedRows = useMemo(()=> mpLines.map(l=>{
-    const info = airInfoBySo[l.soKey] || {}
-    return {
-      __mp:true, __mpPcs: Number(l.pcs)||0,
-      so: l.so, sub: String(l.sub||""), style: l.style||"", invoiceNo: l.inv||"",
-      brand: l.brand || info.brand || "",
-      description: info.description || "",
-      customerPO: info.customerPO || "",
-      country: info.country || "", factory: "",
-      hawbNo: info.hawbNo || "", claimDepartment: info.claimDepartment || "", claimDepts: null,
-      planShipmentDate: l.planDate || null, originalShipmentDate: l.origDate || null,
-      qtyOriginalShipment: null, qtyRequestAir: Number(l.pcs)||0,
-      airFreight: null, actualAirFreight: null, itemStatus: info.itemStatus || "SHIPPED",
-      request: { documentNo: info.docNos ? [...info.docNos].join(", ") : "", buName: info.buName||"NYG", pendingWith: [] },
+  // ส่งออกจริง rows = the actual mp_line shipped lines (real SO+SUB+pcs+dates), other columns from air-req by SO.
+  const shippedRows = useMemo(()=>{
+    const rows = mpLines.map(l=>{
+      const info = airInfoBySo[l.soKey] || {}
+      return {
+        __mp:true, __mpPcs: Number(l.pcs)||0,
+        __soEst: Number(info.est)||0, __soAct: Number(info.act)||0, __soQorig: Number(info.qtyOrig)||0,
+        so: l.so, sub: String(l.sub||""), style: l.style||"", invoiceNo: l.inv||"",
+        brand: info.brand || l.brand || "",
+        description: info.description || "",
+        customerPO: info.customerPO || "",
+        country: info.country || "", factory: "",
+        hawbNo: info.hawbNo || "", claimDepartment: info.claimDepartment || "", claimDepts: info.claimDepts || null,
+        planShipmentDate: l.planDate || null, originalShipmentDate: l.origDate || null,
+        qtyOriginalShipment: null as any, qtyRequestAir: Number(l.pcs)||0,
+        airFreight: null as any, actualAirFreight: null as any, itemStatus: info.itemStatus || "SHIPPED",
+        request: { documentNo: info.docNos ? [...info.docNos].join(", ") : "", buName: info.buName||"NYG", pendingWith: info.pendingWith||[] },
+      }
+    }).filter(passFilters)
+    // EST / ACTUAL / QTY ORIG are SO-level air-req figures → show ONCE per SO (first line) so the
+    // column doesn't repeat and the TOTAL sums the air-req value, not qty × lines.
+    const seen = new Set<string>()
+    for (const row of rows) {
+      const k = mpSoKey(row.so)
+      if (!seen.has(k)) { seen.add(k); row.airFreight = row.__soEst; row.actualAirFreight = row.__soAct; row.qtyOriginalShipment = row.__soQorig }
     }
-  }).filter(passFilters), [mpLines, airInfoBySo, ...filterDeps])
+    return rows
+  }, [mpLines, airInfoBySo, ...filterDeps])
   // ยังไม่มีการส่ง = air-req rows whose SO is NOT in mp_line (not shipped yet).
   const unshippedRows = useMemo(()=> baseFiltered.filter(row=> !mpSoSet.has(mpSoKey(row.so))), [baseFiltered, mpSoSet])
   const qtyAirDisp = (r:any) => tableShipped ? (Number(r.__mpPcs) || 0) : r.qtyRequestAir
