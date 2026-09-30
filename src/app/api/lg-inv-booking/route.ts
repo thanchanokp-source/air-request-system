@@ -42,6 +42,20 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: "อ่าน public.mp_line ไม่ได้: " + (e?.message || "error"), brands: [] }, { status: 500 })
   }
 
+  // 1b) sq_report.export_row: older AIR PREPAID exports (before mp_line coverage ~mid-Sept). Union into
+  //     the same list, shaped like mp_line, keeping mp_line for any SO+SUB it already has (no double INV).
+  try {
+    const _up = (s: any) => String(s ?? "").trim().toUpperCase()
+    const mpKeys = new Set(mp.map((r: any) => `${soN(r.so_no)}|${_up(r.sub_no)}`))
+    const sq = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT so_no, sub_no, invoice_no, customer_brand AS brand, style, qty_pcs AS final_pcs, ex_fty_date AS etd
+       FROM sq_report.export_row WHERE UPPER(TRIM(ship_mode)) = 'AIR PREPAID'`)
+    for (const r of sq) {
+      if (mpKeys.has(`${soN(r.so_no)}|${_up(r.sub_no)}`)) continue   // mp_line wins for overlapping SO+SUB
+      mp.push(r)
+    }
+  } catch { /* sq_report.export_row unavailable → mp_line only */ }
+
   // 2) Air Request items (NYG) → per-SO readiness + per SO+SUB planned air qty + the bookable item id.
   const items = await (prisma as any).airRequestItem.findMany({
     where: { request: { bu: "NYG", isTest: false } },
