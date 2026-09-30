@@ -1105,25 +1105,22 @@ export default function DashboardPage() {
         const unSo = new Set(unshippedRows.map((r:any)=>mpSoKey(r.so))).size
         const unEst = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.airFreight)||0),0)
         const unAct = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.actualAirFreight)||0),0)
+        const unQtyPlan = unshippedRows.reduce((s:number,r:any)=>s+(Number(r.qtyRequestAir)||0),0) // QTY plan ที่ MER กรอก
         // ยังไม่แบ่งแผนกเคลม (จาก claimByDept)
         const unClaim = (claimByDept as any[]).find(d=>d.unassigned)
         const unClaimAmt = unClaim ? (unClaim.amt.THB + unClaim.amt.USD) : 0
         const unClaimEst = unClaim ? (unClaim.est.THB + unClaim.est.USD) : 0
         return (
         <div className="rounded-xl border-2 border-teal-200 bg-white p-3">
-          <div className="flex items-center gap-2 mb-2.5">
-            <span className="text-sm font-semibold text-gray-800">📦 สรุปยอด (mp_line) · NYG</span>
-            <span className="text-[11px] text-gray-400">SHIPPED · AIR PP · เฉพาะ admin</span>
-            <a href="/qty-air-check" className="ml-auto text-[11px] text-blue-600 hover:underline">ดูรายละเอียด →</a>
-          </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* การ์ด 1: ส่งออกจริง + variance rail (ขวาในการ์ด) */}
             <div className="rounded-lg border border-teal-200 bg-teal-50 overflow-hidden">
               <div className="px-3 py-2 flex items-center gap-2 text-teal-800 text-xs font-bold border-b border-teal-200 bg-teal-100/60">
                 <span className="w-2 h-2 rounded-full bg-teal-500"></span>✅ ส่งออกจริง
-                <span className="ml-auto font-medium text-teal-600/80 text-[11px] tabular-nums">{Number(mpCounts.shippedPcs||0).toLocaleString()} pcs · {Number(mpCounts.mpKeys??0).toLocaleString()} SO</span>
+                <span className="ml-auto font-medium text-teal-600/80 text-[11px] tabular-nums">{Number(mpCounts.mpKeys??0).toLocaleString()} SO</span>
               </div>
-              <div className="p-3 grid grid-cols-[1fr_1fr_auto] gap-3 items-center">
+              <div className="p-3 grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-center">
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY ส่งจริง (pcs)</p><p className="text-xl font-bold tabular-nums text-teal-700">{fmtNum(Number(mpCounts.shippedPcs||0))}</p></div>
                 <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Estimate air</p><p className="text-xl font-bold tabular-nums text-sky-700">{fmtNum(est)}</p></div>
                 <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Actual air</p><p className="text-xl font-bold tabular-nums text-green-700">{fmtNum(act)}</p></div>
                 <div className="border-l border-teal-200 pl-3 text-center">
@@ -1139,8 +1136,9 @@ export default function DashboardPage() {
                 <span className="w-2 h-2 rounded-full bg-amber-500"></span>⏳ ยังไม่มีการส่งออก
                 <span className="ml-auto font-medium text-amber-600/80 text-[11px] tabular-nums">{unSo.toLocaleString()} SO</span>
               </div>
-              <div className="p-3 grid grid-cols-3 gap-3 items-center">
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">จำนวน (transaction)</p><p className="text-xl font-bold tabular-nums text-amber-700">{unCount.toLocaleString()}</p></div>
+              <div className="p-3 grid grid-cols-4 gap-3 items-center">
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">จำนวน (tx)</p><p className="text-xl font-bold tabular-nums text-amber-700">{unCount.toLocaleString()}</p></div>
+                <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">QTY plan (MER)</p><p className="text-xl font-bold tabular-nums text-amber-700">{fmtNum(unQtyPlan)}</p></div>
                 <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Estimate air</p><p className="text-xl font-bold tabular-nums text-sky-700">{fmtNum(unEst)}</p></div>
                 <div><p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Actual air</p><p className="text-xl font-bold tabular-nums text-gray-400">{fmtNum(unAct)}</p></div>
               </div>

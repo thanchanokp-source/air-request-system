@@ -77,10 +77,22 @@ fi
 echo "==> [4/5] Restart app"
 pm2 restart "$APP" --update-env
 
-echo "==> [5/5] Verify"
+echo "==> [5/6] Verify"
 sleep 3
 pm2 describe "$APP" | grep -E "status|restarts" || true
 code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3003/login || echo "000")
 echo "    local /login -> HTTP $code   (200/307 = OK)"
 echo "    HEAD: $(git rev-parse --short HEAD)"
+
+# The LB (demo-deb12, openresty) caches per Accept-Encoding and negative-caches 404 for /_next/static
+# files that don't exist yet during a build. After every deploy we fetch the NEW chunks through the
+# public URL with a browser-like Accept-Encoding, so the LB caches 200 before any user hits a stale 404.
+echo "==> [6/6] Pre-warm CDN/LB cache"
+BASE="${PREWARM_URL:-https://demoairrequest.nanyangtextile.com}"
+n=0
+while IFS= read -r f; do
+  p="/_next${f#.next}"
+  curl -s -o /dev/null -H "Accept-Encoding: gzip, deflate, br, zstd" "$BASE$p" && n=$((n+1))
+done < <(find .next/static -type f \( -name '*.js' -o -name '*.css' \) 2>/dev/null)
+echo "    pre-warmed $n files via $BASE"
 echo "==> DONE"
