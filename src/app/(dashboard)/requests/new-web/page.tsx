@@ -39,6 +39,11 @@ const COLS: { k: "so" | "sub" | FKey; label: string; w: string; mer?: boolean }[
   { k: "country", label: "Country", w: "w-28" },
 ]
 const FILL_ALL: FKey[] = ["factory", "bu", "country", "brand", "origDate", "planDate"]
+const BU_OPTS = ["NYG", "EA", "TRM", "GW"]
+const FACTORY_OPTS = ["G1", "G2", "G3", "G4", "TRM", "EA", "GW"]
+// fields shown as a dropdown (table cell + "ใส่ทุกแถว")
+const SELECT_OPTS: Partial<Record<FKey, string[]>> = { bu: BU_OPTS, factory: FACTORY_OPTS }
+const normBu = (s: string) => { const u = String(s || "").trim().toUpperCase(); return BU_OPTS.find(b => b === u) || u }
 
 const so8 = (s: any) => { const d = String(s ?? "").replace(/\D/g, "").replace(/^0+/, ""); return d ? d.padStart(8, "0") : "" }
 const emptyF = (): Fields => ({ qtyOrig: "", qtyAir: "", factory: "", brand: "", bu: "", style: "", po: "", description: "", origDate: "", planDate: "", country: "" })
@@ -46,9 +51,9 @@ let seq = 1
 const newRow = (): Row => ({ key: seq++, so: "", sub: "", f: emptyF(), ed: {}, st: "idle" })
 
 // auto-fill from lookup, never overwriting a field the user typed/pasted (qtyOrig + factory are MER-only)
-const fromInfo = (info: SubInfo, r: Row): Fields => {
+const fromInfo = (info: SubInfo, r: Row, defBu: string): Fields => {
   const auto: Partial<Fields> = {
-    brand: info.brand, bu: info.bu, style: info.style, po: info.po, description: info.description,
+    brand: info.brand, bu: normBu(info.bu) || defBu, style: info.style, po: info.po, description: info.description,
     origDate: info.origDate, planDate: info.planDate, country: info.country,
     qtyAir: info.qtyAir != null ? String(info.qtyAir) : "",
   }
@@ -56,7 +61,7 @@ const fromInfo = (info: SubInfo, r: Row): Fields => {
   for (const k of Object.keys(auto) as FKey[]) if (!r.ed[k]) f[k] = String(auto[k] ?? "")
   return f
 }
-const resolveRow = (r: Row, subs: SubInfo[] | undefined): Row => {
+const resolveRow = (r: Row, subs: SubInfo[] | undefined, defBu: string): Row => {
   if (!so8(r.so)) return { ...r, st: "idle" }
   if (!subs) return r
   if (!subs.length) return { ...r, st: "notfound" }
@@ -64,7 +69,7 @@ const resolveRow = (r: Row, subs: SubInfo[] | undefined): Row => {
   if (!sub && subs.length === 1) sub = subs[0].sub
   const info = subs.find(s => s.sub === sub)
   if (!info) return { ...r, sub, st: "nosub" }
-  return { ...r, sub, st: "ok", f: fromInfo(info, r) }
+  return { ...r, sub, st: "ok", f: fromInfo(info, r, defBu) }
 }
 
 export default function NewWebRequestPage() {
@@ -109,7 +114,7 @@ export default function NewWebRequestPage() {
         cacheRef.current = next; setCache(next)
       } catch (e: any) { setError("ค้น SO ไม่สำเร็จ: " + (e?.message || "error")) }
     }
-    setRows(rs => rs.map(r => keys.has(r.key) ? resolveRow(r, cacheRef.current[so8(r.so)]) : r))
+    setRows(rs => rs.map(r => keys.has(r.key) ? resolveRow(r, cacheRef.current[so8(r.so)], docBu) : r))
   }
 
   const setField = (key: number, k: "so" | "sub" | FKey, v: string) => setRows(rs => rs.map(r => {
@@ -118,7 +123,7 @@ export default function NewWebRequestPage() {
     if (k === "sub") return { ...r, sub: v }
     return { ...r, f: { ...r.f, [k]: v }, ed: { ...r.ed, [k]: true } }
   }))
-  const pickSub = (key: number, sub: string) => setRows(rs => rs.map(r => r.key === key ? resolveRow({ ...r, sub }, cacheRef.current[so8(r.so)]) : r))
+  const pickSub = (key: number, sub: string) => setRows(rs => rs.map(r => r.key === key ? resolveRow({ ...r, sub }, cacheRef.current[so8(r.so)], docBu) : r))
 
   // Excel paste: many lines and/or columns → fill down / across starting at this cell
   const onPaste = (e: React.ClipboardEvent, idx: number, col: "so" | "sub" | FKey) => {
@@ -140,7 +145,7 @@ export default function NewWebRequestPage() {
           if (!k) return
           if (k === "so") { r = { ...r, so: v, sub: "", ed: { qtyOrig: r.ed.qtyOrig, factory: r.ed.factory }, st: "idle" } }
           else if (k === "sub") r.sub = v.toUpperCase()
-          else { r.f[k] = v; r.ed[k] = true }
+          else { r.f[k] = SELECT_OPTS[k] ? v.toUpperCase() : v; r.ed[k] = true }
         })
         out[idx + j] = r
         if (cells.some((_, c) => ["so", "sub"].includes(String(COLS[c0 + c]?.k)))) touched.push(r)
@@ -239,10 +244,17 @@ export default function NewWebRequestPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-3 flex flex-wrap items-center gap-2 text-xs">
         <span className="font-semibold text-gray-600">ใส่ทุกแถว:</span>
-        <select value={fillKey} onChange={e => setFillKey(e.target.value as FKey)} className="border border-gray-300 rounded px-2 py-1">
+        <select value={fillKey} onChange={e => { setFillKey(e.target.value as FKey); setFillVal("") }} className="border border-gray-300 rounded px-2 py-1">
           {FILL_ALL.map(k => <option key={k} value={k}>{COLS.find(c => c.k === k)?.label}</option>)}
         </select>
-        <input value={fillVal} onChange={e => setFillVal(e.target.value)} placeholder="ค่า" className="border border-gray-300 rounded px-2 py-1 w-40" />
+        {SELECT_OPTS[fillKey] ? (
+          <select value={fillVal} onChange={e => setFillVal(e.target.value)} className="border border-gray-300 rounded px-2 py-1 w-40">
+            <option value="">-- เลือก --</option>
+            {SELECT_OPTS[fillKey]!.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        ) : (
+          <input value={fillVal} onChange={e => setFillVal(e.target.value)} placeholder="ค่า" className="border border-gray-300 rounded px-2 py-1 w-40" />
+        )}
         <button type="button" onClick={fillAll} className="px-3 py-1 rounded bg-gray-800 text-white font-semibold">ใส่ทุกแถว ({used.length})</button>
       </div>
 
@@ -271,7 +283,16 @@ export default function NewWebRequestPage() {
                           {subs.map(s => <option key={s.sub} value={s.sub}>{s.sub}</option>)}
                           {r.sub && !subs.some(s => s.sub === r.sub) && <option value={r.sub}>{r.sub} (ไม่พบ)</option>}
                         </select>
-                      ) : (
+                      ) : SELECT_OPTS[c.k as FKey] ? (() => {
+                        const k = c.k as FKey; const opts = SELECT_OPTS[k]!; const v = r.f[k]
+                        return (
+                          <select value={v} onChange={e => setField(r.key, k, e.target.value)} className={inp}>
+                            <option value="">--</option>
+                            {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                            {v && !opts.includes(v) && <option value={v}>{v} (?)</option>}
+                          </select>
+                        )
+                      })() : (
                         <input value={c.k === "so" ? r.so : c.k === "sub" ? r.sub : r.f[c.k as FKey]}
                           onChange={e => setField(r.key, c.k, e.target.value)}
                           onBlur={c.k === "so" || c.k === "sub" ? () => runLookup([rows[idx]]) : undefined}
