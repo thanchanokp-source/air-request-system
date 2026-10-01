@@ -82,6 +82,8 @@ export async function POST(req: NextRequest) {
     })
     const preview = !!body.preview
     const used = new Set<string>()
+    // ถ้า SO+SUB มีหลายแถว → เติม "แถวที่ HAWB ว่าง" ก่อน (blank มาก่อน booked) เพื่อไม่ให้แถวว่างถูกข้าม
+    cand.sort((a: any, b: any) => (String(a.hawbNo || "").trim() ? 1 : 0) - (String(b.hawbNo || "").trim() ? 1 : 0))
     const toAttach: { itemId: string; so: string; sub: string; qty: number; inv: string }[] = []
     for (const it of cand) {
       const k = `${soN(it.so)}|${subU(it.sub)}`

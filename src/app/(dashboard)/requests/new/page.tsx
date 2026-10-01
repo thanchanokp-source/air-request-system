@@ -191,6 +191,11 @@ export default function NewRequestPage() {
         <span className={`px-2 py-0.5 rounded text-xs font-bold ${testMode ? "bg-amber-100 text-amber-700" : isGW ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
           {testMode ? `🧪 TEST · ${userBu}` : userBu}
         </span>
+        {isAdmin && (
+          <a href="/requests/new-web" className="ml-auto text-xs px-3 py-1.5 rounded-lg font-semibold bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100">
+            ✍ กรอกในเว็บ (admin ทดลอง)
+          </a>
+        )}
       </div>
 
       {/* Admin TEST upload — creates a test document whose emails reroute to YOU (admin),
