@@ -692,6 +692,18 @@ export default function DashboardPage() {
       setMpQtyBySub(subQm); setMpSrcBySub(subSrc)
     }).catch(() => {})
   }, [brandFKey, actualF])
+  // ยอด Sale Order ทั้งหมด (SO_ORDER · NYG · ทุก ship mode) — ตาม ปี/เดือน (ship_date) + Brand ที่เลือก
+  const [soOrder, setSoOrder] = useState<{ pcs: number; soCount: number; subCount: number; unparsed: number } | null>(null)
+  const monthFKey = monthFilter.join(",")
+  useEffect(() => {
+    if (activeBu !== "NYG") { setSoOrder(null); return }
+    const p = new URLSearchParams()
+    if (yearFilter) p.set("year", yearFilter)
+    if (monthFKey) p.set("months", monthFKey)
+    if (brandF.length) p.set("brands", brandF.join("|"))
+    fetch(`/api/so-order-summary?${p.toString()}`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null).then(d => setSoOrder(d && !d.error ? d : null)).catch(() => setSoOrder(null))
+  }, [activeBu, yearFilter, monthFKey, brandFKey])  // eslint-disable-line react-hooks/exhaustive-deps
   const [docF,  setDocF]  = useState<string[]>([])
   const [soF,  setSoF]  = useState<string[]>([])
   const [cpF,  setCpF]  = useState<string[]>([])
@@ -1092,17 +1104,36 @@ export default function DashboardPage() {
         const shipPctEst = totEst > 0 ? (est / totEst * 100) : 0   // สัดส่วน bar คิดจาก est cost
         const planPctEst = 100 - shipPctEst
         const fmtM = (n:number) => n >= 1e6 ? (n/1e6).toFixed(2)+"M" : fmtNum(n)
+        // Sale Order (SO_ORDER · ทุก ship mode) — คอลัมน์แรกของการ์ดภาพรวม + % แอร์เทียบยอดขาย
+        const soPcs = soOrder?.pcs || 0
+        const pctOf = (n:number) => soPcs > 0 ? n / soPcs * 100 : 0
+        const airPct = pctOf(totQty), shipPct = pctOf(shipQty), planPct = pctOf(unQtyPlan)
+        const wShip = Math.min(shipPct, 100), wPlan = Math.min(planPct, 100 - wShip)
         return (
         <div className="space-y-2.5">
           {/* ── การ์ดภาพรวม (เต็มความกว้าง) ── */}
           <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
             <p className="text-[11px] font-semibold text-gray-400">ภาพรวม · {totSo.toLocaleString()} SO</p>
             <p className="text-base font-extrabold text-gray-900 mb-3">ส่งแอร์ทั้งหมด</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className={`grid grid-cols-1 gap-4 ${soOrder ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"}`}>
+              {/* Sale Order (SO_ORDER · NYG) — ตามปี/เดือน (ship_date) + Brand ที่เลือก */}
+              {soOrder && (
+                <div className="lg:border-r lg:border-gray-100 lg:pr-4" title="SO_ORDER · NYG · ทุก ship mode · ตามปี/เดือน (ship date) + Brand ที่เลือก">
+                  <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Sale Order</p>
+                  <p className="text-3xl font-extrabold tabular-nums text-slate-700 leading-none mt-0.5">{fmtNum(soPcs)}</p>
+                  <p className="text-[11px] text-gray-400 mt-1 tabular-nums">pcs · {soOrder.soCount.toLocaleString()} SO · ทุก ship mode</p>
+                  {/* แถบ = Sale Order 100% · เขียว ส่งแอร์จริง · ส้ม แผนแอร์ */}
+                  <div className="flex h-1.5 rounded-full bg-slate-200 overflow-hidden mt-2.5">
+                    <div className="h-full bg-green-500" style={{width:`${wShip}%`}} title={`ส่งแอร์จริง ${shipPct.toFixed(1)}% ของ Sale Order`}></div>
+                    <div className="h-full bg-amber-400" style={{width:`${wPlan}%`}} title={`แผนแอร์ ${planPct.toFixed(1)}% ของ Sale Order`}></div>
+                  </div>
+                  {soOrder.unparsed > 0 && <p className="text-[10px] text-amber-700 mt-1">⚠ {soOrder.unparsed.toLocaleString()} แถวอ่าน ship_date ไม่ได้ (ไม่นับ)</p>}
+                </div>
+              )}
               <div>
                 <p className="text-[11px] text-gray-400 font-semibold">จำนวน</p>
                 <p className="text-3xl font-extrabold tabular-nums text-gray-900 leading-none mt-0.5">{fmtNum(totQty)}</p>
-                <p className="text-[11px] text-gray-400 mt-1">pcs</p>
+                <p className="text-[11px] text-gray-400 mt-1 tabular-nums">pcs{soOrder && soPcs > 0 && <> · <b className={airPct > 100 ? "text-red-600" : "text-rose-700"}>{airPct.toFixed(1)}%</b> ของ Sale Order</>}</p>
               </div>
               <div>
                 <p className="text-[11px] text-gray-400 font-semibold">Est air cost</p>
