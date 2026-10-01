@@ -58,6 +58,21 @@ export default function MasterRatePage() {
     } finally { setRecalcing(false) }
   }
 
+  // ONE-TIME: re-price EST of EVERY document (all statuses) from the current rates. Preview first.
+  const [estAll, setEstAll] = useState<any | null>(null)
+  const [estAllBusy, setEstAllBusy] = useState(false)
+  const runEstAll = async (commit: boolean) => {
+    if (commit && !confirm(`บันทึก: คำนวณ EST ใหม่ ${estAll?.changed?.toLocaleString() || "?"} รายการ จาก rate ปัจจุบัน\n(ทุกเอกสาร ทุกสถานะ รวม COMPLETED — ACTUAL ไม่เปลี่ยน)\n\nแนะนำกด ⬇ Backup ก่อน · ยืนยัน?`)) return
+    setEstAllBusy(true)
+    try {
+      const r = await fetch("/api/admin/recalc-est-all", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ commit }) })
+      const d = await r.json()
+      if (!r.ok) { alert("Error: " + (d.error || r.status)); return }
+      setEstAll(d)
+      if (commit) alert(`✓ คำนวณ EST ใหม่แล้ว ${d.changed.toLocaleString()} รายการ`)
+    } finally { setEstAllBusy(false) }
+  }
+
   const load = () => {
     setLoading(true)
     fetch("/api/master/port").then(r => r.json()).then(d => { setRates(Array.isArray(d) ? d : []); setLoading(false) })
@@ -166,6 +181,46 @@ export default function MasterRatePage() {
             {fixingHawb ? "กำลังกระจาย…" : "กระจายตาม qty"}
           </button>
           <span className="text-[11px] text-amber-700 w-full">กระจายยอด Total ให้ทุก SO ที่มี HAWB นี้ (ทุกเอกสาร) ตามสัดส่วน qty — ผลรวมจะเท่ากับ Total พอดี</span>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-rose-800">⚠ คำนวณ EST ใหม่ทั้งหมด (ครั้งเดียว · ทุกเอกสาร ทุกสถานะ รวม COMPLETED)</span>
+            <button onClick={() => runEstAll(false)} disabled={estAllBusy} className="ml-auto text-sm px-3 py-1.5 rounded-lg bg-white border border-rose-300 text-rose-700 font-semibold disabled:opacity-50">
+              {estAllBusy ? "กำลังคำนวณ…" : "👁 ลองดู"}
+            </button>
+            <button onClick={() => runEstAll(true)} disabled={estAllBusy || !estAll || estAll.commit || !estAll.changed} className="text-sm px-3 py-1.5 rounded-lg bg-rose-600 text-white font-semibold disabled:opacity-40">
+              💾 บันทึก ({estAll && !estAll.commit ? estAll.changed.toLocaleString() : 0})
+            </button>
+          </div>
+          <p className="text-[11px] text-rose-700">EST = Gross Weight เดิม × rate ปัจจุบัน (rate ของ BU นั้น ถ้าไม่มีใช้ ALL) · ACTUAL / HAWB ไม่เปลี่ยน · ประเทศที่ไม่มี rate จะคง EST เดิม</p>
+          {estAll && (
+            <div className="bg-white border border-rose-100 rounded-lg overflow-x-auto">
+              <div className="px-3 py-1.5 text-[11px] text-gray-500 border-b border-gray-100">
+                {estAll.commit ? "✓ บันทึกแล้ว" : "ลองดู (ยังไม่บันทึก)"} · สแกน {estAll.scanned.toLocaleString()} รายการ · จะเปลี่ยน <b className="text-rose-700">{estAll.changed.toLocaleString()}</b>
+              </div>
+              <table className="w-full text-xs">
+                <thead className="text-gray-400"><tr className="text-left"><th className="px-3 py-1 font-medium">BU</th><th className="px-3 py-1 font-medium text-right">รายการ</th><th className="px-3 py-1 font-medium text-right">เปลี่ยน</th><th className="px-3 py-1 font-medium text-right">EST เดิม</th><th className="px-3 py-1 font-medium text-right">EST ใหม่</th><th className="px-3 py-1 font-medium text-right">ต่าง</th></tr></thead>
+                <tbody>{estAll.byBu.map((b: any) => (
+                  <tr key={b.bu} className="border-t border-gray-50 tabular-nums">
+                    <td className="px-3 py-1 font-semibold">{b.bu} <span className="text-gray-400 font-normal">{b.cur}</span></td>
+                    <td className="px-3 py-1 text-right">{b.items.toLocaleString()}</td>
+                    <td className="px-3 py-1 text-right">{b.changed.toLocaleString()}</td>
+                    <td className="px-3 py-1 text-right">{b.before.toLocaleString()}</td>
+                    <td className="px-3 py-1 text-right font-semibold">{b.after.toLocaleString()}</td>
+                    <td className={`px-3 py-1 text-right ${b.after - b.before > 0 ? "text-red-600" : "text-green-600"}`}>{(b.after - b.before > 0 ? "+" : "") + (b.after - b.before).toLocaleString()}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+              {estAll.noRate.length > 0 && (
+                <p className="px-3 py-1.5 text-[11px] text-amber-700 border-t border-gray-100">
+                  ไม่มี rate (คง EST เดิม): {estAll.noRate.slice(0, 15).map((x: any) => `${x.key} (${x.items})`).join(" · ")}{estAll.noRate.length > 15 ? " …" : ""}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
