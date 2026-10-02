@@ -791,28 +791,36 @@ export default function DashboardPage() {
   // counts used to attribute qty: shipped rows per SO+SUB, rows sharing one SO+SUB+INV (same round),
   // and real shipment rounds (distinct INV in mp_line/export) per SO+SUB
   const shipCntBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const r of shippedRows) m.set(subKey(r), (m.get(subKey(r))||0)+1); return m }, [shippedRows])
-  const rowsPerInv = useMemo(()=>{ const m = new Map<string, number>(); for (const r of shippedRows) { const k = `${subKey(r)}|${invU(r)}`; m.set(k, (m.get(k)||0)+1) } return m }, [shippedRows])
   const invRoundsBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const ik of Object.keys(mpInv)) { const sk = ik.split("|").slice(0,2).join("|"); m.set(sk, (m.get(sk)||0)+1) } return m }, [mpInv])
-  // QTY of one shipped row:
-  //   · the ONLY row of its SO+SUB+INV round → that round's qty from mp_line/export
-  //   · several rows share the round (styles/splits) → each row's own LG qty (qtyActualShip), src "LG"
-  //   · INV not found in mp_line/export → SO+SUB total if it's the only row, else LG qty
-  const shipQtyOf = useMemo(()=> (r:any): number => {
-    const iv = invU(r), multi = (rowsPerInv.get(`${subKey(r)}|${iv}`) || 0) > 1
-    if (multi) return Number(r.qtyActualShip ?? r.qtyRequestAir) || 0
-    const hit = iv ? mpInv[`${subKey(r)}|${iv}`] : undefined
-    if (hit) return Number(hit.qty) || 0
-    if ((shipCntBySub.get(subKey(r)) || 0) <= 1) return Number(mpQtyBySub[subKey(r)]) || 0
-    return Number(r.qtyActualShip ?? r.qtyRequestAir) || 0
-  }, [mpInv, mpQtyBySub, shipCntBySub, rowsPerInv])
-  const shipSrcOf = useMemo(()=> (r:any): string => {
-    const iv = invU(r)
-    if ((rowsPerInv.get(`${subKey(r)}|${iv}`) || 0) > 1) return "LG"
-    const hit = iv ? mpInv[`${subKey(r)}|${iv}`] : undefined
-    if (hit) return hit.src
-    if ((shipCntBySub.get(subKey(r)) || 0) <= 1) return mpSrcBySub[subKey(r)] || ""
-    return "LG"
-  }, [mpInv, mpSrcBySub, shipCntBySub, rowsPerInv])
+  // QTY AIR is ANCHORED to export/mp_line: each shipment round (SO+SUB+INV) takes its qty from the source,
+  // and when several rows share that round (styles / splits) the source qty is SPLIT across them in
+  // proportion to LG's qty (largest-remainder rounding) → the rows of a round always sum to the source.
+  //   INV not in the source → the SO+SUB total if it's the SO+SUB's only shipped row, else 0 (flagged),
+  //   so the data-table total never exceeds the export/mp_line total.
+  const shipAlloc = useMemo(()=>{
+    const qty = new Map<string, number>(), src = new Map<string, string>()
+    const groups = new Map<string, any[]>()
+    for (const r of shippedRows) { const k = `${subKey(r)}|${invU(r)}`; const g = groups.get(k) || []; g.push(r); groups.set(k, g) }
+    for (const [k, rows] of groups) {
+      const sk = subKey(rows[0]), iv = invU(rows[0])
+      const hit = iv ? mpInv[k] : undefined
+      let total: number, s: string
+      if (hit) { total = Number(hit.qty) || 0; s = hit.src }
+      else if ((shipCntBySub.get(sk) || 0) === rows.length && mpQtyBySub[sk] != null) { total = Number(mpQtyBySub[sk]) || 0; s = mpSrcBySub[sk] || "" }
+      else { total = 0; s = "ไม่พบ" }
+      const w = rows.map(r => Math.max(Number(r.qtyActualShip ?? r.qtyRequestAir) || 0, 0))
+      const W = w.reduce((a, b) => a + b, 0)
+      const raw = rows.map((_, i) => W > 0 ? total * w[i] / W : total / rows.length)
+      const base = raw.map(Math.floor)
+      let rest = total - base.reduce((a, b) => a + b, 0)
+      raw.map((v, i) => ({ i, f: v - base[i] })).sort((a, b) => b.f - a.f).forEach(({ i }) => { if (rest > 0) { base[i]++; rest-- } })
+      rows.forEach((r, i) => { qty.set(r.id, base[i]); src.set(r.id, s) })
+    }
+    return { qty, src }
+  }, [shippedRows, mpInv, mpQtyBySub, mpSrcBySub, shipCntBySub])
+  const shipQtyOf = useMemo(()=> (r:any): number => shipAlloc.qty.get(r.id) ?? 0, [shipAlloc])
+  const shipSrcOf = useMemo(()=> (r:any): string => shipAlloc.src.get(r.id) ?? "", [shipAlloc])
+  const shipUnmatched = useMemo(()=> [...shipAlloc.src.values()].filter(s => s === "ไม่พบ").length, [shipAlloc])
   // ยังไม่มีการส่ง = air-req rows ที่ยังไม่มี HAWB — ตัดแผนที่ซ้ำ "ข้ามเอกสาร" เท่านั้น (ในเอกสารเดียวกันเก็บทุกแถว):
   //   (ก) SO+SUB+STYLE+qty เดียวกันอยู่อีก doc → นับ 1
   //   (ข) บรรทัดเดียวกันนี้ส่งไปแล้วในอีก doc และรอบส่งจริงถูกบันทึกครบแล้ว (แถวส่งจริง ≥ จำนวน INV) → ของซ้ำ
@@ -1504,7 +1512,10 @@ export default function DashboardPage() {
                 <tr className="bg-gray-100 font-bold text-gray-800 border-t-2 border-gray-300">
                   <td className="px-3 py-2 text-right whitespace-nowrap" colSpan={12}>TOTAL ({tblSO.toLocaleString()} รายการ · {tableShipped?"ส่งออกจริง":"ยังไม่มีการส่ง"})</td>
                   <td className="px-3 py-2">{tblQOrig.toLocaleString()}</td>
-                  <td className="px-3 py-2">{tblQAir.toLocaleString()}</td>
+                  <td className="px-3 py-2 whitespace-nowrap" title={tableShipped ? "ยอดตั้งต้นจาก export / mp_line ต่อรอบส่ง (SO+SUB+INV) — ผลรวมเท่ายอดในตาราง export / mp_line" : undefined}>
+                    {tblQAir.toLocaleString()}
+                    {tableShipped && shipUnmatched > 0 && <span className="ml-1.5 text-[10px] font-semibold text-amber-700" title="แถวที่ INV ไม่พบใน export / mp_line → QTY = 0 (ไม่นับ)">⚠ {shipUnmatched} แถวไม่พบ INV</span>}
+                  </td>
                   <td className="px-3 py-2 text-blue-700">{fmtNum(tblEst)}</td>
                   <td className="px-3 py-2 text-green-700">{fmtNum(tblAct)}</td>
                   <td className="px-3 py-2" colSpan={9 + (isAdmin ? 1 : 0)}></td>
