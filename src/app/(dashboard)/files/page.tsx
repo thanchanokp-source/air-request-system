@@ -619,24 +619,25 @@ export default function FilesPage() {
 
           {/* What this HAWB costs — appears as soon as a HAWB is typed in the box above. */}
           {hawbSummary && (
-            <div className="mt-3 rounded-xl bg-slate-800 px-5 py-3 shadow-sm">
+            <div className="mt-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
               {hawbSummary.rows.length === 0 ? (
-                <span className="text-sm text-amber-200">ไม่พบ SO ที่ใช้ HAWB &ldquo;{hawbQuery.trim()}&rdquo; ในเอกสารที่แสดงอยู่</span>
+                <span className="text-sm text-amber-700">ไม่พบ SO ที่ใช้ HAWB &ldquo;{hawbQuery.trim()}&rdquo; ในเอกสารที่แสดงอยู่</span>
               ) : (
-                <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {/* one coloured tile per value (HAWB · total · SO/pcs · INV/docs) */}
                   {[
-                    { lbl: "HAWB", val: hawbSummary.hawbs.join(", "), cls: "font-mono text-white" },
-                    { lbl: "ยอดรวม (THB)", val: fmtNum(hawbSummary.total), cls: "text-amber-300 text-xl" },
-                    { lbl: "SO · pcs", val: `${hawbSummary.rows.length} · ${fmtNum(hawbSummary.qty)}`, cls: "text-white" },
-                    { lbl: "INV · เอกสาร", val: `${hawbSummary.invs.length} · ${hawbSummary.docs.length}`, cls: "text-white" },
+                    { lbl: "HAWB", val: hawbSummary.hawbs.join(", "), box: "bg-indigo-50", l: "text-indigo-700", v: "text-indigo-950 font-mono" },
+                    { lbl: "ยอดรวม (THB)", val: fmtNum(hawbSummary.total), box: "bg-amber-100", l: "text-amber-800", v: "text-amber-900 text-xl" },
+                    { lbl: "SO · pcs", val: `${hawbSummary.rows.length} · ${fmtNum(hawbSummary.qty)}`, box: "bg-green-100", l: "text-green-800", v: "text-green-950" },
+                    { lbl: "INV · เอกสาร", val: `${hawbSummary.invs.length} · ${hawbSummary.docs.length}`, box: "bg-pink-100", l: "text-pink-800", v: "text-pink-950" },
                   ].map(s => (
-                    <div key={s.lbl} className="flex flex-col">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{s.lbl}</span>
-                      <span className={`text-base font-bold tabular-nums leading-tight ${s.cls}`}>{s.val}</span>
+                    <div key={s.lbl} className={`flex flex-col rounded-lg px-3 py-1.5 min-w-[120px] ${s.box}`}>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${s.l}`}>{s.lbl}</span>
+                      <span className={`text-base font-extrabold tabular-nums leading-tight ${s.v}`}>{s.val}</span>
                     </div>
                   ))}
                   <button onClick={() => setHawbOpen(true)}
-                    className="ml-auto text-sm px-4 py-2 rounded-lg font-semibold bg-white text-slate-800 hover:bg-amber-100">
+                    className="ml-auto text-sm px-4 py-2 rounded-lg font-semibold bg-gray-900 text-white hover:bg-gray-700">
                     ดู INV ในใบนี้ ({hawbSummary.invs.length})
                   </button>
                 </div>
