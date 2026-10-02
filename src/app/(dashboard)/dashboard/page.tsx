@@ -797,12 +797,15 @@ export default function DashboardPage() {
   // QTY AIR is ANCHORED to export/mp_line so the data-table total = the source total (what a SUM over
   // export_row / mp_line gives). Per SO+SUB:
   //   1. pick the source with the LARGER SO+SUB total (mp_line can be partial, e.g. 895 vs export 1,125)
-  //   2. if every row's INV exists in THAT source → each INV round's qty is split over its rows
-  //      otherwise (INV spelled differently / missing) → the SO+SUB total is split over all its rows
+  //   2. the rows' INVs match THAT source's INVs exactly (every row INV is in the source AND every source
+  //      INV has a row) → each INV round's qty is split over its rows
+  //      otherwise (LG put the wrong / one INV on all rows, or a round has no row yet) → the SO+SUB total
+  //      is split over all its rows and the SO+SUB is flagged "INV ไม่ตรง" (rows still sum to the source)
   //   Splits follow LG's qty (largest-remainder rounding) so the parts add up exactly.
   //   SO+SUB not in any source → 0 ("ไม่พบ") so the table never exceeds the source.
   const shipAlloc = useMemo(()=>{
     const qty = new Map<string, number>(), src = new Map<string, string>()
+    const invMismatch = new Set<string>()   // SO+SUB keys whose row INVs ≠ source INVs
     const split = (rows: any[], total: number, s: string) => {
       const w = rows.map(r => Math.max(Number(r.qtyActualShip ?? r.qtyRequestAir) || 0, 0))
       const W = w.reduce((a, b) => a + b, 0)
@@ -818,17 +821,21 @@ export default function DashboardPage() {
       if (mpQtyBySub[sk] == null) { rows.forEach(r => { qty.set(r.id, 0); src.set(r.id, "ไม่พบ") }); continue }
       const s = (mpSrcBySub[sk] || "mp_line") as "mp_line" | "export"
       const invMap = invBySrc[s] || {}
-      const allInvKnown = rows.every(r => invU(r) && invMap[`${sk}|${invU(r)}`] != null)
-      if (allInvKnown) {
+      const srcInvs = new Set(Object.keys(invMap).filter(k => k.startsWith(`${sk}|`)))
+      const rowInvs = new Set(rows.map(r => `${sk}|${invU(r)}`))
+      const exact = srcInvs.size > 0 && [...rowInvs].every(k => srcInvs.has(k)) && [...srcInvs].every(k => rowInvs.has(k))
+      if (exact) {
         const byInv = new Map<string, any[]>()
         for (const r of rows) { const k = `${sk}|${invU(r)}`; const g = byInv.get(k) || []; g.push(r); byInv.set(k, g) }
         for (const [k, g] of byInv) split(g, Number(invMap[k]) || 0, s)
       } else {
         split(rows, Number(mpQtyBySub[sk]) || 0, s)
+        if (srcInvs.size > 0) invMismatch.add(sk)
       }
     }
-    return { qty, src }
+    return { qty, src, invMismatch }
   }, [shippedRows, mpQtyBySub, mpSrcBySub, invBySrc])
+  const isInvMismatch = (r:any) => shipAlloc.invMismatch.has(subKey(r))
   const shipQtyOf = useMemo(()=> (r:any): number => shipAlloc.qty.get(r.id) ?? 0, [shipAlloc])
   const shipSrcOf = useMemo(()=> (r:any): string => shipAlloc.src.get(r.id) ?? "", [shipAlloc])
   const shipUnmatched = useMemo(()=> [...shipAlloc.src.values()].filter(s => s === "ไม่พบ").length, [shipAlloc])
@@ -1501,7 +1508,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 font-semibold" title={tableShipped ? "ยอด ship จริงของรอบนี้ (SO+SUB+INV จาก mp_line / export)" : "QTY AIR (แผน)"}>{tableShipped ? shipQtyOf(row).toLocaleString() : (row.qtyRequestAir ?? "-")}</td>
                     <td className="px-3 py-1.5 text-blue-700">{fmtNum(row.airFreight)}</td>
                     <td className="px-3 py-1.5 text-green-700 font-medium">{fmtNum(row.actualAirFreight)}</td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}{tableShipped && isInvMismatch(row) && <span className="ml-1 text-orange-600 font-bold" title="INV ของ SO+SUB นี้ไม่ตรงกับ export / mp_line (เช่น LG ใส่ INV เดียวให้ทุกแถว) — QTY แบ่งจากยอดรวม SO+SUB">⚠</span>}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.hawbNo || "-"}</td>
                     <td className="px-3 py-1.5">
                       {vp!=null&&<span className={`font-medium ${vp>10?"text-red-600":vp<-10?"text-green-600":"text-gray-500"}`}>{fmtPct(vp)}</span>}
@@ -1525,7 +1532,8 @@ export default function DashboardPage() {
                   <td className="px-3 py-2">{tblQOrig.toLocaleString()}</td>
                   <td className="px-3 py-2 whitespace-nowrap" title={tableShipped ? "ยอดตั้งต้นจาก export / mp_line ต่อรอบส่ง (SO+SUB+INV) — ผลรวมเท่ายอดในตาราง export / mp_line" : undefined}>
                     {tblQAir.toLocaleString()}
-                    {tableShipped && shipUnmatched > 0 && <span className="ml-1.5 text-[10px] font-semibold text-amber-700" title="แถวที่ INV ไม่พบใน export / mp_line → QTY = 0 (ไม่นับ)">⚠ {shipUnmatched} แถวไม่พบ INV</span>}
+                    {tableShipped && shipUnmatched > 0 && <span className="ml-1.5 text-[10px] font-semibold text-amber-700" title="SO+SUB ที่ไม่พบใน export / mp_line → QTY = 0 (ไม่นับ)">⚠ {shipUnmatched} แถวไม่พบใน export</span>}
+                    {tableShipped && shipAlloc.invMismatch.size > 0 && <span className="ml-1.5 text-[10px] font-semibold text-orange-700" title="INV ที่ LG ใส่ใน air request ไม่ตรงกับ INV ใน export / mp_line → แบ่งยอดรวม SO+SUB ให้แทน (ยอดรวมยังเท่า export) · ควรให้ LG แก้ INV ในหน้า FIX HAWB">⚠ {shipAlloc.invMismatch.size} SO+SUB INV ไม่ตรง</span>}
                   </td>
                   <td className="px-3 py-2 text-blue-700">{fmtNum(tblEst)}</td>
                   <td className="px-3 py-2 text-green-700">{fmtNum(tblAct)}</td>
