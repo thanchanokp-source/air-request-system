@@ -790,7 +790,11 @@ export default function DashboardPage() {
       const k = lineKey(r), d = docOf(r), sc = score(r), cur = bestDoc.get(k)
       if (!cur || sc > cur.sc || (sc === cur.sc && d > cur.doc)) bestDoc.set(k, { doc: d, sc })
     }
-    return rows.filter(r => bestDoc.get(lineKey(r))?.doc === docOf(r))
+    // A line that already carries an ACTUAL is never dropped — LG really split HAWB money onto it, so
+    // dropping it would make ACT ≠ the HAWB total (e.g. 2609_0002 + 0003 both keyed INV …085). Only
+    // repeat lines with no actual are treated as duplicate uploads. QTY stays single: lines of one
+    // SO+SUB+INV are merged into one row whose QTY = that INV's source qty.
+    return rows.filter(r => bestDoc.get(lineKey(r))?.doc === docOf(r) || (Number(r.actualAirFreight) || 0) > 0)
   }, [baseFiltered])
   // ── ส่งออกจริง table/cards = ONE row per shipment round (SO+SUB+INV) ─────────────────────────────
   // The lines of a round (several styles / splits) are MERGED: styles & descriptions joined, QTY ORIG /
