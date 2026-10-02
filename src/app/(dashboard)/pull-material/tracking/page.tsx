@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { MAROON, BUS, STATUS_LABEL, buColor, fmtDate, fmt } from "../_StageWork"
 import { pcApprover } from "@/lib/pull-approvers"
-import { pullReqType } from "@/lib/pull-reqtype"
+import { pullReqType, isSampleLike } from "@/lib/pull-reqtype"
 import { buildRequesters } from "@/lib/pull-requesters"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { exportPullReport } from "@/lib/pull-report-xlsx"
@@ -12,6 +12,10 @@ import { exportPullReport } from "@/lib/pull-report-xlsx"
 // Pipeline steps branch by request type. Each status maps to the CURRENT (in-progress) step index;
 // steps before it are done. cur >= steps.length → fully done.
 const PC_STEPS = ["PC Req", "DVM App", "LG"]
+// MER Sample / PPC never go through the approval chain: Purchasing fills the shipment and the doc
+// auto-approves straight to Logistics.
+const FREE_STEPS = ["Req", "Purchase", "LG"]
+const FREE_CUR: Record<string, number> = { PENDING_PURCHASING: 1, PC_REVISE: 1, PENDING_LG_RATE: 1, APPROVED: 2, COMPLETED: 3 }
 const SCM_STEPS = ["SCM Req", "Purchase", "SCM Decision", "SCM App·1", "SCM App·2", "LG"]
 const PC_CUR: Record<string, number> = { PENDING_PURCHASING: 1, PENDING_PC_DECISION: 1, PENDING_VP_PUR: 1, PENDING_DVM_PUR: 1, APPROVED: 2, COMPLETED: 3 }
 const SCM_CUR: Record<string, number> = { PENDING_PURCHASING: 1, PENDING_LOGISTICS: 1, PENDING_SCM_DECISION: 2, PENDING_DVM_SCM: 3, PENDING_VP_SCM: 4, PENDING_FINAL: 4, APPROVED: 5, COMPLETED: 6 }
@@ -26,6 +30,7 @@ function pullStatus(rq: any): string {
   if (s === "RECALLED") return "Recalled"
   if (s === "REJECTED") return "Rejected"
   if (s === "NO_AIR") return "No air"
+  if (isSampleLike(pullReqType(rq))) return "Waiting Purchase"   // no approval chain for Sample / PPC
   if ((rq.requestType || "SCM") === "PURCHASING") return "Waiting DVM approve"
   if (s === "PENDING_PURCHASING") return "Waiting Purchase"
   if (s === "PENDING_SCM_DECISION") return "Waiting SCM air decision"
@@ -240,9 +245,11 @@ export default function Page() {
               <tbody className="divide-y divide-gray-100">
                 {shown.map(rq => {
                   const rowPos = [...new Set((rq.items || []).map((i: any) => i.poNoDoc).filter(Boolean))] as string[]
-                  const isPC = (rq.requestType || "SCM") === "PURCHASING"
-                  const steps = isPC ? PC_STEPS : SCM_STEPS
-                  const cur = isPC ? (PC_CUR[rq.status] ?? 1) : (SCM_CUR[rq.status] ?? 1)
+                  const rType = pullReqType(rq)
+                  const isPC = rType === "PURCHASING"
+                  const isFree = isSampleLike(rType)                     // MER Sample · PPC
+                  const steps = isFree ? FREE_STEPS : isPC ? PC_STEPS : SCM_STEPS
+                  const cur = isFree ? (FREE_CUR[rq.status] ?? 1) : isPC ? (PC_CUR[rq.status] ?? 1) : (SCM_CUR[rq.status] ?? 1)
                   const stopped = ["RECALLED", "REJECTED", "NO_AIR"].includes(rq.status)
                   const done = cur >= steps.length
                   const waitName = rq.status === "APPROVED" ? "Logistics"
@@ -348,7 +355,9 @@ export default function Page() {
         const dimStr = (d0.boxW || d0.boxL || d0.boxH) ? `${d0.boxW || "-"}×${d0.boxL || "-"}×${d0.boxH || "-"} cm` : ""
         const Info = ({ label, value }: { label: string; value: any }) => <div><div className="text-[10px] uppercase tracking-wide text-gray-400">{label}</div><div className="text-gray-800 text-sm">{value || "-"}</div></div>
         const vIsPC = (rq.requestType || "SCM") === "PURCHASING"
-        const vSteps = vIsPC ? ["Requester", "DVM Purchase", "Logistics"] : ["Requester", "Purchase", "SCM Decision", "SCM Approve·1", "SCM Approve·2", "Logistics"]
+        const vSteps = isSampleLike(pullReqType(rq)) ? ["Requester", "Purchase", "Logistics"]
+          : vIsPC ? ["Requester", "DVM Purchase", "Logistics"]
+          : ["Requester", "Purchase", "SCM Decision", "SCM Approve·1", "SCM Approve·2", "Logistics"]
         const vCur = vIsPC ? (PC_CUR[rq.status] ?? 1) : (SCM_CUR[rq.status] ?? 1)
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setViewRq(null)}>
