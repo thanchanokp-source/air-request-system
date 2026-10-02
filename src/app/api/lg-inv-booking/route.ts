@@ -59,19 +59,20 @@ export async function GET(_req: NextRequest) {
   // 2) Air Request items (NYG) → per-SO readiness + per SO+SUB planned air qty + the bookable item id.
   const items = await (prisma as any).airRequestItem.findMany({
     where: { request: { bu: "NYG", isTest: false } },
-    select: { id: true, requestId: true, so: true, sub: true, itemStatus: true, qtyRequestAir: true, airFreight: true, hawbNo: true },
+    select: { id: true, requestId: true, so: true, sub: true, itemStatus: true, qtyRequestAir: true, airFreight: true, hawbNo: true, invoiceNo: true },
   }).catch(() => [])
   const subN = (s: any) => String(s == null ? "" : s).trim().toUpperCase()
+  const invN = (s: any) => String(s == null ? "" : s).trim().toUpperCase()
   // Air req items grouped as a LIST per SO+SUB (NOT summed) — needed to PAIR each mp_line line to a
   // specific air req item when a SO+SUB has several planned lines with different qty.
-  type AirItem = { itemId: string; reqId: string; qty: number; est: number; ready: boolean; booked: boolean }
+  type AirItem = { itemId: string; reqId: string; qty: number; est: number; ready: boolean; booked: boolean; inv: string }
   const airItemsBySoSub = new Map<string, AirItem[]>()
   for (const it of items) {
     const k = soN(it.so); if (!k) continue
     const pk = `${k}|${subN(it.sub)}`
     const arr = airItemsBySoSub.get(pk) || []
     // booked = LG already keyed a HAWB on this item → the SO is done, drop it from the pick list.
-    arr.push({ itemId: it.id, reqId: it.requestId, qty: Number(it.qtyRequestAir) || 0, est: Number(it.airFreight) || 0, ready: READY.has(it.itemStatus), booked: !!(it.hawbNo && String(it.hawbNo).trim()) })
+    arr.push({ itemId: it.id, reqId: it.requestId, qty: Number(it.qtyRequestAir) || 0, est: Number(it.airFreight) || 0, ready: READY.has(it.itemStatus), booked: !!(it.hawbNo && String(it.hawbNo).trim()), inv: invN(it.invoiceNo) })
     airItemsBySoSub.set(pk, arr)
   }
 
@@ -90,9 +91,20 @@ export async function GET(_req: NextRequest) {
   const byPk = new Map<string, any[]>()
   for (const l of allLines as any[]) { const pk = `${l._sok}|${l._sub}`; if (!byPk.has(pk)) byPk.set(pk, []); byPk.get(pk)!.push(l) }
   for (const [pk, lines] of byPk) {
-    const pool = [...(airItemsBySoSub.get(pk) || [])] // available air req items
+    const all = airItemsBySoSub.get(pk) || []
+    // Pass 0 — this INV is ALREADY booked on an item of this SO+SUB (same invoice) → that line is done.
+    // Must run before qty pairing, else a duplicate unbooked item (same SO+SUB in another doc) steals
+    // the line and the booked INV reappears as "ยังไม่ถึงคิว".
+    const used = new Set<string>()
+    for (const l of lines) {
+      const b = all.find(a => a.booked && a.inv && a.inv === invN(l.inv) && !used.has(a.itemId))
+      if (b) { used.add(b.itemId); l._pair = b }
+    }
+    // Remaining pool: unbooked items + legacy booked items with no invoice recorded. An item booked
+    // under ANOTHER invoice belongs to that INV's line, never to this one.
+    const pool = all.filter(a => !used.has(a.itemId) && !(a.booked && a.inv))
     // Pass 1 — exact qty
-    for (const l of lines) { const i = pool.findIndex(a => a.qty === l.pcs); if (i >= 0) l._pair = pool.splice(i, 1)[0] }
+    for (const l of lines) { if (l._pair) continue; const i = pool.findIndex(a => a.qty === l.pcs); if (i >= 0) l._pair = pool.splice(i, 1)[0] }
     // Pass 2 — closest qty for the rest
     for (const l of lines) {
       if (l._pair || pool.length === 0) continue
