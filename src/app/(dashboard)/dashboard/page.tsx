@@ -649,9 +649,7 @@ export default function DashboardPage() {
   const [mpQtyBySub, setMpQtyBySub] = useState<Record<string, number>>({}) // "SOkey|SUB" → actual shipped qty (mp_line or export)
   const [mpSrcBySub, setMpSrcBySub] = useState<Record<string, string>>({}) // "SOkey|SUB" → source: "mp_line" | "export"
   const [mpInv, setMpInv] = useState<Record<string, { qty: number; src: string }>>({}) // "SOkey|SUB|INV" → qty of that shipment round
-  const [invBySrc, setInvBySrc] = useState<{ mp_line: Record<string, number>; export: Record<string, number> }>({ mp_line: {}, export: {} })
-  const [invMeta, setInvMeta] = useState<Record<string, { style: string[]; desc: string[] }>>({}) // SO|SUB|INV → style/description from mp_line/export
-  // default ON — dashboard opens in mp_line map mode (NYG/All BU); toggle 🔗 turns it off.
+  const [invBySrc, setInvBySrc] = useState<{ mp_line: Record<string, number>; export: Record<string, number> }>({ mp_line: {}, export: {} })  // default ON — dashboard opens in mp_line map mode (NYG/All BU); toggle 🔗 turns it off.
   // Persist the choice so it stays ON across reloads (stored per browser).
   const [mpMode, setMpMode] = useState(true)
   useEffect(() => {
@@ -694,9 +692,7 @@ export default function DashboardPage() {
       for (const [sk, v] of Object.entries(sa)) { subQm[sk] = Number(v?.qty) || 0; subSrc[sk] = v?.src || "" }
       setMpQtyBySub(subQm); setMpSrcBySub(subSrc)
       setMpInv((d?.invActual || {}) as Record<string, { qty: number; src: string }>)
-      setInvBySrc({ mp_line: d?.invMp || {}, export: d?.invEx || {} })
-      setInvMeta(d?.invMeta || {})
-    }).catch(() => {})
+      setInvBySrc({ mp_line: d?.invMp || {}, export: d?.invEx || {} })    }).catch(() => {})
   }, [brandFKey, actualF])
   // ยอด Sale Order ทั้งหมด (SO_ORDER · NYG · ทุก ship mode) — ตาม ปี/เดือน (ship_date) + Brand ที่เลือก
   const [soOrder, setSoOrder] = useState<{ pcs: number; soCount: number; subCount: number; unparsed: number } | null>(null)
@@ -801,63 +797,77 @@ export default function DashboardPage() {
   // EST / ACT summed. QTY AIR = that INV's qty from export/mp_line (source with the larger SO+SUB total).
   // A source INV of a shown SO+SUB that NO air-req line carries (LG keyed the wrong INV) is added as its
   // own row "ยังไม่ผูก air req" (EST/ACT 0) → the QTY AIR total equals the export/mp_line total.
+  // Decided per SO+SUB so LG keying mistakes never need a manual fix for the dashboard to be right:
+  //   · its lines' INVs match the source INVs exactly → one row per INV round (QTY = that INV's qty)
+  //   · they don't (wrong / one INV on every line, a round not booked yet) → ONE row for the whole SO+SUB
+  //     (QTY = SO+SUB total, INV/HAWB listed) — the original behaviour, always reconciles
+  //   In both modes QTY AIR sums to the export/mp_line total and EST/ACT sum every line (ACT = HAWB money).
   const shipAgg = useMemo(()=>{
     const join = (xs: any[]) => [...new Set(xs.map(x => String(x ?? "").trim()).filter(Boolean))].join(", ")
-    const groups = new Map<string, any[]>()
-    for (const r of shippedLines) { const k = `${subKey(r)}|${invU(r)}`; const g = groups.get(k) || []; g.push(r); groups.set(k, g) }
-    const out: any[] = [], qty = new Map<string, number>(), src = new Map<string, string>()
-    const invMismatch = new Set<string>()
-    const subsShown = new Map<string, any>()   // SO+SUB → a base line (for synthetic rows)
-    for (const [k, rows] of groups) {
-      const b = rows[0], sk = subKey(b)
-      if (!subsShown.has(sk)) subsShown.set(sk, b)
+    const merge = (id: string, rows: any[]) => {
+      const b = rows[0]
       const origByStyle = new Map<string, number>()
       for (const r of rows) origByStyle.set(styleU(r), Math.max(origByStyle.get(styleU(r)) || 0, Number(r.qtyOriginalShipment) || 0))
       const acts = rows.map(r => r.actualAirFreight).filter((v: any) => v != null)
-      out.push({
-        ...b, id: `ship:${k}`, _lines: rows.length,
+      return {
+        ...b, id, _lines: rows.length,
         style: join(rows.map(r => r.style)), description: join(rows.map(r => r.description)),
+        invoiceNo: join(rows.map(r => r.invoiceNo)), hawbNo: join(rows.map(r => r.hawbNo)),
         request: { ...b.request, documentNo: join(rows.map(r => r.request?.documentNo)) },
         qtyOriginalShipment: [...origByStyle.values()].reduce((a, c) => a + c, 0),
         qtyRequestAir: rows.reduce((a, r) => a + (Number(r.qtyRequestAir) || 0), 0),
         qtyActualShip: rows.reduce((a, r) => a + (Number(r.qtyActualShip) || 0), 0),
         airFreight: rows.reduce((a, r) => a + (Number(r.airFreight) || 0), 0),
         actualAirFreight: acts.length ? acts.reduce((a: number, v: any) => a + (Number(v) || 0), 0) : null,
-      })
+      }
     }
-    // QTY per round + synthetic rows for source INVs nobody booked
     const bySub = new Map<string, any[]>()
-    for (const r of out) { const sk = subKey(r); const g = bySub.get(sk) || []; g.push(r); bySub.set(sk, g) }
-    for (const [sk, rows] of bySub) {
-      if (mpQtyBySub[sk] == null) { rows.forEach(r => { qty.set(r.id, 0); src.set(r.id, "ไม่พบ") }); continue }
+    for (const r of shippedLines) { const sk = subKey(r); const g = bySub.get(sk) || []; g.push(r); bySub.set(sk, g) }
+    const out: any[] = [], qty = new Map<string, number>(), src = new Map<string, string>()
+    const invMismatch = new Set<string>()   // SO+SUB shown as one row because its INVs ≠ source INVs
+    for (const [sk, lines] of bySub) {
+      const known = mpQtyBySub[sk] != null
       const s = (mpSrcBySub[sk] || "mp_line") as "mp_line" | "export"
-      const invMap = invBySrc[s] || {}
-      const srcInvs = Object.keys(invMap).filter(k => k.startsWith(`${sk}|`))
-      const rowInvs = new Set(rows.map(r => `${sk}|${invU(r)}`))
-      if (!srcInvs.length) {
-        // source has this SO+SUB but no INV split → only safe when one round is shown
-        rows.forEach((r, i) => { qty.set(r.id, rows.length === 1 && i === 0 ? Number(mpQtyBySub[sk]) || 0 : 0); src.set(r.id, rows.length === 1 ? s : "ไม่พบ") })
-        continue
-      }
-      for (const r of rows) {
-        const hit = invMap[`${sk}|${invU(r)}`]
-        qty.set(r.id, hit != null ? Number(hit) || 0 : 0); src.set(r.id, hit != null ? s : "ไม่พบ")
-        if (hit == null) invMismatch.add(sk)
-      }
-      const base = subsShown.get(sk)
-      for (const ik of srcInvs) {
-        if (rowInvs.has(ik)) continue
-        invMismatch.add(sk)
-        const inv = ik.split("|")[2] || ""
-        const meta = invMeta[ik]
-        const syn = { ...base, id: `ship:${ik}`, _synthetic: true, _lines: 0, invoiceNo: inv, hawbNo: "",
-          style: (meta?.style || []).join(", "), description: (meta?.desc || []).join(", ") || base.description || "",
-          request: { ...base.request, documentNo: "-" }, qtyOriginalShipment: 0, qtyRequestAir: 0, qtyActualShip: 0, airFreight: 0, actualAirFreight: null }
-        out.push(syn); qty.set(syn.id, Number(invMap[ik]) || 0); src.set(syn.id, s)
+      const invMap = known ? (invBySrc[s] || {}) : {}
+      const srcInvs = new Set(Object.keys(invMap).filter(k => k.startsWith(`${sk}|`)))
+      const lineInvs = new Set(lines.map(r => `${sk}|${invU(r)}`))
+      const exact = srcInvs.size > 0 && [...lineInvs].every(k => srcInvs.has(k)) && [...srcInvs].every(k => lineInvs.has(k))
+      if (exact) {
+        const byInv = new Map<string, any[]>()
+        for (const r of lines) { const k = `${sk}|${invU(r)}`; const g = byInv.get(k) || []; g.push(r); byInv.set(k, g) }
+        for (const [k, g] of byInv) { const row = merge(`ship:${k}`, g); out.push(row); qty.set(row.id, Number(invMap[k]) || 0); src.set(row.id, s) }
+      } else {
+        // LG's INVs don't match → try to put each line under the RIGHT source INV by qty:
+        //   1) a source INV whose qty equals a line's air/ship qty takes that line (1-to-1)
+        //   2) if exactly one INV is still open, it takes every remaining line
+        //   any INV left without a line, or a line left over → can't tell → one merged row (always reconciles)
+        const assigned = new Map<string, any[]>()
+        if (known && srcInvs.size > 0) {
+          const open = [...srcInvs], left = [...lines]
+          for (const ik of [...open]) {
+            const q = Number(invMap[ik]) || 0
+            const i = left.findIndex(r => Number(r.qtyRequestAir) === q || Number(r.qtyActualShip) === q)
+            if (i >= 0) { assigned.set(ik, [left.splice(i, 1)[0]]); open.splice(open.indexOf(ik), 1) }
+          }
+          if (open.length === 1 && left.length) { assigned.set(open[0], left.splice(0)); open.length = 0 }
+          if (open.length || left.length) assigned.clear()
+        }
+        if (assigned.size) {
+          for (const [ik, g] of assigned) {
+            const row = merge(`ship:${ik}`, g)
+            row.invoiceNo = ik.split("|")[2] || row.invoiceNo; row._autoInv = true   // show the source INV
+            out.push(row); qty.set(row.id, Number(invMap[ik]) || 0); src.set(row.id, s)
+          }
+          invMismatch.add(sk)
+        } else {
+          const row = merge(`ship:${sk}`, lines); out.push(row)
+          qty.set(row.id, known ? Number(mpQtyBySub[sk]) || 0 : 0); src.set(row.id, known ? s : "ไม่พบ")
+          if (known && srcInvs.size > 0) invMismatch.add(sk)
+        }
       }
     }
     return { rows: out, qty, src, invMismatch }
-  }, [shippedLines, mpQtyBySub, mpSrcBySub, invBySrc, invMeta])
+  }, [shippedLines, mpQtyBySub, mpSrcBySub, invBySrc])
   const shippedRows = shipAgg.rows
   // rounds booked per SO+SUB vs real shipment rounds (distinct INV in mp_line/export) — used by the
   // "ยังไม่มีการส่ง" dedupe below
@@ -1537,7 +1547,9 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 font-semibold" title={tableShipped ? "ยอด ship จริงของรอบนี้ (SO+SUB+INV จาก mp_line / export)" : "QTY AIR (แผน)"}>{tableShipped ? shipQtyOf(row).toLocaleString() : (row.qtyRequestAir ?? "-")}</td>
                     <td className="px-3 py-1.5 text-blue-700">{fmtNum(row.airFreight)}</td>
                     <td className="px-3 py-1.5 text-green-700 font-medium">{fmtNum(row.actualAirFreight)}</td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}{row._synthetic && <span className="ml-1 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold" title="INV นี้มีใน export / mp_line แต่ยังไม่มีแถว air request ไหนผูกไว้ — ให้ LG แก้ INV ในหน้า FIX HAWB">ยังไม่ผูก air req</span>}{tableShipped && !row._synthetic && isInvMismatch(row) && <span className="ml-1 text-orange-600 font-bold" title="INV ของ SO+SUB นี้ไม่ตรงกับ export / mp_line (เช่น LG ใส่ INV เดียวให้ทุกแถว) — QTY แบ่งจากยอดรวม SO+SUB">⚠</span>}</td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}{row._synthetic && <span className="ml-1 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold" title="INV นี้มีใน export / mp_line แต่ยังไม่มีแถว air request ไหนผูกไว้ — ให้ LG แก้ INV ในหน้า FIX HAWB">ยังไม่ผูก air req</span>}{isAdmin && tableShipped && isInvMismatch(row) && (row._autoInv
+                      ? <span className="ml-1 px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 text-[10px] font-bold" title="LG ใส่ INV ใน air request ไม่ตรง → ระบบจับคู่เอกสารกับ INV นี้จาก qty ที่ตรงกับ export / mp_line (ข้อมูลใน air request ยังไม่ถูกแก้)">จับคู่อัตโนมัติ</span>
+                      : <span className="ml-1 text-orange-600 font-bold" title="INV ใน air request ไม่ตรงกับ export / mp_line และจับคู่จาก qty ไม่ได้ → รวมเป็น 1 แถวต่อ SO+SUB (ยอดยังถูก)">⚠</span>)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.hawbNo || "-"}</td>
                     <td className="px-3 py-1.5">
                       {vp!=null&&<span className={`font-medium ${vp>10?"text-red-600":vp<-10?"text-green-600":"text-gray-500"}`}>{fmtPct(vp)}</span>}
@@ -1562,7 +1574,7 @@ export default function DashboardPage() {
                   <td className="px-3 py-2 whitespace-nowrap" title={tableShipped ? "ยอดตั้งต้นจาก export / mp_line ต่อรอบส่ง (SO+SUB+INV) — ผลรวมเท่ายอดในตาราง export / mp_line" : undefined}>
                     {tblQAir.toLocaleString()}
                     {tableShipped && shipUnmatched > 0 && <span className="ml-1.5 text-[10px] font-semibold text-amber-700" title="SO+SUB ที่ไม่พบใน export / mp_line → QTY = 0 (ไม่นับ)">⚠ {shipUnmatched} แถวไม่พบใน export</span>}
-                    {tableShipped && shipAlloc.invMismatch.size > 0 && <span className="ml-1.5 text-[10px] font-semibold text-orange-700" title="INV ที่ LG ใส่ใน air request ไม่ตรงกับ INV ใน export / mp_line → แบ่งยอดรวม SO+SUB ให้แทน (ยอดรวมยังเท่า export) · ควรให้ LG แก้ INV ในหน้า FIX HAWB">⚠ {shipAlloc.invMismatch.size} SO+SUB INV ไม่ตรง</span>}
+                    {isAdmin && tableShipped && shipAlloc.invMismatch.size > 0 && <span className="ml-1.5 text-[10px] font-semibold text-orange-700" title="SO+SUB ที่ INV ใน air request ไม่ตรงกับ export / mp_line → แสดงรวม 1 แถวต่อ SO+SUB (ยอดรวมยังเท่า export) · admin เท่านั้นที่เห็น">⚠ {shipAlloc.invMismatch.size} SO+SUB รวมแถว (INV ไม่ตรง)</span>}
                   </td>
                   <td className="px-3 py-2 text-blue-700">{fmtNum(tblEst)}</td>
                   <td className="px-3 py-2 text-green-700">{fmtNum(tblAct)}</td>
