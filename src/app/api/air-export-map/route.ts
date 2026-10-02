@@ -62,17 +62,16 @@ export async function GET(req: NextRequest) {
   // ── Actual shipped qty per SO+SUB, with SOURCE ──────────────────────────────
   // mp_line covers ~mid-Sept onward; older AIR shipments live in sq_report.export_row (AIR PREPAID).
   // Prefer mp_line for any SO+SUB it has; fall back to sq_report for the rest → no double-count.
-  const subActual: Record<string, { qty: number; src: string }> = {}
-  // Same, split per shipment round: SO+SUB+INV (1 INV = 1 round) → the dashboard shows one row per round.
-  const invActual: Record<string, { qty: number; src: string }> = {}
+  // Both sources describe the SAME shipments; mp_line can be PARTIAL for a SO (e.g. 895 vs export 1,125),
+  // so per key take the source with the LARGER qty instead of always preferring mp_line.
+  // subActual = per SO+SUB · invActual = per SO+SUB+INV (1 INV = 1 shipment round)
+  const mpSub: Record<string, number> = {}, exSub: Record<string, number> = {}
+  const mpInvQ: Record<string, number> = {}, exInvQ: Record<string, number> = {}
   for (const [k, m] of mpBySo) {
     for (const ln of m.lines) {
-      const sk = `${k}|${up(ln.sub)}`
-      if (!subActual[sk]) subActual[sk] = { qty: 0, src: "mp_line" }
-      subActual[sk].qty += Number(ln.pcs) || 0
-      const ik = `${sk}|${up(ln.inv)}`
-      if (!invActual[ik]) invActual[ik] = { qty: 0, src: "mp_line" }
-      invActual[ik].qty += Number(ln.pcs) || 0
+      const sk = `${k}|${up(ln.sub)}`, ik = `${sk}|${up(ln.inv)}`
+      mpSub[sk] = (mpSub[sk] || 0) + (Number(ln.pcs) || 0)
+      mpInvQ[ik] = (mpInvQ[ik] || 0) + (Number(ln.pcs) || 0)
     }
   }
   try {
@@ -80,15 +79,21 @@ export async function GET(req: NextRequest) {
       `SELECT so_no, sub_no, invoice_no, qty_pcs FROM sq_report.export_row WHERE UPPER(TRIM(ship_mode)) = 'AIR PREPAID'`)
     for (const r of sq) {
       const k = soN(r.so_no); if (!k) continue
-      const sk = `${k}|${up(r.sub_no)}`
-      if (subActual[sk]?.src === "mp_line") continue      // mp_line wins for overlapping subs
-      if (!subActual[sk]) subActual[sk] = { qty: 0, src: "export" }
-      subActual[sk].qty += Number(r.qty_pcs) || 0
-      const ik = `${sk}|${up(r.invoice_no)}`
-      if (!invActual[ik]) invActual[ik] = { qty: 0, src: "export" }
-      invActual[ik].qty += Number(r.qty_pcs) || 0
+      const sk = `${k}|${up(r.sub_no)}`, ik = `${sk}|${up(r.invoice_no)}`
+      exSub[sk] = (exSub[sk] || 0) + (Number(r.qty_pcs) || 0)
+      exInvQ[ik] = (exInvQ[ik] || 0) + (Number(r.qty_pcs) || 0)
     }
   } catch { /* sq_report.export_row unavailable → mp_line only */ }
+  const pickMax = (mpQ: Record<string, number>, exQ: Record<string, number>) => {
+    const out: Record<string, { qty: number; src: string }> = {}
+    for (const key of new Set([...Object.keys(mpQ), ...Object.keys(exQ)])) {
+      const a = mpQ[key] || 0, b = exQ[key] || 0
+      out[key] = b > a ? { qty: b, src: "export" } : { qty: a, src: "mp_line" }
+    }
+    return out
+  }
+  const subActual = pickMax(mpSub, exSub)
+  const invActual = pickMax(mpInvQ, exInvQ)
 
   // ── Air Request items (NYG, non-test) ──
   const items = await (prisma as any).airRequestItem.findMany({

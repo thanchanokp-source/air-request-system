@@ -771,50 +771,65 @@ export default function DashboardPage() {
   // มี HAWB จริง = ไม่ว่าง และไม่ใช่ placeholder ("-", "N/A", ".", "0")
   const hasHawb = (r:any) => { const h = String(r?.hawbNo ?? "").trim(); return h !== "" && !/^[-.–—\s]*$/.test(h) && !["n/a","na","0","null"].includes(h.toLowerCase()) }
   const invU = (r:any) => String(r?.invoiceNo ?? "").trim().toUpperCase()
-  // ส่งออกจริง = air-req rows ที่มี HAWB — 1 แถวต่อ "รอบส่ง" = SO+SUB+INV.
-  //   ส่งหลายรอบ (คนละ INV) → หลายแถว (ACT ครบทุกรอบ) · INV เดียวกันซ้ำหลาย doc (อัปซ้ำ) → ยุบเหลือ 1
-  //   แถวที่เก็บ = "ไปไกลสุดใน flow" (มี actual > ไม่ reject > doc ล่าสุด).
+  const styleU = (r:any) => String(r?.style ?? "").trim().toUpperCase()
+  const docOf = (r:any) => String(r?.request?.documentNo || r?.requestId || "")
+  // ส่งออกจริง = air-req rows ที่มี HAWB. Rows of ONE document are all kept (a doc can legitimately carry
+  // many lines of the same SO+SUB+INV — e.g. several styles / 216+9 splits). Only a line repeated in
+  // ANOTHER document (same SO+SUB+STYLE+INV = อัปซ้ำ) collapses: keep the doc that went furthest
+  // (has actual > not rejected > latest doc no). ส่งหลายรอบ (คนละ INV) = คนละ key → คนละแถว.
   const shippedRows = useMemo(()=>{
     const score = (r:any) => (r.actualAirFreight!=null?1000:0) + (r.itemStatus==="REJECTED"?-1000:0)
-    const best = new Map<string, any>()
-    for (const r of baseFiltered) {
-      if (!hasHawb(r)) continue
-      const k = `${subKey(r)}|${invU(r)}`; const cur = best.get(k)
-      if (!cur) { best.set(k, r); continue }
-      const sc = score(r), scCur = score(cur)
-      if (sc > scCur || (sc===scCur && String(r.request?.documentNo||"") > String(cur.request?.documentNo||""))) best.set(k, r)
+    const rows = baseFiltered.filter(hasHawb)
+    const lineKey = (r:any) => `${subKey(r)}|${styleU(r)}|${invU(r)}`
+    const bestDoc = new Map<string, { doc: string; sc: number }>()
+    for (const r of rows) {
+      const k = lineKey(r), d = docOf(r), sc = score(r), cur = bestDoc.get(k)
+      if (!cur || sc > cur.sc || (sc === cur.sc && d > cur.doc)) bestDoc.set(k, { doc: d, sc })
     }
-    return [...best.values()]
+    return rows.filter(r => bestDoc.get(lineKey(r))?.doc === docOf(r))
   }, [baseFiltered])
-  // shipped rows per SO+SUB, and real shipment rounds (distinct INV in mp_line/export) per SO+SUB
+  // counts used to attribute qty: shipped rows per SO+SUB, rows sharing one SO+SUB+INV (same round),
+  // and real shipment rounds (distinct INV in mp_line/export) per SO+SUB
   const shipCntBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const r of shippedRows) m.set(subKey(r), (m.get(subKey(r))||0)+1); return m }, [shippedRows])
+  const rowsPerInv = useMemo(()=>{ const m = new Map<string, number>(); for (const r of shippedRows) { const k = `${subKey(r)}|${invU(r)}`; m.set(k, (m.get(k)||0)+1) } return m }, [shippedRows])
   const invRoundsBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const ik of Object.keys(mpInv)) { const sk = ik.split("|").slice(0,2).join("|"); m.set(sk, (m.get(sk)||0)+1) } return m }, [mpInv])
-  // QTY of one shipped row = qty of ITS round (SO+SUB+INV). Fallbacks: the only shipped row of the SO+SUB
-  // takes the SO+SUB total; otherwise LG's own qtyActualShip (src "air-req").
+  // QTY of one shipped row:
+  //   · the ONLY row of its SO+SUB+INV round → that round's qty from mp_line/export
+  //   · several rows share the round (styles/splits) → each row's own LG qty (qtyActualShip), src "LG"
+  //   · INV not found in mp_line/export → SO+SUB total if it's the only row, else LG qty
   const shipQtyOf = useMemo(()=> (r:any): number => {
-    const iv = invU(r), hit = iv ? mpInv[`${subKey(r)}|${iv}`] : undefined
+    const iv = invU(r), multi = (rowsPerInv.get(`${subKey(r)}|${iv}`) || 0) > 1
+    if (multi) return Number(r.qtyActualShip ?? r.qtyRequestAir) || 0
+    const hit = iv ? mpInv[`${subKey(r)}|${iv}`] : undefined
     if (hit) return Number(hit.qty) || 0
     if ((shipCntBySub.get(subKey(r)) || 0) <= 1) return Number(mpQtyBySub[subKey(r)]) || 0
     return Number(r.qtyActualShip ?? r.qtyRequestAir) || 0
-  }, [mpInv, mpQtyBySub, shipCntBySub])
+  }, [mpInv, mpQtyBySub, shipCntBySub, rowsPerInv])
   const shipSrcOf = useMemo(()=> (r:any): string => {
-    const iv = invU(r), hit = iv ? mpInv[`${subKey(r)}|${iv}`] : undefined
+    const iv = invU(r)
+    if ((rowsPerInv.get(`${subKey(r)}|${iv}`) || 0) > 1) return "LG"
+    const hit = iv ? mpInv[`${subKey(r)}|${iv}`] : undefined
     if (hit) return hit.src
     if ((shipCntBySub.get(subKey(r)) || 0) <= 1) return mpSrcBySub[subKey(r)] || ""
-    return "air-req"
-  }, [mpInv, mpSrcBySub, shipCntBySub])
-  // ยังไม่มีการส่ง = air-req rows ที่ยังไม่มี HAWB — ตัดแผนที่ซ้ำ:
-  //   (ก) SO+SUB+qty เดียวกันหลาย doc → นับ 1 · (ข) SO+SUB+qty นี้ส่งไปแล้ว และรอบส่งจริงถูกบันทึกครบแล้ว
-  //   (แถวส่งจริงของ SO+SUB ≥ จำนวน INV) → แถวแผนนี้คือของซ้ำ ไม่ใช่รอบที่ยังรอส่ง
+    return "LG"
+  }, [mpInv, mpSrcBySub, shipCntBySub, rowsPerInv])
+  // ยังไม่มีการส่ง = air-req rows ที่ยังไม่มี HAWB — ตัดแผนที่ซ้ำ "ข้ามเอกสาร" เท่านั้น (ในเอกสารเดียวกันเก็บทุกแถว):
+  //   (ก) SO+SUB+STYLE+qty เดียวกันอยู่อีก doc → นับ 1
+  //   (ข) บรรทัดเดียวกันนี้ส่งไปแล้วในอีก doc และรอบส่งจริงถูกบันทึกครบแล้ว (แถวส่งจริง ≥ จำนวน INV) → ของซ้ำ
   const unshippedRows = useMemo(()=>{
-    const shippedSame = new Set(shippedRows.map(s => `${subKey(s)}|${Number(s.qtyRequestAir)||0}`))
-    const seen = new Set<string>(), out: any[] = []
+    const lk = (r:any) => `${subKey(r)}|${styleU(r)}|${Number(r.qtyRequestAir)||0}`
+    const shippedDocs = new Map<string, Set<string>>()
+    for (const s of shippedRows) { const k = lk(s); const st = shippedDocs.get(k) || new Set<string>(); st.add(docOf(s)); shippedDocs.set(k, st) }
+    const firstDoc = new Map<string, string>(), out: any[] = []
     for (const r of baseFiltered) {
       if (hasHawb(r)) continue
-      const sk = subKey(r), k = `${sk}|${Number(r.qtyRequestAir)||0}`
-      if (seen.has(k)) continue
-      if (shippedSame.has(k) && (shipCntBySub.get(sk)||0) >= Math.max(invRoundsBySub.get(sk)||0, 1)) continue
-      seen.add(k); out.push(r)
+      const k = lk(r), d = docOf(r), sk = subKey(r)
+      const fd = firstDoc.get(k)
+      if (fd && fd !== d) continue
+      const sd = shippedDocs.get(k)
+      if (sd && ![...sd].every(x => x === d) && (shipCntBySub.get(sk)||0) >= Math.max(invRoundsBySub.get(sk)||0, 1)) continue
+      if (!fd) firstDoc.set(k, d)
+      out.push(r)
     }
     return out
   }, [baseFiltered, shippedRows, shipCntBySub, invRoundsBySub])
@@ -871,15 +886,15 @@ export default function DashboardPage() {
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
-  // once per SO+SUB (max) — the same order qty repeats on every row/round of that SO+SUB
-  const totalQOrig = (()=>{ const m = new Map<string, number>(); for (const r of filtered) { const k = subKey(r); m.set(k, Math.max(m.get(k)||0, Number(r.qtyOriginalShipment)||0)) } let t = 0; m.forEach(v => { t += v }); return t })()
+  // once per SO+SUB+STYLE (max) — the same order qty repeats on every row/round of that line
+  const totalQOrig = (()=>{ const m = new Map<string, number>(); for (const r of filtered) { const k = `${subKey(r)}|${String(r.style??"").trim().toUpperCase()}`; m.set(k, Math.max(m.get(k)||0, Number(r.qtyOriginalShipment)||0)) } let t = 0; m.forEach(v => { t += v }); return t })()
   const totalQAir  = filtered.reduce((s,r)=>s+(Number(r.qtyRequestAir)||0),0)
   const totalEst   = filtered.reduce((s,r)=>s+(r.airFreight||0),0)
   const totalAct   = filtered.reduce((s,r)=>s+(r.actualAirFreight||0),0)
   // ─── Data-table footer totals (based on the table's OWN view: SHIPPED vs ALL) ───
   const tblSO    = tableRows.length
-  // QTY ORIG = the SO+SUB's order qty, repeated on every shipment round → count ONCE per SO+SUB (max), not per row
-  const tblQOrig = (()=>{ const m = new Map<string, number>(); for (const r of tableRows) { const k = subKey(r); m.set(k, Math.max(m.get(k)||0, Number(r.qtyOriginalShipment)||0)) } let t = 0; m.forEach(v => { t += v }); return t })()
+  // QTY ORIG = the line's order qty (SO+SUB+STYLE), repeated on every shipment round/split → count ONCE (max)
+  const tblQOrig = (()=>{ const m = new Map<string, number>(); for (const r of tableRows) { const k = `${subKey(r)}|${styleU(r)}`; m.set(k, Math.max(m.get(k)||0, Number(r.qtyOriginalShipment)||0)) } let t = 0; m.forEach(v => { t += v }); return t })()
   const tblEst   = tableRows.reduce((s,r)=>s+(r.airFreight||0),0)
   const tblAct   = tableRows.reduce((s,r)=>s+(r.actualAirFreight||0),0)
   // QTY AIR total: "ส่งออกจริง" sums each row's own shipment round (SO+SUB+INV);
@@ -1478,7 +1493,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const sp=getSplits(row);return sp.length?sp.map((s:any)=>s.pct!=null?`${s.pct}%`:"-").join(" · "):"-"})()}</td>
                     <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const rs=[...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))];const txt=rs.length?rs.join(" · "):"-";return <span className="truncate block" title={txt}>{txt}</span>})()}</td>
                     <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const pw=Array.isArray(row.request.pendingWith)?row.request.pendingWith:[];const txt=pw.length?pw.join(", "):"-";return <span className="truncate block font-medium text-gray-700" title={txt}>{txt}</span>})()}</td>
-                    {isAdmin && <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const src=tableShipped?shipSrcOf(row):"";return src?<span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${src==="mp_line"?"bg-teal-100 text-teal-700":src==="export"?"bg-amber-100 text-amber-700":"bg-gray-100 text-gray-600"}`} title={src==="air-req"?"INV นี้ไม่พบใน mp_line/export → ใช้ QTY ที่ LG กรอก":undefined}>{src}</span>:<span className="text-gray-300">-</span>})()}</td>}
+                    {isAdmin && <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const src=tableShipped?shipSrcOf(row):"";return src?<span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${src==="mp_line"?"bg-teal-100 text-teal-700":src==="export"?"bg-amber-100 text-amber-700":"bg-gray-100 text-gray-600"}`} title={src==="LG"?"ใช้ QTY ที่ LG กรอก (หลายแถวใช้ INV เดียวกัน หรือ INV ไม่พบใน mp_line/export)":undefined}>{src}</span>:<span className="text-gray-300">-</span>})()}</td>}
                   </tr>
                 )
               })}
