@@ -650,6 +650,7 @@ export default function DashboardPage() {
   const [mpSrcBySub, setMpSrcBySub] = useState<Record<string, string>>({}) // "SOkey|SUB" → source: "mp_line" | "export"
   const [mpInv, setMpInv] = useState<Record<string, { qty: number; src: string }>>({}) // "SOkey|SUB|INV" → qty of that shipment round
   const [invBySrc, setInvBySrc] = useState<{ mp_line: Record<string, number>; export: Record<string, number> }>({ mp_line: {}, export: {} })
+  const [invMeta, setInvMeta] = useState<Record<string, { style: string[]; desc: string[] }>>({}) // SO|SUB|INV → style/description from mp_line/export
   // default ON — dashboard opens in mp_line map mode (NYG/All BU); toggle 🔗 turns it off.
   // Persist the choice so it stays ON across reloads (stored per browser).
   const [mpMode, setMpMode] = useState(true)
@@ -694,6 +695,7 @@ export default function DashboardPage() {
       setMpQtyBySub(subQm); setMpSrcBySub(subSrc)
       setMpInv((d?.invActual || {}) as Record<string, { qty: number; src: string }>)
       setInvBySrc({ mp_line: d?.invMp || {}, export: d?.invEx || {} })
+      setInvMeta(d?.invMeta || {})
     }).catch(() => {})
   }, [brandFKey, actualF])
   // ยอด Sale Order ทั้งหมด (SO_ORDER · NYG · ทุก ship mode) — ตาม ปี/เดือน (ship_date) + Brand ที่เลือก
@@ -843,13 +845,15 @@ export default function DashboardPage() {
         if (rowInvs.has(ik)) continue
         invMismatch.add(sk)
         const inv = ik.split("|")[2] || ""
-        const syn = { ...base, id: `ship:${ik}`, _synthetic: true, _lines: 0, invoiceNo: inv, hawbNo: "", style: "", description: "ยังไม่ผูก air req",
+        const meta = invMeta[ik]
+        const syn = { ...base, id: `ship:${ik}`, _synthetic: true, _lines: 0, invoiceNo: inv, hawbNo: "",
+          style: (meta?.style || []).join(", "), description: (meta?.desc || []).join(", ") || base.description || "",
           request: { ...base.request, documentNo: "-" }, qtyOriginalShipment: 0, qtyRequestAir: 0, qtyActualShip: 0, airFreight: 0, actualAirFreight: null }
         out.push(syn); qty.set(syn.id, Number(invMap[ik]) || 0); src.set(syn.id, s)
       }
     }
     return { rows: out, qty, src, invMismatch }
-  }, [shippedLines, mpQtyBySub, mpSrcBySub, invBySrc])
+  }, [shippedLines, mpQtyBySub, mpSrcBySub, invBySrc, invMeta])
   const shippedRows = shipAgg.rows
   // rounds booked per SO+SUB vs real shipment rounds (distinct INV in mp_line/export) — used by the
   // "ยังไม่มีการส่ง" dedupe below

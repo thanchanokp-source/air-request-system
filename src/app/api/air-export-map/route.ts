@@ -95,6 +95,28 @@ export async function GET(req: NextRequest) {
   const subActual = pickMax(mpSub, exSub)
   const invActual = pickMax(mpInvQ, exInvQ)
 
+  // STYLE / DESCRIPTION per SO+SUB+INV (for dashboard rows of a shipped INV that no air-req line carries).
+  // mp_line style is already loaded; description + export style are read in their own guarded queries so a
+  // missing column can never break this endpoint.
+  const invMeta: Record<string, { style: string[]; desc: string[] }> = {}
+  const addMeta = (so: any, sub: any, inv: any, style: any, desc: any) => {
+    const k = soN(so); if (!k) return
+    const ik = `${k}|${up(sub)}|${up(inv)}`
+    const m = invMeta[ik] || (invMeta[ik] = { style: [], desc: [] })
+    const st = String(style ?? "").trim(), de = String(desc ?? "").trim()
+    if (st && !m.style.includes(st)) m.style.push(st)
+    if (de && !m.desc.includes(de)) m.desc.push(de)
+  }
+  for (const r of mp) addMeta(r.so_no, r.sub_no, r.invoice_no, r.style, null)
+  try {
+    const dr = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, invoice_no, description FROM public.mp_line WHERE UPPER(TRIM(ship_mode)) = 'AIR PP'`)
+    for (const r of dr) addMeta(r.so_no, r.sub_no, r.invoice_no, null, r.description)
+  } catch { /* mp_line has no description column → style only */ }
+  try {
+    const er = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, invoice_no, style FROM sq_report.export_row WHERE UPPER(TRIM(ship_mode)) = 'AIR PREPAID'`)
+    for (const r of er) addMeta(r.so_no, r.sub_no, r.invoice_no, r.style, null)
+  } catch { /* export_row has no style column */ }
+
   // ── Air Request items (NYG, non-test) ──
   const items = await (prisma as any).airRequestItem.findMany({
     where: { request: { bu: "NYG", isTest: false } },
@@ -161,7 +183,7 @@ export async function GET(req: NextRequest) {
     tabA, tabB, subActual, invActual,
     // per-INV qty kept PER SOURCE — the dashboard picks the source at SO+SUB level (larger total) and only
     // then uses that same source's INV split, so INV spellings that differ between sources can't mix.
-    invMp: mpInvQ, invEx: exInvQ,
+    invMp: mpInvQ, invEx: exInvQ, invMeta,
     counts: {
       tabA: tabA.length, tabB: tabB.length, exactly, revise, prepaid, noship: tabB.length, mpKeys: mpBySo.size, countedSo, airKeys: airBySo.size,
       // pcs totals — actual exported qty from mp_line
