@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState, useRef, Fragment } from "react"
+import { useEffect, useState, useRef, useMemo, Fragment } from "react"
 import * as XLSX from "xlsx"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
@@ -8,6 +8,7 @@ import { getSplits, deptLabel, itemHasReassignSplit } from "@/lib/claim"
 import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 import { ApprovalChain } from "@/components/ApprovalChain"
 import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
+import { mapShippedPerItem, type ShipSource } from "@/lib/ship-map"
 
 // Attachments grouped by stage for the popup: MER / SCM / LG / Claim (by uploader role + category).
 const ATT_STAGES = ["MER", "SCM", "LG", "Claim"] as const
@@ -193,7 +194,17 @@ export default function RequestsPage() {
   useEffect(() => {
     fetch("/api/requests").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
     fetch("/api/users/claim-directory").then(r => r.json()).then(d => setClaimDir(Array.isArray(d) ? d : [])).catch(() => {})
+    // real shipped qty source (mp_line / export) for the "QTY ส่งออกจริง" column
+    fetch("/api/air-export-map", { cache: "no-store" }).then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setShipSrc({ subActual: d.subActual || {}, invMp: d.invMp || {}, invEx: d.invEx || {} }) }).catch(() => {})
   }, [])
+  const [shipSrc, setShipSrc] = useState<ShipSource | null>(null)
+  // QTY ส่งออกจริง per line — mapped across EVERY (non-test) document so a SO+SUB split over docs maps once
+  const shipMap = useMemo(() => {
+    if (!shipSrc) return null
+    const items = requests.filter((r: any) => !r.isTest).flatMap((r: any) => (r.items || []).map((i: any) => ({ ...i, request: r })))
+    return mapShippedPerItem(items, shipSrc)
+  }, [requests, shipSrc])
 
   // TEST documents (admin test uploads) are hidden from everyone except ADMIN in browse views.
   const buRequests = requests.filter(r => requestInBu(r, activeBu) && (!r.isTest || role === "ADMIN"))
@@ -369,6 +380,8 @@ export default function RequestsPage() {
         "PLAN DATE": fmtDate(r.planShipmentDate),
         "QTY ORIG": r.qtyOriginalShipment ?? "",
         "QTY AIR": r.qtyRequestAir ?? "",
+        "QTY ส่งออกจริง": shipMap?.get(r.id)?.qty ?? "",
+        "INV (ส่งออกจริง)": shipMap?.get(r.id)?.inv ?? "",
         "EST": r.airFreight ?? 0,
         "ACTUAL": r.actualAirFreight ?? 0,
         "INV NO": r.invoiceNo || "",
@@ -396,7 +409,7 @@ export default function RequestsPage() {
 
   const SO_COLS = [
     ["SO",""],["SUB",""],["BU",""],["BRAND","min-w-[90px]"],["CUSTOMER PO",""],["DESCRIPTION","min-w-[110px]"],["ORIG. DATE","min-w-[90px]"],["PLAN DATE","min-w-[90px]"],
-    ["QTY ORIG",""],["QTY AIR",""],["GROSS WEIGHT (KG)","min-w-[110px]"],
+    ["QTY ORIG",""],["QTY AIR",""],["QTY ส่งออกจริง","min-w-[100px]"],["GROSS WEIGHT (KG)","min-w-[110px]"],
     ["EST. AIR FREIGHT","min-w-[120px]"],["ACTUAL AIR FREIGHT","min-w-[130px]"],
     ["FACTORY",""],["COUNTRY",""],["CLAIM DEPT","min-w-[100px]"],["INVOICE NO","min-w-[100px]"],["HAWB#","min-w-[100px]"],
     ["SO STATUS","min-w-[90px]"],["CURRENT STEP","min-w-[110px]"],["REASON","min-w-[180px]"]
@@ -720,6 +733,14 @@ export default function RequestsPage() {
                                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
                                     <td className="px-3 py-2">{row.qtyOriginalShipment}</td>
                                     <td className="px-3 py-2 font-semibold">{row.qtyRequestAir}</td>
+                                    {(() => {
+                                      if (!shipMap) return <td className="px-3 py-2 text-gray-300">…</td>
+                                      const sh = shipMap.get(row.id)
+                                      if (!sh) return <td className="px-3 py-2 text-gray-400 whitespace-nowrap" title="ไม่พบ SO+SUB นี้ใน mp_line / export">ยังไม่ส่งออก</td>
+                                      const diff = sh.qty !== (Number(row.qtyRequestAir) || 0)
+                                      return <td className={`px-3 py-2 font-semibold whitespace-nowrap ${diff ? "text-orange-700 bg-orange-50" : "text-green-700"}`}
+                                        title={`ส่งออกจริง ${sh.qty.toLocaleString()} pcs · INV ${sh.inv || "-"} · ${sh.src}${diff ? ` · ≠ QTY AIR ${Number(row.qtyRequestAir || 0).toLocaleString()}` : ""}`}>{sh.qty.toLocaleString()}</td>
+                                    })()}
                                     <td className="px-3 py-2 text-blue-700">{fmtNum(row.grossWeight, 2)}</td>
                                     <td className="px-3 py-2 text-blue-700">{row.airFreight != null ? `${fmtNum(row.airFreight)} ${soUnit(row)}` : "-"}</td>
                                     <td className="px-3 py-2 font-semibold text-green-700">{row.actualAirFreight != null ? `${fmtNum(row.actualAirFreight)} ${soUnit(row)}` : "-"}</td>

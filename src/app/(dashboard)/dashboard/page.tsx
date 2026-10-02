@@ -648,7 +648,6 @@ export default function DashboardPage() {
   const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line) — SO-level (page-wide map)
   const [mpQtyBySub, setMpQtyBySub] = useState<Record<string, number>>({}) // "SOkey|SUB" → actual shipped qty (mp_line or export)
   const [mpSrcBySub, setMpSrcBySub] = useState<Record<string, string>>({}) // "SOkey|SUB" → source: "mp_line" | "export"
-  const [mpInv, setMpInv] = useState<Record<string, { qty: number; src: string }>>({}) // "SOkey|SUB|INV" → qty of that shipment round
   const [invBySrc, setInvBySrc] = useState<{ mp_line: Record<string, number>; export: Record<string, number> }>({ mp_line: {}, export: {} })  // default ON — dashboard opens in mp_line map mode (NYG/All BU); toggle 🔗 turns it off.
   // Persist the choice so it stays ON across reloads (stored per browser).
   const [mpMode, setMpMode] = useState(true)
@@ -691,7 +690,6 @@ export default function DashboardPage() {
       const subQm: Record<string, number> = {}, subSrc: Record<string, string> = {}
       for (const [sk, v] of Object.entries(sa)) { subQm[sk] = Number(v?.qty) || 0; subSrc[sk] = v?.src || "" }
       setMpQtyBySub(subQm); setMpSrcBySub(subSrc)
-      setMpInv((d?.invActual || {}) as Record<string, { qty: number; src: string }>)
       setInvBySrc({ mp_line: d?.invMp || {}, export: d?.invEx || {} })    }).catch(() => {})
   }, [brandFKey, actualF])
   // ยอด Sale Order ทั้งหมด (SO_ORDER · NYG · ทุก ship mode) — ตาม ปี/เดือน (ship_date) + Brand ที่เลือก
@@ -767,41 +765,21 @@ export default function DashboardPage() {
   // Data table view — "SHIPPED" = ส่งออกจริง (mp_line lines) · "UNSHIPPED" = ยังไม่มีการส่ง (air-req not in mp_line).
   const [tableView, setTableView] = useState<"SHIPPED"|"UNSHIPPED">("SHIPPED")
   const tableShipped = tableView==="SHIPPED"
-  // "ส่งออกแล้ว" = air-req row ที่มี HAWB (LG เติมแล้ว = ship จริง).
   // มี HAWB จริง = ไม่ว่าง และไม่ใช่ placeholder ("-", "N/A", ".", "0")
   const hasHawb = (r:any) => { const h = String(r?.hawbNo ?? "").trim(); return h !== "" && !/^[-.–—\s]*$/.test(h) && !["n/a","na","0","null"].includes(h.toLowerCase()) }
   const invU = (r:any) => String(r?.invoiceNo ?? "").trim().toUpperCase()
   const styleU = (r:any) => String(r?.style ?? "").trim().toUpperCase()
-  const docOf = (r:any) => String(r?.request?.documentNo || r?.requestId || "")
-  // ส่งออกจริง = air-req rows ที่มี HAWB. Rows of ONE document are all kept (a doc can legitimately carry
-  // many lines of the same SO+SUB+INV — e.g. several styles / 216+9 splits). Only a line repeated in
-  // ANOTHER document (same SO+SUB+STYLE+INV = อัปซ้ำ) collapses: keep the doc that went furthest
-  // (has actual > not rejected > latest doc no). ส่งหลายรอบ (คนละ INV) = คนละ key → คนละแถว.
-  const shippedLines = useMemo(()=>{
-    const score = (r:any) => (r.actualAirFreight!=null?1000:0) + (r.itemStatus==="REJECTED"?-1000:0)
-    const rows = baseFiltered.filter(hasHawb)
-    const lineKey = (r:any) => `${subKey(r)}|${styleU(r)}|${invU(r)}`
-    const bestDoc = new Map<string, { doc: string; sc: number }>()
-    for (const r of rows) {
-      const k = lineKey(r), d = docOf(r), sc = score(r), cur = bestDoc.get(k)
-      if (!cur || sc > cur.sc || (sc === cur.sc && d > cur.doc)) bestDoc.set(k, { doc: d, sc })
-    }
-    // A line that already carries an ACTUAL is never dropped — LG really split HAWB money onto it, so
-    // dropping it would make ACT ≠ the HAWB total (e.g. 2609_0002 + 0003 both keyed INV …085). Only
-    // repeat lines with no actual are treated as duplicate uploads. QTY stays single: lines of one
-    // SO+SUB+INV are merged into one row whose QTY = that INV's source qty.
-    return rows.filter(r => bestDoc.get(lineKey(r))?.doc === docOf(r) || (Number(r.actualAirFreight) || 0) > 0)
-  }, [baseFiltered])
-  // ── ส่งออกจริง table/cards = ONE row per shipment round (SO+SUB+INV) ─────────────────────────────
-  // The lines of a round (several styles / splits) are MERGED: styles & descriptions joined, QTY ORIG /
-  // EST / ACT summed. QTY AIR = that INV's qty from export/mp_line (source with the larger SO+SUB total).
-  // A source INV of a shown SO+SUB that NO air-req line carries (LG keyed the wrong INV) is added as its
-  // own row "ยังไม่ผูก air req" (EST/ACT 0) → the QTY AIR total equals the export/mp_line total.
-  // Decided per SO+SUB so LG keying mistakes never need a manual fix for the dashboard to be right:
-  //   · its lines' INVs match the source INVs exactly → one row per INV round (QTY = that INV's qty)
-  //   · they don't (wrong / one INV on every line, a round not booked yet) → ONE row for the whole SO+SUB
-  //     (QTY = SO+SUB total, INV/HAWB listed) — the original behaviour, always reconciles
-  //   In both modes QTY AIR sums to the export/mp_line total and EST/ACT sum every line (ACT = HAWB money).
+  // ── DATA TABLE: ส่งออกจริง / ยังไม่มีการส่ง ─────────────────────────────────────────────────────────
+  // 1. ตั้งต้นจากแถวที่ MER key (air request) — ทุกแถวมาจากเอกสาร ไม่มีแถวที่ระบบสร้างเอง
+  // 2. แมพกับ mp_line / export ด้วย SO+SUB (แหล่งที่ยอด SO+SUB มากกว่า) → ใส่ INV + ยอดส่งออกจริงลง QTY AIR
+  //    แต่ละแถวได้ INV ของตัวเอง:
+  //      a) INV ที่ยอดเท่ากับ qty ของแถว (1:1 — แถวที่ LG ใส่ INV นั้นไว้ได้ก่อน)
+  //      b) INV ที่ LG ใส่ไว้ ถ้ามีอยู่จริงในแหล่ง
+  //      c) INV ที่ยังเหลือ → แถวที่ยังเหลือ (รวม INV เหล่านั้น)
+  //      d) แถวที่เหลือแต่ไม่มี INV ให้แล้ว: qty ซ้ำกับแถวที่แมพแล้ว = แถวซ้ำ → รวม · ไม่ซ้ำ = แผนรอบถัดไป (ยังไม่ส่ง)
+  // 3. SO+SUB ที่แมพไม่เจอ = ยังไม่ส่งออก
+  // แถวซ้ำ: ส่งออกจริง = SO+SUB+QTY+INV เดียวกัน → 1 แถว (EST/ACT รวม) · ยังไม่มีการส่ง = SO+SUB+QTY เดียวกัน → 1 แถว
+  // QTY AIR ของแต่ละแถว = ยอดของ INV นั้น (INV เดียวหลายแถว qty ต่างกัน → แบ่งตามสัดส่วน qty) → ผลรวม = แหล่ง
   const shipAgg = useMemo(()=>{
     const join = (xs: any[]) => [...new Set(xs.map(x => String(x ?? "").trim()).filter(Boolean))].join(", ")
     const merge = (id: string, rows: any[]) => {
@@ -821,19 +799,11 @@ export default function DashboardPage() {
         actualAirFreight: acts.length ? acts.reduce((a: number, v: any) => a + (Number(v) || 0), 0) : null,
       }
     }
-    const bySub = new Map<string, any[]>()
-    for (const r of shippedLines) { const sk = subKey(r); const g = bySub.get(sk) || []; g.push(r); bySub.set(sk, g) }
-    // not-yet-booked air-req lines (no HAWB) per SO+SUB — a source INV with no booked line can be matched
-    // to one of these by qty (e.g. 2609_0003 · 35 pcs ↔ INV …745) so the shipped table shows every INV
-    const unbookedBySub = new Map<string, any[]>()
-    for (const r of baseFiltered) { if (hasHawb(r)) continue; const sk = subKey(r); const g = unbookedBySub.get(sk) || []; g.push(r); unbookedBySub.set(sk, g) }
-    const pulled = new Set<string>()   // unbooked line ids shown here → removed from "ยังไม่มีการส่ง"
     const out: any[] = [], qty = new Map<string, number>(), src = new Map<string, string>()
-    const invMismatch = new Set<string>()   // SO+SUB shown as one row because its INVs ≠ source INVs
-    // One INV's lines → rows keyed SO+SUB+QTY+INV: lines with the same QTY AIR are duplicates → ONE row
-    // (EST/ACT summed so money still reconciles); a different QTY → its own row. The INV's real qty
-    // (export/mp_line) is split over those rows by their QTY → the rows still add up to the source.
-    const emit = (ik: string, g: any[], invQty: number, s: string, srcInv?: string) => {
+    const invMismatch = new Set<string>()   // SO+SUB where a line was put under a different INV than LG keyed
+    const unshipped: any[] = []
+    // one INV's lines → rows keyed SO+SUB+QTY+INV (same QTY = duplicate → one row), INV qty split by QTY
+    const emit = (sk: string, invLabel: string, g: any[], invQty: number, s: string) => {
       const byQ = new Map<number, any[]>()
       for (const r of g) { const q = Number(r.qtyRequestAir) || 0; const a = byQ.get(q) || []; a.push(r); byQ.set(q, a) }
       const parts = [...byQ.entries()]
@@ -841,109 +811,66 @@ export default function DashboardPage() {
       const raw = parts.map(([q]) => W > 0 ? invQty * q / W : invQty / parts.length)
       const base = raw.map(Math.floor); let rest = Math.round(invQty) - base.reduce((a, b) => a + b, 0)
       raw.map((v, i) => ({ i, f: v - base[i] })).sort((a, b) => b.f - a.f).forEach(({ i }) => { if (rest > 0) { base[i]++; rest-- } })
+      const own = new Set(invLabel.split(", ").filter(Boolean))
       parts.forEach(([q, rs], i) => {
-        const row = merge(`ship:${ik}|${q}`, rs)
-        row.qtyRequestAir = q                                    // duplicates → the qty once
-        if (srcInv !== undefined) {
-          row._autoInv = rs.some(r => invU(r) !== srcInv)        // badge only when a line was re-placed
-          row.invoiceNo = srcInv || row.invoiceNo
-          if (row._autoInv) invMismatch.add(ik.split("|").slice(0, 2).join("|"))
-        }
+        const row = merge(`ship:${sk}|${invLabel}|${q}`, rs)
+        row.qtyRequestAir = q                                     // duplicates → the qty once
+        row._autoInv = !!invLabel && rs.some(r => !own.has(invU(r))) // badge only when a line was re-placed
+        if (invLabel) row.invoiceNo = invLabel                    // show the source INV(s)
+        if (row._autoInv) invMismatch.add(sk)
         out.push(row); qty.set(row.id, base[i]); src.set(row.id, s)
       })
     }
-    for (const [sk, lines] of bySub) {
-      const known = mpQtyBySub[sk] != null
+    const bySub = new Map<string, any[]>()
+    for (const r of baseFiltered) { const sk = subKey(r); const g = bySub.get(sk) || []; g.push(r); bySub.set(sk, g) }
+    for (const [sk, rows] of bySub) {
+      if (mpQtyBySub[sk] == null) { unshipped.push(...rows); continue }          // 3. not in mp_line/export
       const s = (mpSrcBySub[sk] || "mp_line") as "mp_line" | "export"
-      const invMap = known ? (invBySrc[s] || {}) : {}
-      const srcInvs = new Set(Object.keys(invMap).filter(k => k.startsWith(`${sk}|`)))
-      const lineInvs = new Set(lines.map(r => `${sk}|${invU(r)}`))
-      const exact = srcInvs.size > 0 && [...lineInvs].every(k => srcInvs.has(k)) && [...srcInvs].every(k => lineInvs.has(k))
-      if (exact) {
-        const byInv = new Map<string, any[]>()
-        for (const r of lines) { const k = `${sk}|${invU(r)}`; const g = byInv.get(k) || []; g.push(r); byInv.set(k, g) }
-        for (const [k, g] of byInv) emit(k, g, Number(invMap[k]) || 0, s)
-      } else {
-        // LG's INVs don't match → put each line under the RIGHT source INV:
-        //   1) a source INV whose qty equals a line's air/ship qty takes that line (1-to-1)
-        //   2) a remaining line whose OWN INV exists in the source stays with that INV
-        //   3) if exactly one INV is still open, it takes every line still left
-        //   source INVs left with NO line = rounds not booked yet → not counted here (they appear once LG
-        //   books them). Only a line that still can't be placed → one merged row for the SO+SUB.
-        const assigned = new Map<string, any[]>()
-        if (known && srcInvs.size > 0) {
-          const open = [...srcInvs], left = [...lines]
-          const put = (ik: string, rs: any[]) => assigned.set(ik, [...(assigned.get(ik) || []), ...rs])
-          for (const ik of [...open]) {
-            const q = Number(invMap[ik]) || 0
-            const i = left.findIndex(r => Number(r.qtyRequestAir) === q || Number(r.qtyActualShip) === q)
-            if (i >= 0) { put(ik, [left.splice(i, 1)[0]]); open.splice(open.indexOf(ik), 1) }
-          }
-          for (let i = left.length - 1; i >= 0; i--) {
-            const ik = `${sk}|${invU(left[i])}`
-            if (srcInvs.has(ik)) { put(ik, [left.splice(i, 1)[0]]); const o = open.indexOf(ik); if (o >= 0) open.splice(o, 1) }
-          }
-          if (open.length === 1 && left.length) { put(open[0], left.splice(0)); open.length = 0 }
-          if (left.length) assigned.clear()
-        }
-        if (assigned.size) {
-          for (const [ik, g] of assigned) emit(ik, g, Number(invMap[ik]) || 0, s, ik.split("|")[2] || "")
-        } else {
-          const row = merge(`ship:${sk}`, lines); out.push(row)
-          qty.set(row.id, known ? Number(mpQtyBySub[sk]) || 0 : 0); src.set(row.id, known ? s : "ไม่พบ")
-          if (known && srcInvs.size > 0) invMismatch.add(sk)
-          continue
-        }
+      const invMap = invBySrc[s] || {}
+      const srcInvs = Object.keys(invMap).filter(k => k.startsWith(`${sk}|`)).map(k => k.split("|")[2] || "")
+      if (!srcInvs.length) { emit(sk, "", rows, Number(mpQtyBySub[sk]) || 0, s); continue }  // no INV split in source
+      const assigned = new Map<string, any[]>()
+      const put = (inv: string, r: any) => assigned.set(inv, [...(assigned.get(inv) || []), r])
+      const left = [...rows].sort((a, b) => (hasHawb(b) ? 1 : 0) - (hasHawb(a) ? 1 : 0))  // booked lines first
+      const open = [...srcInvs]
+      const qOf = (inv: string) => Number(invMap[`${sk}|${inv}`]) || 0
+      const sameQty = (r: any, q: number) => Number(r.qtyRequestAir) === q || Number(r.qtyActualShip) === q
+      // a) 1:1 by qty — a line that already carries this INV wins
+      for (const inv of [...open]) {
+        const q = qOf(inv)
+        let i = left.findIndex(r => invU(r) === inv && sameQty(r, q))
+        if (i < 0) i = left.findIndex(r => sameQty(r, q))
+        if (i >= 0) { put(inv, left.splice(i, 1)[0]); open.splice(open.indexOf(inv), 1) }
       }
-      // source INVs of this SO+SUB that no booked line covers → pull an unbooked line with the same qty,
-      // else show the INV on its own (no document, no claim data)
-      const covered = new Set(out.filter(r => subKey(r) === sk).map(r => `${sk}|${invU(r)}`))
-      for (const ik of srcInvs) {
-        if (covered.has(ik)) continue
-        const q = Number(invMap[ik]) || 0
-        const cand = (unbookedBySub.get(sk) || []).find(r => !pulled.has(r.id) && (Number(r.qtyRequestAir) === q || Number(r.qtyActualShip) === q))
-        if (cand) { pulled.add(cand.id); emit(ik, [cand], q, s, ik.split("|")[2] || ""); continue }
-        const b = lines[0], inv = ik.split("|")[2] || ""
-        const syn = { ...b, id: `ship:${ik}|syn`, _synthetic: true, _lines: 0, invoiceNo: inv, hawbNo: "",
-          request: { ...b.request, documentNo: "-", pendingWith: [] }, itemStatus: "",
-          qtyOriginalShipment: 0, qtyRequestAir: q, qtyActualShip: 0, airFreight: 0, actualAirFreight: null,
-          claimDepartment: null, claimDepts: null, claimPercentage: null, reasonDelay: "" }
-        out.push(syn); qty.set(syn.id, q); src.set(syn.id, s)
+      // b) lines whose own INV exists in the source
+      for (let i = left.length - 1; i >= 0; i--) {
+        const inv = invU(left[i])
+        if (srcInvs.includes(inv)) { put(inv, left.splice(i, 1)[0]); const o = open.indexOf(inv); if (o >= 0) open.splice(o, 1) }
       }
+      // c) INVs still open → the lines still left (one combined group)
+      if (open.length && left.length) {
+        const label = open.join(", "), q = open.reduce((a, inv) => a + qOf(inv), 0)
+        emit(sk, label, left.splice(0), q, s)
+      }
+      // d) leftover lines: same qty as a placed line = duplicate (join that INV) · otherwise next round → ยังไม่ส่ง
+      for (const r of left) {
+        const hit = [...assigned.entries()].find(([, g]) => g.some(x => Number(x.qtyRequestAir) === Number(r.qtyRequestAir)))
+        if (hit) put(hit[0], r); else unshipped.push(r)
+      }
+      for (const [inv, g] of assigned) emit(sk, inv, g, qOf(inv), s)
     }
-    return { rows: out, qty, src, invMismatch, pulled }
-  }, [shippedLines, baseFiltered, mpQtyBySub, mpSrcBySub, invBySrc])
+    // ยังไม่มีการส่ง: SO+SUB+QTY เดียวกัน (อัปซ้ำ) → 1 แถว
+    const seen = new Set<string>(), unRows: any[] = []
+    for (const r of unshipped) { const k = `${subKey(r)}|${Number(r.qtyRequestAir) || 0}`; if (seen.has(k)) continue; seen.add(k); unRows.push(r) }
+    return { rows: out, qty, src, invMismatch, unshipped: unRows }
+  }, [baseFiltered, mpQtyBySub, mpSrcBySub, invBySrc])
   const shippedRows = shipAgg.rows
-  // rounds booked per SO+SUB vs real shipment rounds (distinct INV in mp_line/export) — used by the
-  // "ยังไม่มีการส่ง" dedupe below
-  const shipCntBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const r of shippedRows) if (!r._synthetic) m.set(subKey(r), (m.get(subKey(r))||0)+1); return m }, [shippedRows])
-  const invRoundsBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const ik of Object.keys(mpInv)) { const sk = ik.split("|").slice(0,2).join("|"); m.set(sk, (m.get(sk)||0)+1) } return m }, [mpInv])
+  const unshippedRows = shipAgg.unshipped
   const isInvMismatch = (r:any) => shipAgg.invMismatch.has(subKey(r))
   const shipQtyOf = useMemo(()=> (r:any): number => shipAgg.qty.get(r.id) ?? 0, [shipAgg])
   const shipSrcOf = useMemo(()=> (r:any): string => shipAgg.src.get(r.id) ?? "", [shipAgg])
   const shipUnmatched = useMemo(()=> [...shipAgg.src.values()].filter(s => s === "ไม่พบ").length, [shipAgg])
   const shipAlloc = shipAgg
-  // ยังไม่มีการส่ง = air-req rows ที่ยังไม่มี HAWB — ตัดแผนที่ซ้ำ "ข้ามเอกสาร" เท่านั้น (ในเอกสารเดียวกันเก็บทุกแถว):
-  //   (ก) SO+SUB+STYLE+qty เดียวกันอยู่อีก doc → นับ 1
-  //   (ข) บรรทัดเดียวกันนี้ส่งไปแล้วในอีก doc และรอบส่งจริงถูกบันทึกครบแล้ว (แถวส่งจริง ≥ จำนวน INV) → ของซ้ำ
-  const unshippedRows = useMemo(()=>{
-    const lk = (r:any) => `${subKey(r)}|${styleU(r)}|${Number(r.qtyRequestAir)||0}`
-    const shippedDocs = new Map<string, Set<string>>()
-    for (const s of shippedLines) { const k = lk(s); const st = shippedDocs.get(k) || new Set<string>(); st.add(docOf(s)); shippedDocs.set(k, st) }
-    const firstDoc = new Map<string, string>(), out: any[] = []
-    for (const r of baseFiltered) {
-      if (hasHawb(r) || shipAgg.pulled.has(r.id)) continue   // shipped, or matched to a shipped INV above
-      const k = lk(r), d = docOf(r), sk = subKey(r)
-      const fd = firstDoc.get(k)
-      if (fd && fd !== d) continue
-      const sd = shippedDocs.get(k)
-      if (sd && ![...sd].every(x => x === d) && (shipCntBySub.get(sk)||0) >= Math.max(invRoundsBySub.get(sk)||0, 1)) continue
-      if (!fd) firstDoc.set(k, d)
-      out.push(r)
-    }
-    return out
-  }, [baseFiltered, shippedLines, shipCntBySub, invRoundsBySub, shipAgg])
-  const qtyAirDisp = (r:any) => tableShipped ? shipQtyOf(r) : r.qtyRequestAir
   // Column definitions — shared by the header, the per-column filter row, and the data cells so they
   // always line up. `get` returns the value used both for the filter's substring match and export.
   const COLS = useMemo<{label:string; get:(r:any)=>any}[]>(()=>[
@@ -960,7 +887,7 @@ export default function DashboardPage() {
     {label:"ORIG. DATE",     get:r=>fmtDate(r.originalShipmentDate)},
     {label:"PLAN DATE",      get:r=>fmtDate(r.planShipmentDate)},
     {label:"QTY ORIG",       get:r=>r.qtyOriginalShipment},
-    {label:"QTY AIR",        get:r=>qtyAirDisp(r)},
+    {label:"QTY AIR",        get:r=>tableShipped ? shipQtyOf(r) : r.qtyRequestAir},
     {label:`EST. (${CUR})`,  get:r=>r.airFreight},
     {label:`ACTUAL (${CUR})`,get:r=>r.actualAirFreight},
     {label:"INV NO",         get:r=>r.invoiceNo||""},
@@ -1007,8 +934,7 @@ export default function DashboardPage() {
   const tblQOrig = (()=>{ const m = new Map<string, number>(); for (const r of tableRows) { const k = `${subKey(r)}|${styleU(r)}`; m.set(k, Math.max(m.get(k)||0, Number(r.qtyOriginalShipment)||0)) } let t = 0; m.forEach(v => { t += v }); return t })()
   const tblEst   = tableRows.reduce((s,r)=>s+(r.airFreight||0),0)
   const tblAct   = tableRows.reduce((s,r)=>s+(r.actualAirFreight||0),0)
-  // QTY AIR total: "ส่งออกจริง" sums each row's own shipment round (SO+SUB+INV);
-  // "ยังไม่มีการส่ง" sums the planned qty.
+  // QTY AIR total: "ส่งออกจริง" = mapped shipped qty (mp_line / export) · "ยังไม่มีการส่ง" = planned qty
   const tblQAir = tableShipped
     ? tableRows.reduce((s,r)=> s + shipQtyOf(r), 0)
     : tableRows.reduce((s,r)=> s + (Number(r.qtyRequestAir) || 0), 0)
@@ -1589,7 +1515,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
                     <td className="px-3 py-1.5">{row.qtyOriginalShipment}</td>
-                    <td className="px-3 py-1.5 font-semibold" title={tableShipped ? "ยอด ship จริงของรอบนี้ (SO+SUB+INV จาก mp_line / export)" : "QTY AIR (แผน)"}>{tableShipped ? shipQtyOf(row).toLocaleString() : (row.qtyRequestAir ?? "-")}</td>
+                    <td className="px-3 py-1.5 font-semibold" title={tableShipped ? "ยอดส่งออกจริง (แมพ SO+SUB+INV จาก mp_line / export)" : "QTY AIR (แผน)"}>{tableShipped ? shipQtyOf(row).toLocaleString() : (row.qtyRequestAir ?? "-")}</td>
                     <td className="px-3 py-1.5 text-blue-700">{fmtNum(row.airFreight)}</td>
                     <td className="px-3 py-1.5 text-green-700 font-medium">{fmtNum(row.actualAirFreight)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}{row._synthetic && <span className="ml-1 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold" title="INV นี้มีใน export / mp_line แต่ยังไม่มีแถว air request ไหนผูกไว้ — ให้ LG แก้ INV ในหน้า FIX HAWB">ยังไม่ผูก air req</span>}{isAdmin && tableShipped && isInvMismatch(row) && (row._autoInv
@@ -1616,7 +1542,7 @@ export default function DashboardPage() {
                 <tr className="bg-gray-100 font-bold text-gray-800 border-t-2 border-gray-300">
                   <td className="px-3 py-2 text-right whitespace-nowrap" colSpan={12}>TOTAL ({tblSO.toLocaleString()} รายการ · {tableShipped?"ส่งออกจริง":"ยังไม่มีการส่ง"})</td>
                   <td className="px-3 py-2">{tblQOrig.toLocaleString()}</td>
-                  <td className="px-3 py-2 whitespace-nowrap" title={tableShipped ? "ยอดตั้งต้นจาก export / mp_line ต่อรอบส่ง (SO+SUB+INV) — ผลรวมเท่ายอดในตาราง export / mp_line" : undefined}>
+                  <td className="px-3 py-2 whitespace-nowrap" title={tableShipped ? "ยอดส่งออกจริงจาก export / mp_line — ผลรวมเท่ายอดในตาราง export / mp_line" : undefined}>
                     {tblQAir.toLocaleString()}
                     {tableShipped && shipUnmatched > 0 && <span className="ml-1.5 text-[10px] font-semibold text-amber-700" title="SO+SUB ที่ไม่พบใน export / mp_line → QTY = 0 (ไม่นับ)">⚠ {shipUnmatched} แถวไม่พบใน export</span>}
                     {isAdmin && tableShipped && shipAlloc.invMismatch.size > 0 && <span className="ml-1.5 text-[10px] font-semibold text-orange-700" title="SO+SUB ที่ INV ใน air request ไม่ตรงกับ export / mp_line → แสดงรวม 1 แถวต่อ SO+SUB (ยอดรวมยังเท่า export) · admin เท่านั้นที่เห็น">⚠ {shipAlloc.invMismatch.size} SO+SUB รวมแถว (INV ไม่ตรง)</span>}
