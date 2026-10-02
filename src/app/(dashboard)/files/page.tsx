@@ -708,7 +708,7 @@ export default function FilesPage() {
                         <thead>
                           <tr className="text-gray-400">
                             {combineMode && <th className="py-1.5 pl-5 pr-2 w-6"></th>}
-                            {["SO","Style","Document","Brand","BU","Ship Date","QTY Air","Booking",""].map(h =>
+                            {["SO","SUB","Style","Document","Brand","BU","Ship Date","QTY Air","Booking",""].map(h =>
                               <th key={h} className={`py-1.5 px-3 font-medium whitespace-nowrap ${h === "QTY Air" ? "text-right" : "text-left"} ${!combineMode && h === "SO" ? "pl-5" : ""}`}>{h}</th>)}
                           </tr>
                         </thead>
@@ -727,6 +727,7 @@ export default function FilesPage() {
                                   </td>
                                 )}
                                 <td className={`py-1.5 px-3 font-semibold text-gray-800 whitespace-nowrap ${!combineMode ? "pl-5" : ""}`}>{item.so}</td>
+                                <td className="py-1.5 px-3 text-gray-700 whitespace-nowrap">{item.sub || "-"}</td>
                                 <td className="py-1.5 px-3 whitespace-nowrap">{item.style}</td>
                                 <td className="py-1.5 px-3 text-blue-700 whitespace-nowrap">{req.documentNo}</td>
                                 <td className="py-1.5 px-3 text-gray-500 whitespace-nowrap">{item.brand || req.brandName}</td>
@@ -905,6 +906,7 @@ export default function FilesPage() {
                                       <tr className="text-gray-500">
                                         {combineMode && <th className="py-1 pr-2 w-6"></th>}
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">SO</th>
+                                        <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">SUB</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Style</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Brand</th>
                                         <th className="text-left py-1 pr-3 font-medium whitespace-nowrap">Description</th>
@@ -932,7 +934,8 @@ export default function FilesPage() {
                                                   className="w-4 h-4 rounded border-gray-300 accent-blue-600" />
                                               </td>
                                             )}
-                                            <td className="py-1.5 pr-3 font-medium text-gray-800">{item.so}</td>
+                                            <td className="py-1.5 pr-3 font-medium text-gray-800 whitespace-nowrap">{item.so}</td>
+                                            <td className="py-1.5 pr-3 text-gray-700 whitespace-nowrap">{item.sub || "-"}</td>
                                             <td className="py-1.5 pr-3 text-gray-600">{item.style}</td>
                                             <td className="py-1.5 pr-3 text-gray-500 whitespace-nowrap">{item.brand || req.brandName}</td>
                                             <td className="py-1.5 pr-3 text-gray-500 max-w-[140px] truncate">{item.description}</td>
