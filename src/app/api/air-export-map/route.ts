@@ -159,6 +159,9 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     tabA, tabB, subActual, invActual,
+    // per-INV qty kept PER SOURCE — the dashboard picks the source at SO+SUB level (larger total) and only
+    // then uses that same source's INV split, so INV spellings that differ between sources can't mix.
+    invMp: mpInvQ, invEx: exInvQ,
     counts: {
       tabA: tabA.length, tabB: tabB.length, exactly, revise, prepaid, noship: tabB.length, mpKeys: mpBySo.size, countedSo, airKeys: airBySo.size,
       // pcs totals — actual exported qty from mp_line

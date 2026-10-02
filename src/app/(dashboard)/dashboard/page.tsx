@@ -649,6 +649,7 @@ export default function DashboardPage() {
   const [mpQtyBySub, setMpQtyBySub] = useState<Record<string, number>>({}) // "SOkey|SUB" → actual shipped qty (mp_line or export)
   const [mpSrcBySub, setMpSrcBySub] = useState<Record<string, string>>({}) // "SOkey|SUB" → source: "mp_line" | "export"
   const [mpInv, setMpInv] = useState<Record<string, { qty: number; src: string }>>({}) // "SOkey|SUB|INV" → qty of that shipment round
+  const [invBySrc, setInvBySrc] = useState<{ mp_line: Record<string, number>; export: Record<string, number> }>({ mp_line: {}, export: {} })
   // default ON — dashboard opens in mp_line map mode (NYG/All BU); toggle 🔗 turns it off.
   // Persist the choice so it stays ON across reloads (stored per browser).
   const [mpMode, setMpMode] = useState(true)
@@ -692,6 +693,7 @@ export default function DashboardPage() {
       for (const [sk, v] of Object.entries(sa)) { subQm[sk] = Number(v?.qty) || 0; subSrc[sk] = v?.src || "" }
       setMpQtyBySub(subQm); setMpSrcBySub(subSrc)
       setMpInv((d?.invActual || {}) as Record<string, { qty: number; src: string }>)
+      setInvBySrc({ mp_line: d?.invMp || {}, export: d?.invEx || {} })
     }).catch(() => {})
   }, [brandFKey, actualF])
   // ยอด Sale Order ทั้งหมด (SO_ORDER · NYG · ทุก ship mode) — ตาม ปี/เดือน (ship_date) + Brand ที่เลือก
@@ -792,32 +794,41 @@ export default function DashboardPage() {
   // and real shipment rounds (distinct INV in mp_line/export) per SO+SUB
   const shipCntBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const r of shippedRows) m.set(subKey(r), (m.get(subKey(r))||0)+1); return m }, [shippedRows])
   const invRoundsBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const ik of Object.keys(mpInv)) { const sk = ik.split("|").slice(0,2).join("|"); m.set(sk, (m.get(sk)||0)+1) } return m }, [mpInv])
-  // QTY AIR is ANCHORED to export/mp_line: each shipment round (SO+SUB+INV) takes its qty from the source,
-  // and when several rows share that round (styles / splits) the source qty is SPLIT across them in
-  // proportion to LG's qty (largest-remainder rounding) → the rows of a round always sum to the source.
-  //   INV not in the source → the SO+SUB total if it's the SO+SUB's only shipped row, else 0 (flagged),
-  //   so the data-table total never exceeds the export/mp_line total.
+  // QTY AIR is ANCHORED to export/mp_line so the data-table total = the source total (what a SUM over
+  // export_row / mp_line gives). Per SO+SUB:
+  //   1. pick the source with the LARGER SO+SUB total (mp_line can be partial, e.g. 895 vs export 1,125)
+  //   2. if every row's INV exists in THAT source → each INV round's qty is split over its rows
+  //      otherwise (INV spelled differently / missing) → the SO+SUB total is split over all its rows
+  //   Splits follow LG's qty (largest-remainder rounding) so the parts add up exactly.
+  //   SO+SUB not in any source → 0 ("ไม่พบ") so the table never exceeds the source.
   const shipAlloc = useMemo(()=>{
     const qty = new Map<string, number>(), src = new Map<string, string>()
-    const groups = new Map<string, any[]>()
-    for (const r of shippedRows) { const k = `${subKey(r)}|${invU(r)}`; const g = groups.get(k) || []; g.push(r); groups.set(k, g) }
-    for (const [k, rows] of groups) {
-      const sk = subKey(rows[0]), iv = invU(rows[0])
-      const hit = iv ? mpInv[k] : undefined
-      let total: number, s: string
-      if (hit) { total = Number(hit.qty) || 0; s = hit.src }
-      else if ((shipCntBySub.get(sk) || 0) === rows.length && mpQtyBySub[sk] != null) { total = Number(mpQtyBySub[sk]) || 0; s = mpSrcBySub[sk] || "" }
-      else { total = 0; s = "ไม่พบ" }
+    const split = (rows: any[], total: number, s: string) => {
       const w = rows.map(r => Math.max(Number(r.qtyActualShip ?? r.qtyRequestAir) || 0, 0))
       const W = w.reduce((a, b) => a + b, 0)
       const raw = rows.map((_, i) => W > 0 ? total * w[i] / W : total / rows.length)
       const base = raw.map(Math.floor)
-      let rest = total - base.reduce((a, b) => a + b, 0)
+      let rest = Math.round(total) - base.reduce((a, b) => a + b, 0)
       raw.map((v, i) => ({ i, f: v - base[i] })).sort((a, b) => b.f - a.f).forEach(({ i }) => { if (rest > 0) { base[i]++; rest-- } })
       rows.forEach((r, i) => { qty.set(r.id, base[i]); src.set(r.id, s) })
     }
+    const bySub = new Map<string, any[]>()
+    for (const r of shippedRows) { const k = subKey(r); const g = bySub.get(k) || []; g.push(r); bySub.set(k, g) }
+    for (const [sk, rows] of bySub) {
+      if (mpQtyBySub[sk] == null) { rows.forEach(r => { qty.set(r.id, 0); src.set(r.id, "ไม่พบ") }); continue }
+      const s = (mpSrcBySub[sk] || "mp_line") as "mp_line" | "export"
+      const invMap = invBySrc[s] || {}
+      const allInvKnown = rows.every(r => invU(r) && invMap[`${sk}|${invU(r)}`] != null)
+      if (allInvKnown) {
+        const byInv = new Map<string, any[]>()
+        for (const r of rows) { const k = `${sk}|${invU(r)}`; const g = byInv.get(k) || []; g.push(r); byInv.set(k, g) }
+        for (const [k, g] of byInv) split(g, Number(invMap[k]) || 0, s)
+      } else {
+        split(rows, Number(mpQtyBySub[sk]) || 0, s)
+      }
+    }
     return { qty, src }
-  }, [shippedRows, mpInv, mpQtyBySub, mpSrcBySub, shipCntBySub])
+  }, [shippedRows, mpQtyBySub, mpSrcBySub, invBySrc])
   const shipQtyOf = useMemo(()=> (r:any): number => shipAlloc.qty.get(r.id) ?? 0, [shipAlloc])
   const shipSrcOf = useMemo(()=> (r:any): string => shipAlloc.src.get(r.id) ?? "", [shipAlloc])
   const shipUnmatched = useMemo(()=> [...shipAlloc.src.values()].filter(s => s === "ไม่พบ").length, [shipAlloc])
