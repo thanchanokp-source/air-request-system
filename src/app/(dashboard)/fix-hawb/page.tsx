@@ -242,8 +242,67 @@ export default function FixHawbPage() {
         </>
       )}
 
+      <SyncShippedBox />
       <ScanAllHawbBox />
       <DedupeDocBox />
+    </div>
+  )
+}
+
+// ★ ซิงค์ยอดส่งออกจริง — write the mapped shipped qty (mp_line / export) into every air-request line and
+// re-split each affected HAWB (money total unchanged) → every page (ACTUAL, claim, PDF) uses the real qty.
+function SyncShippedBox() {
+  const [res, setRes] = useState<any | null>(null)
+  const [includeDone, setIncludeDone] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState("")
+  const post = async (preview: boolean) => {
+    const r = await fetch("/api/admin/sync-shipped", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preview, includeDone }) })
+    const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status); return d
+  }
+  const preview = async () => { setBusy(true); setMsg(""); setRes(null); try { setRes(await post(true)) } catch (e: any) { setMsg("ลองดูไม่สำเร็จ: " + e.message) } finally { setBusy(false) } }
+  const commit = async () => {
+    if (!res?.changed) return
+    if (!confirm(`ซิงค์ยอดส่งออกจริง ${res.changed.toLocaleString()} แถว แล้วกระจายเงินใหม่ ${res.hawbs} HAWB (ยอดรวมของแต่ละ HAWB เท่าเดิม)${includeDone ? "\nรวมเอกสารที่จบแล้วด้วย" : ""} ?`)) return
+    setBusy(true); setMsg("")
+    try { const d = await post(false); setMsg(`✓ ซิงค์แล้ว ${d.written} แถว · กระจายใหม่ ${d.hawbRedistributed} HAWB`); setRes(null) }
+    catch (e: any) { setMsg("ซิงค์ไม่สำเร็จ: " + e.message) } finally { setBusy(false) }
+  }
+  return (
+    <div className="bg-white rounded-xl border-2 border-green-200 p-4 space-y-2 mt-6">
+      <p className="font-semibold text-sm text-gray-800">★ ซิงค์ยอดส่งออกจริง (ให้ทุกหน้าคำนวณจากยอดส่งออกจริง)</p>
+      <p className="text-[11px] text-gray-500">แมพทุกแถวกับ mp_line / export (กฎเดียวกับ dashboard) → เขียนลง <b>QTY ship</b> (QTY AIR ของ MER ไม่แตะ) → กระจายเงินของ HAWB ที่เกี่ยวข้องใหม่ <b>ยอดรวมของ HAWB เท่าเดิม</b> → ACTUAL / ยอดเคลม / PDF ถูกตาม</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={preview} disabled={busy} className="text-sm px-4 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-300 font-semibold disabled:opacity-50">{busy && !res ? "กำลังตรวจ…" : "👁 ลองดู"}</button>
+        <button onClick={commit} disabled={busy || !res?.changed} className="text-sm px-4 py-1.5 rounded-lg bg-green-600 text-white font-semibold disabled:opacity-40">💾 ซิงค์ ({res?.changed || 0})</button>
+        <label className="text-[11px] text-gray-600 flex items-center gap-1"><input type="checkbox" checked={includeDone} onChange={e => { setIncludeDone(e.target.checked); setRes(null) }} /> รวมเอกสารที่จบแล้ว (COMPLETED / Accounting)</label>
+      </div>
+      {msg && <p className="text-xs text-gray-700">{msg}</p>}
+      {res && (
+        <div className="border border-gray-200 rounded-lg overflow-auto max-h-80">
+          <div className="px-3 py-1.5 text-[11px] text-gray-500 bg-gray-50">
+            ตรวจ {n(res.scanned)} แถว · แมพเจอ {n(res.mapped)} · จะเปลี่ยน <b className="text-green-700">{n(res.changed)}</b> แถว · กระจายใหม่ {n(res.hawbs)} HAWB
+            {!includeDone && res.doneSkipped > 0 && <span className="text-amber-700"> · ข้ามเอกสารที่จบแล้ว {n(res.doneSkipped)} แถว</span>}
+          </div>
+          {res.sample?.length > 0 && (
+            <table className="w-full text-xs">
+              <thead className="bg-white text-gray-400 sticky top-0"><tr className="text-left">
+                <th className="px-3 py-1 font-medium">เอกสาร</th><th className="px-3 py-1 font-medium">SO / SUB</th><th className="px-3 py-1 font-medium text-right">QTY AIR</th>
+                <th className="px-3 py-1 font-medium text-right">ship เดิม</th><th className="px-3 py-1 font-medium text-right">ส่งออกจริง</th><th className="px-3 py-1 font-medium">INV</th><th className="px-3 py-1 font-medium">HAWB</th>
+              </tr></thead>
+              <tbody>{res.sample.map((s: any, i: number) => (
+                <tr key={i} className="border-t border-gray-50">
+                  <td className="px-3 py-1 text-gray-500">{s.doc}</td><td className="px-3 py-1 font-mono">{s.so} / {s.sub || "-"}</td>
+                  <td className="px-3 py-1 text-right tabular-nums">{n(s.qtyAir)}</td><td className="px-3 py-1 text-right tabular-nums text-gray-500">{s.before ?? "-"}</td>
+                  <td className="px-3 py-1 text-right tabular-nums font-semibold text-green-700">{n(s.after)}</td>
+                  <td className="px-3 py-1 font-mono text-gray-500">{s.inv || "-"}</td><td className="px-3 py-1 font-mono text-gray-500">{s.hawb}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+          {res.changed > (res.sample?.length || 0) && <p className="px-3 py-1 text-[11px] text-gray-400">แสดง {res.sample.length} จาก {n(res.changed)} แถว</p>}
+        </div>
+      )}
     </div>
   )
 }
