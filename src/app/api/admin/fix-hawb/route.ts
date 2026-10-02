@@ -169,6 +169,88 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ...out, saved: items.length, writeQty })
   }
 
+  // BULK version of redistribute_src for EVERY HAWB at once. The money total of a HAWB stays what it is
+  // now (Σ actual on its lines — LG keyed it right); only its split moves to the real INV qty.
+  //   { action:"scan_src" }                         → HAWBs whose LG qty ≠ real INV qty (nothing written)
+  //   { action:"bulk_src", hawbs:[...], writeQty }  → apply to those HAWBs
+  if (action === "scan_src" || action === "bulk_src") {
+    const soN = (s: any) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "")
+    const up = (s: any) => String(s ?? "").trim().toUpperCase()
+    const items = await (prisma.airRequestItem as any).findMany({
+      where: { hawbNo: { not: null }, request: { isTest: false } },
+      select: { id: true, so: true, sub: true, invoiceNo: true, hawbNo: true, qtyActualShip: true, qtyRequestAir: true, actualAirFreight: true, request: { select: { documentNo: true } } },
+    }) as any[]
+    // real qty per SO|SUB|INV from both sources (whole tables, one query each)
+    const mpQ = new Map<string, number>(), exQ = new Map<string, number>()
+    try {
+      const r = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, invoice_no, SUM(final_pcs)::float8 q FROM public.mp_line WHERE UPPER(TRIM(ship_mode))='AIR PP' GROUP BY 1,2,3`)
+      r.forEach(x => { const k = `${soN(x.so_no)}|${up(x.sub_no)}|${up(x.invoice_no)}`; mpQ.set(k, (mpQ.get(k) || 0) + (Number(x.q) || 0)) })
+    } catch { /* mp_line unavailable */ }
+    try {
+      const r = await prisma.$queryRawUnsafe<any[]>(`SELECT so_no, sub_no, invoice_no, SUM(qty_pcs)::float8 q FROM sq_report.export_row WHERE UPPER(TRIM(ship_mode))='AIR PREPAID' GROUP BY 1,2,3`)
+      r.forEach(x => { const k = `${soN(x.so_no)}|${up(x.sub_no)}|${up(x.invoice_no)}`; exQ.set(k, (exQ.get(k) || 0) + (Number(x.q) || 0)) })
+    } catch { /* export unavailable */ }
+    const lgQty = (it: any) => Math.max(Number(it.qtyActualShip ?? it.qtyRequestAir) || 0, 0)
+    const byHawb = new Map<string, any[]>()
+    for (const it of items) { const h = String(it.hawbNo || "").trim(); if (!h || /^[-.\s]*$/.test(h)) continue; const g = byHawb.get(h) || []; g.push(it); byHawb.set(h, g) }
+
+    const plan = (hItems: any[]) => {
+      const invs = [...new Set(hItems.map(i => up(i.invoiceNo)).filter(Boolean))]
+      const groups = new Map<string, any[]>()
+      for (const it of hItems) { const k = `${soN(it.so)}|${up(it.sub)}`; const g = groups.get(k) || []; g.push(it); groups.set(k, g) }
+      const eff = new Map<string, number>(), effInt = new Map<string, number>()
+      let lgTotal = 0, realTotal = 0, changed = 0
+      for (const [k, g] of groups) {
+        const lg = g.reduce((a, it) => a + lgQty(it), 0)
+        const m = invs.reduce((a, iv) => a + (mpQ.get(`${k}|${iv}`) || 0), 0)
+        const e = invs.reduce((a, iv) => a + (exQ.get(`${k}|${iv}`) || 0), 0)
+        const src = Math.max(m, e), real = src > 0 ? src : lg
+        if (src > 0 && Math.round(src) !== Math.round(lg)) changed++
+        lgTotal += lg; realTotal += real
+        const raw = g.map(it => lg > 0 ? real * lgQty(it) / lg : real / g.length)
+        raw.forEach((v, i) => eff.set(g[i].id, v))
+        const base = raw.map(Math.floor); let rest = Math.round(real) - base.reduce((a, b) => a + b, 0)
+        raw.map((v, i) => ({ i, f: v - base[i] })).sort((a, b) => b.f - a.f).forEach(({ i }) => { if (rest > 0) { base[i]++; rest-- } })
+        g.forEach((it, i) => effInt.set(it.id, base[i]))
+      }
+      const total = Math.round(hItems.reduce((a, it) => a + (Number(it.actualAirFreight) || 0), 0) * 100) / 100
+      return { invs, eff, effInt, lgTotal, realTotal, changed, total, docs: [...new Set(hItems.map(i => i.request?.documentNo).filter(Boolean))] }
+    }
+
+    if (action === "scan_src") {
+      const list: any[] = []
+      for (const [h, hItems] of byHawb) {
+        const p = plan(hItems)
+        if (p.changed === 0 || !(p.total > 0)) continue
+        list.push({ hawb: h, docs: p.docs, lines: hItems.length, invs: p.invs.length, lgQty: Math.round(p.lgTotal), realQty: Math.round(p.realTotal), soChanged: p.changed, total: p.total })
+      }
+      list.sort((a, b) => Math.abs(b.lgQty - b.realQty) - Math.abs(a.lgQty - a.realQty))
+      return NextResponse.json({ ok: true, scanned: byHawb.size, list })
+    }
+
+    // bulk_src — apply
+    const want: string[] = Array.isArray(body.hawbs) ? body.hawbs.map((s: any) => String(s).trim()).filter(Boolean) : []
+    if (!want.length) return NextResponse.json({ error: "ไม่ได้เลือก HAWB" }, { status: 400 })
+    const writeQty = !!body.writeQty
+    let done = 0, lines = 0
+    for (const h of want) {
+      const hItems = byHawb.get(h); if (!hItems?.length) continue
+      const p = plan(hItems)
+      const effTotal = [...p.eff.values()].reduce((a, b) => a + b, 0)
+      if (!(p.total > 0) || !(effTotal > 0)) continue
+      let acc = 0
+      for (let i = 0; i < hItems.length; i++) {
+        const it = hItems[i]
+        const v = i === hItems.length - 1 ? Math.round((p.total - acc) * 100) / 100 : Math.round(p.total * (p.eff.get(it.id) || 0) / effTotal * 100) / 100
+        acc += v
+        await prisma.airRequestItem.update({ where: { id: it.id }, data: { actualAirFreight: v, ...(writeQty ? { qtyActualShip: p.effInt.get(it.id) || 0 } : {}) } as any }).catch(() => {})
+        lines++
+      }
+      done++
+    }
+    return NextResponse.json({ ok: true, done, lines, writeQty })
+  }
+
   if (action === "redistribute") {
     const hawb = String(body.hawb || "").trim()
     const total = Number(body.total)

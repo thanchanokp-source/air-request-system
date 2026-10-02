@@ -242,7 +242,74 @@ export default function FixHawbPage() {
         </>
       )}
 
+      <ScanAllHawbBox />
       <DedupeDocBox />
+    </div>
+  )
+}
+
+// ⑤ ตรวจทุก HAWB — find every HAWB whose LG qty ≠ the real INV qty (mp_line/export) and re-split each
+// HAWB's EXISTING actual total by the real qty, all at once. Scan first (nothing written), then apply.
+function ScanAllHawbBox() {
+  const [res, setRes] = useState<any | null>(null)
+  const [pick, setPick] = useState<Set<string>>(new Set())
+  const [writeQty, setWriteQty] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState("")
+  const post = async (body: any) => {
+    const r = await fetch("/api/admin/fix-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status); return d
+  }
+  const scan = async () => {
+    setBusy(true); setMsg(""); setRes(null)
+    try { const d = await post({ action: "scan_src" }); setRes(d); setPick(new Set(d.list.map((x: any) => x.hawb))) }
+    catch (e: any) { setMsg("ตรวจไม่สำเร็จ: " + e.message) } finally { setBusy(false) }
+  }
+  const apply = async () => {
+    if (!pick.size) return
+    if (!confirm(`กระจายใหม่ ${pick.size} HAWB ตามยอดจริงของ INV\n(ยอดเงินรวมของแต่ละ HAWB เท่าเดิม · เปลี่ยนแค่การแบ่งให้แต่ละ SO)${writeQty ? "\nและแก้ QTY ship ให้เท่ายอดจริง" : ""} ?`)) return
+    setBusy(true); setMsg("")
+    try { const d = await post({ action: "bulk_src", hawbs: [...pick], writeQty }); setMsg(`✓ กระจายใหม่ ${d.done} HAWB · ${d.lines} แถว${d.writeQty ? " · แก้ QTY ship แล้ว" : ""}`); await scan() }
+    catch (e: any) { setMsg("บันทึกไม่สำเร็จ: " + e.message) } finally { setBusy(false) }
+  }
+  const toggle = (h: string) => setPick(p => { const s = new Set(p); s.has(h) ? s.delete(h) : s.add(h); return s })
+  const all = res?.list?.length > 0 && res.list.every((x: any) => pick.has(x.hawb))
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2 mt-6">
+      <p className="font-semibold text-sm text-gray-800">⑤ ตรวจทุก HAWB — กระจายตามยอดจริงของ INV ทีเดียว</p>
+      <p className="text-[11px] text-gray-400">หา HAWB ที่ qty ที่ LG กรอก ≠ ยอดจริงของ INV (mp_line / export) · ยอดเงินรวมของแต่ละ HAWB <b>เท่าเดิม</b> เปลี่ยนแค่การแบ่งให้แต่ละ SO</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={scan} disabled={busy} className="text-sm px-4 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-300 font-semibold disabled:opacity-50">{busy && !res ? "กำลังตรวจ…" : "🔍 ตรวจทุก HAWB"}</button>
+        <button onClick={apply} disabled={busy || !pick.size} className="text-sm px-4 py-1.5 rounded-lg bg-green-600 text-white font-semibold disabled:opacity-40">💾 กระจายใหม่ที่เลือก ({pick.size})</button>
+        <label className="text-[11px] text-gray-600 flex items-center gap-1"><input type="checkbox" checked={writeQty} onChange={e => setWriteQty(e.target.checked)} /> แก้ QTY ship ให้เท่ายอดจริงด้วย</label>
+      </div>
+      {msg && <p className="text-xs text-gray-700">{msg}</p>}
+      {res && (
+        <div className="border border-gray-200 rounded-lg overflow-auto max-h-96">
+          <div className="px-3 py-1.5 text-[11px] text-gray-500 bg-gray-50">ตรวจ {n(res.scanned)} HAWB · ไม่ตรง <b className="text-amber-700">{res.list.length}</b> HAWB</div>
+          {res.list.length > 0 && (
+            <table className="w-full text-xs">
+              <thead className="bg-white text-gray-400 sticky top-0"><tr className="text-left">
+                <th className="px-3 py-1"><input type="checkbox" checked={all} onChange={e => setPick(e.target.checked ? new Set(res.list.map((x: any) => x.hawb)) : new Set())} /></th>
+                <th className="px-3 py-1 font-medium">HAWB</th><th className="px-3 py-1 font-medium">เอกสาร</th>
+                <th className="px-3 py-1 font-medium text-right">qty LG</th><th className="px-3 py-1 font-medium text-right">qty จริง</th>
+                <th className="px-3 py-1 font-medium text-right">SO ไม่ตรง</th><th className="px-3 py-1 font-medium text-right">ยอดเงิน (คงเดิม)</th>
+              </tr></thead>
+              <tbody>{res.list.map((x: any) => (
+                <tr key={x.hawb} className={`border-t border-gray-50 ${pick.has(x.hawb) ? "bg-green-50/50" : ""}`}>
+                  <td className="px-3 py-1"><input type="checkbox" checked={pick.has(x.hawb)} onChange={() => toggle(x.hawb)} /></td>
+                  <td className="px-3 py-1 font-mono">{x.hawb}</td>
+                  <td className="px-3 py-1 text-gray-500">{x.docs.slice(0, 3).join(", ")}{x.docs.length > 3 ? ` +${x.docs.length - 3}` : ""}</td>
+                  <td className="px-3 py-1 text-right tabular-nums">{n(x.lgQty)}</td>
+                  <td className="px-3 py-1 text-right tabular-nums font-semibold text-amber-800">{n(x.realQty)}</td>
+                  <td className="px-3 py-1 text-right tabular-nums">{x.soChanged}</td>
+                  <td className="px-3 py-1 text-right tabular-nums">{n(x.total)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   )
 }
