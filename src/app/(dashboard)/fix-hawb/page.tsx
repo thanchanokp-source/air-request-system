@@ -82,6 +82,31 @@ export default function FixHawbPage() {
     } finally { setBusy(false) }
   }
 
+  // กระจายตาม "ยอดจริงของ INV" (mp_line/export) แทน qty ที่ LG กรอก — ลองดูก่อน แล้วค่อยบันทึก
+  const [srcPrev, setSrcPrev] = useState<any | null>(null)
+  const [writeQty, setWriteQty] = useState(true)
+  const callSrc = async (preview: boolean) => {
+    const t = Number(total)
+    if (!data?.hawb || !(t > 0)) { setMsg("ใส่ total (>0) ก่อน"); return null }
+    const r = await fetch("/api/admin/fix-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "redistribute_src", hawb: data.hawb, total: t, preview, writeQty }) })
+    const d = await r.json()
+    if (!r.ok) { setMsg((preview ? "ลองดู" : "บันทึก") + "ไม่สำเร็จ: " + (d.error || r.status)); return null }
+    return d
+  }
+  const doSrcPreview = async () => {
+    setBusy(true); setMsg(""); setSrcPrev(null)
+    try { const d = await callSrc(true); if (d) setSrcPrev(d) } finally { setBusy(false) }
+  }
+  const doSrcSave = async () => {
+    if (!srcPrev) return
+    if (!confirm(`บันทึก: กระจาย ${Number(total).toLocaleString()} ของ ${data.hawb} ตามยอดจริงของ INV (${srcPrev.realTotal.toLocaleString()} ตัว แทน ${srcPrev.lgTotal.toLocaleString()} ที่ LG กรอก)${writeQty ? "\nและแก้ QTY ship ให้เท่ายอดจริง" : ""} ?`)) return
+    setBusy(true); setMsg("")
+    try {
+      const d = await callSrc(false)
+      if (d) { setMsg(`✓ กระจายตามยอดจริงแล้ว ${d.saved} แถว${d.writeQty ? " · แก้ QTY ship แล้ว" : ""}`); setSrcPrev(null); await load() }
+    } finally { setBusy(false) }
+  }
+
   const doRedistribute = async (targetHawb: string) => {
     const t = Number(total)
     if (!targetHawb.trim() || !(t > 0)) { setMsg("ใส่ total (>0) ก่อน"); return }
@@ -157,6 +182,34 @@ export default function FixHawbPage() {
                 <button onClick={() => doRedistribute(data.hawb)} disabled={busy} className="text-sm px-4 py-1.5 rounded-lg text-white font-semibold disabled:opacity-50" style={{ background: MAROON }}>กระจาย</button>
               </div>
               {newHawb.trim() && <button onClick={() => doRedistribute(newHawb.trim())} disabled={busy} className="text-xs text-blue-600 hover:underline">…หรือกระจายให้ HAWB ใหม่ ({newHawb.trim()}) ด้วย total นี้</button>}
+              <div className="border-t border-gray-100 pt-2 mt-1 space-y-1.5">
+                <p className="text-[11px] text-gray-600"><b>หรือ กระจายตามยอดจริงของ INV</b> (mp_line / export) — ใช้เมื่อ LG ใส่ qty / INV ไม่ตรง</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button onClick={doSrcPreview} disabled={busy || !(Number(total) > 0)} className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-300 font-semibold disabled:opacity-50">👁 ลองดู</button>
+                  <button onClick={doSrcSave} disabled={busy || !srcPrev} className="text-xs px-3 py-1.5 rounded-lg bg-green-600 text-white font-semibold disabled:opacity-40">💾 บันทึก</button>
+                  <label className="text-[11px] text-gray-600 flex items-center gap-1"><input type="checkbox" checked={writeQty} onChange={e => { setWriteQty(e.target.checked); setSrcPrev(null) }} /> แก้ QTY ship ให้เท่ายอดจริงด้วย</label>
+                </div>
+                {srcPrev && (
+                  <div className="border border-gray-200 rounded-lg overflow-auto max-h-64">
+                    <div className="px-2 py-1 text-[11px] text-gray-500 bg-gray-50">ลองดู · INV {srcPrev.invs.length} ใบ · qty ที่ LG กรอก {n(srcPrev.lgTotal)} → ยอดจริง <b className="text-green-700">{n(srcPrev.realTotal)}</b></div>
+                    <table className="w-full text-[11px]">
+                      <thead className="text-gray-400 bg-white sticky top-0"><tr className="text-left">
+                        <th className="px-2 py-1 font-medium">SO / SUB</th><th className="px-2 py-1 font-medium text-right">LG</th><th className="px-2 py-1 font-medium text-right">จริง</th>
+                        <th className="px-2 py-1 font-medium text-right">Actual เดิม</th><th className="px-2 py-1 font-medium text-right">Actual ใหม่</th>
+                      </tr></thead>
+                      <tbody>{srcPrev.summary.map((s: any, i: number) => (
+                        <tr key={i} className={`border-t border-gray-50 ${s.lgQty !== s.usedQty ? "bg-amber-50" : ""}`}>
+                          <td className="px-2 py-1 font-mono">{s.so} / {s.sub || "-"}{!s.found && <span className="ml-1 text-orange-600" title="ไม่พบใน mp_line/export → ใช้ qty ที่ LG กรอก">⚠</span>}</td>
+                          <td className="px-2 py-1 text-right tabular-nums">{n(s.lgQty)}</td>
+                          <td className={`px-2 py-1 text-right tabular-nums ${s.lgQty !== s.usedQty ? "font-semibold text-amber-800" : ""}`}>{n(s.usedQty)}</td>
+                          <td className="px-2 py-1 text-right tabular-nums text-gray-500">{n(s.actualBefore)}</td>
+                          <td className="px-2 py-1 text-right tabular-nums font-semibold">{n(s.actualAfter)}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
