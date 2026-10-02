@@ -648,6 +648,7 @@ export default function DashboardPage() {
   const [mpSoSet, setMpSoSet] = useState<Set<string>>(new Set()) // SOs that shipped (in mp_line) — SO-level (page-wide map)
   const [mpQtyBySub, setMpQtyBySub] = useState<Record<string, number>>({}) // "SOkey|SUB" → actual shipped qty (mp_line or export)
   const [mpSrcBySub, setMpSrcBySub] = useState<Record<string, string>>({}) // "SOkey|SUB" → source: "mp_line" | "export"
+  const [mpInv, setMpInv] = useState<Record<string, { qty: number; src: string }>>({}) // "SOkey|SUB|INV" → qty of that shipment round
   // default ON — dashboard opens in mp_line map mode (NYG/All BU); toggle 🔗 turns it off.
   // Persist the choice so it stays ON across reloads (stored per browser).
   const [mpMode, setMpMode] = useState(true)
@@ -690,6 +691,7 @@ export default function DashboardPage() {
       const subQm: Record<string, number> = {}, subSrc: Record<string, string> = {}
       for (const [sk, v] of Object.entries(sa)) { subQm[sk] = Number(v?.qty) || 0; subSrc[sk] = v?.src || "" }
       setMpQtyBySub(subQm); setMpSrcBySub(subSrc)
+      setMpInv((d?.invActual || {}) as Record<string, { qty: number; src: string }>)
     }).catch(() => {})
   }, [brandFKey, actualF])
   // ยอด Sale Order ทั้งหมด (SO_ORDER · NYG · ทุก ship mode) — ตาม ปี/เดือน (ship_date) + Brand ที่เลือก
@@ -768,23 +770,55 @@ export default function DashboardPage() {
   // "ส่งออกแล้ว" = air-req row ที่มี HAWB (LG เติมแล้ว = ship จริง).
   // มี HAWB จริง = ไม่ว่าง และไม่ใช่ placeholder ("-", "N/A", ".", "0")
   const hasHawb = (r:any) => { const h = String(r?.hawbNo ?? "").trim(); return h !== "" && !/^[-.–—\s]*$/.test(h) && !["n/a","na","0","null"].includes(h.toLowerCase()) }
-  // ส่งออกจริง = air-req rows ที่มี HAWB — DEDUPE เหลือ 1 แถว/SO+SUB (กันยอดเบิ้ลเมื่อ SO+SUB ซ้ำหลาย doc):
-  // เก็บแถวที่ "ไปไกลสุดใน flow" (มี actual > ไม่ reject > doc ล่าสุด).
+  const invU = (r:any) => String(r?.invoiceNo ?? "").trim().toUpperCase()
+  // ส่งออกจริง = air-req rows ที่มี HAWB — 1 แถวต่อ "รอบส่ง" = SO+SUB+INV.
+  //   ส่งหลายรอบ (คนละ INV) → หลายแถว (ACT ครบทุกรอบ) · INV เดียวกันซ้ำหลาย doc (อัปซ้ำ) → ยุบเหลือ 1
+  //   แถวที่เก็บ = "ไปไกลสุดใน flow" (มี actual > ไม่ reject > doc ล่าสุด).
   const shippedRows = useMemo(()=>{
     const score = (r:any) => (r.actualAirFreight!=null?1000:0) + (r.itemStatus==="REJECTED"?-1000:0)
     const best = new Map<string, any>()
     for (const r of baseFiltered) {
       if (!hasHawb(r)) continue
-      const k = subKey(r); const cur = best.get(k)
+      const k = `${subKey(r)}|${invU(r)}`; const cur = best.get(k)
       if (!cur) { best.set(k, r); continue }
       const sc = score(r), scCur = score(cur)
       if (sc > scCur || (sc===scCur && String(r.request?.documentNo||"") > String(cur.request?.documentNo||""))) best.set(k, r)
     }
     return [...best.values()]
   }, [baseFiltered])
-  // ยังไม่มีการส่ง = air-req rows ที่ยังไม่มี HAWB (ยังไม่ ship).
-  const unshippedRows = useMemo(()=> baseFiltered.filter(row=> !hasHawb(row)), [baseFiltered])
-  const qtyAirDisp = (r:any) => tableShipped ? (Number(mpQtyBySub[subKey(r)]) || 0) : r.qtyRequestAir
+  // shipped rows per SO+SUB, and real shipment rounds (distinct INV in mp_line/export) per SO+SUB
+  const shipCntBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const r of shippedRows) m.set(subKey(r), (m.get(subKey(r))||0)+1); return m }, [shippedRows])
+  const invRoundsBySub = useMemo(()=>{ const m = new Map<string, number>(); for (const ik of Object.keys(mpInv)) { const sk = ik.split("|").slice(0,2).join("|"); m.set(sk, (m.get(sk)||0)+1) } return m }, [mpInv])
+  // QTY of one shipped row = qty of ITS round (SO+SUB+INV). Fallbacks: the only shipped row of the SO+SUB
+  // takes the SO+SUB total; otherwise LG's own qtyActualShip (src "air-req").
+  const shipQtyOf = useMemo(()=> (r:any): number => {
+    const iv = invU(r), hit = iv ? mpInv[`${subKey(r)}|${iv}`] : undefined
+    if (hit) return Number(hit.qty) || 0
+    if ((shipCntBySub.get(subKey(r)) || 0) <= 1) return Number(mpQtyBySub[subKey(r)]) || 0
+    return Number(r.qtyActualShip ?? r.qtyRequestAir) || 0
+  }, [mpInv, mpQtyBySub, shipCntBySub])
+  const shipSrcOf = useMemo(()=> (r:any): string => {
+    const iv = invU(r), hit = iv ? mpInv[`${subKey(r)}|${iv}`] : undefined
+    if (hit) return hit.src
+    if ((shipCntBySub.get(subKey(r)) || 0) <= 1) return mpSrcBySub[subKey(r)] || ""
+    return "air-req"
+  }, [mpInv, mpSrcBySub, shipCntBySub])
+  // ยังไม่มีการส่ง = air-req rows ที่ยังไม่มี HAWB — ตัดแผนที่ซ้ำ:
+  //   (ก) SO+SUB+qty เดียวกันหลาย doc → นับ 1 · (ข) SO+SUB+qty นี้ส่งไปแล้ว และรอบส่งจริงถูกบันทึกครบแล้ว
+  //   (แถวส่งจริงของ SO+SUB ≥ จำนวน INV) → แถวแผนนี้คือของซ้ำ ไม่ใช่รอบที่ยังรอส่ง
+  const unshippedRows = useMemo(()=>{
+    const shippedSame = new Set(shippedRows.map(s => `${subKey(s)}|${Number(s.qtyRequestAir)||0}`))
+    const seen = new Set<string>(), out: any[] = []
+    for (const r of baseFiltered) {
+      if (hasHawb(r)) continue
+      const sk = subKey(r), k = `${sk}|${Number(r.qtyRequestAir)||0}`
+      if (seen.has(k)) continue
+      if (shippedSame.has(k) && (shipCntBySub.get(sk)||0) >= Math.max(invRoundsBySub.get(sk)||0, 1)) continue
+      seen.add(k); out.push(r)
+    }
+    return out
+  }, [baseFiltered, shippedRows, shipCntBySub, invRoundsBySub])
+  const qtyAirDisp = (r:any) => tableShipped ? shipQtyOf(r) : r.qtyRequestAir
   // Column definitions — shared by the header, the per-column filter row, and the data cells so they
   // always line up. `get` returns the value used both for the filter's substring match and export.
   const COLS = useMemo<{label:string; get:(r:any)=>any}[]>(()=>[
@@ -814,8 +848,8 @@ export default function DashboardPage() {
     {label:"REASON",         get:r=>[...new Set(getSplits(r).map((s:any)=>s.reason).filter(Boolean))].join(" ")},
     {label:"อยู่ที่ใคร",       get:r=>Array.isArray(r.request?.pendingWith)?r.request.pendingWith.join(" "):""},
     // SOURCE (admin only) — where the actual QTY came from: mp_line (ตั้งแต่ ก.ย.) หรือ export/sq_report (ก่อนหน้า)
-    ...(isAdmin ? [{label:"SOURCE", get:(r:any)=> tableShipped ? (mpSrcBySub[subKey(r)]||"") : ""}] : []),
-  ], [poMap, tableShipped, mpQtyBySub, mpSrcBySub, isAdmin, CUR])
+    ...(isAdmin ? [{label:"SOURCE", get:(r:any)=> tableShipped ? shipSrcOf(r) : ""}] : []),
+  ], [poMap, tableShipped, shipQtyOf, shipSrcOf, isAdmin, CUR])
   // Rows for the table before per-column filters. ส่งออกจริง = shipped air-req; ยังไม่มีการส่ง = unshipped air-req.
   const tableViewRows = useMemo(()=> tableShipped ? shippedRows : unshippedRows, [tableShipped, shippedRows, unshippedRows])
   // Excel-style per-column filters: colF[idx] = the SET of allowed values for that column (checked in
@@ -837,19 +871,21 @@ export default function DashboardPage() {
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = filtered.length
-  const totalQOrig = filtered.reduce((s,r)=>s+(Number(r.qtyOriginalShipment)||0),0)
+  // once per SO+SUB (max) — the same order qty repeats on every row/round of that SO+SUB
+  const totalQOrig = (()=>{ const m = new Map<string, number>(); for (const r of filtered) { const k = subKey(r); m.set(k, Math.max(m.get(k)||0, Number(r.qtyOriginalShipment)||0)) } let t = 0; m.forEach(v => { t += v }); return t })()
   const totalQAir  = filtered.reduce((s,r)=>s+(Number(r.qtyRequestAir)||0),0)
   const totalEst   = filtered.reduce((s,r)=>s+(r.airFreight||0),0)
   const totalAct   = filtered.reduce((s,r)=>s+(r.actualAirFreight||0),0)
   // ─── Data-table footer totals (based on the table's OWN view: SHIPPED vs ALL) ───
   const tblSO    = tableRows.length
-  const tblQOrig = tableRows.reduce((s,r)=>s+(Number(r.qtyOriginalShipment)||0),0)
+  // QTY ORIG = the SO+SUB's order qty, repeated on every shipment round → count ONCE per SO+SUB (max), not per row
+  const tblQOrig = (()=>{ const m = new Map<string, number>(); for (const r of tableRows) { const k = subKey(r); m.set(k, Math.max(m.get(k)||0, Number(r.qtyOriginalShipment)||0)) } let t = 0; m.forEach(v => { t += v }); return t })()
   const tblEst   = tableRows.reduce((s,r)=>s+(r.airFreight||0),0)
   const tblAct   = tableRows.reduce((s,r)=>s+(r.actualAirFreight||0),0)
-  // QTY AIR total: "ส่งออกจริง" sums mp_line qty per SO+SUB (each row = one sub, no dedup needed);
-  // "แพลนทั้งหมด" sums the planned qty.
+  // QTY AIR total: "ส่งออกจริง" sums each row's own shipment round (SO+SUB+INV);
+  // "ยังไม่มีการส่ง" sums the planned qty.
   const tblQAir = tableShipped
-    ? tableRows.reduce((s,r)=> s + (Number(mpQtyBySub[subKey(r)]) || 0), 0)
+    ? tableRows.reduce((s,r)=> s + shipQtyOf(r), 0)
     : tableRows.reduce((s,r)=> s + (Number(r.qtyRequestAir) || 0), 0)
   // Currency is per-SO (EA / GW-RHONE → USD, else THB); a doc can mix. Totals are split so THB and
   // USD are never summed. Charts label their axis with the single currency present, or "mixed".
@@ -1025,8 +1061,8 @@ export default function DashboardPage() {
         "ORIG. DATE":     fmtDate(row.originalShipmentDate),
         "PLAN DATE":      fmtDate(row.planShipmentDate),
         "QTY ORIG":       row.qtyOriginalShipment,
-        "QTY AIR":        tableShipped ? (Number(mpQtyBySub[subKey(row)]) || 0) : row.qtyRequestAir,
-        ...(isAdmin && tableShipped ? { "SOURCE": mpSrcBySub[subKey(row)] || "" } : {}),
+        "QTY AIR":        tableShipped ? shipQtyOf(row) : row.qtyRequestAir,
+        ...(isAdmin && tableShipped ? { "SOURCE": shipSrcOf(row) } : {}),
         "AIR RATE%":      Number(ar.toFixed(1)),
         [`EST. (${CUR})`]:     row.airFreight ?? 0,
         [`ACTUAL (${CUR})`]:   row.actualAirFreight ?? 0,
@@ -1085,7 +1121,7 @@ export default function DashboardPage() {
       {mpActive && mpCounts && (() => {
         // ส่งออกจริง card = คำนวณจาก shippedRows (ชุดเดียวกับตาราง) → ตัวเลขตรงกับ DATA TABLE เป๊ะ
         const shipSo  = new Set(shippedRows.map((r:any)=>mpSoKey(r.so))).size
-        const shipQty = shippedRows.reduce((s:number,r:any)=>s+(Number(mpQtyBySub[subKey(r)])||0),0)
+        const shipQty = shippedRows.reduce((s:number,r:any)=>s+shipQtyOf(r),0)
         const est = shippedRows.reduce((s:number,r:any)=>s+(Number(r.airFreight)||0),0)
         const act = shippedRows.reduce((s:number,r:any)=>s+(Number(r.actualAirFreight)||0),0)
         const varPct = est > 0 ? Math.round((act - est) / est * 1000) / 10 : null
@@ -1428,7 +1464,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.originalShipmentDate)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(row.planShipmentDate)}</td>
                     <td className="px-3 py-1.5">{row.qtyOriginalShipment}</td>
-                    <td className="px-3 py-1.5 font-semibold" title={tableShipped ? "ยอด ship จริงจาก mp_line (map SO+SUB)" : "QTY AIR (แผน)"}>{tableShipped ? Number(mpQtyBySub[subKey(row)] ?? 0).toLocaleString() : (row.qtyRequestAir ?? "-")}</td>
+                    <td className="px-3 py-1.5 font-semibold" title={tableShipped ? "ยอด ship จริงของรอบนี้ (SO+SUB+INV จาก mp_line / export)" : "QTY AIR (แผน)"}>{tableShipped ? shipQtyOf(row).toLocaleString() : (row.qtyRequestAir ?? "-")}</td>
                     <td className="px-3 py-1.5 text-blue-700">{fmtNum(row.airFreight)}</td>
                     <td className="px-3 py-1.5 text-green-700 font-medium">{fmtNum(row.actualAirFreight)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{row.invoiceNo || "-"}</td>
@@ -1442,7 +1478,7 @@ export default function DashboardPage() {
                     <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const sp=getSplits(row);return sp.length?sp.map((s:any)=>s.pct!=null?`${s.pct}%`:"-").join(" · "):"-"})()}</td>
                     <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const rs=[...new Set(getSplits(row).map((s:any)=>s.reason).filter(Boolean))];const txt=rs.length?rs.join(" · "):"-";return <span className="truncate block" title={txt}>{txt}</span>})()}</td>
                     <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const pw=Array.isArray(row.request.pendingWith)?row.request.pendingWith:[];const txt=pw.length?pw.join(", "):"-";return <span className="truncate block font-medium text-gray-700" title={txt}>{txt}</span>})()}</td>
-                    {isAdmin && <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const src=tableShipped?mpSrcBySub[subKey(row)]:"";return src?<span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${src==="mp_line"?"bg-teal-100 text-teal-700":"bg-amber-100 text-amber-700"}`}>{src==="mp_line"?"mp_line":"export"}</span>:<span className="text-gray-300">-</span>})()}</td>}
+                    {isAdmin && <td className="px-3 py-1.5 whitespace-nowrap">{(()=>{const src=tableShipped?shipSrcOf(row):"";return src?<span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${src==="mp_line"?"bg-teal-100 text-teal-700":src==="export"?"bg-amber-100 text-amber-700":"bg-gray-100 text-gray-600"}`} title={src==="air-req"?"INV นี้ไม่พบใน mp_line/export → ใช้ QTY ที่ LG กรอก":undefined}>{src}</span>:<span className="text-gray-300">-</span>})()}</td>}
                   </tr>
                 )
               })}
