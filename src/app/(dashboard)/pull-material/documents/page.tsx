@@ -72,6 +72,7 @@ export default function Page() {
   const [lgMode, setLgMode] = useState<ShipMode | null>(null)
   const [lgModeReason, setLgModeReason] = useState("")
   const [modeBusy, setModeBusy] = useState(false)
+  const [modeAsk, setModeAsk] = useState(false)   // reason popup before confirming a non-AIR mode
   // ── Actual currency ─────────────────────────────────────────────────────────────────────────
   // LG normally types the actual in THB; Est/landed cost is USD. The two ACTUAL boxes are shown in
   // whichever unit LG picks, and are ALWAYS converted to USD before saving (DB keeps USD only).
@@ -1054,16 +1055,15 @@ export default function Page() {
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">LG เปลี่ยนจาก {rq.approvedMode} → {lgMode}</span>
                             )}
                             {rq.status !== "COMPLETED" && (
-                              <button onClick={() => saveMode(rq)} disabled={modeBusy}
+                              <button onClick={() => (lgMode && lgMode !== "AIR" && !lgModeReason.trim() ? setModeAsk(true) : saveMode(rq))} disabled={modeBusy}
                                 className="ml-auto px-3 py-1.5 rounded-lg text-white text-xs font-semibold disabled:opacity-50" style={{ background: "#0369a1" }}>
-                                {modeBusy ? "…" : "💾 ยืนยัน mode (LG ชี้ขาด)"}
+                                {modeBusy ? "…" : "✓ Confirm"}
                               </button>
                             )}
                           </div>
-                          {rq.status !== "COMPLETED" && lgMode && lgMode !== "AIR" && (
-                            <input value={lgModeReason} onChange={e => setLgModeReason(e.target.value)}
-                              placeholder="เหตุผลที่ไม่ส่ง AIR ตามที่ผู้ขอร้องขอ (บังคับ)…"
-                              className="mt-2 w-full border border-red-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200" />
+                          {rq.status !== "COMPLETED" && lgMode && lgMode !== "AIR" && lgModeReason.trim() && (
+                            <p className="mt-2 text-[11px] text-sky-900">เหตุผล: <b>{lgModeReason.trim()}</b>
+                              <button onClick={() => setModeAsk(true)} className="underline ml-1">แก้</button></p>
                           )}
                           <p className="mt-1.5 text-[10px] text-sky-700">เปลี่ยนได้โดยไม่ต้องอนุมัติใหม่ · ระบบบันทึกประวัติทุกครั้งและแจ้งเมลผู้อนุมัติเมื่อต่างจากที่อนุมัติไว้</p>
                         </div>
@@ -1101,7 +1101,10 @@ export default function Page() {
 
               {/* LG entry — HAWB / INV / Actual (once per doc). LOCKED (grey) while No Master: LG must fill
                   the rate + Save (→ Approval) first; actual is entered later after the doc is approved. */}
-              {(() => { const locked = rq.status === "PENDING_LG_RATE"
+              {(() => { // Right panel is sealed until two things are true: the doc has a rate, and LG has
+                // confirmed the shipping mode — the mode decides what the actual even means.
+                const needMode = !rq.shipMode && rq.status !== "COMPLETED"
+                const locked = rq.status === "PENDING_LG_RATE" || needMode
                 // Mode in force decides the wording: a courier parcel has a TRACKING NO, not a HAWB.
                 const curMode: ShipMode = (lgMode || rq.shipMode || rq.approvedMode || "AIR") as ShipMode
                 const isCourier = curMode === "COURIER"
@@ -1112,6 +1115,14 @@ export default function Page() {
                 {/* ── Phase 2 — Forwarder (AIR only) ───────────────────────────────────────────
                     LG mails the FWD a template of this shipment, the FWD returns it filled in and LG
                     imports it here. Typing the actual by hand (Phase 1) still works at any time. */}
+                {/* Mode is not AIR → the template does not apply; say so instead of hiding silently. */}
+                {!locked && curMode !== "AIR" && (
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-[11px] text-gray-600">
+                    📧 <b>ส่งให้ FWD กรอก Actual</b> ใช้กับเอกสาร <b>mode = AIR</b> เท่านั้น —
+                    ใบนี้ mode ปัจจุบันคือ <b>{SHIP_MODE_LABEL[curMode]}</b> ให้ LG กรอก Actual เองในกล่องด้านล่าง
+                    <br />ถ้าที่จริงต้องส่งทางอากาศ ให้เปลี่ยนเป็น Air ที่กล่อง “ยืนยัน mode” ด้านบน แล้วกล่องส่ง FWD จะขึ้นมาเอง
+                  </div>
+                )}
                 {!locked && curMode === "AIR" && (
                   <div className="bg-white rounded-2xl border border-amber-200 shadow-sm p-5">
                     <div className="flex items-center justify-between mb-3">
@@ -1180,7 +1191,7 @@ export default function Page() {
                 <div className={`bg-white rounded-2xl border shadow-sm p-5 ${locked ? "border-gray-200 bg-gray-50" : "border-gray-100"}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-sm font-bold text-gray-800">Logistics — Actual</div>
-                    {locked && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 font-semibold">🔒 เติม rate ก่อน</span>}
+                    {locked && <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 font-semibold">{needMode ? "🔒 กด Confirm mode ก่อน" : "🔒 เติม rate ก่อน"}</span>}
                   </div>
                   <div className={`space-y-3 ${locked ? "opacity-50 pointer-events-none select-none" : ""}`}>
                     <div><label className="text-[11px] font-semibold text-green-700 block mb-1">MAWB NO</label>
@@ -1275,7 +1286,13 @@ export default function Page() {
                       ? <p className="text-[11px] text-gray-400 mt-1.5">กำลังอัปโหลด…</p>
                       : <p className="text-[11px] text-gray-400 mt-1.5">INV / Packing แนบจากฝั่งจัดซื้อ · AWB / ใบขน แนบที่นี่ (ย้อนหลังได้) · ถ้าเอกสารมารวมเป็นไฟล์เดียว เลือก “รวม” — ดูไฟล์ที่แนบด้านบน</p>}
                   </div>
-                  <p className="mt-2 text-[11px] text-gray-400">{locked ? "🔒 เอกสารนี้ยังไม่มี rate — เติม Master Rate แล้วกด 💾 Save (มุมขวาบน) เพื่อเด้งไป Approval ก่อน แล้วจึงกลับมากรอก Actual ทีหลัง" : "กรอกครั้งเดียวต่อเอกสาร · Save แล้วกด “Preview PDF” เพื่อออกเอกสาร"}</p>
+                  {needMode && (
+                    <p className="mt-2 text-[11px] text-sky-800 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+                      🔒 ยังกรอกไม่ได้ — ไปที่กล่อง <b>Mode ขนส่ง</b> ด้านซ้าย เลือก mode แล้วกด <b>✓ Confirm</b> ก่อน
+                      ช่องด้านล่างถึงจะเปิดให้กรอก (mode เป็นตัวกำหนดว่า Actual นี้คือค่าอะไร)
+                    </p>
+                  )}
+                  <p className="mt-2 text-[11px] text-gray-400">{locked && !needMode ? "🔒 เอกสารนี้ยังไม่มี rate — เติม Master Rate แล้วกด 💾 Save (มุมขวาบน) เพื่อเด้งไป Approval ก่อน แล้วจึงกลับมากรอก Actual ทีหลัง" : "กรอกครั้งเดียวต่อเอกสาร · Save แล้วกด “Preview PDF” เพื่อออกเอกสาร"}</p>
                 </div>
               </div>
               )})()}
@@ -1343,6 +1360,38 @@ export default function Page() {
               <button onClick={() => setFwdImport(null)} className="px-4 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ยกเลิก</button>
               <button onClick={applyFwdImport} disabled={fwdBusy} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: MAROON }}>
                 {fwdBusy ? "…" : `นำเข้า (${fwdImport.rows.filter(r => r.use && r.id).length} ใบ)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reason for a non-AIR mode — asked here, not inline, so Confirm stays a single clean action. */}
+      {modeAsk && openReq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setModeAsk(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b">
+              <div className="font-bold text-gray-900">เหตุผลที่ไม่ส่งทาง AIR</div>
+              <p className="text-[11px] text-gray-500 mt-0.5">ผู้ขอเปิดเอกสารนี้เป็น RM REQ AIR — เลือก {lgMode ? SHIP_MODE_LABEL[lgMode] : ""} ต้องบันทึกเหตุผลไว้</p>
+            </div>
+            <div className="p-5 space-y-3">
+              <textarea value={lgModeReason} onChange={e => setLgModeReason(e.target.value)} rows={3} autoFocus
+                placeholder="เช่น ของไม่ด่วน ส่งเรือทันกำหนด · supplier ส่ง DHL เท่านั้น"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200" />
+              <div className="flex flex-wrap gap-1.5">
+                {["ของไม่ด่วน ส่งเรือทัน need date", "ค่าขนส่งทางอากาศสูงเกินไป", "supplier ส่ง courier เท่านั้น", "น้ำหนัก/ขนาดไม่เหมาะกับ air"].map(t => (
+                  <button key={t} type="button" onClick={() => setLgModeReason(t)}
+                    className="px-2.5 py-1 rounded-full text-[11px] border border-gray-200 text-gray-600 hover:bg-gray-50">{t}</button>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-400">บันทึกลงประวัติเอกสาร และแจ้งเมลผู้อนุมัติถ้าต่างจาก mode ที่อนุมัติไว้</p>
+            </div>
+            <div className="px-5 py-3 border-t flex items-center justify-end gap-2">
+              <button onClick={() => setModeAsk(false)} className="px-4 py-2 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ยกเลิก</button>
+              <button onClick={() => { if (!lgModeReason.trim()) return; setModeAsk(false); saveMode(openReq) }}
+                disabled={!lgModeReason.trim() || modeBusy}
+                className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40" style={{ background: "#0369a1" }}>
+                ✓ Confirm
               </button>
             </div>
           </div>

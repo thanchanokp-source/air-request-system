@@ -445,6 +445,40 @@ export default function FilesPage() {
   }
 
   // Total filtered SOs across all visible docs (for the "print all filtered" button label).
+  // ── HAWB summary ──────────────────────────────────────────────────────────────────────────────
+  // When LG types a HAWB in the box, show what that single HAWB actually costs: every SO carrying it
+  // (across documents), its total actual freight, and the invoices it covers — an INV can hold several
+  // SOs, which is exactly what people come here to check.
+  const hawbSummary = useMemo(() => {
+    const q = hawbQuery.trim().toLowerCase()
+    if (!q) return null
+    const rows: any[] = []
+    for (const req of folderFiltered) {
+      for (const it of (req.items || [])) {
+        if (it.itemStatus === "REJECTED") continue
+        if (!String(it.hawbNo || "").trim().toLowerCase().includes(q)) continue
+        rows.push({ ...it, documentNo: req.documentNo, bu: req.buName })
+      }
+    }
+    if (!rows.length) return { rows: [], total: 0, invs: [], docs: [], hawbs: [] }
+    const byInv = new Map<string, { inv: string; sos: any[]; qty: number; cost: number }>()
+    for (const r of rows) {
+      const k = String(r.invoiceNo || "(ไม่มี INV)")
+      const g = byInv.get(k) || { inv: k, sos: [], qty: 0, cost: 0 }
+      g.sos.push(r); g.qty += Number(r.qtyRequestAir) || 0; g.cost += Number(r.actualAirFreight) || 0
+      byInv.set(k, g)
+    }
+    return {
+      rows,
+      total: rows.reduce((a, r) => a + (Number(r.actualAirFreight) || 0), 0),
+      qty: rows.reduce((a, r) => a + (Number(r.qtyRequestAir) || 0), 0),
+      invs: [...byInv.values()].sort((a, b) => b.cost - a.cost),
+      docs: [...new Set(rows.map(r => r.documentNo))],
+      hawbs: [...new Set(rows.map(r => String(r.hawbNo || "").trim()).filter(Boolean))],
+    }
+  }, [hawbQuery, folderFiltered])
+  const [hawbOpen, setHawbOpen] = useState(false)
+
   const filteredSoTotal = filtered.reduce((n, req) => n + (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED" && (!unbookedOnly || !itemBooked(i)) && itemMatchesFilters(i)).length, 0)
 
   // Select/deselect every SO in a group (port / ship-date) at once.
@@ -582,6 +616,28 @@ export default function FilesPage() {
               </div>
             </div>
           </div>
+
+          {/* What this HAWB costs — appears as soon as a HAWB is typed in the box above. */}
+          {hawbSummary && (
+            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
+              {hawbSummary.rows.length === 0 ? (
+                <span className="text-xs text-sky-900">ไม่พบ SO ที่ใช้ HAWB &ldquo;{hawbQuery.trim()}&rdquo; ในเอกสารที่แสดงอยู่</span>
+              ) : (
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  <span className="text-xs text-sky-900">
+                    HAWB <b className="font-mono">{hawbSummary.hawbs.join(", ")}</b>
+                  </span>
+                  <span className="text-xs text-sky-900">ยอดรวม <b className="text-sm">{fmtNum(hawbSummary.total)}</b> THB</span>
+                  <span className="text-xs text-sky-900">{hawbSummary.rows.length} SO · {fmtNum(hawbSummary.qty)} pcs</span>
+                  <span className="text-xs text-sky-900">{hawbSummary.invs.length} INV · {hawbSummary.docs.length} เอกสาร</span>
+                  <button onClick={() => setHawbOpen(true)}
+                    className="ml-auto text-xs px-3 py-1.5 rounded-lg font-semibold border border-sky-300 bg-white text-sky-800 hover:bg-sky-100">
+                    ดู INV ในใบนี้ ({hawbSummary.invs.length})
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Filters */}
           <div className="px-5 py-3 border-b border-gray-100 flex items-start gap-2 flex-wrap">
@@ -953,6 +1009,48 @@ export default function FilesPage() {
           </div>
         </div>
       )}
+      {/* HAWB breakdown — which INVs make up this HAWB and what each one costs. */}
+      {hawbOpen && hawbSummary && hawbSummary.rows.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setHawbOpen(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 border-b flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="font-bold text-gray-900">HAWB <span className="font-mono">{hawbSummary.hawbs.join(", ")}</span></div>
+                <div className="text-[11px] text-gray-500">{hawbSummary.invs.length} INV · {hawbSummary.rows.length} SO · รวม {fmtNum(hawbSummary.total)} THB</div>
+              </div>
+              <button onClick={() => setHawbOpen(false)} className="px-3 py-1.5 rounded-lg text-sm text-gray-500 border border-gray-200 hover:bg-gray-50">ปิด</button>
+            </div>
+            <div className="overflow-y-auto p-5 space-y-3">
+              {hawbSummary.invs.map(g => (
+                <div key={g.inv} className="rounded-xl border border-gray-200">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 bg-gray-50 rounded-t-xl">
+                    <span className="font-mono text-sm font-bold text-gray-800">{g.inv}</span>
+                    <span className="text-[11px] text-gray-500">{g.sos.length} SO · {fmtNum(g.qty)} pcs</span>
+                    <span className="ml-auto text-sm font-bold text-gray-900">{fmtNum(g.cost)} <span className="text-[10px] font-normal text-gray-400">THB</span></span>
+                    {g.sos.length > 1 && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">INV เดียว {g.sos.length} SO</span>}
+                  </div>
+                  <table className="w-full text-xs">
+                    <thead className="text-gray-400"><tr>{["SO", "STYLE", "BRAND", "QTY", "ACTUAL (THB)", "เอกสาร"].map(h => <th key={h} className="px-3 py-1.5 text-left font-medium">{h}</th>)}</tr></thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {g.sos.map((r: any, i: number) => (
+                        <tr key={r.id || i}>
+                          <td className="px-3 py-1.5 font-mono">{r.so}{r.sub ? `-${r.sub}` : ""}</td>
+                          <td className="px-3 py-1.5 text-gray-600">{r.style || "-"}</td>
+                          <td className="px-3 py-1.5 text-gray-600">{r.brand || "-"}</td>
+                          <td className="px-3 py-1.5 text-right">{fmtNum(r.qtyRequestAir)}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold">{fmtNum(r.actualAirFreight)}</td>
+                          <td className="px-3 py-1.5 text-gray-500 font-mono">{r.documentNo}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
   )
 }
