@@ -188,6 +188,101 @@ export default function FixHawbPage() {
           </div>
         </>
       )}
+
+      <DedupeDocBox />
+    </div>
+  )
+}
+
+// ④ ลบแถวที่ซ้ำในเอกสาร — rows that repeat another document's SO+SUB (+qty). Preview → tick → delete.
+function DedupeDocBox() {
+  const [docNo, setDocNo] = useState("")
+  const [res, setRes] = useState<any | null>(null)
+  const [pick, setPick] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState("")
+
+  const preview = async () => {
+    const d0 = docNo.trim(); if (!d0) return
+    setBusy(true); setMsg(""); setRes(null)
+    try {
+      const r = await fetch("/api/admin/dedupe-doc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentNo: d0, preview: true }) })
+      const d = await r.json()
+      if (!r.ok) { setMsg("ลองดูไม่สำเร็จ: " + (d.error || r.status)); return }
+      setRes(d)
+      // pre-tick only EXCESS exact rows (more air-req rows than INV shipment rounds) that LG hasn't booked
+      setPick(new Set((d.exact as any[]).filter(x => x.excess && !x.hawbNo).map(x => x.id)))
+    } finally { setBusy(false) }
+  }
+  const remove = async () => {
+    if (!res || !pick.size) return
+    if (!confirm(`ลบ ${pick.size} แถวออกจาก ${res.documentNo}?\n(ลบถาวร · เก็บ log ไว้ในเอกสาร)`)) return
+    setBusy(true); setMsg("")
+    try {
+      const r = await fetch("/api/admin/dedupe-doc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentNo: res.documentNo, itemIds: [...pick] }) })
+      const d = await r.json()
+      if (!r.ok) { setMsg("ลบไม่สำเร็จ: " + (d.error || r.status)); return }
+      setMsg(d.docDeleted ? `✓ ลบ ${d.deleted} แถว · เอกสารว่างแล้วจึงลบทั้งเอกสาร` : `✓ ลบ ${d.deleted} แถว · เหลือ ${d.remaining} แถว`)
+      setRes(null); setPick(new Set())
+      if (!d.docDeleted) await preview()
+    } finally { setBusy(false) }
+  }
+  const toggle = (id: string) => setPick(p => { const s = new Set(p); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const toggleAll = (rows: any[], on: boolean) => setPick(p => { const s = new Set(p); rows.forEach(r => on ? s.add(r.id) : s.delete(r.id)); return s })
+
+  const Table = ({ rows, title, tone }: { rows: any[]; title: string; tone: string }) => {
+    const all = rows.length > 0 && rows.every(r => pick.has(r.id))
+    return (
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className={`px-3 py-1.5 text-[11px] font-semibold flex items-center gap-2 ${tone}`}>
+          <input type="checkbox" checked={all} onChange={e => toggleAll(rows, e.target.checked)} disabled={!rows.length} />
+          {title} ({rows.length})
+        </div>
+        {rows.length > 0 && (
+          <div className="max-h-72 overflow-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-white text-gray-400 sticky top-0"><tr className="text-left">
+                <th className="px-3 py-1 w-6"></th><th className="px-3 py-1 font-medium">SO</th><th className="px-3 py-1 font-medium">SUB</th>
+                <th className="px-3 py-1 font-medium text-right">QTY Air</th><th className="px-3 py-1 font-medium">HAWB</th>
+                <th className="px-3 py-1 font-medium text-right" title="แถว air request ทั้งหมดของ SO+SUB นี้ / จำนวน INV ที่ส่งจริง (mp_line + export)">แถว / INV ส่งจริง</th>
+                <th className="px-3 py-1 font-medium">มีในเอกสาร</th>
+              </tr></thead>
+              <tbody>{rows.map(r => (
+                <tr key={r.id} className={`border-t border-gray-50 ${pick.has(r.id) ? "bg-red-50" : ""}`}>
+                  <td className="px-3 py-1"><input type="checkbox" checked={pick.has(r.id)} onChange={() => toggle(r.id)} /></td>
+                  <td className="px-3 py-1 font-mono">{r.so}</td><td className="px-3 py-1 font-mono">{r.sub || "-"}</td>
+                  <td className="px-3 py-1 text-right tabular-nums">{n(r.qty)}</td>
+                  <td className="px-3 py-1 font-mono">{r.hawbNo ? <span className="text-amber-700" title="แถวนี้ LG ใส่ HAWB แล้ว — ไม่ได้ติ๊กให้อัตโนมัติ">{r.hawbNo}</span> : "-"}</td>
+                  <td className={`px-3 py-1 text-right tabular-nums ${r.excess ? "text-red-600 font-semibold" : "text-green-700"}`} title={r.excess ? "แถวมากกว่ารอบที่ส่งจริง → น่าจะซ้ำ" : "จำนวนรอบส่ง (INV) รองรับทุกแถว → อาจเป็นการส่งหลายรอบ"}>
+                    {r.airRows} / {r.ships}{r.excess ? "" : " ✓"}
+                  </td>
+                  <td className="px-3 py-1 text-gray-500">{(r.others || []).join(", ")}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2 mt-6">
+      <p className="font-semibold text-sm text-gray-800">④ ลบแถวที่ซ้ำในเอกสาร</p>
+      <p className="text-[11px] text-gray-400">ใส่เลขเอกสาร → <b>ลองดู</b> · ติ๊กให้อัตโนมัติเฉพาะแถวที่ SO+SUB+qty ตรงกับเอกสารอื่น <b>และจำนวนแถว air request มากกว่ารอบที่ส่งจริง (INV ใน mp_line/export)</b> · ยกเว้นแถวที่มี HAWB แล้ว · แถว qty ต่างให้เลือกเอง · แถวใหม่ไม่แตะ</p>
+      <div className="flex gap-2">
+        <input value={docNo} onChange={e => { setDocNo(e.target.value); setRes(null) }} onKeyDown={e => e.key === "Enter" && preview()} placeholder="เช่น AIR_NYG_2609_0056" className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm font-mono" />
+        <button onClick={preview} disabled={busy || !docNo.trim()} className="text-sm px-4 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-300 font-semibold disabled:opacity-50 whitespace-nowrap">👁 ลองดู</button>
+        <button onClick={remove} disabled={busy || !pick.size} className="text-sm px-4 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-40 whitespace-nowrap">🗑 ลบที่เลือก ({pick.size})</button>
+      </div>
+      {msg && <p className="text-xs text-gray-700">{msg}</p>}
+      {res && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-gray-500">{res.documentNo} · {res.status} · ทั้งหมด {n(res.total)} แถว · ซ้ำตรง <b className="text-red-600">{res.exact.length}</b> · qty ต่าง <b className="text-amber-700">{res.diff.length}</b> · ใหม่ (เก็บไว้) <b className="text-green-700">{res.fresh}</b></p>
+          <Table rows={res.exact} title="ซ้ำตรง (SO+SUB+qty ตรงกับเอกสารอื่น)" tone="bg-red-50 text-red-800" />
+          <Table rows={res.diff} title="SO+SUB ซ้ำแต่ qty ต่าง — เลือกเอง" tone="bg-amber-50 text-amber-800" />
+        </div>
+      )}
     </div>
   )
 }

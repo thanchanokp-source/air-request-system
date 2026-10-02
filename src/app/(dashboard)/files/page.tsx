@@ -619,19 +619,24 @@ export default function FilesPage() {
 
           {/* What this HAWB costs — appears as soon as a HAWB is typed in the box above. */}
           {hawbSummary && (
-            <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
+            <div className="mt-3 rounded-xl bg-slate-800 px-5 py-3 shadow-sm">
               {hawbSummary.rows.length === 0 ? (
-                <span className="text-xs text-sky-900">ไม่พบ SO ที่ใช้ HAWB &ldquo;{hawbQuery.trim()}&rdquo; ในเอกสารที่แสดงอยู่</span>
+                <span className="text-sm text-amber-200">ไม่พบ SO ที่ใช้ HAWB &ldquo;{hawbQuery.trim()}&rdquo; ในเอกสารที่แสดงอยู่</span>
               ) : (
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                  <span className="text-xs text-sky-900">
-                    HAWB <b className="font-mono">{hawbSummary.hawbs.join(", ")}</b>
-                  </span>
-                  <span className="text-xs text-sky-900">ยอดรวม <b className="text-sm">{fmtNum(hawbSummary.total)}</b> THB</span>
-                  <span className="text-xs text-sky-900">{hawbSummary.rows.length} SO · {fmtNum(hawbSummary.qty)} pcs</span>
-                  <span className="text-xs text-sky-900">{hawbSummary.invs.length} INV · {hawbSummary.docs.length} เอกสาร</span>
+                <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                  {[
+                    { lbl: "HAWB", val: hawbSummary.hawbs.join(", "), cls: "font-mono text-white" },
+                    { lbl: "ยอดรวม (THB)", val: fmtNum(hawbSummary.total), cls: "text-amber-300 text-xl" },
+                    { lbl: "SO · pcs", val: `${hawbSummary.rows.length} · ${fmtNum(hawbSummary.qty)}`, cls: "text-white" },
+                    { lbl: "INV · เอกสาร", val: `${hawbSummary.invs.length} · ${hawbSummary.docs.length}`, cls: "text-white" },
+                  ].map(s => (
+                    <div key={s.lbl} className="flex flex-col">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{s.lbl}</span>
+                      <span className={`text-base font-bold tabular-nums leading-tight ${s.cls}`}>{s.val}</span>
+                    </div>
+                  ))}
                   <button onClick={() => setHawbOpen(true)}
-                    className="ml-auto text-xs px-3 py-1.5 rounded-lg font-semibold border border-sky-300 bg-white text-sky-800 hover:bg-sky-100">
+                    className="ml-auto text-sm px-4 py-2 rounded-lg font-semibold bg-white text-slate-800 hover:bg-amber-100">
                     ดู INV ในใบนี้ ({hawbSummary.invs.length})
                   </button>
                 </div>
