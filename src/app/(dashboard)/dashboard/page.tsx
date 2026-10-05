@@ -1215,7 +1215,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-[11px] text-gray-400 font-semibold">Actual air cost</p>
                 <p className="text-3xl font-extrabold tabular-nums text-gray-800 leading-none mt-0.5">{fmtM(totAct)}</p>
-                <p className="text-[11px] text-gray-400 mt-1 tabular-nums">{fmtNum(totAct)} THB · เฉพาะส่งจริง</p>
+                <p className="text-[11px] text-gray-400 mt-1 tabular-nums">{fmtNum(totAct)} THB{unAct > 0 ? ` · ส่งจริง ${fmtNum(act)} + แผนส่ง ${fmtNum(unAct)}` : " · ส่งจริง"}</p>
               </div>
             </div>
             {/* progress bar (คิดจาก est cost) */}
@@ -1260,7 +1260,13 @@ export default function DashboardPage() {
               <p className="text-2xl font-extrabold tabular-nums text-amber-800 leading-none mt-0.5">{fmtNum(unQtyPlan)}</p>
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Est air cost</p><p className="text-lg font-bold tabular-nums text-gray-700">{fmtNum(unEst)}</p></div>
-                <div><p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air cost</p><p className="text-lg font-bold tabular-nums text-gray-400">—</p></div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Actual air cost</p>
+                  {unAct > 0
+                    ? <><p className="text-lg font-bold tabular-nums text-orange-700">{fmtNum(unAct)}</p>
+                        <p className="text-[10px] text-orange-700 leading-tight" title="แถวเหล่านี้ LG ใส่ HAWB / ค่าแอร์แล้ว แต่หา SO+SUB+STYLE ใน mp_line / export ไม่เจอ (เช่น STYLE เขียนต่างกัน) จึงยังนับอยู่ฝั่งแผนส่ง">มีค่าแอร์แล้ว แต่หาใน mp_line / export ไม่เจอ</p></>
+                    : <p className="text-lg font-bold tabular-nums text-gray-400">—</p>}
+                </div>
               </div>
               <div className="flex items-center justify-between border-t border-amber-200/70 mt-3 pt-2.5">
                 <span className="text-[11px] text-gray-500 font-semibold">สถานะ</span>
