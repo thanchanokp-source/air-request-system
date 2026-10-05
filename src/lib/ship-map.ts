@@ -12,6 +12,8 @@
 //       MER rows are paired to INVs by equal qty, then closest qty;
 //       more INVs than MER rows → extra rows = a COPY of the MER row, only INV + QTY differ
 //       (EST/ACT not repeated on the copy, so totals stay = the MER rows)
+//       more MER rows than INVs and several rows' qty SUM = one INV (colours keyed apart, source has one
+//       style) → they share it
 //       more MER rows than INVs → the extra MER rows merge into the INV with the closest qty
 //   · EST / ACT stay on their own MER row (never split)
 //   · nothing found in either source → not shipped yet, UNLESS LG already booked the row (HAWB or ACTUAL):
@@ -31,6 +33,7 @@ export type ShipGroup = {
   qty: number          // shipped qty of this INV
   src: "mp_line" | "export" | "LG"   // LG = not in mp_line/export but already booked by LG (HAWB / ACTUAL)
   extra: boolean       // INV with no MER row of its own → shown as a copy of base (only INV + QTY differ)
+  shared?: boolean     // ONE INV split over several MER rows whose qty SUM = the INV (e.g. 2 colours, 9 + 216 = 225)
 }
 export type ShipInfo = { qty: number; inv: string; src: string }
 
@@ -68,6 +71,12 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
     const find = (i: number): number => parent[i] === i ? i : (parent[i] = find(parent[i]))
     for (let i = 0; i < styleList.length; i++) for (let j = i + 1; j < styleList.length; j++)
       if (styleHit(styleList[i], styleList[j])) parent[find(i)] = find(j)
+    // MER styles that hit the SAME source style are one cluster too: the source can't tell them apart
+    // ("P.101.6280.172.OS" + "P.101.6280.337.OS" both ↔ source "P.101.6280") — else the first takes every INV
+    for (const ss of new Set([...mpLines, ...exLines].map(l => normStyle(l.style)))) {
+      const hits = styleList.map((st, i) => styleHit(st, ss) ? i : -1).filter(i => i >= 0)
+      for (const i of hits.slice(1)) parent[find(i)] = find(hits[0])
+    }
     const clusterMap = new Map<number, string[]>()
     styleList.forEach((s, i) => { const r = find(i); clusterMap.set(r, [...(clusterMap.get(r) || []), s]) })
     const clusters = [...clusterMap.values()].sort((a, b) => Math.max(...b.map(s => s.length)) - Math.max(...a.map(s => s.length)))
@@ -127,6 +136,25 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
         if (i < 0) i = left.findIndex(r => sameQ(r, iv.qty))
         if (i >= 0) { owner.set(iv.inv, [left.splice(i, 1)[0]]); openInv.splice(openInv.indexOf(iv), 1) }
       }
+      // several rows whose qty SUM = one INV → they share it (fewest rows first; small sets only)
+      const sharedInv = new Set<string>(), sharedIds = new Set<string>()
+      // only when MER rows OUTNUMBER the INVs — same count = one row per INV (01261158: 9↔900, 216↔225)
+      for (const iv of [...openInv]) {
+        if (left.length <= openInv.length) break
+        const cand = left.map((r, i) => ({ i, q: Number(r.qtyRequestAir) || 0 })).filter(c => c.q > 0)
+        if (cand.length < 2 || cand.length > 14) continue
+        let bestMask = 0, bestN = Infinity
+        for (let m = 1; m < (1 << cand.length); m++) {
+          let n = 0, sum = 0
+          for (let b = 0; b < cand.length; b++) if (m & (1 << b)) { n++; sum += cand[b].q }
+          if (n >= 2 && sum === iv.qty && n < bestN) { bestMask = m; bestN = n }
+        }
+        if (!bestMask) continue
+        const pickIx = cand.filter((_, b) => bestMask & (1 << b)).map(c => c.i).sort((a, b) => b - a)
+        const rs = pickIx.map(i => left.splice(i, 1)[0]).reverse()
+        owner.set(iv.inv, rs); openInv.splice(openInv.indexOf(iv), 1); sharedInv.add(iv.inv)
+        for (const r of rs) sharedIds.add(r.id)
+      }
       while (openInv.length && left.length) {            // closest qty, one-to-one
         let best: { li: number; vi: number; d: number } | null = null
         left.forEach((r, li) => openInv.forEach((iv, vi) => {
@@ -145,10 +173,19 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
       for (const iv of invs) {
         const rs = owner.get(iv.inv) || []
         const extra = rs.length === 0
-        const base = rs[0] || [...owner.values()].flat()[0] || base0
-        groups.push({ key: `${sk}|${st}|${iv.inv}`, sk, rows: rs, base, inv: iv.inv, qty: iv.qty, src: s, extra })
-        // per MER row: Σ qty / INVs of the rows it heads — its own INV + extra INVs copied from it
+        // extra INV copies the MER row with the LARGEST qty (not a 9-pcs colour of a shared INV)
+        const base = rs[0] || [...owner.values()].flat().sort((x, y) => (Number(y.qtyRequestAir) || 0) - (Number(x.qtyRequestAir) || 0))[0] || base0
+        const shared = sharedInv.has(iv.inv)
+        groups.push({ key: `${sk}|${st}|${iv.inv}`, sk, rows: rs, base, inv: iv.inv, qty: iv.qty, src: s, extra, shared })
+        if (shared) {                                    // each row keeps its own part of the INV
+          for (const r of rs) { const cur = perItem.get(r.id); perItem.set(r.id, { qty: (cur?.qty || 0) + (Number(r.qtyRequestAir) || 0), inv: [cur?.inv, iv.inv].filter(Boolean).join(", "), src: s }) }
+          continue
+        }
+        // per MER row: Σ qty / INVs of the rows it heads — its own INV + extra INVs copied from it.
+        // A row that already shares an INV exactly (qty sum = INV) is complete → an extra INV is NOT added to
+        // it (AIR REQUESTS page shows 9 / 216, not 216 + 900); that INV shows only as its own data-table row.
         const head = rs[0] || base
+        if (extra && sharedIds.has(head.id)) continue
         const cur = perItem.get(head.id)
         perItem.set(head.id, { qty: (cur?.qty || 0) + iv.qty, inv: [cur?.inv, iv.inv].filter(Boolean).join(", "), src: s })
         for (const r of rs.slice(1)) if (!perItem.has(r.id)) perItem.set(r.id, { qty: iv.qty, inv: iv.inv, src: s })

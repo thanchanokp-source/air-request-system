@@ -801,9 +801,10 @@ export default function DashboardPage() {
     // rows[0] is the HEAD (original document, chosen by lib/ship-map). Lines of OTHER documents in the same
     // group are duplicate uploads: DOC NO shows only the head document (dups listed in _dupDocs), EST counts
     // the head document's lines only, ACTUAL counts every line (real money already split onto it).
-    const merge = (id: string, rows: any[]) => {
+    // shared = ONE INV split over several MER rows (qty sum = INV) → every row is real, none is a duplicate
+    const merge = (id: string, rows: any[], shared = false) => {
       const b = rows[0], headDoc = String(b.request?.documentNo || "")
-      const own = rows.filter(r => String(r.request?.documentNo || "") === headDoc)
+      const own = shared ? rows : rows.filter(r => String(r.request?.documentNo || "") === headDoc)
       const origByStyle = new Map<string, number>()
       for (const r of own) origByStyle.set(styleU(r), Math.max(origByStyle.get(styleU(r)) || 0, Number(r.qtyOriginalShipment) || 0))
       const acts = rows.map(r => r.actualAirFreight).filter((v: any) => v != null)
@@ -844,7 +845,7 @@ export default function DashboardPage() {
         ? { ...merge(id, [g.base]), _extraInv: true, airFreight: Math.round(estPerPc(g.base) * g.qty * 100) / 100,
             grossWeight: (Number(g.base.grossWeight) || 0) / ((Number(g.base.qtyRequestAir) || Number(g.base.qtyOriginalShipment) || 1)) * g.qty,
             actualAirFreight: null, hawbNo: "" }
-        : merge(id, g.rows)
+        : merge(id, g.rows, !!g.shared)
       row._autoInv = !g.extra && g.rows.some(r => invU(r) !== g.inv)
       row.invoiceNo = g.inv
       if (row._autoInv) invMismatch.add(g.sk)
