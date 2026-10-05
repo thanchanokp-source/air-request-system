@@ -43,15 +43,17 @@ export async function GET(_req: NextRequest) {
   }
 
   // 1b) sq_report.export_row: older AIR PREPAID exports (before mp_line coverage ~mid-Sept). Union into
-  //     the same list, shaped like mp_line, keeping mp_line for any SO+SUB it already has (no double INV).
+  //     the same list, shaped like mp_line. Overlap is judged per SO+SUB+INV (one INV = one shipment round):
+  //     an INV mp_line already has is skipped (no double), but ANOTHER INV of the same SO+SUB is kept —
+  //     skipping by SO+SUB alone hid real rounds (e.g. INV G26166806497 when mp_line had another 3A21 INV).
   try {
     const _up = (s: any) => String(s ?? "").trim().toUpperCase()
-    const mpKeys = new Set(mp.map((r: any) => `${soN(r.so_no)}|${_up(r.sub_no)}`))
+    const mpKeys = new Set(mp.map((r: any) => `${soN(r.so_no)}|${_up(r.sub_no)}|${_up(r.invoice_no)}`))
     const sq = await prisma.$queryRawUnsafe<any[]>(
       `SELECT so_no, sub_no, invoice_no, customer_brand AS brand, style, qty_pcs AS final_pcs, ex_fty_date AS etd
        FROM sq_report.export_row WHERE UPPER(TRIM(ship_mode)) = 'AIR PREPAID'`)
     for (const r of sq) {
-      if (mpKeys.has(`${soN(r.so_no)}|${_up(r.sub_no)}`)) continue   // mp_line wins for overlapping SO+SUB
+      if (mpKeys.has(`${soN(r.so_no)}|${_up(r.sub_no)}|${_up(r.invoice_no)}`)) continue   // same INV already from mp_line
       mp.push(r)
     }
   } catch { /* sq_report.export_row unavailable → mp_line only */ }
