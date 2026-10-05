@@ -47,22 +47,33 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
 
   for (const [sk, rows] of bySub) {
     const mpLines = src.mp?.[sk] || [], exLines = src.ex?.[sk] || []
-    // MER rows grouped by style; most specific (longest) style claims source lines first
+    // MER styles that CONTAIN each other are the same style keyed differently ("03AZ" vs
+    // "03AZ-00A-A2T-CYB") → one cluster. Clusters are processed most-specific (longest) first.
     const byStyle = new Map<string, any[]>()
     for (const r of rows) { const s = normStyle(r.style); const g = byStyle.get(s) || []; g.push(r); byStyle.set(s, g) }
-    const styles = [...byStyle.keys()].sort((a, b) => b.length - a.length)
+    const styleList = [...byStyle.keys()]
+    const parent = styleList.map((_, i) => i)
+    const find = (i: number): number => parent[i] === i ? i : (parent[i] = find(parent[i]))
+    for (let i = 0; i < styleList.length; i++) for (let j = i + 1; j < styleList.length; j++)
+      if (styleHit(styleList[i], styleList[j])) parent[find(i)] = find(j)
+    const clusterMap = new Map<number, string[]>()
+    styleList.forEach((s, i) => { const r = find(i); clusterMap.set(r, [...(clusterMap.get(r) || []), s]) })
+    const clusters = [...clusterMap.values()].sort((a, b) => Math.max(...b.map(s => s.length)) - Math.max(...a.map(s => s.length)))
     const usedMp = new Set<number>(), usedEx = new Set<number>()
 
-    for (const st of styles) {
-      const mer = byStyle.get(st)!
-      const pick = (lines: SrcLine[], used: Set<number>) =>
-        lines.map((_, i) => i).filter(i => !used.has(i) && styleHit(st, normStyle(lines[i].style)))
-      let s: "mp_line" | "export" = "mp_line"
-      let idx = pick(mpLines, usedMp)
-      let lines = mpLines
-      if (!idx.length) { idx = pick(exLines, usedEx); lines = exLines; s = "export" }
+    for (const cl of clusters) {
+      const mer = cl.flatMap(s => byStyle.get(s)!)
+      const st = cl.slice().sort((a, b) => b.length - a.length)[0]          // label for the row key
+      const hitAny = (l: SrcLine) => cl.some(s => styleHit(s, normStyle(l.style)))
+      const pick = (lines: SrcLine[], used: Set<number>) => lines.map((_, i) => i).filter(i => !used.has(i) && hitAny(lines[i]))
+      // mp_line first: if mp_line has ANY line for this style (even one another cluster already took),
+      // never fall back to export — export carries the SAME shipments and would count them twice
+      const inMp = mpLines.some(hitAny)
+      const s: "mp_line" | "export" = inMp ? "mp_line" : "export"
+      const lines = inMp ? mpLines : exLines
+      const idx = pick(lines, inMp ? usedMp : usedEx)
       if (!idx.length) { unshipped.push(...mer); continue }
-      for (const i of idx) (s === "mp_line" ? usedMp : usedEx).add(i)
+      for (const i of idx) (inMp ? usedMp : usedEx).add(i)
 
       // INVs of this SO+SUB+STYLE (qty summed over matched styles)
       const invQ = new Map<string, number>()
@@ -70,7 +81,13 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
       const invs = [...invQ.entries()].map(([inv, qty]) => ({ inv, qty }))
 
       // pair MER rows ↔ INVs: equal qty (a row already carrying that INV wins), then closest
-      const left = [...mer].sort((a, b) => (hasHawb(b) ? 1 : 0) - (hasHawb(a) ? 1 : 0))
+      // head-row preference: booked (HAWB) → has ACTUAL → OLDER document (a duplicate upload is usually
+      // the later doc, e.g. 2609_0056) — so the original document is the one paired / shown
+      const docNo = (r: any) => String(r?.request?.documentNo || "")
+      const left = [...mer].sort((a, b) =>
+        ((hasHawb(b) ? 1 : 0) - (hasHawb(a) ? 1 : 0)) ||
+        (((Number(b.actualAirFreight) || 0) > 0 ? 1 : 0) - ((Number(a.actualAirFreight) || 0) > 0 ? 1 : 0)) ||
+        docNo(a).localeCompare(docNo(b)))
       const owner = new Map<string, any[]>()            // inv → MER rows
       const openInv = [...invs]
       const sameQ = (r: any, q: number) => Number(r.qtyRequestAir) === q || Number(r.qtyActualShip) === q
@@ -88,7 +105,7 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
         const b = best!; const iv = openInv.splice(b.vi, 1)[0]
         owner.set(iv.inv, [left.splice(b.li, 1)[0]])
       }
-      for (const r of left) {                            // more MER rows than INVs → merge into closest INV
+      for (const r of left) {                            // more MER rows than INVs → duplicates: merge into closest INV (head stays first)
         let bi = invs[0], bd = Infinity
         for (const iv of invs) { const d = Math.abs((Number(r.qtyRequestAir) || 0) - iv.qty); if (d < bd) { bd = d; bi = iv } }
         owner.set(bi.inv, [...(owner.get(bi.inv) || []), r])

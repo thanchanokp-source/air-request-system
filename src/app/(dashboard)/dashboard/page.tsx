@@ -787,20 +787,25 @@ export default function DashboardPage() {
   // QTY AIR ของแต่ละแถว = ยอดของ INV นั้น (INV เดียวหลายแถว qty ต่างกัน → แบ่งตามสัดส่วน qty) → ผลรวม = แหล่ง
   const shipAgg = useMemo(()=>{
     const join = (xs: any[]) => [...new Set(xs.map(x => String(x ?? "").trim()).filter(Boolean))].join(", ")
+    // rows[0] is the HEAD (original document, chosen by lib/ship-map). Lines of OTHER documents in the same
+    // group are duplicate uploads: DOC NO shows only the head document (dups listed in _dupDocs), EST counts
+    // the head document's lines only, ACTUAL counts every line (real money already split onto it).
     const merge = (id: string, rows: any[]) => {
-      const b = rows[0]
+      const b = rows[0], headDoc = String(b.request?.documentNo || "")
+      const own = rows.filter(r => String(r.request?.documentNo || "") === headDoc)
       const origByStyle = new Map<string, number>()
-      for (const r of rows) origByStyle.set(styleU(r), Math.max(origByStyle.get(styleU(r)) || 0, Number(r.qtyOriginalShipment) || 0))
+      for (const r of own) origByStyle.set(styleU(r), Math.max(origByStyle.get(styleU(r)) || 0, Number(r.qtyOriginalShipment) || 0))
       const acts = rows.map(r => r.actualAirFreight).filter((v: any) => v != null)
       return {
         ...b, id, _lines: rows.length,
-        style: join(rows.map(r => r.style)), description: join(rows.map(r => r.description)),
+        _dupDocs: [...new Set(rows.map(r => String(r.request?.documentNo || "")).filter(d => d && d !== headDoc))],
+        style: join(own.map(r => r.style)), description: join(own.map(r => r.description)),
         hawbNo: join(rows.map(r => r.hawbNo)),
-        request: { ...b.request, documentNo: join(rows.map(r => r.request?.documentNo)) },
+        request: { ...b.request, documentNo: headDoc },
         qtyOriginalShipment: [...origByStyle.values()].reduce((a, c) => a + c, 0),
-        qtyRequestAir: rows.reduce((a, r) => a + (Number(r.qtyRequestAir) || 0), 0),
+        qtyRequestAir: own.reduce((a, r) => a + (Number(r.qtyRequestAir) || 0), 0),
         qtyActualShip: rows.reduce((a, r) => a + (Number(r.qtyActualShip) || 0), 0),
-        airFreight: rows.reduce((a, r) => a + (Number(r.airFreight) || 0), 0),
+        airFreight: own.reduce((a, r) => a + (Number(r.airFreight) || 0), 0),
         actualAirFreight: acts.length ? acts.reduce((a: number, v: any) => a + (Number(v) || 0), 0) : null,
       }
     }
@@ -1480,7 +1485,7 @@ export default function DashboardPage() {
                 const vp = row.airFreight>0&&row.actualAirFreight>0 ? (row.actualAirFreight-row.airFreight)/row.airFreight*100 : null
                 return (
                   <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-3 py-1.5 font-medium whitespace-nowrap">{row.request.documentNo}{String(row.reasonDelay||"").startsWith("Auto-add") && <span className="ml-1 px-1 py-0.5 rounded bg-pink-100 text-pink-700 text-[9px] font-bold align-middle">AUTO</span>}</td>
+                    <td className="px-3 py-1.5 font-medium whitespace-nowrap">{row.request.documentNo}{String(row.reasonDelay||"").startsWith("Auto-add") && <span className="ml-1 px-1 py-0.5 rounded bg-pink-100 text-pink-700 text-[9px] font-bold align-middle">AUTO</span>}{row._dupDocs?.length > 0 && <span className="ml-1 px-1 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold align-middle cursor-help" title={`SO+SUB+STYLE เดียวกันอยู่ในเอกสารอื่นด้วย (นับเป็นแถวซ้ำ ไม่นับ EST ซ้ำ):\n${row._dupDocs.join("\n")}`}>+{row._dupDocs.length} ซ้ำ</span>}</td>
                     <td className="px-3 py-1.5 font-medium tabular-nums">{so8(row.so)}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{poMap[row.so] || "-"}</td>
                     <td className="px-3 py-1.5">{row.style}</td>
