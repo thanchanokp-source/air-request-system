@@ -900,14 +900,17 @@ export default function DashboardPage() {
     if (!active.length) return tableViewRows
     return tableViewRows.filter(row => active.every(([idx,vals])=> (vals as string[]).includes(String(COLS[Number(idx)]?.get(row) ?? ""))))
   }, [tableViewRows, colF, COLS])
+  // Every KPI / chart reads the SAME rows the DATA TABLE shows (its tab + column filters) with the SAME
+  // QTY AIR it displays (ส่งออกจริง = mapped from mp_line / export) → table totals and graphs always agree.
+  const chartRows = useMemo(()=> tableShipped ? tableRows.map((r:any)=> ({ ...r, qtyRequestAir: shipQtyOf(r) })) : tableRows, [tableRows, tableShipped, shipQtyOf])
 
   // ─── KPI ────────────────────────────────────────────────────────────────
-  const totalSO    = filtered.length
+  const totalSO    = chartRows.length
   // once per SO+SUB+STYLE (max) — the same order qty repeats on every row/round of that line
-  const totalQOrig = (()=>{ const m = new Map<string, number>(); for (const r of filtered) { const k = `${subKey(r)}|${String(r.style??"").trim().toUpperCase()}`; m.set(k, Math.max(m.get(k)||0, Number(r.qtyOriginalShipment)||0)) } let t = 0; m.forEach(v => { t += v }); return t })()
-  const totalQAir  = filtered.reduce((s,r)=>s+(Number(r.qtyRequestAir)||0),0)
-  const totalEst   = filtered.reduce((s,r)=>s+(r.airFreight||0),0)
-  const totalAct   = filtered.reduce((s,r)=>s+(r.actualAirFreight||0),0)
+  const totalQOrig = (()=>{ const m = new Map<string, number>(); for (const r of chartRows) { const k = `${subKey(r)}|${String(r.style??"").trim().toUpperCase()}`; m.set(k, Math.max(m.get(k)||0, Number(r.qtyOriginalShipment)||0)) } let t = 0; m.forEach(v => { t += v }); return t })()
+  const totalQAir  = chartRows.reduce((s,r)=>s+(Number(r.qtyRequestAir)||0),0)
+  const totalEst   = chartRows.reduce((s,r)=>s+(r.airFreight||0),0)
+  const totalAct   = chartRows.reduce((s,r)=>s+(r.actualAirFreight||0),0)
   // ─── Data-table footer totals (based on the table's OWN view: SHIPPED vs ALL) ───
   const tblSO    = tableRows.length
   // QTY ORIG = the line's order qty (SO+SUB+STYLE), repeated on every shipment round/split → count ONCE (max)
@@ -921,14 +924,14 @@ export default function DashboardPage() {
   // Currency is per-SO (EA / GW-RHONE → USD, else THB); a doc can mix. Totals are split so THB and
   // USD are never summed. Charts label their axis with the single currency present, or "mixed".
   const rowCur = (r:any) => soCurrency(r.request?.bu ?? r.bu, r.brand ?? r.request?.brandName)
-  const splitOf = (pick:(r:any)=>number) => splitByCurrency(filtered.map(r=>({amount:pick(r)||0, bu:r.request?.bu, brand:r.brand??r.request?.brandName})))
+  const splitOf = (pick:(r:any)=>number) => splitByCurrency(chartRows.map(r=>({amount:pick(r)||0, bu:r.request?.bu, brand:r.brand??r.request?.brandName})))
   const estSplit   = splitOf(r=>r.airFreight)
   const actSplit   = splitOf(r=>r.actualAirFreight)
-  const cursPresent= new Set(filtered.map(rowCur))
+  const cursPresent= new Set(chartRows.map(rowCur))
   const curLabel   = cursPresent.size > 1 ? "mixed" : ((cursPresent.values().next().value as string) || CUR)
   const airRatePct = totalQOrig>0 ? totalQAir/totalQOrig*100 : 0
   const varPct     = totalEst>0 && totalAct>0 ? (totalAct-totalEst)/totalEst*100 : null
-  const compDone   = filtered.filter(r=>r.itemStatus==="COMPLETED"||r.itemStatus==="ACCOUNTING_PENDING").length
+  const compDone   = chartRows.filter(r=>r.itemStatus==="COMPLETED"||r.itemStatus==="ACCOUNTING_PENDING").length
   const compPct    = totalSO>0 ? compDone/totalSO*100 : 0
 
   // ─── Builders ───────────────────────────────────────────────────────────
@@ -969,42 +972,42 @@ export default function DashboardPage() {
 
   const monthlyCost = useMemo(()=>{
     const m:Record<string,{est:number;actual:number;ym:string}>={}
-    filtered.forEach(r=>{ const k=moKey(r); if(k==="N/A") return; if(!m[k])m[k]={est:0,actual:0,ym:moSort(r)}; m[k].est+=r.airFreight||0; m[k].actual+=r.actualAirFreight||0 })
+    chartRows.forEach(r=>{ const k=moKey(r); if(k==="N/A") return; if(!m[k])m[k]={est:0,actual:0,ym:moSort(r)}; m[k].est+=r.airFreight||0; m[k].actual+=r.actualAirFreight||0 })
     return Object.entries(m).sort(([,a],[,b])=>a.ym.localeCompare(b.ym)).map(([name,v])=>({name,est:Math.round(v.est),actual:Math.round(v.actual)}))
-  },[filtered])
+  },[chartRows])
 
   const monthlyQty = useMemo(()=>{
     const m:Record<string,{orig:number;air:number;ym:string}>={}
-    filtered.forEach(r=>{ const k=moKey(r); if(k==="N/A") return; if(!m[k])m[k]={orig:0,air:0,ym:moSort(r)}; m[k].orig+=Number(r.qtyOriginalShipment)||0; m[k].air+=Number(r.qtyRequestAir)||0 })
+    chartRows.forEach(r=>{ const k=moKey(r); if(k==="N/A") return; if(!m[k])m[k]={orig:0,air:0,ym:moSort(r)}; m[k].orig+=Number(r.qtyOriginalShipment)||0; m[k].air+=Number(r.qtyRequestAir)||0 })
     return Object.entries(m).sort(([,a],[,b])=>a.ym.localeCompare(b.ym)).map(([name,v])=>({name,orig:Math.round(v.orig),air:Math.round(v.air),airRate:v.orig>0?Math.round(v.air/v.orig*100):0}))
-  },[filtered])
+  },[chartRows])
 
-  const brandCost  = useMemo(()=>buildCost(filtered,r=>brandKey(r)),[filtered])
-  const brandQty   = useMemo(()=>buildQty(filtered,r=>brandKey(r)),[filtered])
-  const brandDelay = useMemo(()=>buildDelay(filtered,r=>brandKey(r)),[filtered])
+  const brandCost  = useMemo(()=>buildCost(chartRows,r=>brandKey(r)),[chartRows])
+  const brandQty   = useMemo(()=>buildQty(chartRows,r=>brandKey(r)),[chartRows])
+  const brandDelay = useMemo(()=>buildDelay(chartRows,r=>brandKey(r)),[chartRows])
 
   const cRows = (_r:any) => true
   const cKey  = (r:any) => countryKey(r.country)
-  const countryCost  = useMemo(()=>buildCost(filtered.filter(cRows),cKey),[filtered,drillCountry])
-  const countryQty   = useMemo(()=>buildQty(filtered.filter(cRows),cKey),[filtered,drillCountry])
-  const countryDelay = useMemo(()=>buildDelay(filtered.filter(cRows),cKey),[filtered,drillCountry])
+  const countryCost  = useMemo(()=>buildCost(chartRows.filter(cRows),cKey),[chartRows,drillCountry])
+  const countryQty   = useMemo(()=>buildQty(chartRows.filter(cRows),cKey),[chartRows,drillCountry])
+  const countryDelay = useMemo(()=>buildDelay(chartRows.filter(cRows),cKey),[chartRows,drillCountry])
 
-  const buCost  = useMemo(()=>buildCost(filtered,r=>r.request.buName),[filtered])
-  const buQty   = useMemo(()=>buildQty(filtered,r=>r.request.buName),[filtered])
-  const buDelay = useMemo(()=>buildDelay(filtered,r=>r.request.buName),[filtered])
+  const buCost  = useMemo(()=>buildCost(chartRows,r=>r.request.buName),[chartRows])
+  const buQty   = useMemo(()=>buildQty(chartRows,r=>r.request.buName),[chartRows])
+  const buDelay = useMemo(()=>buildDelay(chartRows,r=>r.request.buName),[chartRows])
 
-  const deptCost  = useMemo(()=>buildCost(filtered,r=>r.claimDepartment||"Unassigned"),[filtered])
-  const deptQty   = useMemo(()=>buildQty(filtered,r=>r.claimDepartment||"Unassigned"),[filtered])
-  const deptDelay = useMemo(()=>buildDelay(filtered,r=>r.claimDepartment||"Unassigned"),[filtered])
+  const deptCost  = useMemo(()=>buildCost(chartRows,r=>r.claimDepartment||"Unassigned"),[chartRows])
+  const deptQty   = useMemo(()=>buildQty(chartRows,r=>r.claimDepartment||"Unassigned"),[chartRows])
+  const deptDelay = useMemo(()=>buildDelay(chartRows,r=>r.claimDepartment||"Unassigned"),[chartRows])
 
   // Claim amount per claim department (each split's share): actual = actualAirFreight × claim%,
-  // est = airFreight × claim%. Summed across all filtered SO, biggest first.
+  // est = airFreight × claim%. Summed across all chartRows SO, biggest first.
   const claimByDept = useMemo(()=>{
     const m: Record<string,{amt:{THB:number,USD:number},est:{THB:number,USD:number},qty:number}> = {}
     // "ยังไม่แบ่ง claim" bucket = rows with NO claim dept yet (auto / not assigned) → their ACTUAL is not
     // in any dept, so track it separately so sum(dept actual) + unassigned = total actual (reconciles).
     const un = {amt:{THB:0,USD:0} as any,est:{THB:0,USD:0} as any,qty:0}
-    filtered.forEach(r=>{
+    chartRows.forEach(r=>{
       const est=Number(r.airFreight)||0
       const act=Number(r.actualAirFreight)||0   // ACTUAL only — no est fallback
       const cur=rowCur(r)
@@ -1034,12 +1037,12 @@ export default function DashboardPage() {
       qty:un.qty, _mag:(un.amt.THB+un.amt.USD)||(un.est.THB+un.est.USD), unassigned:true,
     })
     return arr.sort((a,b)=>b._mag-a._mag)
-  },[filtered])
+  },[chartRows])
   const claimMagTotal = claimByDept.reduce((s,d)=>s+d._mag,0)
 
   const monthlyDelay = useMemo(()=>{
     const m:Record<string,{total:number;count:number;ym:string}>={}
-    filtered.forEach(r=>{
+    chartRows.forEach(r=>{
       if(!r.planShipmentDate||!r.originalShipmentDate) return
       const plan=new Date(r.planShipmentDate), orig=new Date(r.originalShipmentDate)
       if(isNaN(plan.getTime())||isNaN(orig.getTime())) return
@@ -1051,7 +1054,7 @@ export default function DashboardPage() {
     })
     return Object.entries(m).sort(([,a],[,b])=>a.ym.localeCompare(b.ym))
       .map(([name,v])=>({name,avgDays:Math.round(v.total/v.count),count:v.count}))
-  },[filtered])
+  },[chartRows])
 
   // Pie
   const buildPie = (rows:any[], fn:(r:any)=>string, top=7) => {
@@ -1382,8 +1385,8 @@ export default function DashboardPage() {
 
       {/* ── Delay Reason Overview (below filters) ───────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <ReasonPanel rows={filtered} height={180} cur={curLabel}/>
-        <LogisticsCostBar rows={filtered}/>
+        <ReasonPanel rows={chartRows} height={180} cur={curLabel}/>
+        <LogisticsCostBar rows={chartRows}/>
       </div>
 
       {/* ── Column Headers ───────────────────────────────────────────────── */}
@@ -1398,7 +1401,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Paged data={monthlyCost} fromEnd>{(s)=><CostBar data={s} height={H} cur={curLabel}/>}</Paged>
         <Paged data={monthlyQty} fromEnd>{(s)=><QtyBar data={s} height={H}/>}</Paged>
-        <Paged data={monthlyDelay} fromEnd>{(s)=><DelayBar data={s} rows={filtered} groupFn={moKey} height={H}/>}</Paged>
+        <Paged data={monthlyDelay} fromEnd>{(s)=><DelayBar data={s} rows={chartRows} groupFn={moKey} height={H}/>}</Paged>
       </div>
 
       {/* ── Row 2: By Brand ─────────────────────────────────────────────── */}
@@ -1406,7 +1409,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Paged data={brandCost}>{(s)=><CostBar data={s} height={H} cur={curLabel}/>}</Paged>
         <Paged data={brandQty}>{(s)=><QtyBar data={s} height={H}/>}</Paged>
-        <Paged data={brandDelay}>{(s)=><DelayBar data={s} rows={filtered} groupFn={(r:any)=>brandKey(r)} height={H}/>}</Paged>
+        <Paged data={brandDelay}>{(s)=><DelayBar data={s} rows={chartRows} groupFn={(r:any)=>brandKey(r)} height={H}/>}</Paged>
       </div>
 
       {/* ── Row 3: By Country ────────────────────────────────────────────── */}
@@ -1414,7 +1417,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Paged data={countryCost}>{(s)=><CostBar data={s} height={H} cur={curLabel}/>}</Paged>
         <Paged data={countryQty}>{(s)=><QtyBar data={s} height={H}/>}</Paged>
-        <Paged data={countryDelay}>{(s)=><DelayBar data={s} rows={filtered.filter(cRows)} groupFn={cKey} height={H}/>}</Paged>
+        <Paged data={countryDelay}>{(s)=><DelayBar data={s} rows={chartRows.filter(cRows)} groupFn={cKey} height={H}/>}</Paged>
       </div>
 
       {/* ── Row 4: By BU ────────────────────────────────────────────────── */}
@@ -1422,7 +1425,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <CostBar  data={buCost}  height={H} cur={curLabel}/>
         <QtyBar   data={buQty}   height={H}/>
-        <DelayBar data={buDelay} rows={filtered} groupFn={(r:any)=>r.request?.buName||"N/A"} height={H}/>
+        <DelayBar data={buDelay} rows={chartRows} groupFn={(r:any)=>r.request?.buName||"N/A"} height={H}/>
       </div>
 
       {/* ── Row 5: By Claim Dept ─────────────────────────────────────────── */}
@@ -1430,7 +1433,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <CostBar  data={deptCost}  height={H} cur={curLabel}/>
         <QtyBar   data={deptQty}   height={H}/>
-        <DelayBar data={deptDelay} rows={filtered} groupFn={(r:any)=>r.claimDepartment||"Unassigned"} height={H}/>
+        <DelayBar data={deptDelay} rows={chartRows} groupFn={(r:any)=>r.claimDepartment||"Unassigned"} height={H}/>
       </div>
 
 
