@@ -36,14 +36,14 @@ export type ShipInfo = { qty: number; inv: string; src: string }
 
 const soKey = (s: any) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "")
 const up = (s: any) => String(s ?? "").trim().toUpperCase()
-const normStyle = (s: any) => String(s ?? "").toUpperCase().trim()
+export const normStyle = (s: any) => String(s ?? "").toUpperCase().trim()
 export const shipSubKey = (it: any) => `${soKey(it?.so)}|${up(it?.sub)}`
 const hasHawb = (it: any) => { const h = String(it?.hawbNo ?? "").trim(); return h !== "" && !/^[-.\s]*$/.test(h) }
 // STYLE match: contains either way, OR every segment of the shorter style appears in the longer one —
 // abbreviations drop MIDDLE segments too ("044M-MQ1" ↔ "044M-0HUL-2HE-MQ1", "03EM-ERH" ↔ "03EM-09T-GBN-ERH").
 // Always compared within one SO+SUB, so a loose match can't jump to another order.
 const segs = (s: string) => s.split(/[-./_\s]+/).filter(Boolean)
-const styleHit = (mer: string, src: string) => {
+export const styleHit = (mer: string, src: string) => {
   if (!mer || !src) return false
   if (src.includes(mer) || mer.includes(src)) return true
   const a = segs(mer), b = segs(src)

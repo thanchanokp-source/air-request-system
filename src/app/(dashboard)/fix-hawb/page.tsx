@@ -244,7 +244,71 @@ export default function FixHawbPage() {
 
       <SyncShippedBox />
       <ScanAllHawbBox />
+      <DedupeAllBox />
       <DedupeDocBox />
+    </div>
+  )
+}
+
+// ⑥ ลบแถวซ้ำทุกเอกสาร — same rules as the MER upload (lib/dedupe): same SO+SUB+STYLE+QTY in an older
+// document, not booked (no HAWB / ACTUAL), and more rows than real shipment rounds. Preview → delete.
+function DedupeAllBox() {
+  const [res, setRes] = useState<any | null>(null)
+  const [pick, setPick] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState("")
+  const post = async (body: any) => {
+    const r = await fetch("/api/admin/dedupe-all", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status); return d
+  }
+  const preview = async () => {
+    setBusy(true); setMsg(""); setRes(null)
+    try { const d = await post({ preview: true }); setRes(d); setPick(new Set(d.rows.map((x: any) => x.itemId))) }
+    catch (e: any) { setMsg("ลองดูไม่สำเร็จ: " + e.message) } finally { setBusy(false) }
+  }
+  const remove = async () => {
+    if (!pick.size) return
+    if (!confirm(`ลบแถวซ้ำ ${pick.size} แถว จากเอกสารที่อัปซ้ำ?\n(ลบถาวร · เก็บ log ในเอกสาร · อีเมลแจ้ง admin)`)) return
+    setBusy(true); setMsg("")
+    try { const d = await post({ itemIds: [...pick] }); setMsg(`✓ ลบ ${d.deleted} แถว จาก ${d.docs} เอกสาร${d.docsDeleted ? ` (ลบทั้งเอกสาร ${d.docsDeleted})` : ""}`); setRes(null); setPick(new Set()) }
+    catch (e: any) { setMsg("ลบไม่สำเร็จ: " + e.message) } finally { setBusy(false) }
+  }
+  const toggleDoc = (doc: string, on: boolean) => setPick(p => { const s = new Set(p); for (const r of res.rows) if (r.documentNo === doc) on ? s.add(r.itemId) : s.delete(r.itemId); return s })
+  return (
+    <div className="bg-white rounded-xl border border-red-200 p-4 space-y-2 mt-6">
+      <p className="font-semibold text-sm text-gray-800">⑥ ลบแถวซ้ำทุกเอกสาร</p>
+      <p className="text-[11px] text-gray-500">แถวซ้ำ = SO+SUB+STYLE+QTY ตรงกับแถวในเอกสารที่เก่ากว่า · ยังไม่มี HAWB / ACTUAL · และ SO+SUB มีแถวเกินจำนวนรอบส่งจริง (INV) — เอกสารต้นฉบับไม่ถูกลบ · กฎเดียวกับตอน MER อัปโหลด</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={preview} disabled={busy} className="text-sm px-4 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-300 font-semibold disabled:opacity-50">{busy && !res ? "กำลังตรวจ…" : "👁 ลองดู"}</button>
+        <button onClick={remove} disabled={busy || !pick.size} className="text-sm px-4 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-40">🗑 ลบที่เลือก ({pick.size})</button>
+      </div>
+      {msg && <p className="text-xs text-gray-700">{msg}</p>}
+      {res && (
+        <div className="border border-gray-200 rounded-lg overflow-auto max-h-96">
+          <div className="px-3 py-1.5 text-[11px] text-gray-500 bg-gray-50">แถวซ้ำ <b className="text-red-600">{n(res.total)}</b> แถว จาก {res.docs.length} เอกสาร</div>
+          {res.docs.map((d: any) => {
+            const rows = res.rows.filter((r: any) => r.documentNo === d.documentNo)
+            const all = rows.every((r: any) => pick.has(r.itemId))
+            return (
+              <details key={d.documentNo} className="border-t border-gray-100">
+                <summary className="px-3 py-1.5 text-xs cursor-pointer flex items-center gap-2">
+                  <input type="checkbox" checked={all} onChange={e => toggleDoc(d.documentNo, e.target.checked)} onClick={e => e.stopPropagation()} />
+                  <b className="font-mono">{d.documentNo}</b> <span className="text-gray-500">· {d.rows} แถว</span>
+                </summary>
+                <table className="w-full text-[11px]">
+                  <tbody>{rows.map((r: any) => (
+                    <tr key={r.itemId} className="border-t border-gray-50">
+                      <td className="px-3 py-1"><input type="checkbox" checked={pick.has(r.itemId)} onChange={() => setPick(p => { const s = new Set(p); s.has(r.itemId) ? s.delete(r.itemId) : s.add(r.itemId); return s })} /></td>
+                      <td className="px-2 py-1 font-mono">{r.so} / {r.sub || "-"}</td><td className="px-2 py-1">{r.style || "-"}</td>
+                      <td className="px-2 py-1 text-right tabular-nums">{n(r.qty)}</td><td className="px-2 py-1 text-gray-500">ซ้ำกับ {r.twinDoc}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </details>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

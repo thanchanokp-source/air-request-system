@@ -164,6 +164,9 @@ export default function NewRequestPage() {
     }
     setLoading(false)
     if (data.id) {
+      if (data.skippedDup?.length > 0) {
+        alert(`ℹ ตัดแถวที่ซ้ำกับเอกสารที่มีอยู่แล้วออก ${data.skippedDup.length} แถว (ไม่ได้บันทึก):\n\n${data.skippedDup.slice(0, 15).join("\n")}${data.skippedDup.length > 15 ? `\n… และอีก ${data.skippedDup.length - 15} แถว` : ""}`)
+      }
       if (data.missingRates?.length > 0) {
         alert(`⚠️ The following Brand/Country pairs are not in Master — Est. Air Freight will be 0:\n\n${data.missingRates.map((x: any) => `${x.brand} / ${x.country}`).join("\n")}\n\nPlease add the Rate in Master > Rate, then use Recalculate`)
       }

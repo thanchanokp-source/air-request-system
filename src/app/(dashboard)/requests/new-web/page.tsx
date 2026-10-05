@@ -196,6 +196,7 @@ export default function NewWebRequestPage() {
       })
       const data = await res.json()
       if (!data.id) { setError(data.error || "Something went wrong"); return }
+      if (data.skippedDup?.length > 0) alert(`ℹ ตัดแถวที่ซ้ำกับเอกสารที่มีอยู่แล้วออก ${data.skippedDup.length} แถว (ไม่ได้บันทึก):\n\n${data.skippedDup.slice(0, 15).join("\n")}${data.skippedDup.length > 15 ? "\n…" : ""}`)
       // attach the entered rows as an .xlsx — same as an Excel upload leaves its file on the doc
       const ws = XLSX.utils.json_to_sheet(items); const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, "Air Request")

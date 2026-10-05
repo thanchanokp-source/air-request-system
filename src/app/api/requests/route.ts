@@ -11,6 +11,7 @@ import { normalizeSo } from "@/lib/so"
 import { forceImportReason } from "@/lib/claim"
 import { pendingApproverNames } from "@/lib/pending-approvers"
 import { soCurrency } from "@/lib/currency"
+import { findUploadDuplicates, mailAdmins } from "@/lib/dedupe"
 import crypto from "crypto"
 
 // Normalize a year that may be 2-digit or Thai Buddhist (B.E.) to Gregorian.
@@ -143,6 +144,25 @@ export async function POST(req: NextRequest) {
       return k ? item[k] : ""
     }
     const numOf = (v: any) => { const n = parseFloat(String(v ?? "").replace(/,/g, "")); return isNaN(n) ? 0 : n }
+
+    // ── A: drop rows that DUPLICATE an existing document (lib/dedupe rules: same SO+SUB+STYLE+QTY in an
+    // active doc, and the SO+SUB already has as many rows as real shipment rounds). They are not saved;
+    // the uploader + admins are told which rows were dropped. Historical imports & TEST docs are exempt.
+    let skippedDup: string[] = []
+    if (!isHistorical && !isTestDoc) {
+      const shaped = items.map((i: any) => ({
+        so: normalizeSo(col(i, "SO")), sub: String(col(i, "SUB") || ""), style: String(col(i, "STYLE") || ""),
+        qtyRequestAir: Number(String(col(i, "QTY Request ship Air (pcs)") ?? "").replace(/,/g, "")) || 0,
+      }))
+      const { drop, list } = await findUploadDuplicates(shaped).catch(() => ({ drop: new Set<number>(), list: [] as string[] }))
+      if (drop.size) {
+        if (drop.size === items.length) {
+          return NextResponse.json({ error: `ทุกแถวในไฟล์ซ้ำกับเอกสารที่มีอยู่แล้ว (${drop.size} แถว) — ไม่ได้สร้างเอกสาร:\n${list.slice(0, 8).join("\n")}${list.length > 8 ? "\n…" : ""}`, skippedDup: list }, { status: 409 })
+        }
+        for (const i of [...drop].sort((a, b) => b - a)) items.splice(i, 1)   // remove in place (highest index first)
+        skippedDup = list
+      }
+    }
 
     // ── C: guard duplicate SO+SUB — QTY AWARE (NYG) ──────────────────────────────
     // The same SO+SUB across active docs is legitimate for PARTIAL shipments (a sub shipped in
@@ -528,7 +548,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ id: request.id, missingRates, missingDescriptions })
+    if (skippedDup.length) {
+      await mailAdmins(`[Air Request] ${docNo}: ตัดแถวซ้ำตอนอัปโหลด ${skippedDup.length} แถว (ไม่ได้บันทึก)`, skippedDup)
+    }
+    return NextResponse.json({ id: request.id, missingRates, missingDescriptions, skippedDup })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
