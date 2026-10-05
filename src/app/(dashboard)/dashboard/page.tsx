@@ -909,7 +909,9 @@ export default function DashboardPage() {
   }, [tableViewRows, colF, COLS])
   // Every KPI / chart reads the SAME rows the DATA TABLE shows (its tab + column filters) with the SAME
   // QTY AIR it displays (ส่งออกจริง = mapped from mp_line / export) → table totals and graphs always agree.
-  const chartRows = useMemo(()=> tableShipped ? tableRows.map((r:any)=> ({ ...r, qtyRequestAir: shipQtyOf(r) })) : tableRows, [tableRows, tableShipped, shipQtyOf])
+  // qtyActualShip is set too: charts like Logistics Cost/Pcs divide by `qtyActualShip ?? qtyRequestAir`, and a
+  // merged row's qtyActualShip is a SUM that becomes 0 (not null) when LG never filled it → tiny divisor.
+  const chartRows = useMemo(()=> tableShipped ? tableRows.map((r:any)=> { const q = shipQtyOf(r); return { ...r, qtyRequestAir: q, qtyActualShip: q } }) : tableRows, [tableRows, tableShipped, shipQtyOf])
 
   // ─── KPI ────────────────────────────────────────────────────────────────
   const totalSO    = chartRows.length
