@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
     // round of the same SO+SUB+STYLE) → nothing is dropped and the qty guard below doesn't block.
     const keepDup = body.dupMode === "keep"
     let skippedDup: string[] = []
-    if (!isHistorical && !isTestDoc && !keepDup) {
+    if (!isHistorical && !isTestDoc && !keepDup && bu === "NYG") {   // NYG only (lib/dedupe)
       const shaped = items.map((i: any) => ({
         so: normalizeSo(col(i, "SO")), sub: String(col(i, "SUB") || ""), style: String(col(i, "STYLE") || ""),
         qtyRequestAir: Number(String(col(i, "QTY Request ship Air (pcs)") ?? "").replace(/,/g, "")) || 0,

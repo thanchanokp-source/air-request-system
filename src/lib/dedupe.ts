@@ -11,6 +11,7 @@ import { loadShipSource } from "@/lib/ship-source"
 //   3. it has no HAWB and no ACTUAL (a row LG already booked is never removed)
 //   4. the SO+SUB has more air-request rows than real shipment rounds (distinct INV in mp_line / export,
 //      at least 1) — so a genuine 2nd round with the same qty is kept
+// NYG only: mp_line / export are NYG sources (GW · EA · TRM have their own flows) → other BUs never checked
 
 const qtyOf = (r: any) => Number(r.qtyRequestAir) || 0
 const booked = (r: any) => {
@@ -33,7 +34,7 @@ export async function loadRoundsBySub(): Promise<Map<string, number>> {
 
 async function activeItemsForSos(sos8: string[]) {
   return await (prisma.airRequestItem as any).findMany({
-    where: { so: { in: sos8 }, itemStatus: { not: "REJECTED" }, request: { isTest: false } },
+    where: { so: { in: sos8 }, itemStatus: { not: "REJECTED" }, request: { isTest: false, bu: "NYG" } },
     select: { id: true, so: true, sub: true, style: true, qtyRequestAir: true, hawbNo: true, actualAirFreight: true, invoiceNo: true, itemStatus: true,
       request: { select: { id: true, documentNo: true, createdAt: true, status: true, createdBy: { select: { name: true, email: true } } } } },
   }) as any[]
@@ -96,7 +97,7 @@ export type DupCandidate = { itemId: string; requestId: string; documentNo: stri
 /** B) every document: duplicate rows that may be removed (nothing is written) */
 export async function planDedupeAll(): Promise<DupCandidate[]> {
   const items = await (prisma.airRequestItem as any).findMany({
-    where: { itemStatus: { not: "REJECTED" }, request: { isTest: false } },
+    where: { itemStatus: { not: "REJECTED" }, request: { isTest: false, bu: "NYG" } },
     select: { id: true, so: true, sub: true, style: true, qtyRequestAir: true, hawbNo: true, actualAirFreight: true,
       request: { select: { id: true, documentNo: true, createdAt: true } } },
   }) as any[]

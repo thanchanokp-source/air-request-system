@@ -139,7 +139,7 @@ export default function NewRequestPage() {
       return
     }
     setError("")
-    if (!isHistorical && !(isAdmin && testMode)) {
+    if (!isHistorical && !(isAdmin && testMode) && !isGW && !isEA && !isTRM) {   // duplicate popup: NYG only
       setLoading(true)
       const chk = await fetch("/api/requests/check-dups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: preview }) })
         .then(r => r.json()).catch(() => ({ rows: [] }))
