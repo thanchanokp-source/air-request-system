@@ -6,7 +6,8 @@
 //   · every field comes from the MER row EXCEPT QTY AIR and INV, which come from the shipment source
 //   · match by SO + SUB + STYLE. STYLE matches by CONTAINS either way, ignoring case/spaces
 //     (MER may key "3AZ" for "3AZ-010"); a source line matching several MER styles goes to the longest
-//   · source = mp_line first; only when mp_line has nothing for that SO+SUB+STYLE → export (same rules)
+//   · source per SO+SUB+STYLE = ONE of mp_line / export (never both): the larger total; equal total →
+//     the one with more INVs; still equal → mp_line (mp_line can miss or lump INVs)
 //   · output rows = number of INVs of that SO+SUB+STYLE:
 //       MER rows are paired to INVs by equal qty, then closest qty;
 //       more INVs than MER rows → extra rows = a COPY of the MER row, only INV + QTY differ
@@ -66,14 +67,22 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
       const st = cl.slice().sort((a, b) => b.length - a.length)[0]          // label for the row key
       const hitAny = (l: SrcLine) => cl.some(s => styleHit(s, normStyle(l.style)))
       const pick = (lines: SrcLine[], used: Set<number>) => lines.map((_, i) => i).filter(i => !used.has(i) && hitAny(lines[i]))
-      // mp_line first: if mp_line has ANY line for this style (even one another cluster already took),
-      // never fall back to export — export carries the SAME shipments and would count them twice
-      const inMp = mpLines.some(hitAny)
-      const s: "mp_line" | "export" = inMp ? "mp_line" : "export"
-      const lines = inMp ? mpLines : exLines
-      const idx = pick(lines, inMp ? usedMp : usedEx)
+      // Both sources describe the SAME shipments — use ONE of them per SO+SUB+STYLE, never add them:
+      //   1) the larger total (mp_line can MISS INVs: 1256946 mp 12 vs export 12+88+1)
+      //   2) equal total → the one with more INVs (mp_line can LUMP INVs: 09261668 one 6,768 vs 3,102+3,666)
+      //   3) still equal → mp_line
+      const mpIdx = pick(mpLines, usedMp), exIdx = pick(exLines, usedEx)
+      const tot = (lines: SrcLine[], ix: number[]) => ix.reduce((a, i) => a + (Number(lines[i].qty) || 0), 0)
+      const nInv = (lines: SrcLine[], ix: number[]) => new Set(ix.map(i => lines[i].inv)).size
+      const mT = tot(mpLines, mpIdx), eT = tot(exLines, exIdx)
+      const useEx = eT > mT || (eT === mT && eT > 0 && nInv(exLines, exIdx) > nInv(mpLines, mpIdx))
+      const s: "mp_line" | "export" = useEx ? "export" : "mp_line"
+      const lines = useEx ? exLines : mpLines
+      const idx = useEx ? exIdx : mpIdx
       if (!idx.length) { unshipped.push(...mer); continue }
-      for (const i of idx) (inMp ? usedMp : usedEx).add(i)
+      // claim this style's lines in BOTH sources so no other cluster picks the same shipments up
+      for (const i of mpIdx) usedMp.add(i)
+      for (const i of exIdx) usedEx.add(i)
 
       // INVs of this SO+SUB+STYLE (qty summed over matched styles)
       const invQ = new Map<string, number>()
