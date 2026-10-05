@@ -710,6 +710,8 @@ export default function DashboardPage() {
   const [docF,  setDocF]  = useState<string[]>([])
   const [soF,  setSoF]  = useState<string[]>([])
   const [subF, setSubF] = useState<string[]>([])
+  const [reasonF, setReasonF] = useState<string[]>([])   // delay reason (claim split REASON, else reasonDelay)
+  const [detailF, setDetailF] = useState<string[]>([])   // delay detail (claim split DETAIL)
   const [cpF,  setCpF]  = useState<string[]>([])
   const [portFilter,    setPortFilter]    = useState("")
   const [countryFilter, setCountryFilter] = useState("")
@@ -740,6 +742,9 @@ export default function DashboardPage() {
   // Shared filter predicate (every filter EXCEPT the mp_line scope). Works on both air-req rows and
   // the synthetic mp_line rows below (they carry the same field names). actualF is skipped for mp_line
   // rows (they have no per-line air freight).
+  // delay reason / detail of a row: from its claim splits (REASON n / DETAIL n); reason falls back to reasonDelay
+  const rowReasons = (row:any): string[] => { const rs = getSplits(row).map((s:any)=>String(s.reason ?? "").trim()).filter(Boolean); return rs.length ? rs : [String(row?.reasonDelay ?? "").trim()].filter(Boolean) }
+  const rowDetails = (row:any): string[] => getSplits(row).map((s:any)=>String(s.detail ?? "").trim()).filter(Boolean)
   const passFilters = (row:any)=>{
     const d = row.planShipmentDate ? new Date(row.planShipmentDate) : null
     const yr = d&&!isNaN(d.getTime()) ? String(d.getFullYear()) : ""
@@ -755,6 +760,8 @@ export default function DashboardPage() {
            (!docF.length  || docF.includes(row.request?.documentNo)) &&
            (!soF.length   || soF.includes(row.so)) &&
            (!subF.length  || subF.includes(String(row.sub ?? "").trim().toUpperCase())) &&
+           (!reasonF.length || rowReasons(row).some(x => reasonF.includes(x))) &&
+           (!detailF.length || rowDetails(row).some(x => detailF.includes(x))) &&
            (!cpF.length   || cpF.includes(row.customerPO)) &&
            (!portFilter   || row.port===portFilter) &&
            (!countryFilter|| countryKey(row.country)===countryFilter) &&
@@ -762,7 +769,7 @@ export default function DashboardPage() {
            (!hawbF.length || hawbF.includes(row.hawbNo)) &&
            (!actualF || (actualF === "HAS" ? row.actualAirFreight != null : row.actualAirFreight == null))
   }
-  const filterDeps = [yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,subF,cpF,portFilter,countryFilter,claimF,hawbF]
+  const filterDeps = [yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,subF,reasonF,detailF,cpF,portFilter,countryFilter,claimF,hawbF]
   // Base = air-req rows after all filters (mp_line scope layered on afterwards).
   const baseFiltered = useMemo(()=>allSOs.filter(passFilters), [allSOs, ...filterDeps])
   // Whole page (KPI · charts): follows the page-wide 🔗 map toggle.
@@ -1073,11 +1080,15 @@ export default function DashboardPage() {
   const sos      = [...new Set(allSOs.map(r=>r.so).filter(Boolean))].sort()
   // SUB options follow the SO filter (pick a SO → only its SUBs)
   const subs     = [...new Set(allSOs.filter(r=>!soF.length||soF.includes(r.so)).map(r=>String(r.sub ?? "").trim().toUpperCase()).filter(Boolean))].sort()
+  // Reason / Detail options follow the Claim Dept filter (pick PROCUREMENT → only its reasons); Detail also follows Reason
+  const claimRows = allSOs.filter((r:any)=>!claimF.length||claimF.includes(r.claimDepartment))
+  const reasonOpts = [...new Set(claimRows.flatMap(rowReasons))].sort()
+  const detailOpts = [...new Set(claimRows.filter((r:any)=>!reasonF.length||rowReasons(r).some(x=>reasonF.includes(x))).flatMap(rowDetails))].sort()
   const hawbs    = [...new Set(allSOs.map((r:any)=>r.hawbNo).filter(Boolean))].sort()
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
   const countries= [...new Set(allSOs.map(r=>countryKey(r.country)).filter(Boolean))].sort()
-  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||actualF||brandF.length||docF.length||soF.length||subF.length||cpF.length||portFilter||countryFilter||claimF.length||hawbF.length)
-  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setActualF(""); setBrandF([]); setDocF([]); setSoF([]); setSubF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]); setHawbF([]); setColF({}) }
+  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||actualF||brandF.length||docF.length||soF.length||subF.length||reasonF.length||detailF.length||cpF.length||portFilter||countryFilter||claimF.length||hawbF.length)
+  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setActualF(""); setBrandF([]); setDocF([]); setSoF([]); setSubF([]); setReasonF([]); setDetailF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]); setHawbF([]); setColF({}) }
 
   const H = 210
 
@@ -1385,6 +1396,8 @@ export default function DashboardPage() {
             {countries.map((c:any)=><option key={c} value={c}>{c}</option>)}
           </select>
           <MultiSelect label="Claim Dept" options={CLAIM_DEPTS} value={claimF} onChange={setClaimF}/>
+          <MultiSelect label="Delay reason..." options={reasonOpts} value={reasonF} onChange={setReasonF}/>
+          <MultiSelect label="Delay detail..." options={detailOpts} value={detailF} onChange={setDetailF}/>
           <MultiSelect label="HAWB#..." options={hawbs} value={hawbF} onChange={setHawbF}/>
         </div>
       </div>
