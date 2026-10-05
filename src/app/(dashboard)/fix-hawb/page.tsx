@@ -1,5 +1,6 @@
 "use client"
 import { useState } from "react"
+import * as XLSX from "xlsx"
 
 const MAROON = "#6b1a1a"
 const n = (v: any) => (v != null ? Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "-")
@@ -243,6 +244,7 @@ export default function FixHawbPage() {
       )}
 
       <SyncShippedBox />
+      <ExpenseFileBox />
       <ScanAllHawbBox />
       <DedupeAllBox />
       <DedupeDocBox />
@@ -440,6 +442,135 @@ function ScanAllHawbBox() {
             </table>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ⑦ เทียบไฟล์ expense กับที่ LG กรอก — Excel with a HAWB column + an amount column (several lines per HAWB
+// are summed). Shows per HAWB: file vs Σ actual in the system. Ticked HAWBs can take the FILE amount
+// (split over its SOs by real INV qty, same as ⑤). Nothing is written until "ใช้ยอดจากไฟล์".
+const ST: Record<string, { label: string; cls: string }> = {
+  DIFF: { label: "ไม่ตรง", cls: "bg-red-50 text-red-700 border-red-200" },
+  NO_ACTUAL: { label: "LG ยังไม่กรอก", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  NOT_IN_SYSTEM: { label: "ไม่มีในระบบ", cls: "bg-gray-100 text-gray-600 border-gray-300" },
+  MATCH: { label: "ตรง", cls: "bg-green-50 text-green-700 border-green-200" },
+}
+function ExpenseFileBox() {
+  const [sheet, setSheet] = useState<{ name: string; head: string[]; rows: any[][] } | null>(null)
+  const [hCol, setHCol] = useState(-1)
+  const [aCol, setACol] = useState(-1)
+  const [res, setRes] = useState<any[] | null>(null)
+  const [show, setShow] = useState<string>("PROBLEM")
+  const [pick, setPick] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState("")
+  const post = async (body: any) => {
+    const r = await fetch("/api/admin/fix-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status); return d
+  }
+  const onFile = async (f: File | undefined) => {
+    setRes(null); setMsg(""); setSheet(null); if (!f) return
+    const wb = XLSX.read(await f.arrayBuffer(), { type: "array" })
+    const aoa: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" })
+    // header row = first row (within 15) that has a cell containing "HAWB"
+    let hr = aoa.slice(0, 15).findIndex(r => r.some(c => /HAWB/i.test(String(c))))
+    if (hr < 0) hr = 0
+    const head = (aoa[hr] || []).map((c: any) => String(c).trim())
+    setSheet({ name: f.name, head, rows: aoa.slice(hr + 1) })
+    setHCol(head.findIndex(h => /HAWB/i.test(h)))
+    const amt = [/TOTAL.*(THB|AMOUNT|EXPENSE|CHARGE)/i, /(EXPENSE|AMOUNT|CHARGE|TOTAL)/i, /THB/i]
+    let ac = -1
+    for (const re of amt) { ac = head.findIndex(h => re.test(h) && !/HAWB/i.test(h)); if (ac >= 0) break }
+    setACol(ac)
+  }
+  const check = async () => {
+    if (!sheet || hCol < 0 || aCol < 0) return
+    setBusy(true); setMsg("")
+    try {
+      const rows = sheet.rows.map(r => ({ hawb: String(r[hCol] ?? "").trim(), amount: r[aCol] })).filter(r => r.hawb)
+      const d = await post({ action: "check_file", rows })
+      setRes(d.list); setPick(new Set(d.list.filter((x: any) => x.status === "DIFF").map((x: any) => x.hawb)))
+    } catch (e: any) { setMsg("ตรวจไม่สำเร็จ: " + e.message) } finally { setBusy(false) }
+  }
+  const canPick = (x: any) => x.status === "DIFF" || x.status === "NO_ACTUAL"
+  const picked = (res || []).filter(x => pick.has(x.hawb) && canPick(x))
+  const apply = async () => {
+    if (!picked.length) return
+    if (!confirm(`ใช้ยอดจากไฟล์กับ ${picked.length} HAWB\n(แบ่งให้แต่ละ SO ตามยอดส่งจริงของ INV · แทนค่า ACTUAL เดิม)\nรวม ${n(picked.reduce((a, x) => a + x.file, 0))} THB ?`)) return
+    setBusy(true); setMsg("")
+    try {
+      const totals: Record<string, number> = {}; picked.forEach(x => { totals[x.hawb] = x.file })
+      const d = await post({ action: "bulk_src", hawbs: picked.map(x => x.hawb), totals, writeQty: false })
+      setMsg(`✓ อัปเดต ${d.done} HAWB · ${d.lines} แถว`); await check()
+    } catch (e: any) { setMsg("บันทึกไม่สำเร็จ: " + e.message) } finally { setBusy(false) }
+  }
+  const exportXlsx = () => {
+    if (!res) return
+    const ws = XLSX.utils.json_to_sheet(res.map(x => ({ HAWB: x.hawb, "ยอดไฟล์": x.file, "ยอด LG (ระบบ)": x.sys, "ต่าง (ระบบ-ไฟล์)": x.diff, "สถานะ": ST[x.status]?.label, "เอกสาร": x.docs.join(", "), "แถว": x.lines })))
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "HAWB check")
+    XLSX.writeFile(wb, `hawb-expense-check-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+  const cnt = (s: string) => (res || []).filter(x => x.status === s).length
+  const view = (res || []).filter(x => show === "ALL" || (show === "PROBLEM" ? x.status !== "MATCH" : x.status === show))
+  const toggle = (h: string) => setPick(p => { const s = new Set(p); s.has(h) ? s.delete(h) : s.add(h); return s })
+  const sum = (k: string) => view.filter(x => k !== "sys" || x.status !== "NOT_IN_SYSTEM").reduce((a, x) => a + (Number(x[k]) || 0), 0)
+  const tabs: [string, string][] = [["PROBLEM", `ต้องดู (${(res?.length || 0) - cnt("MATCH")})`], ["DIFF", `ไม่ตรง (${cnt("DIFF")})`], ["NO_ACTUAL", `LG ยังไม่กรอก (${cnt("NO_ACTUAL")})`], ["NOT_IN_SYSTEM", `ไม่มีในระบบ (${cnt("NOT_IN_SYSTEM")})`], ["MATCH", `ตรง (${cnt("MATCH")})`], ["ALL", `ทั้งหมด (${res?.length || 0})`]]
+  const colSel = (v: number, set: (n: number) => void) => (
+    <select value={v} onChange={e => set(Number(e.target.value))} className="border rounded px-1 py-0.5 text-xs">
+      <option value={-1}>— เลือก —</option>{sheet!.head.map((h, i) => <option key={i} value={i}>{h || `คอลัมน์ ${i + 1}`}</option>)}
+    </select>)
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2 mt-6">
+      <p className="font-semibold text-sm text-gray-800">⑦ เทียบไฟล์ expense กับที่ LG กรอก (ราย HAWB)</p>
+      <p className="text-[11px] text-gray-400">อัป Excel ที่มีคอลัมน์ HAWB + ยอดเงิน (HAWB ซ้ำหลายบรรทัด = รวมให้) → เทียบกับผลรวม ACTUAL ที่ LG กรอกในระบบ · ยังไม่มีการเขียนจนกว่าจะกด &quot;ใช้ยอดจากไฟล์&quot;</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="file" accept=".xlsx,.xls,.csv" onChange={e => onFile(e.target.files?.[0])} className="text-xs" />
+        {sheet && <>
+          <label className="text-[11px] text-gray-600">คอลัมน์ HAWB {colSel(hCol, setHCol)}</label>
+          <label className="text-[11px] text-gray-600">คอลัมน์ยอดเงิน {colSel(aCol, setACol)}</label>
+          <button onClick={check} disabled={busy || hCol < 0 || aCol < 0} className="text-sm px-4 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-300 font-semibold disabled:opacity-50">{busy && !res ? "กำลังตรวจ…" : "🔍 เทียบ"}</button>
+        </>}
+      </div>
+      {msg && <p className="text-xs text-gray-700">{msg}</p>}
+      {res && (
+        <>
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            {tabs.map(([k, l]) => (
+              <button key={k} onClick={() => setShow(k)} className={`px-2.5 py-1 rounded-full border ${show === k ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-300"}`}>{l}</button>
+            ))}
+            <span className="flex-1" />
+            <button onClick={exportXlsx} className="px-3 py-1 rounded-lg border border-gray-300 text-gray-700">⬇ Excel</button>
+            <button onClick={apply} disabled={busy || !picked.length} className="px-3 py-1 rounded-lg bg-green-600 text-white font-semibold disabled:opacity-40">💾 ใช้ยอดจากไฟล์ ({picked.length})</button>
+          </div>
+          <div className="border border-gray-200 rounded-lg overflow-auto max-h-[28rem]">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr className="text-left">
+                <th className="px-3 py-1"><input type="checkbox" checked={view.some(canPick) && view.filter(canPick).every(x => pick.has(x.hawb))} onChange={e => setPick(p => { const s = new Set(p); view.filter(canPick).forEach(x => e.target.checked ? s.add(x.hawb) : s.delete(x.hawb)); return s })} /></th>
+                <th className="px-3 py-1 font-medium">HAWB</th><th className="px-3 py-1 font-medium">สถานะ</th>
+                <th className="px-3 py-1 font-medium text-right">ยอดไฟล์</th><th className="px-3 py-1 font-medium text-right">ยอด LG (ระบบ)</th>
+                <th className="px-3 py-1 font-medium text-right">ต่าง (ระบบ − ไฟล์)</th><th className="px-3 py-1 font-medium">เอกสาร</th>
+              </tr></thead>
+              <tbody>{view.map(x => (
+                <tr key={x.hawb} className="border-t border-gray-50">
+                  <td className="px-3 py-1">{canPick(x) && <input type="checkbox" checked={pick.has(x.hawb)} onChange={() => toggle(x.hawb)} />}</td>
+                  <td className="px-3 py-1 font-mono">{x.hawb}{x.fileLines > 1 && <span className="text-gray-400"> · {x.fileLines} บรรทัด</span>}</td>
+                  <td className="px-3 py-1"><span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${ST[x.status]?.cls}`}>{ST[x.status]?.label}</span></td>
+                  <td className="px-3 py-1 text-right tabular-nums">{n(x.file)}</td>
+                  <td className="px-3 py-1 text-right tabular-nums">{x.status === "NOT_IN_SYSTEM" ? "-" : n(x.sys)}</td>
+                  <td className={`px-3 py-1 text-right tabular-nums font-semibold ${x.status === "DIFF" ? (x.diff > 0 ? "text-red-700" : "text-blue-700") : "text-gray-400"}`}>{x.status === "NOT_IN_SYSTEM" ? "-" : (x.diff > 0 ? "+" : "") + n(x.diff)}</td>
+                  <td className="px-3 py-1 text-gray-500">{x.docs.slice(0, 3).join(", ")}{x.docs.length > 3 ? ` +${x.docs.length - 3}` : ""}</td>
+                </tr>
+              ))}</tbody>
+              <tfoot className="bg-gray-50 font-semibold"><tr>
+                <td></td><td className="px-3 py-1">รวม {view.length} HAWB</td><td></td>
+                <td className="px-3 py-1 text-right tabular-nums">{n(sum("file"))}</td>
+                <td className="px-3 py-1 text-right tabular-nums">{n(sum("sys"))}</td>
+                <td></td><td></td>
+              </tr></tfoot>
+            </table>
+          </div>
+        </>
       )}
     </div>
   )

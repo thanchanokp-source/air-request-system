@@ -172,8 +172,10 @@ export async function POST(req: NextRequest) {
   // BULK version of redistribute_src for EVERY HAWB at once. The money total of a HAWB stays what it is
   // now (Σ actual on its lines — LG keyed it right); only its split moves to the real INV qty.
   //   { action:"scan_src" }                         → HAWBs whose LG qty ≠ real INV qty (nothing written)
-  //   { action:"bulk_src", hawbs:[...], writeQty }  → apply to those HAWBs
-  if (action === "scan_src" || action === "bulk_src") {
+  //   { action:"bulk_src", hawbs:[...], writeQty, totals? }  → apply to those HAWBs
+  //     totals = { [hawb]: amount } → use that money total instead of the current Σ actual (⑦ expense file)
+  //   { action:"check_file", rows:[{hawb, amount}] } → expense file vs what LG keyed (Σ actual per HAWB)
+  if (action === "scan_src" || action === "bulk_src" || action === "check_file") {
     const soN = (s: any) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "")
     const up = (s: any) => String(s ?? "").trim().toUpperCase()
     const items = await (prisma.airRequestItem as any).findMany({
@@ -217,6 +219,34 @@ export async function POST(req: NextRequest) {
       return { invs, eff, effInt, lgTotal, realTotal, changed, total, docs: [...new Set(hItems.map(i => i.request?.documentNo).filter(Boolean))] }
     }
 
+    if (action === "check_file") {
+      // HAWB key ignores case / spaces / dashes ("NY26-LAX 0801" = "NY26LAX0801"); a HAWB on several file
+      // lines (charge breakdown) is summed
+      const hk = (h: any) => up(h).replace(/[\s-]/g, "")
+      const sysBy = new Map<string, string>()
+      for (const h of byHawb.keys()) sysBy.set(hk(h), h)
+      const fileQ = new Map<string, { label: string; amt: number; n: number }>()
+      for (const r of (Array.isArray(body.rows) ? body.rows : [])) {
+        const k = hk(r?.hawb); const a = Number(String(r?.amount ?? "").replace(/,/g, "")); if (!k || !isFinite(a)) continue
+        const cur = fileQ.get(k) || { label: String(r.hawb).trim(), amt: 0, n: 0 }
+        cur.amt += a; cur.n++; fileQ.set(k, cur)
+      }
+      const list: any[] = []
+      for (const [k, f] of fileQ) {
+        const h = sysBy.get(k)
+        const hItems = h ? byHawb.get(h)! : []
+        const sys = Math.round(hItems.reduce((a, it) => a + (Number(it.actualAirFreight) || 0), 0) * 100) / 100
+        const file = Math.round(f.amt * 100) / 100
+        const diff = Math.round((sys - file) * 100) / 100
+        const status = !h ? "NOT_IN_SYSTEM" : Math.abs(diff) <= 1 ? "MATCH" : sys === 0 ? "NO_ACTUAL" : "DIFF"
+        list.push({ hawb: h || f.label, fileLines: f.n, file, sys, diff, status, lines: hItems.length,
+          docs: [...new Set(hItems.map(i => i.request?.documentNo).filter(Boolean))] })
+      }
+      const rank: Record<string, number> = { DIFF: 0, NO_ACTUAL: 1, NOT_IN_SYSTEM: 2, MATCH: 3 }
+      list.sort((a, b) => rank[a.status] - rank[b.status] || Math.abs(b.diff) - Math.abs(a.diff))
+      return NextResponse.json({ ok: true, list })
+    }
+
     if (action === "scan_src") {
       const list: any[] = []
       for (const [h, hItems] of byHawb) {
@@ -232,10 +262,12 @@ export async function POST(req: NextRequest) {
     const want: string[] = Array.isArray(body.hawbs) ? body.hawbs.map((s: any) => String(s).trim()).filter(Boolean) : []
     if (!want.length) return NextResponse.json({ error: "ไม่ได้เลือก HAWB" }, { status: 400 })
     const writeQty = !!body.writeQty
+    const totals: Record<string, number> = body.totals && typeof body.totals === "object" ? body.totals : {}
     let done = 0, lines = 0
     for (const h of want) {
       const hItems = byHawb.get(h); if (!hItems?.length) continue
       const p = plan(hItems)
+      if (Number(totals[h]) > 0) p.total = Math.round(Number(totals[h]) * 100) / 100   // ⑦ amount from the expense file
       const effTotal = [...p.eff.values()].reduce((a, b) => a + b, 0)
       if (!(p.total > 0) || !(effTotal > 0)) continue
       let acc = 0
