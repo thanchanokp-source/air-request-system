@@ -706,6 +706,7 @@ export default function DashboardPage() {
   }, [activeBu, yearFilter, monthFKey, brandFKey])  // eslint-disable-line react-hooks/exhaustive-deps
   const [docF,  setDocF]  = useState<string[]>([])
   const [soF,  setSoF]  = useState<string[]>([])
+  const [subF, setSubF] = useState<string[]>([])
   const [cpF,  setCpF]  = useState<string[]>([])
   const [portFilter,    setPortFilter]    = useState("")
   const [countryFilter, setCountryFilter] = useState("")
@@ -750,6 +751,7 @@ export default function DashboardPage() {
            (!brandF.length|| brandF.includes(brandKey(row))) &&
            (!docF.length  || docF.includes(row.request?.documentNo)) &&
            (!soF.length   || soF.includes(row.so)) &&
+           (!subF.length  || subF.includes(String(row.sub ?? "").trim().toUpperCase())) &&
            (!cpF.length   || cpF.includes(row.customerPO)) &&
            (!portFilter   || row.port===portFilter) &&
            (!countryFilter|| countryKey(row.country)===countryFilter) &&
@@ -757,7 +759,7 @@ export default function DashboardPage() {
            (!hawbF.length || hawbF.includes(row.hawbNo)) &&
            (!actualF || (actualF === "HAS" ? row.actualAirFreight != null : row.actualAirFreight == null))
   }
-  const filterDeps = [yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,cpF,portFilter,countryFilter,claimF,hawbF]
+  const filterDeps = [yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,subF,cpF,portFilter,countryFilter,claimF,hawbF]
   // Base = air-req rows after all filters (mp_line scope layered on afterwards).
   const baseFiltered = useMemo(()=>allSOs.filter(passFilters), [allSOs, ...filterDeps])
   // Whole page (KPI · charts): follows the page-wide 🔗 map toggle.
@@ -1088,11 +1090,13 @@ export default function DashboardPage() {
   const brands   = [...new Set(allSOs.map((r:any)=>brandKey(r)).filter((b:string)=>b&&b!=="N/A"))].sort()
   const docNos   = [...new Set(allSOs.map((r:any)=>r.request.documentNo).filter(Boolean))].sort()
   const sos      = [...new Set(allSOs.map(r=>r.so).filter(Boolean))].sort()
+  // SUB options follow the SO filter (pick a SO → only its SUBs)
+  const subs     = [...new Set(allSOs.filter(r=>!soF.length||soF.includes(r.so)).map(r=>String(r.sub ?? "").trim().toUpperCase()).filter(Boolean))].sort()
   const hawbs    = [...new Set(allSOs.map((r:any)=>r.hawbNo).filter(Boolean))].sort()
   const ports    = [...new Set(allSOs.map(r=>r.port).filter(Boolean))].sort()
   const countries= [...new Set(allSOs.map(r=>countryKey(r.country)).filter(Boolean))].sort()
-  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||actualF||brandF.length||docF.length||soF.length||cpF.length||portFilter||countryFilter||claimF.length||hawbF.length)
-  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setActualF(""); setBrandF([]); setDocF([]); setSoF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]); setHawbF([]); setColF({}) }
+  const hasFilter= !!(yearFilter||monthFilter.length||statusFilter||actualF||brandF.length||docF.length||soF.length||subF.length||cpF.length||portFilter||countryFilter||claimF.length||hawbF.length)
+  const clearAll = ()=>{ setYearFilter(""); setMonthFilter([]); setStatusFilter(""); setActualF(""); setBrandF([]); setDocF([]); setSoF([]); setSubF([]); setCpF([]); setPortFilter(""); setCountryFilter(""); setClaimF([]); setHawbF([]); setColF({}) }
 
   const H = 210
 
@@ -1371,7 +1375,7 @@ export default function DashboardPage() {
               onChange={labels=>setMonthFilter(labels.map(l=>MONTH_OPTS.find(m=>m.label===l)?.value||l))}/>
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-8 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-9 gap-2">
           <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
             <option value="">All Status</option>
             <option value="PENDING">Pending</option>
@@ -1388,6 +1392,7 @@ export default function DashboardPage() {
           <MultiSelect label="All Brand" options={brands} value={brandF} onChange={setBrandF}/>
           <MultiSelect label="Doc No..." options={docNos} value={docF} onChange={setDocF}/>
           <MultiSelect label="SO..." options={sos} value={soF} onChange={setSoF}/>
+          <MultiSelect label="SUB..." options={subs} value={subF} onChange={setSubF}/>
           <select value={countryFilter} onChange={e=>setCountryFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
             <option value="">All Country</option>
             {countries.map((c:any)=><option key={c} value={c}>{c}</option>)}
