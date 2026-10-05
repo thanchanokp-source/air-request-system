@@ -745,12 +745,14 @@ export default function DashboardPage() {
   // claim lines of a row (dept · delay reason · detail) from its splits; no split → claimDepartment + reasonDelay
   const claimLines = (row:any) => { const sp = getSplits(row); return sp.length ? sp.map((s:any)=>({ d:String(s.dept??"").trim(), r:String(s.reason??"").trim(), x:String(s.detail??"").trim() })) : [{ d:String(row?.claimDepartment??"").trim(), r:String(row?.reasonDelay??"").trim(), x:"" }] }
   const claimMatch = (row:any) => { const ls = claimLines(row); return claimF.some(k => { const [t,d,r,x] = k.split(SEP); return ls.some(l => l.d===d && (t==="D" || (l.r===r && (t==="R" || l.x===x)))) }) }
-  const passFilters = (row:any)=>{
+  const periodOk = (row:any)=>{
     const d = row.planShipmentDate ? new Date(row.planShipmentDate) : null
     const yr = d&&!isNaN(d.getTime()) ? String(d.getFullYear()) : ""
     const mo = d&&!isNaN(d.getTime()) ? String(d.getMonth()+1).padStart(2,"0") : ""
-    return (!yearFilter  || yr===yearFilter) &&
-           (!monthFilter.length || monthFilter.includes(mo)) &&
+    return (!yearFilter || yr===yearFilter) && (!monthFilter.length || monthFilter.includes(mo))
+  }
+  const passFilters = (row:any, skipPeriod = false)=>{
+    return (skipPeriod || periodOk(row)) &&
            (!statusFilter || (
              statusFilter==="PENDING"   ? (row.itemStatus !== "COMPLETED" && row.itemStatus !== "ACCOUNTING_PENDING" && row.itemStatus !== "REJECTED") :
              statusFilter==="COMPLETED" ? (row.itemStatus === "COMPLETED" || row.itemStatus === "ACCOUNTING_PENDING") :
@@ -769,7 +771,7 @@ export default function DashboardPage() {
   }
   const filterDeps = [yearFilter,monthFilter,statusFilter,actualF,brandF,docF,soF,subF,cpF,portFilter,countryFilter,claimF,hawbF]
   // Base = air-req rows after all filters (mp_line scope layered on afterwards).
-  const baseFiltered = useMemo(()=>allSOs.filter(passFilters), [allSOs, ...filterDeps])
+  const baseFiltered = useMemo(()=>allSOs.filter(r=>passFilters(r)), [allSOs, ...filterDeps])
   // Whole page (KPI · charts): follows the page-wide 🔗 map toggle.
   const filtered = useMemo(()=> mpActive ? baseFiltered.filter(row=>mpSoSet.has(mpSoKey(row.so))) : baseFiltered, [baseFiltered, mpActive, mpSoSet])
   // Data table view — "SHIPPED" = ส่งออกจริง (mp_line lines) · "UNSHIPPED" = ยังไม่มีการส่ง (air-req not in mp_line).
@@ -790,6 +792,10 @@ export default function DashboardPage() {
   // 3. SO+SUB ที่แมพไม่เจอ = ยังไม่ส่งออก
   // แถวซ้ำ: ส่งออกจริง = SO+SUB+QTY+INV เดียวกัน → 1 แถว (EST/ACT รวม) · ยังไม่มีการส่ง = SO+SUB+QTY เดียวกัน → 1 แถว
   // QTY AIR ของแต่ละแถว = ยอดของ INV นั้น (INV เดียวหลายแถว qty ต่างกัน → แบ่งตามสัดส่วน qty) → ผลรวม = แหล่ง
+  // SO+SUB → INV mapping runs on ALL rows ONCE (not on the filtered rows): filtering first made a SO+SUB whose
+  // rows sit in several months hand every INV to the rows left in the chosen month (e.g. Jul absorbed Aug's INVs)
+  // → the month view ≠ that month in the full table. Filters are applied to the mapped groups afterwards.
+  const shipMapped = useMemo(()=> shipSrc ? buildShipRows(allSOs, shipSrc) : null, [allSOs, shipSrc])
   const shipAgg = useMemo(()=>{
     const join = (xs: any[]) => [...new Set(xs.map(x => String(x ?? "").trim()).filter(Boolean))].join(", ")
     // rows[0] is the HEAD (original document, chosen by lib/ship-map). Lines of OTHER documents in the same
@@ -816,10 +822,13 @@ export default function DashboardPage() {
     }
     const out: any[] = [], qty = new Map<string, number>(), src = new Map<string, string>()
     const invMismatch = new Set<string>()   // SO+SUB where LG's INV ≠ the mapped INV (admin badge)
-    if (!shipSrc) return { rows: out, qty, src, invMismatch, unshipped: [] as any[] }
+    if (!shipMapped) return { rows: out, qty, src, invMismatch, unshipped: [] as any[] }
     // lib/ship-map: MER rows → SO+SUB+STYLE (contains) → INV + qty from mp_line, else export;
     // rows = number of INVs; EST/ACT stay on their own MER row (extra INV rows carry none)
-    const { groups, unshipped } = buildShipRows(baseFiltered, shipSrc)
+    // a group belongs to the month of its HEAD row (the row whose EST/doc it shows); other filters pass when
+    // any of its MER rows passes (e.g. HAWB filter on a merged row)
+    const groups = shipMapped.groups.filter(g => { const rs = g.extra ? [g.base] : g.rows; return periodOk(rs[0]) && rs.some(r => passFilters(r, true)) })
+    const unshipped = shipMapped.unshipped.filter((r:any) => passFilters(r))
     for (const g of groups) {
       const id = `ship:${g.key}`
       // extra INV (more INVs than MER rows) → a COPY of the MER row (same doc, claim, status, dates…),
@@ -848,7 +857,7 @@ export default function DashboardPage() {
       if (seen.has(k)) continue; seen.add(k); unRows.push(r)
     }
     return { rows: out, qty, src, invMismatch, unshipped: unRows }
-  }, [baseFiltered, shipSrc])
+  }, [shipMapped, ...filterDeps])  // eslint-disable-line react-hooks/exhaustive-deps
   const shippedRows = shipAgg.rows
   const unshippedRows = shipAgg.unshipped
   const isInvMismatch = (r:any) => shipAgg.invMismatch.has(subKey(r))
@@ -1096,6 +1105,7 @@ export default function DashboardPage() {
 
   const H = 210
 
+  const planYm = (row:any) => { const d = row.planShipmentDate ? new Date(row.planShipmentDate) : null; const ok = d && !isNaN(d.getTime()); return { y: ok ? d!.getFullYear() : "", m: ok ? d!.getMonth()+1 : "" } }
   const exportExcel = () => {
     const rows = tableRows.map(row => {
       const ar = row.qtyOriginalShipment > 0 ? row.qtyRequestAir / row.qtyOriginalShipment * 100 : 0
@@ -1111,6 +1121,9 @@ export default function DashboardPage() {
         "BU":             row.request.buName,
         "ORIG. DATE":     fmtDate(row.originalShipmentDate),
         "PLAN DATE":      fmtDate(row.planShipmentDate),
+        // same basis as the PERIOD filter / summary cards (planShipmentDate) → a pivot on these matches the dashboard
+        "YEAR":           planYm(row).y,
+        "MONTH":          planYm(row).m,
         "QTY ORIG":       row.qtyOriginalShipment,
         "QTY AIR":        tableShipped ? shipQtyOf(row) : row.qtyRequestAir,
         ...(isAdmin && tableShipped ? { "SOURCE": shipSrcOf(row) } : {}),

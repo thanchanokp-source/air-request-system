@@ -125,6 +125,10 @@ export default function NewRequestPage() {
     setPreview(rows)
   }
 
+  // Rows already uploaded in another document (same SO+SUB+STYLE) → shown in a popup before submit so MER
+  // can drop them or confirm "upload everything" (a real 2nd shipment round is allowed — nothing is blocked).
+  const [dupCheck, setDupCheck] = useState<any[] | null>(null)
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!file || preview.length === 0) return
@@ -134,6 +138,23 @@ export default function NewRequestPage() {
       setError(isGW ? "Please select a DPM GW before submitting" : isEA ? "Please select an ADVM (EA) before submitting" : isTRM ? "Please select a DVM (TRM) before submitting" : "Please select a DVM Merchandise before submitting")
       return
     }
+    setError("")
+    if (!isHistorical && !(isAdmin && testMode)) {
+      setLoading(true)
+      const chk = await fetch("/api/requests/check-dups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: preview }) })
+        .then(r => r.json()).catch(() => ({ rows: [] }))
+      setLoading(false)
+      if (Array.isArray(chk.rows) && chk.rows.length) { setDupCheck(chk.rows); return }
+    }
+    await doSubmit("skip")
+  }
+
+  async function doSubmit(dupMode: "skip" | "keep") {
+    const isHistorical = isAdmin && historical
+    const dupConfirmed = dupMode === "keep" && dupCheck
+      ? dupCheck.map((d: any) => `SO ${d.so} / ${d.sub || "-"} / ${d.style || "-"} · qty ${d.qty} (เคยอัป: ${d.matches.map((m: any) => m.documentNo).join(", ")})`)
+      : []
+    setDupCheck(null)
     setLoading(true)
     setError("")
     const res = await fetch("/api/requests", {
@@ -146,6 +167,7 @@ export default function NewRequestPage() {
         bu: userBu,
         isTest: isAdmin && testMode,
         historical: isHistorical,
+        dupMode, dupConfirmed,
       })
     })
     const data = await res.json()
@@ -176,8 +198,49 @@ export default function NewRequestPage() {
     }
   }
 
+  const likelyCnt = dupCheck ? dupCheck.filter((d: any) => d.likelyDup).length : 0
   return (
     <div className="space-y-6">
+      {dupCheck && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <p className="font-bold text-gray-900">พบ {dupCheck.length} แถวที่เคยอัปโหลดแล้ว — ใช่รายการเดิมไหม?</p>
+              <p className="text-xs text-gray-500 mt-1">SO + SUB + STYLE เดียวกันมีอยู่ในเอกสารด้านล่างแล้ว · ถ้าเป็นการ<b>ส่งอีกรอบ</b>จริง กด "ยืนยันอัปทั้งหมด" ได้
+                {likelyCnt > 0 && <> · <b className="text-red-600">{likelyCnt} แถว</b> qty ตรงกับของเดิมและไม่มีรอบส่งใหม่รองรับ (น่าจะซ้ำ)</>}</p>
+            </div>
+            <div className="overflow-auto flex-1">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500 sticky top-0"><tr className="text-left">
+                  <th className="px-3 py-2 font-medium">แถวที่จะอัป (SO / SUB / STYLE)</th><th className="px-3 py-2 font-medium text-right">QTY AIR</th>
+                  <th className="px-3 py-2 font-medium">ของเดิม: เอกสาร</th><th className="px-3 py-2 font-medium text-right">QTY</th>
+                  <th className="px-3 py-2 font-medium">สถานะ</th><th className="px-3 py-2 font-medium">INV / HAWB</th><th className="px-3 py-2 font-medium">อัปโดย · วันที่</th>
+                </tr></thead>
+                <tbody>{dupCheck.map((d: any) => d.matches.map((m: any, j: number) => (
+                  <tr key={`${d.index}-${j}`} className={`border-t border-gray-100 ${d.likelyDup ? "bg-red-50/60" : ""}`}>
+                    {j === 0 && <td rowSpan={d.matches.length} className="px-3 py-1.5 align-top font-mono">
+                      {d.so} / {d.sub || "-"} / {d.style || "-"}
+                      {d.likelyDup && <span className="ml-1 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-bold font-sans">น่าจะซ้ำ</span>}
+                    </td>}
+                    {j === 0 && <td rowSpan={d.matches.length} className="px-3 py-1.5 align-top text-right tabular-nums font-semibold">{d.qty.toLocaleString()}</td>}
+                    <td className="px-3 py-1.5 font-mono text-blue-700">{m.documentNo}</td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums ${m.qty === d.qty ? "text-red-600 font-semibold" : ""}`}>{m.qty.toLocaleString()}</td>
+                    <td className="px-3 py-1.5 text-gray-600">{m.status || "-"}</td>
+                    <td className="px-3 py-1.5 font-mono text-gray-500">{[m.inv, m.hawb].filter(Boolean).join(" / ") || "-"}</td>
+                    <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{m.by || "-"}{m.created ? ` · ${m.created}` : ""}</td>
+                  </tr>
+                )))}</tbody>
+              </table>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap items-center gap-2 justify-end">
+              <button type="button" onClick={() => setDupCheck(null)} className="px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-700 font-medium">ยกเลิก</button>
+              <button type="button" onClick={() => doSubmit("skip")} disabled={likelyCnt === 0} title={likelyCnt === 0 ? "ไม่มีแถวที่น่าจะซ้ำให้ตัด" : undefined}
+                className="px-4 py-2 rounded-lg text-sm bg-red-600 text-white font-semibold disabled:opacity-40">ตัดแถวที่น่าจะซ้ำออก ({likelyCnt}) แล้วอัป</button>
+              <button type="button" onClick={() => doSubmit("keep")} className="px-4 py-2 rounded-lg text-sm bg-blue-600 text-white font-semibold">ยืนยันอัปทั้งหมด (ส่งรอบใหม่)</button>
+            </div>
+          </div>
+        </div>
+      )}
       {loading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[260px]">
