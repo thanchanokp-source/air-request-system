@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react"
 import { MAROON, BUS, fmt, fmtDate, buColor } from "../_StageWork"
 import { courierUsd, destForBu, seaUsd, pullLandedCost, cheapestMode, modeTotals, SHIP_MODE_LABEL, EXCHANGE_RATE, type ShipMode } from "@/lib/pull-courier"
 import { pullReqType } from "@/lib/pull-reqtype"
+import { MultiSelect } from "@/components/ui/multi-select"
 import LandedCostCompare from "@/components/pull/LandedCostCompare"
 import { FWD_SHEET, parseFwdRow } from "@/lib/pull-fwd-template"
 import { fwdMailSubject, fwdMailDetail } from "@/lib/pull-fwd-mail"
@@ -51,8 +52,8 @@ export default function Page() {
   // Queue tabs: docs LG still owes an actual for (default) · already entered · missing master rate.
   const [lgTab, setLgTab] = useState<"actual" | "done" | "nomaster">("actual")
   const [q, setQ] = useState("")            // free text: doc / PO / SO / requester / HAWB / INV
-  const [brandF, setBrandF] = useState("ALL")
-  const [vendorF, setVendorF] = useState("ALL")
+  const [brandF, setBrandF] = useState<string[]>([])
+  const [vendorF, setVendorF] = useState<string[]>([])
   // #4 batch fill: filter by port + ETC range, multi-select docs, fill actual across many at once.
   const [portF, setPortF] = useState("ALL")
   const [etcFrom, setEtcFrom] = useState("")
@@ -696,8 +697,8 @@ export default function Page() {
   const docVendors = (r: any) => [...new Set((r.items || []).map((i: any) => i.vendorName).filter(Boolean))] as string[]
   const allBrands = [...new Set(reqs.filter(inTab).flatMap(docBrands))].sort()
   const allVendors = [...new Set(reqs.filter(inTab).flatMap(docVendors))].sort()
-  const matchBrand = (r: any) => brandF === "ALL" || docBrands(r).includes(brandF)
-  const matchVendor = (r: any) => vendorF === "ALL" || docVendors(r).includes(vendorF)
+  const matchBrand = (r: any) => !brandF.length || docBrands(r).some(b => brandF.includes(b))
+  const matchVendor = (r: any) => !vendorF.length || docVendors(r).some(v => vendorF.includes(v))
   // One search box over everything LG actually looks a doc up by.
   const matchQ = (r: any) => {
     const needle = q.trim().toLowerCase()
@@ -757,19 +758,15 @@ export default function Page() {
                   placeholder="🔍 เลขเอกสาร / PO / SO / Brand / Supplier / HAWB / INV / ผู้ขอ…"
                   className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-200" />
               </div>
-              <div>
+              <div className="w-[190px]">
                 <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">Brand</label>
-                <select value={brandF} onChange={e => { setBrandF(e.target.value); setSelectedIds(new Set()) }} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white max-w-[190px]">
-                  <option value="ALL">ทุก Brand</option>
-                  {allBrands.map(b => <option key={b} value={b}>{b}</option>)}
-                </select>
+                <MultiSelect label="ทุก Brand" options={allBrands} value={brandF}
+                  onChange={v => { setBrandF(v); setSelectedIds(new Set()) }} />
               </div>
-              <div>
+              <div className="w-[220px]">
                 <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">Supplier</label>
-                <select value={vendorF} onChange={e => { setVendorF(e.target.value); setSelectedIds(new Set()) }} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white max-w-[220px]">
-                  <option value="ALL">ทุก Supplier</option>
-                  {allVendors.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
+                <MultiSelect label="ทุก Supplier" options={allVendors} value={vendorF}
+                  onChange={v => { setVendorF(v); setSelectedIds(new Set()) }} />
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-wide text-gray-400 mb-1">Port</label>
@@ -781,8 +778,8 @@ export default function Page() {
               {/* One calendar for the whole ETC range (was two separate date boxes). */}
               <DateRangePicker label="ETC (ช่วงวันที่)" from={etcFrom} to={etcTo} placeholder="ทุกวัน ETC"
                 onChange={(f, t) => { setEtcFrom(f); setEtcTo(t); setSelectedIds(new Set()) }} />
-              {(portF !== "ALL" || etcFrom || etcTo || q || brandF !== "ALL" || vendorF !== "ALL") &&
-                <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF("ALL"); setVendorF("ALL") }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
+              {(portF !== "ALL" || etcFrom || etcTo || q || brandF.length || vendorF.length) &&
+                <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF([]); setVendorF([]) }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
               <span className="ml-auto text-xs text-gray-400">{shown.length} ใบ</span>
             </div>
 
@@ -805,8 +802,8 @@ export default function Page() {
               <div className="space-y-2">
                 <div className="text-[11px] text-gray-500">
                   ทำกับ <b>{scope.length} ใบ</b>{selectedIds.size ? " ที่เลือกไว้" : " ตามตัวกรองปัจจุบัน"}
-                  {!selectedIds.size && (portF !== "ALL" || etcFrom || brandF !== "ALL" || vendorF !== "ALL" || q)
-                    ? ` (${[portF !== "ALL" ? `Port ${portF}` : "", brandF !== "ALL" ? brandF : "", vendorF !== "ALL" ? vendorF : "", etcFrom ? `ETC ${etcFrom.slice(5)}–${(etcTo || "").slice(5) || "…"}` : "", q ? `ค้นหา “${q}”` : ""].filter(Boolean).join(" · ")})`
+                  {!selectedIds.size && (portF !== "ALL" || etcFrom || brandF.length || vendorF.length || q)
+                    ? ` (${[portF !== "ALL" ? `Port ${portF}` : "", brandF.join(", "), vendorF.join(", "), etcFrom ? `ETC ${etcFrom.slice(5)}–${(etcTo || "").slice(5) || "…"}` : "", q ? `ค้นหา “${q}”` : ""].filter(Boolean).join(" · ")})`
                     : ""}
                 </div>
                 <div className="flex flex-wrap gap-2.5">

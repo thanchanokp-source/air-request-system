@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { loadShipSource } from "@/lib/ship-source"
 
 export const runtime = "nodejs"
 
@@ -184,6 +185,8 @@ export async function GET(req: NextRequest) {
     // per-INV qty kept PER SOURCE — the dashboard picks the source at SO+SUB level (larger total) and only
     // then uses that same source's INV split, so INV spellings that differ between sources can't mix.
     invMp: mpInvQ, invEx: exInvQ, invMeta,
+    // shipment lines per SO+SUB (INV + STYLE, mp_line / export separate) for lib/ship-map
+    srcLines: await loadShipSource(),
     counts: {
       tabA: tabA.length, tabB: tabB.length, exactly, revise, prepaid, noship: tabB.length, mpKeys: mpBySo.size, countedSo, airKeys: airBySo.size,
       // pcs totals — actual exported qty from mp_line

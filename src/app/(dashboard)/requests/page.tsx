@@ -196,7 +196,7 @@ export default function RequestsPage() {
     fetch("/api/users/claim-directory").then(r => r.json()).then(d => setClaimDir(Array.isArray(d) ? d : [])).catch(() => {})
     // real shipped qty source (mp_line / export) for the "QTY ส่งออกจริง" column
     fetch("/api/air-export-map", { cache: "no-store" }).then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setShipSrc({ subActual: d.subActual || {}, invMp: d.invMp || {}, invEx: d.invEx || {} }) }).catch(() => {})
+      .then(d => { if (d) setShipSrc(d.srcLines || { mp: {}, ex: {} }) }).catch(() => {})
   }, [])
   const [shipSrc, setShipSrc] = useState<ShipSource | null>(null)
   // QTY ส่งออกจริง per line — mapped across EVERY (non-test) document so a SO+SUB split over docs maps once
