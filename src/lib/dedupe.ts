@@ -34,9 +34,36 @@ export async function loadRoundsBySub(): Promise<Map<string, number>> {
 async function activeItemsForSos(sos8: string[]) {
   return await (prisma.airRequestItem as any).findMany({
     where: { so: { in: sos8 }, itemStatus: { not: "REJECTED" }, request: { isTest: false } },
-    select: { id: true, so: true, sub: true, style: true, qtyRequestAir: true, hawbNo: true, actualAirFreight: true,
-      request: { select: { id: true, documentNo: true, createdAt: true } } },
+    select: { id: true, so: true, sub: true, style: true, qtyRequestAir: true, hawbNo: true, actualAirFreight: true, invoiceNo: true, itemStatus: true,
+      request: { select: { id: true, documentNo: true, createdAt: true, status: true, createdBy: { select: { name: true, email: true } } } } },
   }) as any[]
+}
+
+export type UploadMatch = { documentNo: string; qty: number; status: string; inv: string; hawb: string; by: string; created: string }
+export type UploadCheckRow = { index: number; so: string; sub: string; style: string; qty: number; likelyDup: boolean; matches: UploadMatch[] }
+
+/**
+ * For the MER upload POPUP: every uploaded row whose SO+SUB+STYLE was already uploaded in an active document,
+ * with those old rows (doc, qty, status, INV/HAWB, uploader). likelyDup = the same row would be dropped by
+ * findUploadDuplicates (same qty + no spare shipment round). Nothing is blocked — MER decides.
+ */
+export async function checkUploadDuplicates(rows: { so: string; sub: string; style: string; qtyRequestAir: number }[]): Promise<UploadCheckRow[]> {
+  const sos8 = [...new Set(rows.map(r => String(r.so || "")).filter(Boolean))]
+  if (!sos8.length) return []
+  const existing = await activeItemsForSos(sos8)
+  const { drop } = await findUploadDuplicates(rows)
+  const bySub = new Map<string, any[]>()
+  for (const e of existing) { const k = shipSubKey(e); bySub.set(k, [...(bySub.get(k) || []), e]) }
+  const out: UploadCheckRow[] = []
+  rows.forEach((r, i) => {
+    const ms = (bySub.get(shipSubKey(r)) || []).filter(e => styleHit(normStyle(e.style), normStyle(r.style)))
+    if (!ms.length) return
+    out.push({ index: i, so: r.so, sub: r.sub, style: r.style, qty: qtyOf(r), likelyDup: drop.has(i),
+      matches: ms.map(e => ({ documentNo: e.request?.documentNo || "-", qty: qtyOf(e), status: e.request?.status || e.itemStatus || "",
+        inv: e.invoiceNo || "", hawb: e.hawbNo || "", by: e.request?.createdBy?.name || e.request?.createdBy?.email || "",
+        created: e.request?.createdAt ? new Date(e.request.createdAt).toISOString().slice(0, 10) : "" })) })
+  })
+  return out
 }
 
 /**

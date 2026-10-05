@@ -148,8 +148,11 @@ export async function POST(req: NextRequest) {
     // ── A: drop rows that DUPLICATE an existing document (lib/dedupe rules: same SO+SUB+STYLE+QTY in an
     // active doc, and the SO+SUB already has as many rows as real shipment rounds). They are not saved;
     // the uploader + admins are told which rows were dropped. Historical imports & TEST docs are exempt.
+    // dupMode "keep" = MER saw the duplicate popup and confirmed "upload everything" (e.g. another shipment
+    // round of the same SO+SUB+STYLE) → nothing is dropped and the qty guard below doesn't block.
+    const keepDup = body.dupMode === "keep"
     let skippedDup: string[] = []
-    if (!isHistorical && !isTestDoc) {
+    if (!isHistorical && !isTestDoc && !keepDup) {
       const shaped = items.map((i: any) => ({
         so: normalizeSo(col(i, "SO")), sub: String(col(i, "SUB") || ""), style: String(col(i, "STYLE") || ""),
         qtyRequestAir: Number(String(col(i, "QTY Request ship Air (pcs)") ?? "").replace(/,/g, "")) || 0,
@@ -169,7 +172,7 @@ export async function POST(req: NextRequest) {
     // several batches), as long as the total air qty ≤ the original order qty. Block only when the
     // cumulative air qty (existing + this upload) EXCEEDS original → a true duplicate / re-upload that
     // would double-count vs mp_line. (NYG only; historical imports & TEST docs exempt.)
-    if (!isHistorical && !isTestDoc && bu === "NYG") {
+    if (!isHistorical && !isTestDoc && !keepDup && bu === "NYG") {
       const subN = (s: any) => String(s ?? "").trim().toUpperCase()
       const pairOf = (so: any, sub: any) => `${normalizeSo(so)}|${subN(sub)}`
       const inc = new Map<string, { air: number; orig: number }>()
@@ -550,6 +553,12 @@ export async function POST(req: NextRequest) {
 
     if (skippedDup.length) {
       await mailAdmins(`[Air Request] ${docNo}: ตัดแถวซ้ำตอนอัปโหลด ${skippedDup.length} แถว (ไม่ได้บันทึก)`, skippedDup)
+    }
+    if (keepDup && Array.isArray(body.dupConfirmed) && body.dupConfirmed.length) {
+      // MER knowingly uploaded rows that already exist elsewhere → keep a trace for admins
+      await prisma.approvalLog.create({ data: { requestId: request.id, userId, action: "UPLOAD_DUP_CONFIRMED", fromStatus: initialStatus, toStatus: initialStatus,
+        comment: `Merchandise ยืนยันอัปแถวที่เคยอัปแล้ว ${body.dupConfirmed.length} แถว: ${body.dupConfirmed.slice(0, 20).join(" · ")}` } }).catch(() => {})
+      await mailAdmins(`[Air Request] ${docNo}: Merchandise ยืนยันอัปแถวที่เคยอัปแล้ว ${body.dupConfirmed.length} แถว`, body.dupConfirmed)
     }
     return NextResponse.json({ id: request.id, missingRates, missingDescriptions, skippedDup })
   } catch (error: any) {

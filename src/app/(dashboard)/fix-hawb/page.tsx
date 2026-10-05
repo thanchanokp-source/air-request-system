@@ -285,7 +285,15 @@ function DedupeAllBox() {
       {msg && <p className="text-xs text-gray-700">{msg}</p>}
       {res && (
         <div className="border border-gray-200 rounded-lg overflow-auto max-h-96">
-          <div className="px-3 py-1.5 text-[11px] text-gray-500 bg-gray-50">แถวซ้ำ <b className="text-red-600">{n(res.total)}</b> แถว จาก {res.docs.length} เอกสาร</div>
+          <div className="px-3 py-1.5 text-[11px] text-gray-500 bg-gray-50 flex items-center gap-3 sticky top-0 z-10">
+            <label className="flex items-center gap-1.5 cursor-pointer font-semibold text-gray-700">
+              <input type="checkbox" checked={res.rows.length > 0 && pick.size === res.rows.length}
+                ref={el => { if (el) el.indeterminate = pick.size > 0 && pick.size < res.rows.length }}
+                onChange={e => setPick(e.target.checked ? new Set(res.rows.map((x: any) => x.itemId)) : new Set())} />
+              เลือกทั้งหมด
+            </label>
+            <span>แถวซ้ำ <b className="text-red-600">{n(res.total)}</b> แถว จาก {res.docs.length} เอกสาร · เลือก <b>{n(pick.size)}</b></span>
+          </div>
           {res.docs.map((d: any) => {
             const rows = res.rows.filter((r: any) => r.documentNo === d.documentNo)
             const all = rows.every((r: any) => pick.has(r.itemId))
