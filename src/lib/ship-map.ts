@@ -14,7 +14,8 @@
 //       (EST/ACT not repeated on the copy, so totals stay = the MER rows)
 //       more MER rows than INVs → the extra MER rows merge into the INV with the closest qty
 //   · EST / ACT stay on their own MER row (never split)
-//   · nothing found in either source → not shipped yet
+//   · nothing found in either source → not shipped yet, UNLESS LG already booked the row (HAWB or ACTUAL):
+//     then it has shipped → shipped side with LG's INV + qty (src "LG"). Plan rows never carry money.
 
 export type SrcLine = { inv: string; style: string; qty: number }
 export type ShipSource = {
@@ -28,17 +29,27 @@ export type ShipGroup = {
   base: any            // MER row whose fields are shown
   inv: string
   qty: number          // shipped qty of this INV
-  src: "mp_line" | "export"
+  src: "mp_line" | "export" | "LG"   // LG = not in mp_line/export but already booked by LG (HAWB / ACTUAL)
   extra: boolean       // INV with no MER row of its own → shown as a copy of base (only INV + QTY differ)
 }
 export type ShipInfo = { qty: number; inv: string; src: string }
 
 const soKey = (s: any) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "")
 const up = (s: any) => String(s ?? "").trim().toUpperCase()
-const normStyle = (s: any) => String(s ?? "").toUpperCase().replace(/\s+/g, "")
+const normStyle = (s: any) => String(s ?? "").toUpperCase().trim()
 export const shipSubKey = (it: any) => `${soKey(it?.so)}|${up(it?.sub)}`
 const hasHawb = (it: any) => { const h = String(it?.hawbNo ?? "").trim(); return h !== "" && !/^[-.\s]*$/.test(h) }
-const styleHit = (mer: string, src: string) => !!mer && !!src && (src.includes(mer) || mer.includes(src))
+// STYLE match: contains either way, OR every segment of the shorter style appears in the longer one —
+// abbreviations drop MIDDLE segments too ("044M-MQ1" ↔ "044M-0HUL-2HE-MQ1", "03EM-ERH" ↔ "03EM-09T-GBN-ERH").
+// Always compared within one SO+SUB, so a loose match can't jump to another order.
+const segs = (s: string) => s.split(/[-./_\s]+/).filter(Boolean)
+const styleHit = (mer: string, src: string) => {
+  if (!mer || !src) return false
+  if (src.includes(mer) || mer.includes(src)) return true
+  const a = segs(mer), b = segs(src)
+  const [short, long] = a.length <= b.length ? [a, new Set(b)] : [b, new Set(a)]
+  return short.length >= 2 && short.every(t => long.has(t))
+}
 
 export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGroup[]; unshipped: any[]; perItem: Map<string, ShipInfo> } {
   const groups: ShipGroup[] = [], unshipped: any[] = []
@@ -79,7 +90,18 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
       const s: "mp_line" | "export" = useEx ? "export" : "mp_line"
       const lines = useEx ? exLines : mpLines
       const idx = useEx ? exIdx : mpIdx
-      if (!idx.length) { unshipped.push(...mer); continue }
+      if (!idx.length) {
+        // not found in mp_line / export: a row LG already booked (HAWB or ACTUAL) HAS shipped → keep it on
+        // the shipped side with LG's own INV + qty (src "LG"); only rows with neither stay as plan
+        for (const r of mer) {
+          if (hasHawb(r) || (Number(r.actualAirFreight) || 0) > 0) {
+            const q = Number(r.qtyActualShip ?? r.qtyRequestAir) || 0, inv = up(r.invoiceNo)
+            groups.push({ key: `${sk}|${st}|LG|${r.id}`, sk, rows: [r], base: r, inv, qty: q, src: "LG", extra: false })
+            perItem.set(r.id, { qty: q, inv, src: "LG" })
+          } else unshipped.push(r)
+        }
+        continue
+      }
       // claim this style's lines in BOTH sources so no other cluster picks the same shipments up
       for (const i of mpIdx) usedMp.add(i)
       for (const i of exIdx) usedEx.add(i)
