@@ -1094,9 +1094,16 @@ export default function DashboardPage() {
         const id = r.request?.id; if(!id) continue
         const pct = (Number(sp.pct)||0)/100
         const d = m.get(id) || { id, docNo:r.request?.documentNo, bu:r.request?.bu, status:r.request?.status,
-          updatedAt:r.request?.updatedAt, so:new Set<string>(), act:0, est:0, stages:new Set<string>(), who:new Set<string>() }
+          updatedAt:r.request?.updatedAt, so:new Set<string>(), act:0, est:0, stages:new Set<string>(), who:new Set<string>(), waitDoc:new Set<string>(), notYet:false }
         d.so.add(`${r.so}|${r.sub||""}`); d.act += (Number(r.actualAirFreight)||0)*pct; d.est += (Number(r.airFreight)||0)*pct
-        if(ss==="p"){
+        // the claim is split already (SCM picked the depts) but the DOCUMENT may still sit at an earlier
+        // stage (SCM / VP SCM / LG …) — then the dept can't act yet: say where it is, no approve link
+        const CLAIM_DOC = ["PENDING_CLAIM","PENDING_VP_CLAIM","PENDING_CLAIM_GW","PENDING_CLAIM_REJECT_GW"]
+        if(ss==="p" && !CLAIM_DOC.includes(r.request?.status)){
+          d.notYet = true
+          d.stages.add(`ยังไม่ถึงขั้นเคลม · อยู่ที่ ${STATUS_LABELS[r.request?.status] || String(r.request?.status||"").replace(/^PENDING_/,"").replace(/_/g," ")}`)
+          for(const w of (Array.isArray(r.request?.pendingWith)?r.request.pendingWith:[])) d.waitDoc.add(w)
+        } else if(ss==="p"){
           d.stages.add(cs.label)
           // who THIS dept waits on for this SO: latest forward of the dept (scoped to the SO), else its entry person
           const itemId = (r._itemIds && r._itemIds[0]) || r.id
@@ -1109,7 +1116,8 @@ export default function DashboardPage() {
       }
     }
     return [...m.values()].map(d=>{ const who=[...d.who] as string[]
-      return { ...d, who, soN:d.so.size, mine: who.some(w=>myNames.includes(String(w).toLowerCase())) } })
+      // not at the claim stage yet → show who the DOCUMENT waits on; never "your turn"
+      return { ...d, who: who.length ? who : [...d.waitDoc] as string[], soN:d.so.size, mine: who.some(w=>myNames.includes(String(w).toLowerCase())) } })
       .sort((a,b)=> (Number(b.mine)-Number(a.mine)) || (b.act-a.act) || (b.est-a.est))
   },[deptPop, chartRows, myNames, claimDir])
 
@@ -1494,7 +1502,7 @@ export default function DashboardPage() {
                         <td className="py-1.5 pr-3 text-right tabular-nums">{d.soN}</td>
                         <td className="py-1.5 pr-3 text-right tabular-nums font-semibold">{fmtNum(Math.round(d.act))}</td>
                         <td className="py-1.5 pr-3 text-right tabular-nums text-gray-500">{fmtNum(Math.round(d.est))}</td>
-                        {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-amber-700">{[...d.stages].join(", ")}</td>}
+                        {deptPop.tab==="p" && <td className={`py-1.5 pr-3 ${d.notYet ? "text-gray-500" : "text-amber-700"}`}>{[...d.stages].join(", ")}</td>}
                         {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-gray-700 max-w-[240px] truncate" title={d.who.join(" / ")}>{d.who.join(" / ") || (claimDir===null ? "…" : "-")}{days(d.updatedAt)!=null && <span className="text-gray-400"> · {days(d.updatedAt)} วัน</span>}</td>}
                         <td className="py-1.5 text-right whitespace-nowrap">
                           <a href={`/requests/${d.id}`} className={`inline-block px-2.5 py-1 rounded-lg font-semibold ${d.mine && deptPop.tab==="p" ? "bg-green-600 text-white hover:bg-green-700" : "border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
