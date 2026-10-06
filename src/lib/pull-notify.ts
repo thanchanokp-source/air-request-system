@@ -87,7 +87,7 @@ export function poUsernameToEmail(name: any): string | null {
   return `${first}${initial ? "." + initial : ""}@nanyangtextile.com`
 }
 
-export async function notifyPullStage(reqId: string, status: string): Promise<void> {
+export async function notifyPullStage(reqId: string, status: string, opts?: { resubmitted?: boolean }): Promise<void> {
   const cfg = STAGE[status]
   // NOTE: PullMaterialRequest has createdById but NO `createdBy` relation — selecting it here made the
   // whole query throw → notify returned silently → every Pull RM email was lost. Use createdById instead.
@@ -121,6 +121,9 @@ export async function notifyPullStage(reqId: string, status: string): Promise<vo
     { label: "L/T Air", value: s0.leadTimeAir || "" },
     { label: "Remark", value: rq.remark || "" },
   ]
+  // A doc that was recalled, edited and sent back needs to read differently from a brand-new one —
+  // the approver has seen it before and must look again at what changed.
+  if (opts?.resubmitted) docFields.unshift({ label: "⚠️ สถานะ", value: "เอกสารถูกเรียกคืน แก้ไข แล้วส่งกลับมาอนุมัติใหม่ (การอนุมัติเดิมถูกยกเลิก)" })
 
   // Terminal: FYI to the requester + ALERT Logistics to enter the actual air freight.
   if (status === "APPROVED") {

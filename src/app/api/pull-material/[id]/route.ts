@@ -264,6 +264,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Resubmit / any forward move → clear a prior recall so it re-enters the flow cleanly.
       data.recallReason = null
       data.recalledBy = null
+      // Coming back from RECALLED = a fresh run: the previous approval (signature / approved mode)
+      // no longer stands, so it is wiped and the approver is asked again.
+      if (before?.status === "RECALLED") {
+        data.approverSignature = null; data.approverName = null; data.approvedAt = null
+        data.approvedMode = null; data.approvedEst = null
+      }
     }
 
     // DVM Purchase approval → snapshot the approver's signature onto the doc (stamped in the PDF).
@@ -301,7 +307,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Alert the owner(s) of the NEW stage (magic-link per person). Covers every forward transition:
     // Logistics, SCM/PC decision, VP SCM, President, DVM/VP Purchasing, and APPROVED (→ requester).
-    if (!isStop) await notifyPullStage(id, body.status).catch(() => {})
+    if (!isStop) await notifyPullStage(id, body.status, { resubmitted: before?.status === "RECALLED" }).catch(() => {})
 
     if (isStop) {
       const word = body.status === "REJECTED" ? "Rejected" : "Recalled"
