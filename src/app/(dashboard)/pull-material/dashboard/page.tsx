@@ -7,6 +7,18 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { buildRequesters } from "@/lib/pull-requesters"
 import { pullReqType } from "@/lib/pull-reqtype"
 
+// Chart palette — fixed slots, assigned in order and never cycled. Checked for colour-blind
+// separation against a white panel; every bar also carries its own number, so colour is never
+// the only thing that tells two things apart.
+const C = {
+  s1: "#2a78d6", s2: "#eb6834", s3: "#1baf7a", s4: "#eda100", s5: "#4a3aa7",
+  good: "#008300", warn: "#b45309", crit: "#e34948",
+  seq: ["#104281", "#1c5cab", "#2a78d6", "#86b6ef", "#cde2fb"],
+}
+const THB = 32.5
+const DAY = 86400000
+const days = (a: any, b: any) => (a && b ? (new Date(b).getTime() - new Date(a).getTime()) / DAY : null)
+
 export default function Page() {
   const { data: session, status: auth } = useSession()
   const [bu, setBu] = useState("NYG")
@@ -20,7 +32,6 @@ export default function Page() {
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { load() }, [bu]) // eslint-disable-line
-
 
   // Filter options (Doc No / PO / จัดซื้อ) + apply SCM/Purchasing + those filters to EVERY metric below.
   const { options: reqOptions, displayOf } = useMemo(() => buildRequesters(reqs), [reqs])
@@ -39,29 +50,91 @@ export default function Page() {
   })
   const items = fReqs.flatMap((r: any) => r.items || [])
   const totalDocs = fReqs.length
-  const totalItems = items.length
+  const estOf = (r: any) => (r.items || []).reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
+  const kgOf = (r: any) => (r.items || []).reduce((s: number, i: any) => s + (Number(i.weight) || 0), 0)
+  const isDone = (r: any) => r.status === "COMPLETED" || r.actualAir != null
+  const ownerOf = (r: any) => r.purchaserName || displayOf(r) || r.requesterName || "-"
+
   const totalPullGarment = items.reduce((s, i) => s + (Number(i.pullGarment) || 0), 0)
+  const totalKg = items.reduce((s, i) => s + (Number(i.weight) || 0), 0)
   // Pull RM freight is priced in USD (air master rates are USD/kg).
   const est = items.reduce((s, i) => s + (Number(i.airFreightCost) || 0), 0)
-  const act = items.reduce((s, i) => s + (Number(i.actualAir) || 0), 0)
-  const variance = act - est
-  const variancePct = est > 0 && act > 0 ? (variance / est) * 100 : null
-  const costPerGarment = totalPullGarment > 0 ? est / totalPullGarment : 0
+  const act = fReqs.reduce((s, r) => s + (Number(r.actualAir) || 0), 0)
+  const doneDocs = fReqs.filter(isDone)
+  const wipDocs = fReqs.filter((r: any) => !isDone(r))
+  // Est of the CLOSED docs only — the only fair base to judge the Actual against.
+  const estDone = doneDocs.reduce((s, r) => s + estOf(r), 0)
+  const variance = act - estDone
+  const variancePct = estDone > 0 && act > 0 ? (variance / estDone) * 100 : null
 
-  // By status
-  const byStatus: Record<string, number> = {}
-  fReqs.forEach((r: any) => { byStatus[r.status] = (byStatus[r.status] || 0) + 1 })
+  // ── 1 · รอบเวลาต่อคน (เปิดเอกสาร → ปิดงาน) ────────────────────────────────────────────
+  // The system has no per-stage timestamps yet, so this is the honest number we CAN compute:
+  // calendar days from the document being raised until LG closed it. Rows slower than the overall
+  // average are flagged — no invented target.
+  const byOwner: Record<string, { d: number[]; docs: number }> = {}
+  fReqs.forEach((r: any) => {
+    const o = ownerOf(r); const g = (byOwner[o] ||= { d: [], docs: 0 })
+    g.docs++
+    if (isDone(r)) { const n = days(r.createdAt, r.updatedAt); if (n != null && n >= 0) g.d.push(n) }
+  })
+  const ownerRows = Object.entries(byOwner).map(([k, v]) => ({
+    k, docs: v.docs, avg: v.d.length ? v.d.reduce((a, b) => a + b, 0) / v.d.length : null, closed: v.d.length,
+  }))
+  const turnRows = ownerRows.filter(o => o.avg != null).sort((a, b) => (b.avg || 0) - (a.avg || 0)).slice(0, 8)
+  const avgAll = turnRows.length ? turnRows.reduce((s, o) => s + (o.avg || 0), 0) / turnRows.length : 0
+  const workRows = [...ownerRows].sort((a, b) => b.docs - a.docs).slice(0, 8)
 
-  // Regular vs Irregular
-  const regular = fReqs.filter((r: any) => r.mode === "REGULAR").length
-  const irregular = totalDocs - regular
+  // ── 2 · Est vs Actual รายเดือน ─────────────────────────────────────────────────────────
+  const byMonth: Record<string, { docs: number; est: number; act: number }> = {}
+  fReqs.forEach((r: any) => {
+    const d = new Date(r.createdAt); if (isNaN(d.getTime())) return
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+    const g = (byMonth[k] ||= { docs: 0, est: 0, act: 0 })
+    g.docs++; g.est += estOf(r); g.act += Number(r.actualAir) || 0
+  })
+  const monthly = Object.entries(byMonth).sort().slice(-8)
+  const maxMonth = Math.max(1, ...monthly.flatMap(([, v]) => [v.est, v.act]))
 
-  // Air vs Sea decision (per material line)
-  const airLines = items.filter((i: any) => i.airDecision === "AIR").length
-  const noAirLines = items.filter((i: any) => i.airDecision && i.airDecision !== "AIR").length
-  const undecided = totalItems - airLines - noAirLines
+  // ── 3 · ค้างอยู่ขั้นไหน ────────────────────────────────────────────────────────────────
+  const byStage: Record<string, number> = {}
+  wipDocs.forEach((r: any) => { const k = STATUS_LABEL[r.status] || r.status; byStage[k] = (byStage[k] || 0) + 1 })
+  const stageRows = Object.entries(byStage).sort((a, b) => b[1] - a[1]).slice(0, 6)
 
-  // Top-5 by est air cost (brand / supplier / country)
+  // ── 4 · ค่าขนส่งจริงต่อกิโล แยกตาม Forwarder (THB/kg) ─────────────────────────────────
+  const byFwd: Record<string, { act: number; est: number; kg: number; docs: number }> = {}
+  doneDocs.forEach((r: any) => {
+    const name = r.fwdName || r.preCostFwd; const kg = kgOf(r)
+    if (!name || !kg || r.actualAir == null) return
+    const g = (byFwd[name] ||= { act: 0, est: 0, kg: 0, docs: 0 })
+    g.act += Number(r.actualAir) || 0; g.est += estOf(r); g.kg += kg; g.docs++
+  })
+  const fwdRows = Object.entries(byFwd).map(([k, v]) => ({
+    k, docs: v.docs, rate: (v.act * THB) / v.kg, diff: ((v.act - v.est) * THB) / v.kg,
+  })).sort((a, b) => b.rate - a.rate).slice(0, 6)
+
+  // ── 5 · สัดส่วน Incoterm (นับตามเอกสาร — ใช้เทอมของบรรทัดแรกที่กรอก) ──────────────────
+  const incCount: Record<string, number> = {}
+  fReqs.forEach((r: any) => { const t = ((r.items || []).find((i: any) => i.incoterm) || {}).incoterm; if (t) incCount[t] = (incCount[t] || 0) + 1 })
+  const incRows = Object.entries(incCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  const incTotal = incRows.reduce((s, [, n]) => s + n, 0)
+
+  // ── 6 · ใบที่ต้องตามด่วน ──────────────────────────────────────────────────────────────
+  const AGE_LIMIT = 7 // วันที่ถือว่าค้างนาน
+  const exceptions = wipDocs.map((r: any) => {
+    const age = Math.floor((Date.now() - new Date(r.createdAt).getTime()) / DAY)
+    const rev = Number(r.reviseCount) || 0
+    const waitFwd = r.fwdSentAt && !r.fwdImportedAt ? Math.floor((Date.now() - new Date(r.fwdSentAt).getTime()) / DAY) : null
+    return { r, age, rev, waitFwd }
+  }).filter(x => x.age > AGE_LIMIT || x.rev >= 3 || (x.waitFwd != null && x.waitFwd > 3))
+    .sort((a, b) => (b.rev * 10 + b.age) - (a.rev * 10 + a.age)).slice(0, 10)
+
+  // ── 7 · เหตุผลที่ถูกตีกลับ (ระบบเก็บได้แค่เหตุผลล่าสุดของแต่ละใบ) ────────────────────
+  const reasonCount: Record<string, number> = {}
+  fReqs.forEach((r: any) => { const t = String(r.lastReturnReason || "").trim(); if (t && (Number(r.reviseCount) || 0) > 0) reasonCount[t] = (reasonCount[t] || 0) + 1 })
+  const reasonRows = Object.entries(reasonCount).sort((a, b) => b[1] - a[1]).slice(0, 6)
+  const totalRevises = fReqs.reduce((s, r) => s + (Number(r.reviseCount) || 0), 0)
+
+  // ── Top-5 by est air cost (brand / supplier / country) ────────────────────────────────
   const topBy = (key: string) => {
     const m: Record<string, number> = {}
     items.forEach((i: any) => { const k = i[key] || null; if (k) m[k] = (m[k] || 0) + (Number(i.airFreightCost) || 0) })
@@ -69,38 +142,36 @@ export default function Page() {
   }
   const topBrand = topBy("brand"), topVendor = topBy("vendorName"), topCountry = topBy("country")
 
-  // Monthly trend (docs + Est + Actual)
-  const byMonth: Record<string, { docs: number; est: number; act: number }> = {}
-  fReqs.forEach((r: any) => {
-    const d = new Date(r.createdAt); if (isNaN(d.getTime())) return
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-    if (!byMonth[k]) byMonth[k] = { docs: 0, est: 0, act: 0 }
-    byMonth[k].docs++
-    byMonth[k].est += (r.items || []).reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
-    byMonth[k].act += Number(r.actualAir) || 0
-  })
-  const monthly = Object.entries(byMonth).sort()
-  const maxMonthEst = Math.max(1, ...monthly.flatMap(([, v]) => [v.est, v.act]))
+  // OVER BUDGET (Actual > Est) attributed to brand / vendor. A doc's Actual is per-doc, so it's split
+  // across its lines by each line's Est share, then summed per brand & per vendor.
+  const overBy = (key: "brand" | "vendorName") => {
+    const m: Record<string, { est: number; act: number }> = {}
+    fReqs.forEach((r: any) => {
+      const its = r.items || []
+      const docEst = estOf(r), docAct = Number(r.actualAir) || 0
+      if (!docEst || !docAct) return
+      its.forEach((i: any) => {
+        const k = i[key]; if (!k) return
+        const e = Number(i.airFreightCost) || 0
+        const g = (m[k] ||= { est: 0, act: 0 })
+        g.est += e; g.act += docAct * (e / docEst)
+      })
+    })
+    return Object.entries(m).map(([name, v]) => ({ name, est: v.est, act: v.act, diff: v.act - v.est }))
+      .filter(x => x.diff > 0.5).sort((a, b) => b.diff - a.diff).slice(0, 6)
+  }
+  const overBrand = overBy("brand"), overVendor = overBy("vendorName")
+  const overTotal = overBrand.reduce((s, x) => s + x.diff, 0)
 
-  // Spend by BU (Est + Actual) for the BU-split bars.
-  const byBu: Record<string, { est: number; act: number }> = {}
-  fReqs.forEach((r: any) => {
-    const b = r.bu || "NYG"; const e = (byBu[b] ||= { est: 0, act: 0 })
-    e.est += (r.items || []).reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
-    e.act += Number(r.actualAir) || 0
-  })
-  const buRows = Object.entries(byBu).sort((a, b) => b[1].est - a[1].est)
-  const maxBuEst = Math.max(1, ...buRows.map(([, v]) => v.est))
   const dstr = (v: any) => (v ? new Date(v).toLocaleDateString("en-GB") : "-")
   const TABLE_COLS = ["Doc No", "BU", "สาย", "จัดซื้อ", "PO", "Country", "Port", "Incoterm", "Wt(kg)", "Factory", "ETC", "Est USD", "MAWB", "HAWB", "ETD", "ETA", "Pre cost", "Actual", "Local", "CFM in-house", "Status"]
   const tableRow = (r: any): any[] => {
     const its = r.items || []
     const d0 = its.find((i: any) => i.airFreightCost != null) || its[0] || {}
-    const est = its.reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
     const po = [...new Set(its.map((i: any) => i.poNoDoc).filter(Boolean))].join(", ")
     return [r.documentNo, r.bu, reqTypeOf(r) === "PURCHASING" ? "จัดซื้อ" : reqTypeOf(r) === "SAMPLE" ? "Sample" : "SCM", displayOf(r) || "", po,
       d0.country || "", d0.port || d0.seaPort || "", d0.incoterm || "", d0.weight != null ? Number(d0.weight) : "",
-      r.factory || d0.factory || "", dstr(d0.etc), est ? Math.round(est) : "",
+      r.factory || d0.factory || "", dstr(d0.etc), estOf(r) ? Math.round(estOf(r)) : "",
       r.mawbNo || "", r.hawbNo || "", dstr(r.flightEtd), dstr(r.flightEta),
       r.preCost != null ? Number(r.preCost) : "", r.actualAir != null ? Number(r.actualAir) : "", r.localChargeTh != null ? Number(r.localChargeTh) : "",
       dstr(r.cfmInHouseDate), STATUS_LABEL[r.status] || r.status]
@@ -120,66 +191,90 @@ export default function Page() {
     } catch (e) { alert("Export ไม่สำเร็จ: " + String((e as any)?.message || e).slice(0, 160)) }
   }
 
-  // OVER BUDGET (Actual > Est) attributed to brand / vendor. A doc's Actual is per-doc, so it's split
-  // across its lines by each line's Est share, then summed per brand & per vendor. Only docs with both
-  // Est and Actual entered count; only groups that ended up over budget are shown.
-  const overBy = (key: "brand" | "vendorName") => {
-    const m: Record<string, { est: number; act: number }> = {}
-    fReqs.forEach((r: any) => {
-      const its = r.items || []
-      const docEst = its.reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
-      const docAct = Number(r.actualAir) || 0
-      if (!docEst || !docAct) return
-      its.forEach((i: any) => {
-        const k = i[key]; if (!k) return
-        const e = Number(i.airFreightCost) || 0
-        const g = (m[k] ||= { est: 0, act: 0 })
-        g.est += e; g.act += docAct * (e / docEst)
-      })
-    })
-    return Object.entries(m).map(([name, v]) => ({ name, est: v.est, act: v.act, diff: v.act - v.est }))
-      .filter(x => x.diff > 0.5).sort((a, b) => b.diff - a.diff).slice(0, 6)
-  }
-  const overBrand = overBy("brand"), overVendor = overBy("vendorName")
-  const overTotal = overBrand.reduce((s, x) => s + x.diff, 0)
-
-  const cards = [
-    { label: "Total Pull (garment)", value: fmt(totalPullGarment), color: "#a04020" },
-    { label: "Est Air Freight (USD)", value: fmt(Math.round(est)), color: "#0369a1" },
-    { label: "Actual Air Freight (USD)", value: fmt(Math.round(act)), color: "#16a34a" },
-    {
-      label: "Variance (Act − Est)", value: variancePct == null ? "—" : `${variance >= 0 ? "▲" : "▼"} ${fmt(Math.abs(Math.round(variance)))} (${Math.abs(variancePct).toFixed(0)}%)`,
-      color: variance > 0 ? "#dc2626" : "#16a34a",
-    },
-    { label: "Cost / garment (USD)", value: costPerGarment ? costPerGarment.toFixed(2) : "—", color: "#7c3aed" },
-  ]
-
-  const Bar = ({ pct, color }: { pct: number; color: string }) => (
-    <div className="flex-1 bg-gray-100 rounded-full h-3.5 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${Math.max(pct, 2)}%`, background: color }} /></div>
+  // ── building blocks ───────────────────────────────────────────────────────────────────
+  const Panel = ({ title, cap, right, children, className = "" }: any) => (
+    <div className={`bg-white rounded-xl border border-gray-200 p-4 ${className}`}>
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-[13.5px] font-bold text-gray-900">{title}</h2>
+          {cap && <p className="text-[11.5px] text-gray-500 mt-0.5">{cap}</p>}
+        </div>
+        {right}
+      </div>
+      <div className="mt-3">{children}</div>
+    </div>
   )
-  const TopCard = ({ title, rows }: { title: string; rows: [string, number][] }) => {
-    const max = Math.max(1, ...rows.map(([, v]) => v))
+
+  // Horizontal bars — every row carries its own value label, so colour is never the only cue.
+  const HBars = ({ rows, max, color = C.s1, unit = "", labelW = "w-28" }: {
+    rows: { k: string; v: number; color?: string; label?: string; tag?: any }[]; max?: number; color?: string; unit?: string; labelW?: string
+  }) => {
+    const top = max ?? Math.max(1, ...rows.map(r => r.v))
+    if (!rows.length) return <p className="text-sm text-gray-300">ไม่มีข้อมูล</p>
     return (
-      <div className="bg-white rounded-xl border p-4">
-        <p className="text-xs font-semibold text-gray-500 uppercase mb-3">{title}</p>
-        {rows.length === 0 ? <p className="text-sm text-gray-300">No data</p> : (
-          <div className="space-y-2">
-            {rows.map(([name, v]) => (
-              <div key={name} className="flex items-center gap-2">
-                <span className="text-xs text-gray-600 w-28 truncate" title={name}>{name}</span>
-                <Bar pct={(v / max) * 100} color={MAROON} />
-                <span className="text-xs font-semibold text-gray-700 w-16 text-right tabular-nums">{fmt(Math.round(v))}</span>
-              </div>
-            ))}
+      <div className="space-y-2">
+        {rows.map(r => (
+          <div key={r.k} className="flex items-center gap-2">
+            <span className={`text-[12px] text-gray-600 ${labelW} truncate shrink-0`} title={r.k}>{r.k}</span>
+            <span className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+              <span className="block h-4 rounded-r" style={{ width: `${Math.max(2, (r.v / top) * 100)}%`, background: r.color || color }} />
+            </span>
+            <span className="text-[12px] font-bold text-gray-800 tabular-nums text-right shrink-0 min-w-[66px]">
+              {r.label ?? `${fmt(Math.round(r.v))}${unit}`}
+            </span>
+            {r.tag}
           </div>
-        )}
+        ))}
       </div>
     )
   }
 
+  const Chip = ({ kind, children }: { kind: "bad" | "warn" | "ok"; children: any }) => (
+    <span className={`text-[10.5px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${kind === "bad" ? "bg-red-50 text-red-700" : kind === "warn" ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>{children}</span>
+  )
+
+  // Donut — hand-drawn arcs with a 2px surface gap between slices.
+  const Donut = ({ rows, total }: { rows: [string, number][]; total: number }) => {
+    const S = 168, R = 72, r0 = 44, cx = S / 2, cy = S / 2
+    const pt = (a: number, rad: number) => [cx + Math.cos(a) * rad, cy + Math.sin(a) * rad]
+    let a0 = -Math.PI / 2
+    const paths = rows.map(([k, n], idx) => {
+      const a1 = a0 + (n / total) * Math.PI * 2 - 0.02
+      const [x0, y0] = pt(a0, R), [x1, y1] = pt(a1, R), [x2, y2] = pt(a1, r0), [x3, y3] = pt(a0, r0)
+      const large = a1 - a0 > Math.PI ? 1 : 0
+      const d = `M${x0} ${y0} A${R} ${R} 0 ${large} 1 ${x1} ${y1} L${x2} ${y2} A${r0} ${r0} 0 ${large} 0 ${x3} ${y3} Z`
+      a0 = a1 + 0.02
+      return <path key={k} d={d} fill={[C.s1, C.s2, C.s3, C.s4, C.s5][idx % 5]} stroke="#fff" strokeWidth={2}><title>{`${k} · ${n} ใบ (${Math.round((n / total) * 100)}%)`}</title></path>
+    })
+    return (
+      <svg viewBox={`0 0 ${S} ${S}`} width={S} height={S} role="img" aria-label="สัดส่วน Incoterm">
+        {paths}
+        <text x={cx} y={cy - 2} textAnchor="middle" style={{ fontSize: 19, fontWeight: 700, fill: "#111827" }}>{total}</text>
+        <text x={cx} y={cy + 14} textAnchor="middle" style={{ fontSize: 10, fill: "#9ca3af" }}>เอกสาร</text>
+      </svg>
+    )
+  }
+
+  const kpis = [
+    { k: "เอกสารทั้งหมด", v: fmt(totalDocs), d: `${doneDocs.length} ปิดงานแล้ว · ${wipDocs.length} กำลังดำเนินการ`, c: "#111827" },
+    { k: "น้ำหนักรวม", v: `${fmt(Math.round(totalKg))} kg`, d: totalDocs ? `เฉลี่ย ${fmt(Math.round(totalKg / totalDocs))} kg/ใบ` : "—", c: C.s5 },
+    { k: "Est air (USD)", v: fmt(Math.round(est)), d: "จาก Master Rate ตาม port + น้ำหนัก", c: C.s1 },
+    { k: "Actual air (USD)", v: fmt(Math.round(act)), d: `จาก ${doneDocs.length} ใบที่ LG ปิดงานแล้ว`, c: C.s2 },
+    {
+      k: "ส่วนต่าง Actual − Est", c: variance > 0 ? C.crit : C.good,
+      v: variancePct == null ? "—" : `${variance >= 0 ? "▲" : "▼"} ${Math.abs(variancePct).toFixed(1)}%`,
+      d: variancePct == null ? "ยังไม่มีใบที่ปิดงาน" : `${variance >= 0 ? "+" : "−"}${fmt(Math.abs(Math.round(variance)))} USD · เทียบ Est ของใบที่ปิดแล้ว`,
+    },
+  ]
+
   return (
     <div className="p-5 max-w-[1400px] mx-auto space-y-4">
-      <div><h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>DASHBOARD</h1></div>
+      <div>
+        <div className="text-[10.5px] uppercase tracking-[0.16em] text-gray-400 font-semibold">RM REQ AIR · {bu}</div>
+        <h1 className="text-3xl font-bold tracking-tight" style={{ color: MAROON }}>DASHBOARD</h1>
+        <p className="text-[12.5px] text-gray-500 mt-0.5">ใครคอขวด · ส่วนต่าง Est เทียบ Actual · ใบที่ค้างเกินกำหนด</p>
+      </div>
+
       <div className="flex gap-1.5">{BUS.map(b => (
         <button key={b} onClick={() => setBu(b)} className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${bu === b ? "text-white border-transparent" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`} style={bu === b ? { background: buColor(b) } : undefined}>{b}</button>
       ))}</div>
@@ -213,17 +308,140 @@ export default function Page() {
         <div className="bg-white rounded-xl border p-12 text-center text-gray-400">ยังไม่มีเอกสารใน BU นี้</div>
       ) : (
         <>
-          {/* A · KPI cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {cards.map(c => (
-              <div key={c.label} className="bg-white rounded-xl border p-4">
-                <div className="text-xl font-bold" style={{ color: c.color }}>{c.value}</div>
-                <div className="text-[11px] text-gray-500 mt-1">{c.label}</div>
+          {/* ── KPI row ─────────────────────────────────────────────────────────── */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+            {kpis.map(c => (
+              <div key={c.k} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+                <div className="text-[10.5px] uppercase tracking-wider text-gray-400 font-semibold">{c.k}</div>
+                <div className="text-[25px] font-bold leading-tight mt-1 tabular-nums" style={{ color: c.c }}>{c.v}</div>
+                <div className="text-[11.5px] text-gray-500 mt-0.5">{c.d}</div>
               </div>
             ))}
           </div>
 
-          {/* A · OVER BUDGET (Actual > Est) — by brand & vendor */}
+          {/* ── รอบเวลาต่อคน · ปริมาณงานต่อคน ───────────────────────────────────── */}
+          <div className="grid lg:grid-cols-2 gap-3">
+            <Panel
+              title="รอบเวลาเฉลี่ยต่อคน (เปิดเอกสาร → ปิดงาน)"
+              cap={`นับเฉพาะใบที่ปิดงานแล้ว · ค่าเฉลี่ยรวม ${avgAll ? avgAll.toFixed(1) : "—"} วัน`}
+              right={turnRows.some(o => (o.avg || 0) > avgAll) ? <Chip kind="bad">● ช้ากว่าค่าเฉลี่ย {turnRows.filter(o => (o.avg || 0) > avgAll).length} คน</Chip> : null}>
+              <HBars
+                rows={turnRows.map(o => ({
+                  k: o.k, v: o.avg || 0, color: (o.avg || 0) > avgAll ? C.crit : C.s1,
+                  label: `${(o.avg || 0).toFixed(1)} วัน`,
+                  tag: (o.avg || 0) > avgAll ? <Chip kind="bad">ช้า</Chip> : null,
+                }))} />
+              <p className="text-[11px] text-gray-400 mt-3">* ระบบยังไม่เก็บเวลาแยกรายขั้น — ตัวเลขนี้คือเวลาทั้งใบ ตั้งแต่เปิดจนถึง LG ปิดงาน</p>
+            </Panel>
+
+            <Panel title="ปริมาณงานต่อคน" cap="จำนวนเอกสารที่รับผิดชอบในช่วงนี้ (แยกจากเวลา เพื่อไม่ให้สองสเกลปนกัน)">
+              <HBars rows={workRows.map(o => ({ k: o.k, v: o.docs, label: `${o.docs} ใบ` }))} color={C.seq[2]} />
+            </Panel>
+          </div>
+
+          {/* ── Est vs Actual รายเดือน · ค้างอยู่ขั้นไหน ─────────────────────────── */}
+          <div className="grid lg:grid-cols-3 gap-3">
+            <Panel className="lg:col-span-2" title="Est เทียบ Actual รายเดือน" cap="หน่วย USD · แท่งคู่ต่อเดือน (สเกลเดียว)"
+              right={
+                <div className="flex gap-3 text-[11.5px] text-gray-500">
+                  <span className="flex items-center gap-1.5"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: C.s1 }} />Est air</span>
+                  <span className="flex items-center gap-1.5"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: C.s2 }} />Actual air</span>
+                </div>
+              }>
+              {monthly.length === 0 ? <p className="text-sm text-gray-300">ไม่มีข้อมูล</p> : (
+                <div className="flex items-end gap-5 h-52 overflow-x-auto pb-1">
+                  {monthly.map(([m, v], idx) => (
+                    <div key={m} className="flex flex-col items-center gap-1 shrink-0" style={{ width: 66 }}>
+                      {idx === monthly.length - 1 && (
+                        <span className="text-[10px] font-semibold text-gray-500 tabular-nums">{(v.est / 1000).toFixed(1)}k / {(v.act / 1000).toFixed(1)}k</span>
+                      )}
+                      <div className="flex items-end gap-1.5 h-36">
+                        <div className="w-5 rounded-t" title={`Est ${fmt(Math.round(v.est))} USD`} style={{ height: `${(v.est / maxMonth) * 100}%`, minHeight: 3, background: C.s1 }} />
+                        <div className="w-5 rounded-t" title={`Actual ${fmt(Math.round(v.act))} USD`} style={{ height: `${(v.act / maxMonth) * 100}%`, minHeight: v.act > 0 ? 3 : 0, background: C.s2 }} />
+                      </div>
+                      <span className="text-[10px] text-gray-400">{m.slice(2)}</span>
+                      <span className="text-[10px] font-medium" style={{ color: C.s5 }}>{v.docs} ใบ</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="ค้างอยู่ขั้นไหน" cap={`เอกสารที่ยังไม่ปิดงาน ${wipDocs.length} ใบ`}>
+              <HBars rows={stageRows.map(([k, n], i) => ({ k, v: n, color: C.seq[Math.min(i, C.seq.length - 1)], label: `${n} ใบ` }))} labelW="w-32" />
+            </Panel>
+          </div>
+
+          {/* ── Forwarder · Incoterm ────────────────────────────────────────────── */}
+          <div className="grid lg:grid-cols-2 gap-3">
+            <Panel title="ค่าขนส่งจริงต่อกิโล แยกตาม Forwarder" cap="THB/kg เฉลี่ยจากใบที่ปิดงานแล้ว · ตัวเลขในวงเล็บ = ส่วนต่างจาก Est">
+              <HBars
+                color={C.s3}
+                rows={fwdRows.map(f => ({
+                  k: `${f.k} (${f.docs})`, v: f.rate, label: f.rate.toFixed(1),
+                  tag: <span className="text-[11px] font-semibold tabular-nums" style={{ color: f.diff > 0 ? C.crit : C.good }}>({f.diff > 0 ? "+" : ""}{f.diff.toFixed(1)})</span>,
+                }))} />
+            </Panel>
+
+            <Panel title="สัดส่วน Incoterm" cap="กระทบว่าต้องบวก origin cost (EXW/FCA) หรือไม่">
+              {incTotal === 0 ? <p className="text-sm text-gray-300">ไม่มีข้อมูล</p> : (
+                <div className="flex gap-5 items-center flex-wrap">
+                  <Donut rows={incRows as [string, number][]} total={incTotal} />
+                  <div className="flex flex-col gap-2 text-[12px] text-gray-600">
+                    {incRows.map(([k, n], i) => (
+                      <span key={k} className="flex items-center gap-2">
+                        <i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: [C.s1, C.s2, C.s3, C.s4, C.s5][i % 5] }} />
+                        {k} <b className="tabular-nums">{n}</b>
+                        <span className="text-gray-400">({Math.round((n / incTotal) * 100)}%)</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Panel>
+          </div>
+
+          {/* ── ใบที่ต้องตามด่วน · เหตุผลที่ถูกตีกลับ ──────────────────────────── */}
+          <div className="grid lg:grid-cols-3 gap-3">
+            <Panel className="lg:col-span-2" title="ใบที่ต้องตามด่วน" cap={`ค้างเกิน ${AGE_LIMIT} วัน · ถูกตีกลับ ≥ 3 ครั้ง · หรือ FWD ยังไม่ตอบเกิน 3 วัน`}>
+              {exceptions.length === 0 ? <p className="text-sm text-gray-300">ไม่มีใบที่เกินเกณฑ์ 🎉</p> : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[12.5px]">
+                    <thead>
+                      <tr className="text-[10.5px] uppercase tracking-wide text-gray-400">
+                        <th className="text-left font-semibold px-2 py-1.5">เอกสาร</th>
+                        <th className="text-left font-semibold px-2 py-1.5">ติดอยู่ที่</th>
+                        <th className="text-left font-semibold px-2 py-1.5">ผู้รับผิดชอบ</th>
+                        <th className="text-right font-semibold px-2 py-1.5">ค้าง</th>
+                        <th className="text-left font-semibold px-2 py-1.5">สถานะ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {exceptions.map(({ r, age, rev, waitFwd }) => (
+                        <tr key={r.id} className="border-t border-gray-100">
+                          <td className="px-2 py-1.5 font-semibold text-gray-800">{r.documentNo}</td>
+                          <td className="px-2 py-1.5 text-gray-600">{STATUS_LABEL[r.status] || r.status}</td>
+                          <td className="px-2 py-1.5 text-gray-500">{ownerOf(r)}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">{age} วัน</td>
+                          <td className="px-2 py-1.5">
+                            {rev >= 3 ? <Chip kind="bad">▲ ตีกลับ {rev} ครั้ง</Chip>
+                              : waitFwd != null && waitFwd > 3 ? <Chip kind="warn">● FWD ไม่ตอบ {waitFwd} วัน</Chip>
+                                : <Chip kind="warn">● เกินเกณฑ์ {age - AGE_LIMIT} วัน</Chip>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="เหตุผลที่ถูกตีกลับ" cap={`ตีกลับรวม ${totalRevises} ครั้ง · แสดงเหตุผลล่าสุดของแต่ละใบ`}>
+              <HBars rows={reasonRows.map(([k, n]) => ({ k, v: n, label: `${n} ใบ` }))} color={C.s5} labelW="w-36" />
+            </Panel>
+          </div>
+
+          {/* ── เกินงบ (Actual > Est) ───────────────────────────────────────────── */}
           {(overBrand.length > 0 || overVendor.length > 0) && (() => {
             const OverList = ({ title, rows }: { title: string; rows: { name: string; est: number; act: number; diff: number }[] }) => (
               <div className="flex-1 min-w-[260px]">
@@ -235,7 +453,7 @@ export default function Page() {
                       return (
                         <div key={x.name} className="flex items-center justify-between gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
                           <span className="text-sm text-gray-800 truncate" title={x.name}>{x.name}</span>
-                          <span className={`text-xs font-bold tabular-nums px-2 py-0.5 rounded-full shrink-0 ${pct >= 15 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>+${fmt(Math.round(x.diff))} (+{pct.toFixed(0)}%)</span>
+                          <span className={`text-xs font-bold tabular-nums px-2 py-0.5 rounded-full shrink-0 ${pct >= 15 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>+${fmt(Math.round(x.diff))} (+{pct.toFixed(0)}%)</span>
                         </div>
                       )
                     })}
@@ -244,74 +462,29 @@ export default function Page() {
               </div>
             )
             return (
-              <div className="bg-white rounded-xl border p-4">
-                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase">⚠ เกินงบ (Actual &gt; Est) — เจาะตามแบรนด์ / ผู้ขาย</p>
-                  <span className="text-xs font-bold text-red-700 tabular-nums">รวม +${fmt(Math.round(overTotal))}</span>
-                </div>
+              <Panel title="⚠ เกินงบ (Actual > Est) — เจาะตามแบรนด์ / ผู้ขาย"
+                cap="Actual ต่อเอกสารถูกกระจายเข้าแต่ละบรรทัดตามสัดส่วน Est · นับเฉพาะเอกสารที่กรอก Actual แล้ว"
+                right={<span className="text-xs font-bold tabular-nums" style={{ color: C.crit }}>รวม +${fmt(Math.round(overTotal))}</span>}>
                 <div className="flex gap-6 flex-wrap">
                   <OverList title="🏷️ ตามแบรนด์ (Brand)" rows={overBrand} />
                   <OverList title="🏭 ตามผู้ขาย (Vendor)" rows={overVendor} />
                 </div>
-                <p className="text-[11px] text-gray-400 mt-3">* Actual ต่อเอกสารถูกกระจายเข้าแต่ละบรรทัดตามสัดส่วน Est แล้วรวมตามแบรนด์/ผู้ขาย · นับเฉพาะเอกสารที่กรอก Actual แล้ว</p>
-              </div>
+              </Panel>
             )
           })()}
 
-          {/* A · Actual vs Est monthly + spend by BU (the Control-Tower core) */}
-          <div className="grid lg:grid-cols-3 gap-3">
-            <div className="bg-white rounded-xl border p-4 lg:col-span-2">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase">Actual vs Est — รายเดือน (USD)</p>
-                <div className="flex gap-3 text-[11px] text-gray-500">
-                  <span className="flex items-center gap-1"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "#c99aa2" }} />Est</span>
-                  <span className="flex items-center gap-1"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: MAROON }} />Actual</span>
-                </div>
-              </div>
-              {monthly.length === 0 ? <p className="text-sm text-gray-300">No data</p> : (
-                <div className="flex items-end gap-4 h-44 overflow-x-auto pb-1">
-                  {monthly.map(([m, v]) => (
-                    <div key={m} className="flex flex-col items-center gap-1 shrink-0" style={{ width: 60 }}>
-                      <div className="flex items-end gap-1 h-32">
-                        <div className="w-5 rounded-t" title={`Est ${fmt(Math.round(v.est))}`} style={{ height: `${(v.est / maxMonthEst) * 100}%`, minHeight: 3, background: "#c99aa2" }} />
-                        <div className="w-5 rounded-t" title={`Actual ${fmt(Math.round(v.act))}`} style={{ height: `${(v.act / maxMonthEst) * 100}%`, minHeight: v.act > 0 ? 3 : 0, background: MAROON }} />
-                      </div>
-                      <span className="text-[10px] text-gray-400">{m.slice(2)}</span>
-                      <span className="text-[10px] text-blue-600 font-medium">{v.docs} doc</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="bg-white rounded-xl border p-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase mb-3">ต้นทุนตาม BU (Est · USD)</p>
-              {buRows.length === 0 ? <p className="text-sm text-gray-300">No data</p> : (
-                <div className="space-y-2.5">
-                  {buRows.map(([b, v]) => (
-                    <div key={b} className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-gray-700 w-10">{b}</span>
-                      <Bar pct={(v.est / maxBuEst) * 100} color={MAROON} />
-                      <span className="text-xs font-semibold text-gray-700 w-16 text-right tabular-nums">{fmt(Math.round(v.est))}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* B · Top by cost */}
+          {/* ── Top by cost ─────────────────────────────────────────────────────── */}
           <div className="grid md:grid-cols-3 gap-3">
-            <TopCard title="Top brand — by Est Air (USD)" rows={topBrand as [string, number][]} />
-            <TopCard title="Top supplier — by Est Air (USD)" rows={topVendor as [string, number][]} />
-            <TopCard title="Top country — by Est Air (USD)" rows={topCountry as [string, number][]} />
+            {([["Top brand — Est air (USD)", topBrand, C.s1], ["Top supplier — Est air (USD)", topVendor, C.s2], ["Top country — Est air (USD)", topCountry, C.s3]] as const).map(([title, rows, color]) => (
+              <Panel key={title as string} title={title}>
+                <HBars rows={(rows as [string, number][]).map(([k, v]) => ({ k, v }))} color={color as string} />
+              </Panel>
+            ))}
           </div>
 
-          {/* E · Data table — every field entered by SCM / จัดซื้อ / LG (one row per document) */}
-          <div className="bg-white rounded-xl border p-4">
-            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase">ตารางข้อมูลทั้งหมด (SCM · จัดซื้อ · LG) — {fReqs.length} เอกสาร</p>
-              <button onClick={exportTable} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50">📊 Export Excel</button>
-            </div>
+          {/* ── Data table — every field entered by SCM / จัดซื้อ / LG ───────────── */}
+          <Panel title={`ตารางข้อมูลทั้งหมด (SCM · จัดซื้อ · LG) — ${fReqs.length} เอกสาร`}
+            right={<button onClick={exportTable} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-emerald-300 text-emerald-700 bg-white hover:bg-emerald-50">📊 Export Excel</button>}>
             <div className="overflow-x-auto">
               <table className="text-xs whitespace-nowrap min-w-[1500px] w-full">
                 <thead className="text-gray-500 border-b border-gray-200">
@@ -321,7 +494,7 @@ export default function Page() {
                   {fReqs.map((r: any) => {
                     const its = r.items || []
                     const d0 = its.find((i: any) => i.airFreightCost != null) || its[0] || {}
-                    const est = its.reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
+                    const e = estOf(r)
                     const po = [...new Set(its.map((i: any) => i.poNoDoc).filter(Boolean))].join(", ")
                     return (
                       <tr key={r.id} className="hover:bg-gray-50">
@@ -336,13 +509,13 @@ export default function Page() {
                         <td className="px-2 py-1.5 text-right tabular-nums">{d0.weight != null ? fmt(d0.weight) : "-"}</td>
                         <td className="px-2 py-1.5">{r.factory || d0.factory || "-"}</td>
                         <td className="px-2 py-1.5">{dstr(d0.etc)}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums font-semibold" style={{ color: MAROON }}>{est ? fmt(Math.round(est)) : "-"}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums font-semibold" style={{ color: C.s1 }}>{e ? fmt(Math.round(e)) : "-"}</td>
                         <td className="px-2 py-1.5">{r.mawbNo || "-"}</td>
                         <td className="px-2 py-1.5">{r.hawbNo || "-"}</td>
                         <td className="px-2 py-1.5">{dstr(r.flightEtd)}</td>
                         <td className="px-2 py-1.5">{dstr(r.flightEta)}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{r.preCost != null ? fmt(r.preCost) : "-"}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{r.actualAir != null ? fmt(r.actualAir) : "-"}</td>
+                        <td className="px-2 py-1.5 text-right tabular-nums font-semibold" style={{ color: C.s2 }}>{r.actualAir != null ? fmt(r.actualAir) : "-"}</td>
                         <td className="px-2 py-1.5 text-right tabular-nums">{r.localChargeTh != null ? fmt(r.localChargeTh) : "-"}</td>
                         <td className="px-2 py-1.5">{dstr(r.cfmInHouseDate)}</td>
                         <td className="px-2 py-1.5">{STATUS_LABEL[r.status] || r.status}</td>
@@ -352,8 +525,7 @@ export default function Page() {
                 </tbody>
               </table>
             </div>
-          </div>
-
+          </Panel>
         </>
       )}
     </div>
