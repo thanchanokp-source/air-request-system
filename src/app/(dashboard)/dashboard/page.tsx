@@ -79,7 +79,10 @@ const soBrand = (r: any) => r?.brand || r?.request?.brandName || r?.brandName ||
 // Normalised brand key for matching — uppercase + collapse spaces so MER's inconsistent
 // entries ("rhone", "RHONE ", "RHONE  X") group together. Filtering uses CONTAINS on this.
 // Brand families: every name CONTAINING the word is ONE brand ("FANATICS-BRANDS, FANATICS", "FANATICS, INC." → FANATICS)
-const BRAND_FAMILY: { re: RegExp; name: string }[] = [{ re: /FANATIC/, name: "FANATICS" }]
+const BRAND_FAMILY: { re: RegExp; name: string }[] = [
+  { re: /FANATIC/, name: "FANATICS" },
+  { re: /\bOMNI\b/, name: "OMNI APPARATECH" },   // "OMNI" + "OMNI APPARATECH INC." = one brand
+]
 const brandFamily = (up: string) => BRAND_FAMILY.find(f => f.re.test(up))?.name
 const brandKey = (r: any) => { const k = soBrand(r).trim().toUpperCase().replace(/\s+/g, " "); return brandFamily(k) ?? k }
 // Group-key that also merges company-suffix variants of the SAME brand
