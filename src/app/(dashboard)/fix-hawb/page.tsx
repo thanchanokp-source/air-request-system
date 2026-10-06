@@ -456,7 +456,10 @@ const ST: Record<string, { label: string; cls: string }> = {
   NOT_IN_SYSTEM: { label: "ไม่มีในระบบ", cls: "bg-gray-100 text-gray-600 border-gray-300" },
   MATCH: { label: "ตรง", cls: "bg-green-50 text-green-700 border-green-200" },
 }
+const HAWB_RE = /HAWB|H\/AWB|HOUSE\s*AWB|HOUSE\s*AIR/i
 function ExpenseFileBox() {
+  const [wb, setWb] = useState<any | null>(null)
+  const [sheetName, setSheetName] = useState("")
   const [sheet, setSheet] = useState<{ name: string; head: string[]; rows: any[][] } | null>(null)
   const [hCol, setHCol] = useState(-1)
   const [aCol, setACol] = useState(-1)
@@ -469,19 +472,31 @@ function ExpenseFileBox() {
     const r = await fetch("/api/admin/fix-hawb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
     const d = await r.json(); if (!r.ok) throw new Error(d.error || r.status); return d
   }
+  // header row = first row (within 30) that has a cell containing "HAWB"
+  const readSheet = (book: any, name: string) => {
+    const aoa: any[][] = XLSX.utils.sheet_to_json(book.Sheets[name], { header: 1, defval: "" })
+    const hr = aoa.slice(0, 30).findIndex(r => r.some(c => HAWB_RE.test(String(c))))
+    return { aoa, hr }
+  }
   const onFile = async (f: File | undefined) => {
-    setRes(null); setMsg(""); setSheet(null); if (!f) return
-    const wb = XLSX.read(await f.arrayBuffer(), { type: "array" })
-    const aoa: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" })
-    // header row = first row (within 15) that has a cell containing "HAWB"
-    let hr = aoa.slice(0, 15).findIndex(r => r.some(c => /HAWB/i.test(String(c))))
-    if (hr < 0) hr = 0
+    setRes(null); setMsg(""); setSheet(null); setWb(null); if (!f) return
+    const book = XLSX.read(await f.arrayBuffer(), { type: "array" })
+    setWb(book)
+    // default sheet = the first one that has a HAWB header
+    const first = book.SheetNames.find((nm: string) => readSheet(book, nm).hr >= 0) || book.SheetNames[0]
+    pickSheet(book, first)
+  }
+  const pickSheet = (book: any, name: string) => {
+    setRes(null); setMsg(""); setSheetName(name)
+    const { aoa, hr: h0 } = readSheet(book, name)
+    const hr = h0 < 0 ? 0 : h0
+    if (h0 < 0) setMsg(`ชีท "${name}" ไม่เจอหัวคอลัมน์ HAWB — เลือกคอลัมน์เอง หรือเปลี่ยนชีท`)
     const head = (aoa[hr] || []).map((c: any) => String(c).trim())
-    setSheet({ name: f.name, head, rows: aoa.slice(hr + 1) })
-    setHCol(head.findIndex(h => /HAWB/i.test(h)))
+    setSheet({ name, head, rows: aoa.slice(hr + 1) })
+    setHCol(head.findIndex(h => HAWB_RE.test(h)))
     const amt = [/TOTAL.*(THB|AMOUNT|EXPENSE|CHARGE)/i, /(EXPENSE|AMOUNT|CHARGE|TOTAL)/i, /THB/i]
     let ac = -1
-    for (const re of amt) { ac = head.findIndex(h => re.test(h) && !/HAWB/i.test(h)); if (ac >= 0) break }
+    for (const re of amt) { ac = head.findIndex(h => re.test(h) && !HAWB_RE.test(h)); if (ac >= 0) break }
     setACol(ac)
   }
   const check = async () => {
@@ -526,6 +541,11 @@ function ExpenseFileBox() {
       <p className="text-[11px] text-gray-400">อัป Excel ที่มีคอลัมน์ HAWB + ยอดเงิน (HAWB ซ้ำหลายบรรทัด = รวมให้) → เทียบกับผลรวม ACTUAL ที่ LG กรอกในระบบ · ยังไม่มีการเขียนจนกว่าจะกด &quot;ใช้ยอดจากไฟล์&quot;</p>
       <div className="flex flex-wrap items-center gap-2">
         <input type="file" accept=".xlsx,.xls,.csv" onChange={e => onFile(e.target.files?.[0])} className="text-xs" />
+        {wb && wb.SheetNames.length > 1 && (
+          <label className="text-[11px] text-gray-600">ชีท <select value={sheetName} onChange={e => pickSheet(wb, e.target.value)} className="border rounded px-1 py-0.5 text-xs">
+            {wb.SheetNames.map((nm: string) => <option key={nm} value={nm}>{nm}{readSheet(wb, nm).hr >= 0 ? " ✓" : ""}</option>)}
+          </select></label>
+        )}
         {sheet && <>
           <label className="text-[11px] text-gray-600">คอลัมน์ HAWB {colSel(hCol, setHCol)}</label>
           <label className="text-[11px] text-gray-600">คอลัมน์ยอดเงิน {colSel(aCol, setACol)}</label>

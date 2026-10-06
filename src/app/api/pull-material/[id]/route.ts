@@ -19,6 +19,14 @@ const STAGE_ROLES: Record<string, string[]> = {
   PC_REVISE: ["PURCHASING"], // LG returned the doc — Purchasing must fix files/data then send back
 }
 
+// "LG has started" = the shipment is real: a booking number, a flight, an actual, a file already sent
+// to the forwarder, or the doc is closed. Up to that moment the requester may still recall or delete;
+// after it, the document must stay (LG/Accounting already have numbers hanging off it).
+export const lgStarted = (d: any) => !!(
+  String(d?.hawbNo || "").trim() || String(d?.mawbNo || "").trim() ||
+  d?.actualAir != null || d?.fwdSentAt || d?.flightEtd || d?.status === "COMPLETED"
+)
+
 // TEST doc → all its emails reroute to the creator (monitor copy, "meant for"), like Air Request.
 async function pullTestRecipient(id: string): Promise<string | null> {
   // PullMaterialRequest has no `createdBy` relation (only createdById) — look the creator up by id.
@@ -237,6 +245,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     if (isStop) {
+      // Recall is open right up until LG books — including while the doc sits "Waiting for LG".
+      const cur = await (prisma as any).pullMaterialRequest.findUnique({
+        where: { id }, select: { hawbNo: true, mawbNo: true, actualAir: true, fwdSentAt: true, flightEtd: true, status: true },
+      })
+      if (body.status === "RECALLED" && lgStarted(cur)) {
+        return NextResponse.json({ error: "LG เริ่มจองแล้ว (มี HAWB / เที่ยวบิน / Actual หรือส่งให้ FWD ไปแล้ว) — recall ไม่ได้" }, { status: 400 })
+      }
       const reason = String((body.status === "REJECTED" ? body.rejectReason : body.recallReason) || "").trim()
       if (!reason) return NextResponse.json({ error: "reason required" }, { status: 400 })
       data.recallReason = reason
@@ -372,9 +387,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params
   const userId = (session.user as any).id
   const isAdmin = (session.user as any).role === "ADMIN"
-  const rq = await (prisma as any).pullMaterialRequest.findUnique({ where: { id }, select: { createdById: true } })
+  const rq = await (prisma as any).pullMaterialRequest.findUnique({
+    where: { id },
+    select: { createdById: true, hawbNo: true, mawbNo: true, actualAir: true, fwdSentAt: true, flightEtd: true, status: true },
+  })
   if (!rq) return NextResponse.json({ error: "Not found" }, { status: 404 })
   if (!isAdmin && rq.createdById !== userId) return NextResponse.json({ error: "Forbidden — creator only" }, { status: 403 })
+  if (lgStarted(rq)) return NextResponse.json({ error: "LG เริ่มจองแล้ว — ลบเอกสารไม่ได้ (ใช้ recall ก่อนหน้านี้เท่านั้น)" }, { status: 400 })
   await (prisma as any).pullMaterialRequest.delete({ where: { id } })
   return NextResponse.json({ ok: true })
 }

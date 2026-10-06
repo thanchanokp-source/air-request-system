@@ -39,6 +39,13 @@ function pullStatus(rq: any): string {
   return STATUS_LABEL[s] || s
 }
 
+// Recall / delete stay open until LG actually books the shipment (HAWB, flight, actual, or the file
+// already went to the forwarder). "Waiting for LG" is still cancellable — nothing has been booked yet.
+const lgStarted = (d: any) => !!(
+  String(d?.hawbNo || "").trim() || String(d?.mawbNo || "").trim() ||
+  d?.actualAir != null || d?.fwdSentAt || d?.flightEtd || d?.status === "COMPLETED"
+)
+
 export default function Page() {
   const { data: session, status: auth } = useSession()
   const roles: string[] = [(session?.user as any)?.role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
@@ -306,7 +313,7 @@ export default function Page() {
                             filled in yet (LG actual, INV per PO …). */}
                         <button onClick={() => openPdf(rq)} disabled={pdfing === rq.id} title="Preview / download PDF"
                           className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50 mr-1" style={{ background: MAROON }}>{pdfing === rq.id ? "…" : "🔍 PDF"}</button>
-                        {(isAdmin || rq.createdById === userId) && !["APPROVED", "COMPLETED", "RECALLED"].includes(rq.status) && (
+                        {(isAdmin || rq.createdById === userId) && !["COMPLETED", "RECALLED"].includes(rq.status) && !lgStarted(rq) && (
                           <button onClick={() => recall(rq)} disabled={busy === rq.id} title="Recall (creator only)"
                             className="text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:text-amber-700 hover:border-amber-300 disabled:opacity-50">↩ Recall</button>
                         )}
@@ -314,7 +321,7 @@ export default function Page() {
                           <button onClick={() => openEdit(rq)} disabled={busy === rq.id} title="Edit & resubmit"
                             className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50" style={{ background: MAROON }}>✎ แก้ไข & Resubmit</button>
                         )}
-                        {isAdmin && (
+                        {isAdmin && !lgStarted(rq) && (
                           <button onClick={() => del(rq)} disabled={busy === rq.id} title="ลบเอกสารถาวร (admin เท่านั้น)"
                             className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 ml-1">🗑 ลบ</button>
                         )}
