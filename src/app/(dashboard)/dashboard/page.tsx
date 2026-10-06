@@ -1070,6 +1070,35 @@ export default function DashboardPage() {
     return arr.sort((a,b)=>b._mag-a._mag)
   },[chartRows])
   const claimMagTotal = claimByDept.reduce((s,d)=>s+d._mag,0)
+  // Click a dept card → popup: documents of that dept by state (default Pending), with who it waits on
+  // and a link to open the document (marked "ถึงตาคุณ" when this user is in the doc's pending list).
+  const [deptPop, setDeptPop] = useState<{dept:string; tab:"p"|"a"|"r"}|null>(null)
+  const myNames = useMemo(()=>{
+    const u:any = session?.user || {}
+    return [u.name, u.email, String(u.email||"").split("@")[0]].filter(Boolean).map((x:string)=>x.toLowerCase())
+  },[session])
+  const deptDocs = useMemo(()=>{
+    if(!deptPop) return []
+    const PAST = ["COMPLETED","ACCOUNTING_PENDING","PRESIDENT_PENDING"]
+    const m = new Map<string,any>()
+    for(const r of chartRows){
+      for(const sp of getSplits(r)){
+        if((deptLabel(sp.dept)||"-")!==deptPop.dept) continue
+        const cs = claimSplitState(sp.dept, sp.status)
+        const ss = r.itemStatus==="REJECTED" ? "r" : PAST.includes(r.itemStatus) ? "a" : cs.s==="approved" ? "a" : cs.s==="rejected" ? "r" : "p"
+        if(ss!==deptPop.tab) continue
+        const id = r.request?.id; if(!id) continue
+        const pct = (Number(sp.pct)||0)/100
+        const d = m.get(id) || { id, docNo:r.request?.documentNo, bu:r.request?.bu, status:r.request?.status, pendingWith:Array.isArray(r.request?.pendingWith)?r.request.pendingWith:[],
+          updatedAt:r.request?.updatedAt, so:new Set<string>(), act:0, est:0, stages:new Set<string>() }
+        d.so.add(`${r.so}|${r.sub||""}`); d.act += (Number(r.actualAirFreight)||0)*pct; d.est += (Number(r.airFreight)||0)*pct
+        if(ss==="p") d.stages.add(cs.label)
+        m.set(id, d)
+      }
+    }
+    return [...m.values()].map(d=>({ ...d, soN:d.so.size, mine: d.pendingWith.some((w:string)=>myNames.includes(String(w).toLowerCase())) }))
+      .sort((a,b)=> (Number(b.mine)-Number(a.mine)) || (b.act-a.act) || (b.est-a.est))
+  },[deptPop, chartRows, myNames])
 
   const monthlyDelay = useMemo(()=>{
     const m:Record<string,{total:number;count:number;ym:string}>={}
@@ -1364,8 +1393,11 @@ export default function DashboardPage() {
               const barPct = d._mag/barMax*100
               const c = deptColor(d.dept)
               return (
-                <div key={d.dept} title={`${fmtNum(d.qty)} pcs · ${share.toFixed(0)}% of total claim`}
-                  className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-colors flex-1 min-w-[190px]">
+                <div key={d.dept} title={`${fmtNum(d.qty)} pcs · ${share.toFixed(0)}% of total claim · คลิกดูเอกสาร`}
+                  role="button" tabIndex={0}
+                  onClick={()=>setDeptPop({dept:d.dept, tab:d.st?.p?.n ? "p" : "a"})}
+                  onKeyDown={e=>{ if(e.key==="Enter") setDeptPop({dept:d.dept, tab:"p"}) }}
+                  className="rounded-xl border border-gray-100 p-4 hover:border-gray-300 hover:shadow-sm transition-colors flex-1 min-w-[190px] cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-300">
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:c}}/>
                     <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide truncate">{d.dept}</span>
@@ -1403,6 +1435,67 @@ export default function DashboardPage() {
             })}
           </div>
         </div>
+        )
+      })()}
+
+      {deptPop && (()=>{
+        const card = claimByDept.find(d=>d.dept===deptPop.dept)
+        const c = deptColor(deptPop.dept)
+        const tabs:[ "p"|"a"|"r", string, string][] = [["p","Pending","#f59e0b"],["a","Accepted","#16a34a"],["r","Rejected","#dc2626"]]
+        const days = (d:any)=> d ? Math.max(0, Math.floor((Date.now()-new Date(d).getTime())/86400000)) : null
+        const mineN = deptDocs.filter(d=>d.mine).length
+        return (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setDeptPop(null)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col" onClick={e=>e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
+                <span className="w-2 h-2 rounded-full" style={{background:c}}/>
+                <p className="font-bold text-gray-900">{deptPop.dept}</p>
+                {card?.st && <span className="text-xs text-gray-500">รวม {fmtSplit(card.amt,fmtK)}</span>}
+                <div className="flex gap-1 ml-2">
+                  {tabs.map(([k,l,col])=>(
+                    <button key={k} onClick={()=>setDeptPop({...deptPop, tab:k})}
+                      className={`text-xs px-3 py-1 rounded-full border ${deptPop.tab===k ? "text-white border-transparent" : "text-gray-600 border-gray-200 bg-white"}`}
+                      style={deptPop.tab===k ? {background:col} : undefined}>
+                      {l}{card?.st ? ` · ${fmtSplit({THB:Math.round(card.st[k].THB),USD:Math.round(card.st[k].USD)},fmtK)}` : ""}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={()=>setDeptPop(null)} className="ml-auto text-gray-400 hover:text-gray-700 text-lg leading-none" aria-label="ปิด">✕</button>
+              </div>
+              {deptPop.tab==="p" && mineN>0 && <p className="px-5 pt-3 text-xs text-green-700 font-semibold">ถึงตาคุณ {mineN} เอกสาร — กด “เปิดเพื่อ Approve”</p>}
+              <div className="overflow-auto px-5 py-3">
+                {deptDocs.length===0 ? <p className="text-sm text-gray-400 py-8 text-center">ไม่มีเอกสารในสถานะนี้ (ตามตัวกรองปัจจุบัน)</p> : (
+                  <table className="w-full text-xs">
+                    <thead className="text-gray-400 sticky top-0 bg-white"><tr className="text-left">
+                      <th className="py-1.5 pr-3 font-medium">เอกสาร</th>
+                      <th className="py-1.5 pr-3 font-medium text-right">SO</th>
+                      <th className="py-1.5 pr-3 font-medium text-right">Actual (ส่วนแผนก)</th>
+                      <th className="py-1.5 pr-3 font-medium text-right">Est (ส่วนแผนก)</th>
+                      {deptPop.tab==="p" && <th className="py-1.5 pr-3 font-medium">ขั้นที่รอ</th>}
+                      {deptPop.tab==="p" && <th className="py-1.5 pr-3 font-medium">อยู่ที่ใคร</th>}
+                      <th className="py-1.5 font-medium"></th>
+                    </tr></thead>
+                    <tbody>{deptDocs.map(d=>(
+                      <tr key={d.id} className={`border-t border-gray-50 ${d.mine && deptPop.tab==="p" ? "bg-green-50/60" : ""}`}>
+                        <td className="py-1.5 pr-3 font-mono text-gray-800">{d.docNo}</td>
+                        <td className="py-1.5 pr-3 text-right tabular-nums">{d.soN}</td>
+                        <td className="py-1.5 pr-3 text-right tabular-nums font-semibold">{fmtNum(Math.round(d.act))}</td>
+                        <td className="py-1.5 pr-3 text-right tabular-nums text-gray-500">{fmtNum(Math.round(d.est))}</td>
+                        {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-amber-700">{[...d.stages].join(", ")}</td>}
+                        {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-gray-600 max-w-[220px] truncate" title={d.pendingWith.join(", ")}>{d.pendingWith.join(", ") || "-"}{days(d.updatedAt)!=null && <span className="text-gray-400"> · {days(d.updatedAt)} วัน</span>}</td>}
+                        <td className="py-1.5 text-right whitespace-nowrap">
+                          <a href={`/requests/${d.id}`} className={`inline-block px-2.5 py-1 rounded-lg font-semibold ${d.mine && deptPop.tab==="p" ? "bg-green-600 text-white hover:bg-green-700" : "border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+                            {d.mine && deptPop.tab==="p" ? "เปิดเพื่อ Approve →" : "เปิดดู →"}
+                          </a>
+                        </td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                )}
+              </div>
+              <p className="px-5 py-2 border-t border-gray-100 text-[10px] text-gray-400">ตามตัวกรองปัจจุบันของ Dashboard · ยอด = ค่าแอร์ × % เคลมของแผนกนี้</p>
+            </div>
+          </div>
         )
       })()}
 
