@@ -1368,7 +1368,7 @@ export default function DashboardPage() {
                     <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide truncate">{d.dept}</span>
                   </div>
                   <p className="text-[22px] font-bold text-gray-900 leading-none tabular-nums">{fmtSplit(d.amt,fmtK)}</p>
-                  {/* accept / pending / reject — stacked bar (share of THIS dept) + lines (THB · SO) */}
+                  {/* accept / pending / reject — stacked bar (share of THIS dept) + lines (THB) */}
                   {(()=>{
                     const st = d.st, mag = (x:any)=>(x.THB||0)+(x.USD||0)
                     const tot = mag(st.a)+mag(st.p)+mag(st.r)
@@ -1386,7 +1386,6 @@ export default function DashboardPage() {
                             <span className="w-2 h-2 rounded-sm shrink-0" style={{background:col}}/>
                             <span className="text-gray-600">{k}</span>
                             <span className="ml-auto font-semibold text-gray-900">{fmtSplit({THB:Math.round(x.THB),USD:Math.round(x.USD)},fmtK)}</span>
-                            <span className="text-gray-400 w-12 text-right">{x.n} SO</span>
                           </div>
                         ))}
                       </div>
