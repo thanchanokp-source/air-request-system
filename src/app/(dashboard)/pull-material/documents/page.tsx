@@ -56,6 +56,8 @@ export default function Page() {
   const [vendorF, setVendorF] = useState<string[]>([])
   // #4 batch fill: filter by port + ETC range, multi-select docs, fill actual across many at once.
   const [portF, setPortF] = useState("ALL")
+  // Where a doc stands with the forwarder: never mailed · mailed and still waiting · FWD answered.
+  const [fwdF, setFwdF] = useState<"ALL" | "NONE" | "SENT" | "BACK">("ALL")
   const [etcFrom, setEtcFrom] = useState("")
   const [etcTo, setEtcTo] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -707,7 +709,12 @@ export default function Page() {
       ...(r.items || []).flatMap((i: any) => [i.poNoDoc, i.soNoDoc, i.brand, i.vendorName, i.itemName, i.itemCode, i.port])]
     return hay.some((v: any) => String(v || "").toLowerCase().includes(needle))
   }
-  const shown = reqs.filter(r => inTab(r) && (typeF === "ALL" || pullReqType(r) === typeF) && matchPort(r) && matchEtc(r) && matchBrand(r) && matchVendor(r) && matchQ(r))
+  // FWD state of one doc — the same three words the chips, the row badge and step 2/3 all use.
+  const fwdState = (r: any): "NONE" | "SENT" | "BACK" => r.fwdImportedAt ? "BACK" : r.fwdSentAt ? "SENT" : "NONE"
+  // Everything except the FWD chips, so the chips can show honest counts of what is left.
+  const base = reqs.filter(r => inTab(r) && (typeF === "ALL" || pullReqType(r) === typeF) && matchPort(r) && matchEtc(r) && matchBrand(r) && matchVendor(r) && matchQ(r))
+  const fwdCount = (v: "ALL" | "NONE" | "SENT" | "BACK") => v === "ALL" ? base.length : base.filter(r => fwdState(r) === v).length
+  const shown = base.filter(r => fwdF === "ALL" || fwdState(r) === fwdF)
   const selectableShown = shown.filter(r => r.status !== "COMPLETED") // can't bulk-fill an already-closed doc
   const allSelected = selectableShown.length > 0 && selectableShown.every(r => selectedIds.has(r.id))
   const toggleSel = (id: string) => setSelectedIds(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -778,9 +785,22 @@ export default function Page() {
               {/* One calendar for the whole ETC range (was two separate date boxes). */}
               <DateRangePicker label="ETC (ช่วงวันที่)" from={etcFrom} to={etcTo} placeholder="ทุกวัน ETC"
                 onChange={(f, t) => { setEtcFrom(f); setEtcTo(t); setSelectedIds(new Set()) }} />
-              {(portF !== "ALL" || etcFrom || etcTo || q || brandF.length || vendorF.length) &&
-                <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF([]); setVendorF([]) }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
+              {(portF !== "ALL" || etcFrom || etcTo || q || brandF.length || vendorF.length || fwdF !== "ALL") &&
+                <button onClick={() => { setPortF("ALL"); setEtcFrom(""); setEtcTo(""); setQ(""); setBrandF([]); setVendorF([]); setFwdF("ALL") }} className="px-2 py-1.5 text-xs text-gray-500 underline">ล้าง filter</button>}
               <span className="ml-auto text-xs text-gray-400">{shown.length} ใบ</span>
+              {/* Where the doc stands with the forwarder — the thing LG asks first: "ส่งไปหรือยัง". */}
+              <div className="w-full flex flex-wrap items-center gap-1.5 pt-1 border-t border-gray-200">
+                <span className="text-[10px] uppercase tracking-wide text-gray-400 mr-1">สถานะ FWD</span>
+                {([["ALL", "ทั้งหมด", ""], ["NONE", "ยังไม่ส่ง FWD", "bg-gray-100 text-gray-700 border-gray-200"],
+                   ["SENT", "📧 ส่งแล้ว · รอตอบ", "bg-amber-50 text-amber-800 border-amber-200"],
+                   ["BACK", "📥 FWD ตอบกลับแล้ว", "bg-emerald-50 text-emerald-800 border-emerald-200"]] as const).map(([v, label, cls]) => (
+                  <button key={v} onClick={() => { setFwdF(v); setSelectedIds(new Set()) }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${fwdF === v ? "text-white border-transparent" : cls || "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}
+                    style={fwdF === v ? { background: "#b45309" } : undefined}>
+                    {label} <span className="opacity-70">({fwdCount(v)})</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
           {/* ── The three steps of LG's day, in order, over whatever the filters show (or the ticked
@@ -822,7 +842,10 @@ export default function Page() {
                     {num(2, step === 2)}
                     <div className="min-w-0">
                       <div className="text-[12.5px] font-bold text-gray-800">ส่งให้ FWD กรอก</div>
-                      <p className="text-[11.5px] text-gray-500 mt-0.5 mb-2">พร้อมส่ง <b>{readySend.length} ใบ</b>{air.length - readySend.length ? ` · ส่งแล้ว ${air.length - readySend.length} ใบ` : ""}</p>
+                      <p className="text-[11.5px] text-gray-500 mt-0.5 mb-2">
+                        พร้อมส่ง <b>{readySend.length} ใบ</b>
+                        {air.length - readySend.length ? <> · <button onClick={() => setFwdF("SENT")} className="underline text-amber-700 hover:text-amber-900">ส่งแล้ว {air.length - readySend.length} ใบ</button></> : ""}
+                      </p>
                       <div className="flex gap-1.5 flex-wrap">
                         <button onClick={() => setBulkFwd(true)} disabled={fwdBusy || !air.length}
                           className={`px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 ${step === 2 ? "text-white" : "border border-gray-300 text-gray-600 bg-white hover:bg-gray-50"}`}
@@ -837,7 +860,9 @@ export default function Page() {
                     {num(3, step === 3)}
                     <div className="min-w-0">
                       <div className="text-[12.5px] font-bold text-gray-800">รับผลกลับ &amp; ปิดงาน</div>
-                      <p className="text-[11.5px] text-gray-500 mt-0.5 mb-2">{waiting.length ? <>รอ FWD ตอบ <b>{waiting.length} ใบ</b></> : "ไม่มีใบที่รอ FWD"}</p>
+                      <p className="text-[11.5px] text-gray-500 mt-0.5 mb-2">
+                        {waiting.length ? <button onClick={() => setFwdF("SENT")} className="underline hover:text-gray-700">รอ FWD ตอบ <b>{waiting.length} ใบ</b></button> : "ไม่มีใบที่รอ FWD"}
+                      </p>
                       <label className={`inline-block px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${step === 3 ? "text-white" : "border border-gray-300 text-gray-600 bg-white hover:bg-gray-50"} ${fwdBusy ? "opacity-50 pointer-events-none" : ""}`}
                         style={step === 3 ? { background: MAROON } : undefined}>
                         ⬆️ Import จาก FWD
@@ -900,7 +925,15 @@ export default function Page() {
                             {done && <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✓ Actual</span>}
                             {rq.preferredMode && rq.preferredMode !== rq.shipMode &&
                               <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 font-semibold" title={rq.preferredNote || "จัดซื้อแจ้งความต้องการ"}>🙋 จัดซื้อขอ {rq.preferredMode === "AIR" ? "✈️ Air" : rq.preferredMode === "SEA" ? "🚢 Sea" : "📦 Courier"}</span>}
-                            {rq.fwdSentAt && <span className="text-[11px] text-amber-600" title={`ส่งให้ FWD แล้ว (phase ${rq.fwdPhase || 1})`}>✉️ P{rq.fwdPhase || 1}</span>}
+                            {/* Sent to the forwarder — amber while waiting, green once the file came back. */}
+                            {rq.fwdSentAt && (
+                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold border ${rq.fwdImportedAt ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"}`}
+                                title={`${rq.fwdImportedAt ? `FWD ตอบกลับแล้ว ${fmtDate(rq.fwdImportedAt)}` : `ส่งให้ FWD แล้ว ${fmtDate(rq.fwdSentAt)}`} · phase ${rq.fwdPhase || 1}${rq.fwdSentCount > 1 ? ` · ส่ง ${rq.fwdSentCount} ครั้ง` : ""}`}>
+                                {rq.fwdImportedAt ? "📥 FWD ตอบแล้ว" : "📧 ส่ง FWD แล้ว"}
+                                {rq.fwdName ? ` · ${rq.fwdName}` : ""} · {fmtDate(rq.fwdImportedAt || rq.fwdSentAt)}
+                                {!rq.fwdImportedAt && rq.fwdSentCount > 1 ? ` ×${rq.fwdSentCount}` : ""}
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-gray-400 mt-0.5">{rq.requesterName} · PO {pos || "-"}{ports ? ` · Port ${ports}` : ""}{etc0 ? ` · ETC ${String(etc0).slice(0, 10)}` : ""}</div>
                         </div>

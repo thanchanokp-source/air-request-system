@@ -11,7 +11,7 @@ const ENTRY_ROLES = [
   "DVM_MER", "CLAIM_PRODUCTION", "CLAIM_PROCUREMENT",
   "SCM_NYK_APPROVER", "SCM_NYG", "CLAIM_GW", "DPM_SCM",
   // Main linear-stage approvers (so the chain can show who each stage waits on)
-  "VP_MER", "VP_MER_GW", "GM_GW", "SCM_USER", "VP_SCM",
+  "VP_MER", "VP_MER_GW", "DPM_GW", "GM_GW", "SCM_USER", "VP_SCM",
   "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "PRESIDENT", "PRESIDENT_GW",
   // TRM merch approvers (so their names resolve in the Waiting line)
   "DVM_MER_TRM", "VP_MER_TRM",

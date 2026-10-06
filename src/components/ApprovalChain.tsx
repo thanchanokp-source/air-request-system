@@ -353,7 +353,25 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   // "Claim" turns green when ALL claim depts approved; "Logistics" only after LG Save & Send.
   const claimChip: "done" | "active" | "pending" = completed || claimDone ? "done" : parallelReached ? "active" : "pending"
   const lgChip: "done" | "active" | "pending" = completed || lgDone ? "done" : parallelReached ? "active" : "pending"
-  const gwNonNyk = claimDepts.filter(d => d.dept !== "NYK" && d.dept !== "SCM NYK")
+  // GW claim: own 2-step line (DPM → GM) below, so exclude it from the generic per-dept who
+  const gwNonNyk = claimDepts.filter(d => d.dept !== "NYK" && d.dept !== "SCM NYK" && d.dept !== "GW")
+  // Days waiting per step: claim starts when GM approved the document (that log is in every doc payload);
+  // GM step starts when the DPM approved this SO (claimApprovals.createdAt).
+  const daysSince = (d: any) => d ? Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000)) : null
+  const claimStart = (req?.approvalLogs || []).find((l: any) => l.action === "APPROVE" && l.fromStatus === "PENDING_GM_GW")?.createdAt
+  const dTxt = (n: number | null) => n == null ? "" : ` · ${n} วัน`
+  let gwGwWho = ""
+  if (parallelReached && !completed && !rejected) {
+    const gwSt = claimSource.flatMap(it => getSplits(it)).filter((s: any) => s.dept === "GW").map((s: any) => s.status)
+    if (gwSt.some((x: any) => x == null || x === "CLAIM_PENDING")) {
+      const dpm = nameOf(req?.assignedVpMer) || resolveRoleEmail(approvers, ["DPM_GW", "VP_MER_GW"], "GW")
+      gwGwWho = `GW: DPM ${dpm}`.trim() + dTxt(daysSince(claimStart))
+    } else if (gwSt.includes("GW_DPM_PASSED")) {
+      const dpmAt = (soItem?.claimApprovals || []).filter((a: any) => a.role === "DPM_GW" || a.role === "VP_MER_GW").map((a: any) => a.createdAt).sort().pop()
+      gwGwWho = `GW: GM ${resolveRoleEmail(approvers, ["GM_GW"], "GW")}`.trim() + dTxt(daysSince(dpmAt))
+    }
+  }
+  const nykApproverNames = [...new Set((approvers || []).filter((u: any) => u.role === "SCM_NYK_APPROVER" || (Array.isArray(u.roles) && u.roles.includes("SCM_NYK_APPROVER"))).map((u: any) => nameOf(u.email) || nameOf(u.name)).filter(Boolean))].join(" / ")
   const gwClaimWho = parallelReached && !completed && !rejected
     ? pendingWhoFor(gwNonNyk, claimForwards, soItem?.id, { dir: approvers, bu, factory: soItem?.factory })
     : []
@@ -363,7 +381,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   if (gwNyk && parallelReached && !completed && !rejected) {
     const appr: any[] = soItem?.claimApprovals || []
     if (!appr.some((a: any) => a.role === "SCM_NYK_APPROVER")) {
-      gwNykWho = "NYK: Approver"
+      gwNykWho = `NYK: Approver ${nykApproverNames}`.trim() + dTxt(daysSince(claimStart))
     } else {
       const parts: string[] = []
       if (!appr.some((a: any) => a.role === "SCM_NYK_EVP")) parts.push(`EVP ${nameOf(req?.assignedScmNykEvp)}`.trim())
@@ -378,7 +396,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   const gwLgWho = (status === "PENDING_CLAIM_GW" && !lgDone && !completed && !rejected)
     ? ["Logistics"]
     : []
-  const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwLgWho, ...gwClaimWho, ...(gwNykWho ? [gwNykWho] : [])]
+  const gwPendingWho = [...(gwStageWho ? [gwStageWho] : []), ...gwLgWho, ...gwClaimWho, ...(gwGwWho ? [gwGwWho] : []), ...(gwNykWho ? [gwNykWho] : [])]
 
   return (
     <div className="py-1">
@@ -413,7 +431,8 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
       {rejected && <span title={rejectReason || undefined} className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 font-medium max-w-[260px] truncate inline-block align-bottom">✕ {rejectReason || "Rejected"}</span>}
       {completed && <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-green-600 text-white font-medium">Completed</span>}
     </div>
-    <WaitingLine items={gwPendingWho} days={waitDays} />
+    {/* per-step days are on the GW / NYK entries → drop the doc-level "รอ N วัน" (it resets on any edit) */}
+    <WaitingLine items={gwPendingWho} days={gwGwWho || gwNykWho.includes("วัน") ? null : waitDays} />
     </div>
   )
 }

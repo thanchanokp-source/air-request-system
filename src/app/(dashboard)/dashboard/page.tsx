@@ -8,7 +8,7 @@ import {
 } from "recharts"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { ClaimTreeSelect, SEP, type ClaimTree } from "@/components/ui/claim-tree-select"
-import { getSplits, splitAirCost, deptLabel } from "@/lib/claim"
+import { getSplits, splitAirCost, deptLabel, claimSplitState } from "@/lib/claim"
 import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 import { buildShipRows, type ShipSource } from "@/lib/ship-map"
@@ -1023,7 +1023,11 @@ export default function DashboardPage() {
   // Claim amount per claim department (each split's share): actual = actualAirFreight × claim%,
   // est = airFreight × claim%. Summed across all chartRows SO, biggest first.
   const claimByDept = useMemo(()=>{
-    const m: Record<string,{amt:{THB:number,USD:number},est:{THB:number,USD:number},qty:number}> = {}
+    // st = accept / pending / reject per dept: actual × claim% + SO count (the dept's split state;
+    // an SO past the claim stage counts as accepted, a rejected SO as rejected)
+    type St = {THB:number,USD:number,n:number}
+    const m: Record<string,{amt:{THB:number,USD:number},est:{THB:number,USD:number},qty:number,st:{a:St,p:St,r:St}}> = {}
+    const PAST_CLAIM = ["COMPLETED","ACCOUNTING_PENDING","PRESIDENT_PENDING"]
     // "ยังไม่แบ่ง claim" bucket = rows with NO claim dept yet (auto / not assigned) → their ACTUAL is not
     // in any dept, so track it separately so sum(dept actual) + unassigned = total actual (reconciles).
     const un = {amt:{THB:0,USD:0} as any,est:{THB:0,USD:0} as any,qty:0}
@@ -1035,8 +1039,11 @@ export default function DashboardPage() {
       if(splits.length===0){ un.amt[cur]+=act; un.est[cur]+=est; un.qty+=Number(r.qtyRequestAir)||0; return }
       for(const s of splits){
         const lbl=deptLabel(s.dept)||"-"; const pct=Number(s.pct)||0
-        if(!m[lbl]) m[lbl]={amt:{THB:0,USD:0},est:{THB:0,USD:0},qty:0}
+        if(!m[lbl]) m[lbl]={amt:{THB:0,USD:0},est:{THB:0,USD:0},qty:0,st:{a:{THB:0,USD:0,n:0},p:{THB:0,USD:0,n:0},r:{THB:0,USD:0,n:0}}}
         m[lbl].amt[cur]+=act*pct/100              // actual ล้วน (ไม่ fallback est)
+        const ss = r.itemStatus==="REJECTED" ? "rejected" : PAST_CLAIM.includes(r.itemStatus) ? "approved" : claimSplitState(s.dept, s.status).s
+        const b = m[lbl].st[ss==="approved"?"a":ss==="rejected"?"r":"p"]
+        b[cur as "THB"|"USD"]+=act*pct/100; b.n++
         m[lbl].est[cur]+=est*pct/100
         m[lbl].qty+=Math.round((Number(r.qtyRequestAir)||0)*pct/100)
       }
@@ -1047,6 +1054,7 @@ export default function DashboardPage() {
       amt:{THB:Math.round(v.amt.THB),USD:Math.round(v.amt.USD)},
       est:{THB:Math.round(v.est.THB),USD:Math.round(v.est.USD)},
       qty:v.qty,
+      st:v.st as any,
       _mag:(v.amt.THB+v.amt.USD)||(v.est.THB+v.est.USD),
       unassigned:false,
     }))
@@ -1054,7 +1062,7 @@ export default function DashboardPage() {
       dept:"ยังไม่แบ่ง claim",
       amt:{THB:Math.round(un.amt.THB),USD:Math.round(un.amt.USD)},
       est:{THB:Math.round(un.est.THB),USD:Math.round(un.est.USD)},
-      qty:un.qty, _mag:(un.amt.THB+un.amt.USD)||(un.est.THB+un.est.USD), unassigned:true,
+      qty:un.qty, st:null as any, _mag:(un.amt.THB+un.amt.USD)||(un.est.THB+un.est.USD), unassigned:true,
     })
     return arr.sort((a,b)=>b._mag-a._mag)
   },[chartRows])
@@ -1354,15 +1362,36 @@ export default function DashboardPage() {
               const c = deptColor(d.dept)
               return (
                 <div key={d.dept} title={`${fmtNum(d.qty)} pcs · ${share.toFixed(0)}% of total claim`}
-                  className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-colors flex-1 min-w-[150px]">
+                  className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 hover:shadow-sm transition-colors flex-1 min-w-[190px]">
                   <div className="flex items-center gap-1.5 mb-2.5">
                     <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:c}}/>
                     <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide truncate">{d.dept}</span>
                   </div>
                   <p className="text-[22px] font-bold text-gray-900 leading-none tabular-nums">{fmtSplit(d.amt,fmtK)}</p>
-                  <div className="mt-3 h-1 rounded-full bg-gray-100 overflow-hidden">
-                    <div className="h-full rounded-full" style={{width:`${Math.max(2,Math.min(100,barPct))}%`, background:c}}/>
-                  </div>
+                  {/* accept / pending / reject — stacked bar (share of THIS dept) + lines (THB · SO) */}
+                  {(()=>{
+                    const st = d.st, mag = (x:any)=>(x.THB||0)+(x.USD||0)
+                    const tot = mag(st.a)+mag(st.p)+mag(st.r)
+                    const w = (x:any)=> tot>0 ? mag(x)/tot*100 : 0
+                    const rows:[string,string,any][] = [["Accepted","#16a34a",st.a],["Pending","#f59e0b",st.p],...(st.r.n?[["Rejected","#dc2626",st.r] as [string,string,any]]:[])]
+                    return (<>
+                      <div className="mt-3 h-2 rounded-full bg-gray-100 overflow-hidden flex gap-[2px]" title={`ยอด ${barPct.toFixed(0)}% ของแผนกที่มากที่สุด`}>
+                        {tot>0
+                          ? rows.map(([k,col,x])=> w(x)>0 && <div key={k} className="h-full" style={{width:`${w(x)}%`, background:col}}/>)
+                          : <div className="h-full" style={{width:`${st.p.n?100:0}%`, background:"#f59e0b"}}/>}
+                      </div>
+                      <div className="mt-2.5 space-y-1">
+                        {rows.map(([k,col,x])=>(
+                          <div key={k} className="flex items-center gap-1.5 text-[11px] tabular-nums">
+                            <span className="w-2 h-2 rounded-sm shrink-0" style={{background:col}}/>
+                            <span className="text-gray-600">{k}</span>
+                            <span className="ml-auto font-semibold text-gray-900">{fmtSplit({THB:Math.round(x.THB),USD:Math.round(x.USD)},fmtK)}</span>
+                            <span className="text-gray-400 w-12 text-right">{x.n} SO</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>)
+                  })()}
                   <div className="flex items-center justify-between mt-2 text-[10px] text-gray-400 tabular-nums">
                     <span className="font-medium text-gray-500">{share.toFixed(0)}% of total</span>
                     <span>est {fmtSplit(d.est,fmtK)}</span>
