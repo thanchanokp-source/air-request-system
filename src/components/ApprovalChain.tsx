@@ -153,8 +153,10 @@ function entryPersonOf(dept: string, dir: any[] | undefined, bu?: string, factor
   // PRODUCTION: match the SO's factory G-group via prodGroupCovers so an "ALL"-group approver
   // (e.g. TRM's chandra, EA's theerawee — one person covering every factory) is included.
   if (dept === "PRODUCTION") { const g = vpProdGroup(factory); cands = cands.filter((u: any) => prodGroupCovers(u.claimDepartment, g)) }
-  if (dept === "PROCUREMENT") cands = cands.filter((u: any) => u.procurementType === "PURCHASING")
   cands.sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
+  // PROCUREMENT entry is an OR-group (lib/claim): every CLAIM_PROCUREMENT person can approve in
+  // parallel — any one finishes the entry step → show them all, not just the first.
+  if (dept === "PROCUREMENT") return [...new Set(cands.map((u: any) => nameOf(u.email) || nameOf(u.name)).filter(Boolean))].join(" / ")
   const u = cands[0]
   return u ? nameOf(u.email) || nameOf(u.name) : ""
 }

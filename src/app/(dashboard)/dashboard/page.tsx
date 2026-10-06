@@ -1103,7 +1103,7 @@ export default function DashboardPage() {
           const w = pendingWhoFor([{dept:sp.dept, done:false}], r.request?.claimForwards, itemId,
             { dir: claimDir || [], bu: r.request?.bu, factory: r.factory, assignedDvmMer: r.request?.assignedDvmMer })[0] || ""
           const name = w.includes(": ") ? w.slice(w.indexOf(": ")+2) : ""
-          if(name) d.who.add(name)
+          if(name) name.split(" / ").forEach(n=>d.who.add(n))   // OR-group (e.g. PROCUREMENT) = several names
         }
         m.set(id, d)
       }
@@ -1495,7 +1495,7 @@ export default function DashboardPage() {
                         <td className="py-1.5 pr-3 text-right tabular-nums font-semibold">{fmtNum(Math.round(d.act))}</td>
                         <td className="py-1.5 pr-3 text-right tabular-nums text-gray-500">{fmtNum(Math.round(d.est))}</td>
                         {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-amber-700">{[...d.stages].join(", ")}</td>}
-                        {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-gray-700 max-w-[240px] truncate" title={d.who.join(", ")}>{d.who.join(", ") || (claimDir===null ? "…" : "-")}{days(d.updatedAt)!=null && <span className="text-gray-400"> · {days(d.updatedAt)} วัน</span>}</td>}
+                        {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-gray-700 max-w-[240px] truncate" title={d.who.join(" / ")}>{d.who.join(" / ") || (claimDir===null ? "…" : "-")}{days(d.updatedAt)!=null && <span className="text-gray-400"> · {days(d.updatedAt)} วัน</span>}</td>}
                         <td className="py-1.5 text-right whitespace-nowrap">
                           <a href={`/requests/${d.id}`} className={`inline-block px-2.5 py-1 rounded-lg font-semibold ${d.mine && deptPop.tab==="p" ? "bg-green-600 text-white hover:bg-green-700" : "border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
                             {d.mine && deptPop.tab==="p" ? "เปิดเพื่อ Approve →" : "เปิดดู →"}
