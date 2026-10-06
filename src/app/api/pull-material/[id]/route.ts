@@ -400,6 +400,25 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!rq) return NextResponse.json({ error: "Not found" }, { status: 404 })
   if (!isAdmin && rq.createdById !== userId) return NextResponse.json({ error: "Forbidden — creator only" }, { status: 403 })
   if (lgStarted(rq)) return NextResponse.json({ error: "LG เริ่มจองแล้ว — ลบเอกสารไม่ได้ (ใช้ recall ก่อนหน้านี้เท่านั้น)" }, { status: 400 })
+
+  // Keep a full snapshot before the row (and its cascading items) disappears. Attachment FILES stay in
+  // the bucket — their storage paths are in here, so a deleted document can be rebuilt if asked.
+  const full = await (prisma as any).pullMaterialRequest.findUnique({
+    where: { id }, include: { items: true, attachments: true },
+  })
+  if (full) {
+    const { items, attachments, ...request } = full
+    await (prisma as any).pullMaterialDeleted.create({
+      data: {
+        documentNo: full.documentNo, bu: full.bu, requestType: full.requestType, status: full.status,
+        deletedBy: (session.user as any).email || null,
+        reason: new URL(_req.url).searchParams.get("reason") || null,
+        data: JSON.parse(JSON.stringify({ request, items, attachments })),
+      },
+    }).catch((e: any) => console.log("[pull-delete] backup failed:", String(e).slice(0, 200)))
+  }
+
   await (prisma as any).pullMaterialRequest.delete({ where: { id } })
-  return NextResponse.json({ ok: true })
+  console.log(`[pull-delete] ${full?.documentNo || id} deleted by ${(session.user as any).email} — snapshot kept`)
+  return NextResponse.json({ ok: true, backedUp: !!full })
 }

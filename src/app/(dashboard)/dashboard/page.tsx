@@ -1219,10 +1219,10 @@ export default function DashboardPage() {
             <div className={`grid grid-cols-1 gap-4 ${soOrder ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3"}`}>
               {/* Sale Order (SO_ORDER · NYG) — ตามปี/เดือน (ship_date) + Brand ที่เลือก */}
               {soOrder && (
-                <div className="lg:border-r lg:border-gray-100 lg:pr-4" title="SO_ORDER · NYG · ทุก ship mode · ตามปี/เดือน (ship date) + Brand ที่เลือก">
+                <div className="lg:border-r lg:border-gray-100 lg:pr-4" title="SO_ORDER · NYG · ทุก ship mode · ship date ตั้งแต่ 2026 · ตามปี/เดือน + Brand ที่เลือก">
                   <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide">Sale Order</p>
                   <p className="text-3xl font-extrabold tabular-nums text-slate-700 leading-none mt-0.5">{fmtNum(soPcs)}</p>
-                  <p className="text-[11px] text-gray-400 mt-1 tabular-nums">pcs · {soOrder.soCount.toLocaleString()} SO · ทุก ship mode</p>
+                  <p className="text-[11px] text-gray-400 mt-1 tabular-nums">pcs · {soOrder.soCount.toLocaleString()} SO · ทุก ship mode{!yearFilter && " · ตั้งแต่ 2026"}</p>
                   {/* แถบ = Sale Order 100% · เขียว ส่งแอร์จริง · ส้ม แผนแอร์ */}
                   <div className="flex h-1.5 rounded-full bg-slate-200 overflow-hidden mt-2.5">
                     <div className="h-full bg-green-500" style={{width:`${wShip}%`}} title={`ส่งแอร์จริง ${shipPct.toFixed(1)}% ของ Sale Order`}></div>

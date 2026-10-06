@@ -673,3 +673,21 @@ model PullForwarder {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+// Snapshot of a Pull RM document taken the moment it is deleted. Deleting is irreversible for the
+// live tables (items cascade away), so the whole document — header, items, attachment metadata with
+// their storage paths — is kept here as JSON and can be restored or audited later.
+model PullMaterialDeleted {
+  id          String   @id @default(cuid())
+  documentNo  String
+  bu          String?
+  requestType String?
+  status      String?  // status at the moment of deletion
+  deletedBy   String?  // email of whoever pressed delete
+  deletedAt   DateTime @default(now())
+  reason      String?
+  data        Json     // { request: {...}, items: [...], attachments: [...] }
+
+  @@index([documentNo])
+  @@index([deletedAt])
+}

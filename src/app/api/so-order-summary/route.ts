@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 export const runtime = "nodejs"
 
 // Total SALE ORDER qty (SO_ORDER, NYG, every ship mode) for the dashboard — follows the same
-// period filter (year / months, by ship_date) and Brand filter (customername, normalised like brandKey).
+// period filter (year / months, by ship_date; never before 2026) and Brand filter (customername, normalised like brandKey).
 // GET ?year=2026&months=01,02&brands=FANATICS|NIKE → { pcs, soCount, subCount, unparsed, byMonth[{ym,pcs,soCount}] }
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -32,7 +32,8 @@ export async function GET(req: NextRequest) {
     )
     , f AS (
       SELECT * FROM s
-      WHERE ($1 = '' OR sd IS NULL OR to_char(sd, 'YYYY') = $1)
+      WHERE (sd IS NULL OR sd >= DATE '2026-01-01')   -- air-request system starts 2026 → older SO not counted
+        AND ($1 = '' OR sd IS NULL OR to_char(sd, 'YYYY') = $1)
         AND (cardinality($2::text[]) = 0 OR sd IS NULL OR to_char(sd, 'MM') = ANY($2::text[]))
         AND (cardinality($3::text[]) = 0 OR brand = ANY($3::text[]))
     )
