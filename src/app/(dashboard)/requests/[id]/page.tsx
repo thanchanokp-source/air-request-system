@@ -994,6 +994,16 @@ export default function RequestDetailPage() {
     // A forward addressed to my email = I act as the forwarded approver (regardless of my own role).
     if (isEmailFwdRecipient) return "CLAIM_NEXT_APPROVER"
     if (primaryIsClaimRole) return role
+    // GW claim split "GW" = the doc's DPM → GM. Act as that step when an SO's GW split waits for me.
+    if (isGWRequest && ["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(req?.status)) {
+      const held: string[] = [role, ...(((session?.user as any)?.roles) || [])]
+      const myEmail = String((session?.user as any)?.email || "").toLowerCase()
+      const gwAt = (pred: (st: any) => boolean) => (req?.items || []).some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus)
+        && getSplits(i).some((s: any) => s.dept === "GW" && pred(s.status)))
+      const dpmRole = held.find(r => r === "DPM_GW" || r === "VP_MER_GW")
+      if (dpmRole && (!req?.assignedVpMer || String(req.assignedVpMer).toLowerCase() === myEmail) && gwAt(st => st == null || st === "CLAIM_PENDING")) return dpmRole
+      if (held.includes("GM_GW") && gwAt(st => st === "GW_DPM_PASSED")) return "GM_GW"
+    }
     const others: string[] = (((session?.user as any)?.roles) || []).filter((r: string) => r && r !== role)
     const items = req?.items || []
     const deptListOf = (i: any) => Array.isArray(i.claimDepts) && i.claimDepts.length ? i.claimDepts.map((d: any) => d.dept) : (i.claimDepartment ? [i.claimDepartment] : [])
@@ -1030,10 +1040,11 @@ export default function RequestDetailPage() {
   const isNykClaimRole = claimRole === "SCM_NYK" || claimRole === "SCM_NYK_APPROVER" || claimRole === "SCM_NYK_EVP"
   // SCM NYK 3-role UI applies in BOTH BU (dept "SCM NYK" in GW, "NYK" in NYG).
   // CLAIM_GW / SCM_NYG use this UI only in GW.
-  const isGwClaimP1Role = isNykClaimRole || ((claimRole === "CLAIM_GW" || claimRole === "SCM_NYG") && isGWRequest)
+  const isGwStepRole = isGWRequest && ["DPM_GW", "VP_MER_GW", "GM_GW"].includes(claimRole)   // GW claim: DPM → GM
+  const isGwClaimP1Role = isNykClaimRole || ((claimRole === "CLAIM_GW" || claimRole === "SCM_NYG") && isGWRequest) || isGwStepRole
   const gwClaimDepts = claimRole === "CLAIM_GW"
     ? (myClaimDept === "GW" ? ["GW"] : myClaimDept === "SUPPLIER" ? ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"] : ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"])
-    : isNykClaimRole ? (isGWRequest ? ["SCM NYK"] : ["NYK"]) : claimRole === "SCM_NYG" ? ["SCM NYG"] : []
+    : isNykClaimRole ? (isGWRequest ? ["SCM NYK"] : ["NYK"]) : claimRole === "SCM_NYG" ? ["SCM NYG"] : isGwStepRole ? ["GW"] : []
   // NYG per-split: my dept's split status (null = still waiting my DVM). undefined = my dept not on this SO.
   const mySplitStatus = (i: any): string | null | undefined => {
     const list: string[] = Array.isArray(i.claimDepts) && i.claimDepts.length > 0
@@ -1293,6 +1304,9 @@ export default function RequestDetailPage() {
     if (isGwClaimP1Role) {
       // GW: show SOs at the parallel claim stage where my dept has a split (+ rejected history).
       if (i.itemStatus === "REJECTED") return true
+      // GW step roles see only the SOs waiting for THEIR step (DPM: not yet approved · GM: DPM-approved)
+      if (isGwStepRole) return ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => s.dept === "GW"
+        && (claimRole === "GM_GW" ? s.status === "GW_DPM_PASSED" : (s.status == null || s.status === "CLAIM_PENDING")))
       return ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept))
     }
     // NYG: my dept is on this SO (matchDept). Show claim-stage items + rejected history.
@@ -4980,7 +4994,7 @@ export default function RequestDetailPage() {
               {isProcureDvm && (
                 <button onClick={() => setProcureDecision(null)} className="text-[11px] text-gray-400 hover:text-gray-600 flex items-center gap-1">← Back</button>
               )}
-              <h2 className="font-semibold text-gray-800">SO APPROVAL — {isGwClaimP1Role ? (gwClaimDepts[0] || "Claim") : `DVM ${claimDept}`} ({myClaimItems.length})</h2>
+              <h2 className="font-semibold text-gray-800">SO APPROVAL — {isGwStepRole ? `GW claim · ${claimRole === "GM_GW" ? "GM" : "DPM"}` : isGwClaimP1Role ? (gwClaimDepts[0] || "Claim") : `DVM ${claimDept}`} ({myClaimItems.length})</h2>
             </div>
             <div className="flex items-center gap-4 text-xs font-medium">
               <button onClick={() => setClaimTableView(v => !v)}

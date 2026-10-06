@@ -334,9 +334,31 @@ function gwClaimGroups(depts: Set<string>, req: any): { role: string; label: str
   // Accept both the canonical "SCM NYK" and the short "NYK" (defensive — depends on import path).
   if (depts.has("SCM NYK") || depts.has("NYK")) groups.push({ role: "SCM_NYK_APPROVER", label: "SCM NYK", token: (req as any).scmNykApproverToken })
   if (depts.has("SCM NYG") || depts.has("NYG")) groups.push({ role: "SCM_NYG", label: "SCM NYG", token: (req as any).scmNygToken })
-  // GW approves (CLAIM_GW tagged "GW"); SUPPLIER needs NO approval → no group / alert.
-  if (depts.has("GW")) groups.push({ role: "CLAIM_GW", label: "GW", claimDept: "GW", token: (req as any).claimGwToken })
+  // GW is approved by the doc's DPM → GM (alerted by notifyGwClaimStep); SUPPLIER needs no approval.
   return groups
+}
+
+// GW claim split = 2 steps by the people who approved the document: DPM (the doc's assignedVpMer,
+// else every DPM_GW / VP_MER_GW) → GM (GM_GW). step "DPM" when the claim opens, "GM" after DPM approved.
+export async function notifyGwClaimStep(requestId: string, step: "DPM" | "GM") {
+  return runWithTestMail(await docTestRecipient(requestId), async () => {
+    const req: any = await prisma.airRequest.findUnique({ where: { id: requestId }, include: { items: true } })
+    if (req) await notifyGwClaimStepImpl(req, step)
+  })
+}
+async function gwClaimStepEmails(req: any, step: "DPM" | "GM"): Promise<string[]> {
+  if (step === "DPM" && req.assignedVpMer) return [String(req.assignedVpMer)]
+  const roles = step === "DPM" ? ["DPM_GW", "VP_MER_GW"] : ["GM_GW"]
+  const us = await (prisma.user as any).findMany({ where: { isActive: true, OR: [{ role: { in: roles } }, { roles: { hasSome: roles } }] }, select: { email: true } })
+  return [...new Set((us as any[]).map(u => u.email).filter(Boolean))] as string[]
+}
+async function notifyGwClaimStepImpl(req: any, step: "DPM" | "GM") {
+  try {
+    const to = await gwClaimStepEmails(req, step)
+    if (!to.length) return
+    const link = `${APP_URL}/requests/${req.id}`
+    await sendMail(to, `[Claim – GW · ${step}] Pending Approval — ${req.documentNo}`, buildHtml(req, "PENDING_CLAIM_GW", link))
+  } catch (e) { console.error("[notify] GW claim step failed:", e) }
 }
 
 // Magic-link token field for each GW claim role.
@@ -772,6 +794,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string, only
       const scope = onlyItemIds?.length ? req.items.filter((it: any) => onlyItemIds.includes(it.id)) : req.items
       for (const it of scope) getSplits(it).forEach(s => depts.add(s.dept))
       const groups = gwClaimGroups(depts, req)
+      if (depts.has("GW")) await notifyGwClaimStepImpl(req, "DPM").catch(() => {})
       if (groups.length === 0) return
       const link = `${APP_URL}/requests/${requestId}`
       // Each group = a claim dept's people (GW≠SUPPLIER via claimDepartment).
@@ -1679,6 +1702,12 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
       for (const d of pendingDepts) {
         if (forwardedDepts.has(d)) continue // already forwarded → only the current holder above
         if (d === "COMMERCIAL") { addE(doc.assignedDvmMer || doc.assignedVpMer); continue }
+        if (d === "GW" && doc.bu === "GW") {   // GW claim: DPM of the doc → GM
+          const st = (doc.items || []).flatMap((it: any) => getSplits(it)).filter((s: any) => s.dept === "GW").map((s: any) => s.status)
+          if (st.some((x: any) => x == null || x === "CLAIM_PENDING")) { if (doc.assignedVpMer) addE(doc.assignedVpMer); else { roleSet.add("DPM_GW"); roleSet.add("VP_MER_GW") } }
+          if (st.includes("GW_DPM_PASSED")) roleSet.add("GM_GW")
+          continue
+        }
         // Not yet forwarded → still at the ENTRY step, so remind only the entry role (the VP is
         // reached later via a forward, which is handled by the branch above — never ping VP early).
         for (const r of claimEntryRoles(d)) roleSet.add(r)
@@ -1810,14 +1839,10 @@ async function claimEntryUsersForDept(req: any, dept: string, items: any[]): Pro
   if (req.bu === "GW") {
     if (dept === "SCM NYG" || dept === "NYG") deptRoles = ["SCM_NYG"]
     else if (dept === "GW") {
-      // GW claim = CLAIM_GW people tagged "GW" (untagged = legacy, handles both) → priority-1 batch
-      const us = await prisma.user.findMany({
-        where: { isActive: true, bu: { in: [(req as any).bu, "ALL"] }, OR: [{ role: "CLAIM_GW" }, { roles: { has: "CLAIM_GW" } }] } as any,
-        select: { id: true, email: true, priority: true, claimDepartment: true }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
-      })
-      const gw = us.filter((u: any) => u.claimDepartment !== "SUPPLIER")
-      const withP = gw.filter((u: any) => u.priority != null)
-      push(withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : gw.slice(0, 1))
+      // GW claim entry = the doc's DPM (assignedVpMer), else every DPM_GW / VP_MER_GW
+      const emails = await gwClaimStepEmails(req, "DPM")
+      const us = await prisma.user.findMany({ where: { isActive: true, email: { in: emails } } as any, select: { id: true, email: true } })
+      push(us)
       return out
     }
     else return [] // SUPPLIER = auto-approve → no claimer to notify

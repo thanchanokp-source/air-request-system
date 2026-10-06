@@ -85,6 +85,16 @@ export default function ApprovalsPage() {
   // (User.roles[]). Derive every NYG claim dept they can act on so a person who is
   // (e.g.) VP MER AND a claim approver sees the doc again at the claim step.
   const myRoles: string[] = [role, ...(((session?.user as any)?.roles) || [])].filter(Boolean)
+  // GW claim split "GW" = the doc's DPM → GM: SOs waiting for MY step (DPM: not yet approved, only the
+  // DPM picked on the doc · GM: DPM-approved).
+  const gwClaimStepItems = (r: any): any[] => {
+    if (r.bu !== "GW" || !["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(r.status)) return []
+    const isDpm = (myRoles.includes("DPM_GW") || myRoles.includes("VP_MER_GW")) && (!r.assignedVpMer || String(r.assignedVpMer).toLowerCase() === userEmail.toLowerCase())
+    const isGm = myRoles.includes("GM_GW")
+    if (!isDpm && !isGm) return []
+    return (r.items || []).filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => s.dept === "GW"
+      && ((isDpm && (s.status == null || s.status === "CLAIM_PENDING")) || (isGm && s.status === "GW_DPM_PASSED"))))
+  }
   // Which BU(s) this person's queue can span (their roles' BUs; bu==="ALL" → every BU).
   // SCM_NYK_* are shared (BOTH) → pin no BU. Approvals stays a PERSONAL queue, so admins/
   // jariya are NOT auto-granted all BUs here — only people whose roles truly span >1 BU get
@@ -175,6 +185,8 @@ export default function ApprovalsPage() {
     // forward-aware heldClaimItems() / claimNextItems() in the myRequests filter.
     if ((myRoles.includes("DPM_GW") || myRoles.includes("VP_MER_GW")) && (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW") && !r.pendingRate && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING") && (!r.assignedVpMer || r.assignedVpMer === userEmail || r.status === "PENDING_DPM_GW")) return true
     if (myRoles.includes("GM_GW") && r.status === "PENDING_GM_GW" && r.bu === "GW" && items.some((i: any) => i.itemStatus === "PENDING")) return true
+    // GW claim split "GW" = the doc's DPM → GM (lib/claim GW_DPM_PASSED)
+    if (gwClaimStepItems(r).length) return true
     // President (GW) is now the FINAL approver — items sit at PRESIDENT_PENDING
     // (claim + logistics already complete) awaiting the whole-doc approval.
     if (myRoles.includes("PRESIDENT_GW") && r.status === "PENDING_PRESIDENT_GW" && r.bu === "GW") return items.some((i: any) => i.itemStatus === "PRESIDENT_PENDING")
@@ -275,6 +287,7 @@ export default function ApprovalsPage() {
     if (CLAIM_VP_ROLES.includes(role)) return []
     if ((myRoles.includes("DPM_GW") || myRoles.includes("VP_MER_GW")) && (r.status === "PENDING_VP_MER_GW" || r.status === "PENDING_DPM_GW")) return items.filter((i: any) => i.itemStatus === "PENDING")
     if (myRoles.includes("GM_GW") && r.status === "PENDING_GM_GW") return items.filter((i: any) => i.itemStatus === "PENDING")
+    if (gwClaimStepItems(r).length) return gwClaimStepItems(r)
     if (myRoles.includes("MER_GW") && r.bu === "GW") return items.filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
     if (myRoles.includes("LOGISTICS_GW") && r.bu === "GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
     if (myRoles.includes("SCM_NYK_APPROVER")) {

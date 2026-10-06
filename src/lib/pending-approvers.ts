@@ -62,6 +62,12 @@ export function pendingApproverNames(doc: any, users: ApproverDir[]): string[] {
     for (const d of pendingDepts) {
       if (forwardedDepts.has(d)) continue
       if (d === "COMMERCIAL") { const n = nameOfEmail(doc.assignedDvmMer || doc.assignedVpMer); if (n) set.add(n); continue }
+      if (d === "GW" && bu === "GW") {   // GW claim: DPM of the doc → GM
+        const st = (doc.items || []).flatMap((it: any) => getSplits(it)).filter((s: any) => s.dept === "GW").map((s: any) => s.status)
+        if (st.some((x: any) => x == null || x === "CLAIM_PENDING")) { const n = doc.assignedVpMer ? nameOfEmail(doc.assignedVpMer) : null; if (n) set.add(n); else { roleSet.add("DPM_GW"); roleSet.add("VP_MER_GW") } }
+        if (st.includes("GW_DPM_PASSED")) roleSet.add("GM_GW")
+        continue
+      }
       for (const r of claimEntryRoles(d)) roleSet.add(r)
     }
     if (roleSet.size) for (const n of namesForRoles([...roleSet])) set.add(n)

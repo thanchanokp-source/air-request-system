@@ -117,9 +117,12 @@ export const GW_CLAIM_DEPTS = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
 export const SUPPLIER_DEPTS = ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
 // GW-side claim depts that need NO approval: all SUPPLIER variants are treated as already
 // approved everywhere — never alerted, never block, no approve button.
-// "GW" APPROVES again (CLAIM_GW people tagged claimDepartment "GW", priority chain) — a split
-// like NYK 70% + GW 30% must wait for GW to press Approve. SCM NYK / SCM NYG approve as before.
+// "GW" APPROVES again — 2 steps, the same people who approved the document: the doc's DPM
+// (assignedVpMer; DPM_GW / VP_MER_GW) → GM (GM_GW). Split status: null → GW_DPM_PASSED → DEPT_APPROVED.
+// A split like NYK 70% + GW 30% waits for both. SCM NYK / SCM NYG approve as before.
 export const NO_APPROVAL_GW_DEPTS = [...SUPPLIER_DEPTS]
+export const GW_DPM_PASSED = "GW_DPM_PASSED"
+export const GW_CLAIM_STEP_ROLES = ["DPM_GW", "VP_MER_GW", "GM_GW"]
 const isNoApprovalGwDept = (d: string) => NO_APPROVAL_GW_DEPTS.includes(d)
 
 // Departments a GW claim role is responsible for (must match the Excel values).
@@ -130,6 +133,7 @@ export function gwDeptsForRole(role: string, claimDept?: string | null): string[
   // only in one BU, so returning both is safe and keeps visibility working.
   if (role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP") return ["SCM NYK", "NYK"]
   if (role === "SCM_NYG") return ["SCM NYG"]
+  if (GW_CLAIM_STEP_ROLES.includes(role)) return ["GW"]
   if (role === "CLAIM_GW") {
     if (claimDept === "GW") return ["GW"]
     if (claimDept === "SUPPLIER") return ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
@@ -196,6 +200,7 @@ export function claimSplitState(dept: string, status: string | null | undefined)
   if (status === "REJECTED") return { s: "rejected", label: "Rejected" }
   if (status === "COMPLETED" || status === GW_DEPT_APPROVED || status === "ACCT_PENDING") return { s: "approved", label: "Accepted" }
   if (isNoApprovalGwDept(dept)) return { s: "approved", label: "No approval needed" }
+  if (status === GW_DPM_PASSED) return { s: "pending", label: "Waiting GM" }
   if (status === NYG_SPLIT.CLAIM_PASSED) return { s: "pending", label: "Waiting VP" }
   if (status === GW_NYK_APPROVER_PASSED) return { s: "pending", label: "Waiting EVP / CR" }
   if (status === GW_DEPT_ACCEPTED) return { s: "pending", label: "Waiting CR NO" }
@@ -486,7 +491,7 @@ export function deriveGwItemStatus(splits: ClaimSplit[], lgDone: boolean = true,
       ? GW_DEPT_APPROVED : s.status)
   if (st.some(s => s === SPLIT_STATUS.REJECTED)) return "REJECTED" // reject one portion → SO rejected
   // claim not fully approved yet (incl. NYK approver-done but EVP/CR incomplete)
-  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_DEPT_ACCEPTED || s === GW_NYK_APPROVER_PASSED)) return "PRES_PASSED"
+  if (st.some(s => s == null || s === SPLIT_STATUS.CLAIM_PENDING || s === GW_DEPT_ACCEPTED || s === GW_NYK_APPROVER_PASSED || s === GW_DPM_PASSED)) return "PRES_PASSED"
   // claim fully approved + Logistics data filled → President's FINAL approval
   // (President moved to the end); President then sends it to Accounting.
   // NYK Direct docs skip President → go straight to Accounting.

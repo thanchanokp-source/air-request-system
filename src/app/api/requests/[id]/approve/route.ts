@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NEXT_STATUS, STYLE_APPROVER_STATUSES, CLAIM_VP_ROLES } from "@/types"
+import { notifyGwClaimStep } from "@/lib/notify"
+import { GW_DPM_PASSED, GW_CLAIM_STEP_ROLES } from "@/lib/claim"
 import { notifyStatusChange, notifyClaimNextPriority, notifyLgFilesToClaimers, notifyClaimNext, notifyClaimEntry, notifyRejectionForward, notifyRejectionToCreator, notifyBackToMerGw, notifyLgRejectFyi, notifyRecall, notifyGwClaimNyk, notifyReviseToLg } from "@/lib/notify"
 import { captureApprovalSignature, SIG_APPROVE_ACTIONS, isSignatureData } from "@/lib/signature"
 import { getSplits, deriveGwItemStatus, setDeptSplitStatus, deriveNygItemStatus, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, approveGwDeptSplits, GW_DEPT_APPROVED, nykSplitStatus, setGwSplitStatus, ownerCanonicalDept, expandClaimDept, itemHasPendingDept, NYG_SPLIT, SPLIT_STATUS, isLastPosition, actingClaimForSO, claimEntryRoles, claimVpRoles, vpProdGroup, prodGroupCovers } from "@/lib/claim"
@@ -1444,7 +1446,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   // GW claim dept rejects → send SO back to MER (GW) to re-select the claim dept.
-  if (action === "claim_back_to_mer_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG", "CLAIM_NEXT_APPROVER"].includes(userRole)) {
+  if (action === "claim_back_to_mer_gw" && (["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG", "CLAIM_NEXT_APPROVER"].includes(userRole) || (request.bu === "GW" && heldRoles.some(r => GW_CLAIM_STEP_ROLES.includes(r))))) {
     // NYK Direct imports ride the GW claim machinery even though bu=NYG → allow them past the GW guard.
     if (request.bu !== "GW" && !(request as any).nykDirect) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(request.status)) return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
@@ -1559,6 +1561,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Batch version of approve_so_claim_gw — approve MANY SO in ONE request so it
   // doesn't fire an email + doc-status recalc per SO (that made 30+ SO very slow).
   // DB writes per item, then a single recalc + single notify at the end.
+  // GW claim split ("GW" dept) = 2 steps by the doc's own approvers: DPM (assignedVpMer; DPM_GW / VP_MER_GW)
+  // → GM (GM_GW). Split status null → GW_DPM_PASSED → DEPT_APPROVED. Works for the batch and per-SO action.
+  const gwStepHeld = heldRoles.filter(r => GW_CLAIM_STEP_ROLES.includes(r))
+  if ((action === "batch_approve_claim_gw" || action === "approve_so_claim_gw") && gwStepHeld.length && request.bu === "GW"
+      && !["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
+    if (!["PENDING_CLAIM_GW", "PENDING_CLAIM_REJECT_GW"].includes(request.status)) return NextResponse.json({ error: "Not in the GW Claim stage" }, { status: 400 })
+    const ids: string[] = action === "approve_so_claim_gw" ? (itemId ? [itemId] : []) : (Array.isArray(itemIds) ? itemIds : [])
+    if (!ids.length) return NextResponse.json({ error: "itemIds required" }, { status: 400 })
+    const myEmail = String((session.user as any).email || "").toLowerCase()
+    const assignedDpm = String((request as any).assignedVpMer || "").toLowerCase()
+    const canDpm = gwStepHeld.some(r => r === "DPM_GW" || r === "VP_MER_GW") && (!assignedDpm || assignedDpm === myEmail)
+    const canGm = gwStepHeld.includes("GM_GW")
+    const items = await prisma.airRequestItem.findMany({ where: { requestId: id, id: { in: ids } } })
+    let dpmDone = 0, gmDone = 0
+    for (const it of items) {
+      if (!["PRES_PASSED", "LOG_PASSED"].includes(it.itemStatus)) continue
+      const sp = getSplits(it).find((s: any) => s.dept === "GW")
+      if (!sp || sp.status === "REJECTED" || sp.status === GW_DEPT_APPROVED) continue
+      const atDpm = sp.status == null || sp.status === SPLIT_STATUS.CLAIM_PENDING
+      let next: string | null = null, stepRole = ""
+      if (atDpm && canDpm) { next = GW_DPM_PASSED; stepRole = gwStepHeld.find(r => r !== "GM_GW")!; dpmDone++ }
+      else if (sp.status === GW_DPM_PASSED && canGm) { next = GW_DEPT_APPROVED; stepRole = "GM_GW"; gmDone++ }
+      if (!next) continue
+      await (prisma as any).claimApproval.upsert({ where: { itemId_userId: { itemId: it.id, userId } }, create: { itemId: it.id, userId, role: stepRole }, update: { createdAt: new Date() } })
+      const updated = setGwSplitStatus(getSplits(it), ["GW"], next)
+      await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: updated as any, itemStatus: deriveGwItemStatus(updated, (it as any).actualAirFreight != null, skipPres), ...(comment ? { itemComment: comment } : {}) } as any })
+    }
+    if (dpmDone + gmDone === 0) return NextResponse.json({ error: canDpm || canGm ? "No SO to approve (already handled or not your step)" : "This document's GW claim is assigned to another DPM" }, { status: 400 })
+    await prisma.approvalLog.create({ data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: request.status, comment: `GW claim — ${dpmDone ? `DPM approved ${dpmDone} SO` : ""}${dpmDone && gmDone ? " · " : ""}${gmDone ? `GM approved ${gmDone} SO` : ""}` } })
+    if (dpmDone) await notifyGwClaimStep(id, "GM").catch(() => {})
+    const nextDocStatus = await recalcDocStatusGW(id)
+    if (nextDocStatus !== request.status) {
+      await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
+      await notifyStatusChange(id, nextDocStatus).catch(() => {})
+    }
+    return NextResponse.json(await getUpdated())
+  }
+
   if (action === "batch_approve_claim_gw" && ["CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYG"].includes(userRole)) {
     // NYK Direct imports ride the GW claim machinery even though bu=NYG → allow them past the GW guard.
     if (request.bu !== "GW" && !(request as any).nykDirect) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
