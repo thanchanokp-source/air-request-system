@@ -321,9 +321,10 @@ export default function Page() {
                           <button onClick={() => openEdit(rq)} disabled={busy === rq.id} title="Edit & resubmit"
                             className="text-xs px-2.5 py-1 rounded-lg text-white disabled:opacity-50" style={{ background: MAROON }}>✎ แก้ไข & Resubmit</button>
                         )}
-                        {/* Creator or admin may delete, on the same "LG has not booked yet" rule the API enforces. */}
-                        {(isAdmin || rq.createdById === userId) && !lgStarted(rq) && (
-                          <button onClick={() => del(rq)} disabled={busy === rq.id} title="ลบเอกสารถาวร (ผู้สร้างหรือ admin · ก่อน LG จอง)"
+                        {/* Delete is the step AFTER recall: recalling already told everyone involved, so
+                            nothing disappears unannounced. Still blocked once LG has booked. */}
+                        {(isAdmin || rq.createdById === userId) && rq.status === "RECALLED" && !lgStarted(rq) && (
+                          <button onClick={() => del(rq)} disabled={busy === rq.id} title="ลบเอกสารถาวร — ทำได้เฉพาะใบที่ Recalled แล้ว (ผู้สร้างหรือ admin)"
                             className="text-xs px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 ml-1">🗑 ลบ</button>
                         )}
                       </td>

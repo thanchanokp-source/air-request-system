@@ -399,7 +399,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   })
   if (!rq) return NextResponse.json({ error: "Not found" }, { status: 404 })
   if (!isAdmin && rq.createdById !== userId) return NextResponse.json({ error: "Forbidden — creator only" }, { status: 403 })
-  if (lgStarted(rq)) return NextResponse.json({ error: "LG เริ่มจองแล้ว — ลบเอกสารไม่ได้ (ใช้ recall ก่อนหน้านี้เท่านั้น)" }, { status: 400 })
+  if (lgStarted(rq)) return NextResponse.json({ error: "LG เริ่มจองแล้ว — ลบเอกสารไม่ได้" }, { status: 400 })
+  // Deleting is only ever the second step: recall first (which notifies everyone), then delete.
+  if (rq.status !== "RECALLED") {
+    return NextResponse.json({ error: "ลบได้เฉพาะเอกสารที่ Recall แล้ว — กด Recall ก่อน (ระบบจะแจ้งผู้เกี่ยวข้อง) แล้วค่อยลบ" }, { status: 400 })
+  }
 
   // Keep a full snapshot before the row (and its cascading items) disappears. Attachment FILES stay in
   // the bucket — their storage paths are in here, so a deleted document can be rebuilt if asked.
