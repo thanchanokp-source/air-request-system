@@ -115,11 +115,11 @@ export const GW_DEPT_APPROVED = "DEPT_APPROVED"
 export const GW_CLAIM_DEPTS = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
 
 export const SUPPLIER_DEPTS = ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
-// GW-side claim depts that need NO approval (the CLAIM_GW role no longer approves):
-// "GW" + all SUPPLIER variants are treated as already approved everywhere — never
-// alerted, never block, no approve button. They flow straight to Accounting.
-// Only SCM NYK / SCM NYG still approve.
-export const NO_APPROVAL_GW_DEPTS = ["GW", ...SUPPLIER_DEPTS]
+// GW-side claim depts that need NO approval: all SUPPLIER variants are treated as already
+// approved everywhere — never alerted, never block, no approve button.
+// "GW" APPROVES again (CLAIM_GW people tagged claimDepartment "GW", priority chain) — a split
+// like NYK 70% + GW 30% must wait for GW to press Approve. SCM NYK / SCM NYG approve as before.
+export const NO_APPROVAL_GW_DEPTS = [...SUPPLIER_DEPTS]
 const isNoApprovalGwDept = (d: string) => NO_APPROVAL_GW_DEPTS.includes(d)
 
 // Departments a GW claim role is responsible for (must match the Excel values).

@@ -39,7 +39,7 @@ export function pendingApproverNames(doc: any, users: ApproverDir[]): string[] {
 
   // Claim stages → forwarded holder(s) per dept + entry-role people for not-yet-forwarded depts + LG.
   if (["PENDING_CLAIM", "PENDING_VP_CLAIM", "PENDING_CLAIM_GW"].includes(st)) {
-    const NO_APPROVAL = ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+    const NO_APPROVAL = ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]   // GW approves again
     const done = ["DEPT_APPROVED", "COMPLETED", "REJECTED"]
     const pendingDepts = new Set<string>()
     for (const it of (doc.items || [])) for (const s of getSplits(it)) if (s.dept && !done.includes(String(s.status || "")) && !NO_APPROVAL.includes(s.dept)) pendingDepts.add(s.dept)

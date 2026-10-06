@@ -78,10 +78,13 @@ const STATUS_LABELS: Record<string,string> = {
 const soBrand = (r: any) => r?.brand || r?.request?.brandName || r?.brandName || "N/A"
 // Normalised brand key for matching — uppercase + collapse spaces so MER's inconsistent
 // entries ("rhone", "RHONE ", "RHONE  X") group together. Filtering uses CONTAINS on this.
-const brandKey = (r: any) => soBrand(r).trim().toUpperCase().replace(/\s+/g, " ")
+// Brand families: every name CONTAINING the word is ONE brand ("FANATICS-BRANDS, FANATICS", "FANATICS, INC." → FANATICS)
+const BRAND_FAMILY: { re: RegExp; name: string }[] = [{ re: /FANATIC/, name: "FANATICS" }]
+const brandFamily = (up: string) => BRAND_FAMILY.find(f => f.re.test(up))?.name
+const brandKey = (r: any) => { const k = soBrand(r).trim().toUpperCase().replace(/\s+/g, " "); return brandFamily(k) ?? k }
 // Group-key that also merges company-suffix variants of the SAME brand
 // ("FANATICS" + "FANATICS, INC." → one), used where two spellings must sum together.
-const brandGroupKey = (r: any) => soBrand(r).toUpperCase()
+const brandGroupKey = (r: any) => brandFamily(soBrand(r).toUpperCase()) ?? soBrand(r).toUpperCase()
   .replace(/[.,]/g, " ")
   .replace(/\b(INC|LTD|LIMITED|CO|COMPANY|CORP|CORPORATION|LLC|PLC)\b/g, " ")
   .replace(/\s+/g, " ").trim()
@@ -520,7 +523,7 @@ function LogisticsCostBar({ rows }: { rows:any[] }) {
       // Projection rows (no actual yet) inflated the qty and understated Cost/Pcs.
       if(r.actualAirFreight==null) return
       // Merge company-suffix variants ("FANATICS" + "FANATICS, INC.") into one brand.
-      const k=brandGroupKey(r); const raw=soBrand(r)
+      const k=brandGroupKey(r); const raw=brandFamily(soBrand(r).toUpperCase()) ?? soBrand(r)
       if(!m[k])m[k]={cost:0,qty:0,soCount:0,curs:new Set<string>(),disp:raw}
       if(raw.length < m[k].disp.length) m[k].disp = raw   // show the cleanest (shortest) name
       m[k].cost+=r.actualAirFreight||0

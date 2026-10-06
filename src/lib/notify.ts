@@ -334,8 +334,8 @@ function gwClaimGroups(depts: Set<string>, req: any): { role: string; label: str
   // Accept both the canonical "SCM NYK" and the short "NYK" (defensive — depends on import path).
   if (depts.has("SCM NYK") || depts.has("NYK")) groups.push({ role: "SCM_NYK_APPROVER", label: "SCM NYK", token: (req as any).scmNykApproverToken })
   if (depts.has("SCM NYG") || depts.has("NYG")) groups.push({ role: "SCM_NYG", label: "SCM NYG", token: (req as any).scmNygToken })
-  // GW + SUPPLIER need NO approval (auto-approved) → do NOT alert / create groups for
-  // them. Only SCM NYK / SCM NYG approve.
+  // GW approves (CLAIM_GW tagged "GW"); SUPPLIER needs NO approval → no group / alert.
+  if (depts.has("GW")) groups.push({ role: "CLAIM_GW", label: "GW", claimDept: "GW", token: (req as any).claimGwToken })
   return groups
 }
 
@@ -1648,7 +1648,7 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
       // Claim stages → remind ONLY the claim depts that are ACTUALLY on this document (a
       // COMMERCIAL-only doc must not ping Procurement/NYK). COMMERCIAL = the merch person picked;
       // other depts by their entry/VP roles; plus Logistics (parallel) until Save & Send.
-      const NO_APPROVAL = ["GW", "SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
+      const NO_APPROVAL = ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]   // GW approves again
       const doneSt = ["DEPT_APPROVED", "COMPLETED", "REJECTED"]
       const pendingDepts = new Set<string>()
       for (const it of (doc.items || [])) for (const s of getSplits(it)) if (s.dept && !doneSt.includes(String(s.status || "")) && !NO_APPROVAL.includes(s.dept)) pendingDepts.add(s.dept)
@@ -1809,7 +1809,18 @@ async function claimEntryUsersForDept(req: any, dept: string, items: any[]): Pro
   let deptRoles: string[]
   if (req.bu === "GW") {
     if (dept === "SCM NYG" || dept === "NYG") deptRoles = ["SCM_NYG"]
-    else return [] // GW / SUPPLIER = auto-approve → no claimer to notify
+    else if (dept === "GW") {
+      // GW claim = CLAIM_GW people tagged "GW" (untagged = legacy, handles both) → priority-1 batch
+      const us = await prisma.user.findMany({
+        where: { isActive: true, bu: { in: [(req as any).bu, "ALL"] }, OR: [{ role: "CLAIM_GW" }, { roles: { has: "CLAIM_GW" } }] } as any,
+        select: { id: true, email: true, priority: true, claimDepartment: true }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      })
+      const gw = us.filter((u: any) => u.claimDepartment !== "SUPPLIER")
+      const withP = gw.filter((u: any) => u.priority != null)
+      push(withP.length ? withP.filter((u: any) => u.priority === withP[0].priority) : gw.slice(0, 1))
+      return out
+    }
+    else return [] // SUPPLIER = auto-approve → no claimer to notify
   } else deptRoles = claimEntryRoles(dept)
 
   // PRODUCTION entry → priority-1 by factory G-group.

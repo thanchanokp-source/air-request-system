@@ -174,7 +174,8 @@ export async function POST(req: NextRequest) {
   //   { action:"scan_src" }                         → HAWBs whose LG qty ≠ real INV qty (nothing written)
   //   { action:"bulk_src", hawbs:[...], writeQty, totals? }  → apply to those HAWBs
   //     totals = { [hawb]: amount } → use that money total instead of the current Σ actual (⑦ expense file)
-  //   { action:"check_file", rows:[{hawb, amount}] } → expense file vs what LG keyed (Σ actual per HAWB)
+  //   { action:"check_file", rows:[{hawb, amount, inv?}] } → expense file vs what LG keyed (Σ actual per HAWB)
+  //     inv (optional, may hold several) → also lists the file's INVs NOT yet on that HAWB (invMissing)
   if (action === "scan_src" || action === "bulk_src" || action === "check_file") {
     const soN = (s: any) => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "")
     const up = (s: any) => String(s ?? "").trim().toUpperCase()
@@ -225,11 +226,14 @@ export async function POST(req: NextRequest) {
       const hk = (h: any) => up(h).replace(/[\s-]/g, "")
       const sysBy = new Map<string, string>()
       for (const h of byHawb.keys()) sysBy.set(hk(h), h)
-      const fileQ = new Map<string, { label: string; amt: number; n: number }>()
+      const fileQ = new Map<string, { label: string; amt: number; n: number; invs: Set<string> }>()
       for (const r of (Array.isArray(body.rows) ? body.rows : [])) {
-        const k = hk(r?.hawb); const a = Number(String(r?.amount ?? "").replace(/,/g, "")); if (!k || !isFinite(a)) continue
-        const cur = fileQ.get(k) || { label: String(r.hawb).trim(), amt: 0, n: 0 }
-        cur.amt += a; cur.n++; fileQ.set(k, cur)
+        const k = hk(r?.hawb); if (!k) continue
+        const a = Number(String(r?.amount ?? "").replace(/,/g, "")) || 0
+        const cur = fileQ.get(k) || { label: String(r.hawb).trim(), amt: 0, n: 0, invs: new Set<string>() }
+        cur.amt += a; cur.n++
+        String(r?.inv ?? "").split(/[\s,;\/]+/).map(up).filter(x => x.length >= 5).forEach(x => cur.invs.add(x))
+        fileQ.set(k, cur)
       }
       const list: any[] = []
       for (const [k, f] of fileQ) {
@@ -239,11 +243,14 @@ export async function POST(req: NextRequest) {
         const file = Math.round(f.amt * 100) / 100
         const diff = Math.round((sys - file) * 100) / 100
         const status = !h ? "NOT_IN_SYSTEM" : Math.abs(diff) <= 1 ? "MATCH" : sys === 0 ? "NO_ACTUAL" : "DIFF"
-        list.push({ hawb: h || f.label, fileLines: f.n, file, sys, diff, status, lines: hItems.length,
+        const sysInvs = new Set(hItems.map(i => up(i.invoiceNo)).filter(Boolean))
+        const invMissing = [...f.invs].filter(x => !sysInvs.has(x))      // in the file, not on this HAWB yet
+        const invExtra = f.invs.size ? [...sysInvs].filter(x => !f.invs.has(x)) : []   // on the HAWB, not in the file
+        list.push({ hawb: h || f.label, fileLines: f.n, file, sys, diff, status, lines: hItems.length, invMissing, invExtra,
           docs: [...new Set(hItems.map(i => i.request?.documentNo).filter(Boolean))] })
       }
       const rank: Record<string, number> = { DIFF: 0, NO_ACTUAL: 1, NOT_IN_SYSTEM: 2, MATCH: 3 }
-      list.sort((a, b) => rank[a.status] - rank[b.status] || Math.abs(b.diff) - Math.abs(a.diff))
+      list.sort((a, b) => (b.invMissing.length ? 1 : 0) - (a.invMissing.length ? 1 : 0) || rank[a.status] - rank[b.status] || Math.abs(b.diff) - Math.abs(a.diff))
       return NextResponse.json({ ok: true, list })
     }
 

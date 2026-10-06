@@ -21,7 +21,9 @@ export async function GET(req: NextRequest) {
     WITH s AS (
       SELECT so_no_doc, sub_no,
              NULLIF(regexp_replace(qty::text, '[^0-9.]', '', 'g'), '')::numeric AS pcs,
-             UPPER(regexp_replace(TRIM(COALESCE(customername, '')), '\\s+', ' ', 'g')) AS brand,
+             -- brand family (same as the dashboard): any name containing FANATIC = FANATICS
+             CASE WHEN UPPER(customername) LIKE '%FANATIC%' THEN 'FANATICS'
+                  ELSE UPPER(regexp_replace(TRIM(COALESCE(customername, '')), '\\s+', ' ', 'g')) END AS brand,
              CASE
                WHEN TRIM(ship_date::text) ~ '^\\d{4}-\\d{1,2}-\\d{1,2}'      THEN to_date(substring(TRIM(ship_date::text) from '^\\d{4}-\\d{1,2}-\\d{1,2}'), 'YYYY-MM-DD')
                WHEN TRIM(ship_date::text) ~ '^\\d{1,2}/\\d{1,2}/\\d{4}'      THEN to_date(substring(TRIM(ship_date::text) from '^\\d{1,2}/\\d{1,2}/\\d{4}'), 'DD/MM/YYYY')

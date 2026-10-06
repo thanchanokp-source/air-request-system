@@ -463,6 +463,7 @@ function ExpenseFileBox() {
   const [sheet, setSheet] = useState<{ name: string; head: string[]; rows: any[][] } | null>(null)
   const [hCol, setHCol] = useState(-1)
   const [aCol, setACol] = useState(-1)
+  const [iCol, setICol] = useState(-1)   // optional INV column → attach INVs missing from the HAWB
   const [res, setRes] = useState<any[] | null>(null)
   const [show, setShow] = useState<string>("PROBLEM")
   const [pick, setPick] = useState<Set<string>>(new Set())
@@ -498,31 +499,46 @@ function ExpenseFileBox() {
     let ac = -1
     for (const re of amt) { ac = head.findIndex(h => re.test(h) && !HAWB_RE.test(h)); if (ac >= 0) break }
     setACol(ac)
+    setICol(head.findIndex(h => /INV|INVOICE/i.test(h) && !HAWB_RE.test(h) && !/AMOUNT|TOTAL|THB|DATE/i.test(h)))
   }
   const check = async () => {
     if (!sheet || hCol < 0 || aCol < 0) return
     setBusy(true); setMsg("")
     try {
-      const rows = sheet.rows.map(r => ({ hawb: String(r[hCol] ?? "").trim(), amount: r[aCol] })).filter(r => r.hawb)
+      const rows = sheet.rows.map(r => ({ hawb: String(r[hCol] ?? "").trim(), amount: r[aCol], inv: iCol >= 0 ? String(r[iCol] ?? "") : "" })).filter(r => r.hawb)
       const d = await post({ action: "check_file", rows })
-      setRes(d.list); setPick(new Set(d.list.filter((x: any) => x.status === "DIFF").map((x: any) => x.hawb)))
+      setRes(d.list); setPick(new Set(d.list.filter((x: any) => x.status === "DIFF" || x.invMissing?.length).map((x: any) => x.hawb)))
     } catch (e: any) { setMsg("ตรวจไม่สำเร็จ: " + e.message) } finally { setBusy(false) }
   }
-  const canPick = (x: any) => x.status === "DIFF" || x.status === "NO_ACTUAL"
+  // pickable: money differs / LG not keyed yet / the file has INVs not on the HAWB (also a HAWB not in the system)
+  const canPick = (x: any) => x.status === "DIFF" || x.status === "NO_ACTUAL" || x.invMissing?.length > 0
   const picked = (res || []).filter(x => pick.has(x.hawb) && canPick(x))
   const apply = async () => {
     if (!picked.length) return
-    if (!confirm(`ใช้ยอดจากไฟล์กับ ${picked.length} HAWB\n(แบ่งให้แต่ละ SO ตามยอดส่งจริงของ INV · แทนค่า ACTUAL เดิม)\nรวม ${n(picked.reduce((a, x) => a + x.file, 0))} THB ?`)) return
+    const nInv = picked.reduce((a, x) => a + (x.invMissing?.length || 0), 0)
+    if (!confirm(`อัปเดต ${picked.length} HAWB จากไฟล์${nInv ? `\n• เพิ่ม INV เข้า HAWB ${nInv} INV (จับ SO+SUB จาก mp_line / export · ใส่ INV + HAWB + qty จริงให้แถวที่ยังว่าง)` : ""}\n• ใส่ยอด expense จากไฟล์ (แบ่งให้แต่ละ SO ตามยอดส่งจริงของ INV · แทนค่า ACTUAL เดิม)\nรวม ${n(picked.reduce((a, x) => a + x.file, 0))} THB ?`)) return
     setBusy(true); setMsg("")
     try {
-      const totals: Record<string, number> = {}; picked.forEach(x => { totals[x.hawb] = x.file })
-      const d = await post({ action: "bulk_src", hawbs: picked.map(x => x.hawb), totals, writeQty: false })
-      setMsg(`✓ อัปเดต ${d.done} HAWB · ${d.lines} แถว`); await check()
+      // 1) attach the file's INVs that are not on the HAWB yet (same as ③ add INV)
+      let added = 0; const notFound: string[] = [], failed: string[] = []
+      for (const x of picked) {
+        if (!x.invMissing?.length) continue
+        try { const d = await post({ action: "add_inv", hawb: x.hawb, inv: x.invMissing.join(" ") }); added += d.added || 0; notFound.push(...(d.notFound || [])) }
+        catch (e: any) { failed.push(`${x.hawb}: ${e.message}`) }
+      }
+      // 2) money: the file amount, split by real INV qty
+      const withAmt = picked.filter(x => x.file > 0)
+      const totals: Record<string, number> = {}; withAmt.forEach(x => { totals[x.hawb] = x.file })
+      const d = withAmt.length ? await post({ action: "bulk_src", hawbs: withAmt.map(x => x.hawb), totals, writeQty: false }) : { done: 0, lines: 0 }
+      setMsg([`✓ อัปเดตยอด ${d.done} HAWB · ${d.lines} แถว`, added ? `เพิ่ม INV แล้ว ${added} แถว` : "",
+        notFound.length ? `⚠ ไม่พบ INV ใน mp_line / export: ${[...new Set(notFound)].join(", ")}` : "",
+        failed.length ? `⚠ ${failed.join(" · ")}` : ""].filter(Boolean).join(" · "))
+      await check()
     } catch (e: any) { setMsg("บันทึกไม่สำเร็จ: " + e.message) } finally { setBusy(false) }
   }
   const exportXlsx = () => {
     if (!res) return
-    const ws = XLSX.utils.json_to_sheet(res.map(x => ({ HAWB: x.hawb, "ยอดไฟล์": x.file, "ยอด LG (ระบบ)": x.sys, "ต่าง (ระบบ-ไฟล์)": x.diff, "สถานะ": ST[x.status]?.label, "เอกสาร": x.docs.join(", "), "แถว": x.lines })))
+    const ws = XLSX.utils.json_to_sheet(res.map(x => ({ HAWB: x.hawb, "ยอดไฟล์": x.file, "ยอด LG (ระบบ)": x.sys, "ต่าง (ระบบ-ไฟล์)": x.diff, "สถานะ": ST[x.status]?.label, "INV ยังไม่อยู่ใน HAWB": (x.invMissing || []).join(", "), "INV ในระบบแต่ไม่อยู่ในไฟล์": (x.invExtra || []).join(", "), "เอกสาร": x.docs.join(", "), "แถว": x.lines })))
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "HAWB check")
     XLSX.writeFile(wb, `hawb-expense-check-${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
@@ -537,7 +553,7 @@ function ExpenseFileBox() {
     </select>)
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2 mt-6">
-      <p className="font-semibold text-sm text-gray-800">⑦ เทียบไฟล์ expense กับที่ LG กรอก (ราย HAWB)</p>
+      <p className="font-semibold text-sm text-gray-800">⑦ อัปเดต HAWB &amp; expense จากไฟล์ (เทียบกับที่ LG กรอก)</p>
       <p className="text-[11px] text-gray-400">อัป Excel ที่มีคอลัมน์ HAWB + ยอดเงิน (HAWB ซ้ำหลายบรรทัด = รวมให้) → เทียบกับผลรวม ACTUAL ที่ LG กรอกในระบบ · ยังไม่มีการเขียนจนกว่าจะกด &quot;ใช้ยอดจากไฟล์&quot;</p>
       <div className="flex flex-wrap items-center gap-2">
         <input type="file" accept=".xlsx,.xls,.csv" onChange={e => onFile(e.target.files?.[0])} className="text-xs" />
@@ -549,6 +565,7 @@ function ExpenseFileBox() {
         {sheet && <>
           <label className="text-[11px] text-gray-600">คอลัมน์ HAWB {colSel(hCol, setHCol)}</label>
           <label className="text-[11px] text-gray-600">คอลัมน์ยอดเงิน {colSel(aCol, setACol)}</label>
+          <label className="text-[11px] text-gray-600">คอลัมน์ INV <span className="text-gray-400">(ถ้ามี)</span> {colSel(iCol, setICol)}</label>
           <button onClick={check} disabled={busy || hCol < 0 || aCol < 0} className="text-sm px-4 py-1.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-300 font-semibold disabled:opacity-50">{busy && !res ? "กำลังตรวจ…" : "🔍 เทียบ"}</button>
         </>}
       </div>
@@ -569,7 +586,7 @@ function ExpenseFileBox() {
                 <th className="px-3 py-1"><input type="checkbox" checked={view.some(canPick) && view.filter(canPick).every(x => pick.has(x.hawb))} onChange={e => setPick(p => { const s = new Set(p); view.filter(canPick).forEach(x => e.target.checked ? s.add(x.hawb) : s.delete(x.hawb)); return s })} /></th>
                 <th className="px-3 py-1 font-medium">HAWB</th><th className="px-3 py-1 font-medium">สถานะ</th>
                 <th className="px-3 py-1 font-medium text-right">ยอดไฟล์</th><th className="px-3 py-1 font-medium text-right">ยอด LG (ระบบ)</th>
-                <th className="px-3 py-1 font-medium text-right">ต่าง (ระบบ − ไฟล์)</th><th className="px-3 py-1 font-medium">เอกสาร</th>
+                <th className="px-3 py-1 font-medium text-right">ต่าง (ระบบ − ไฟล์)</th><th className="px-3 py-1 font-medium">INV</th><th className="px-3 py-1 font-medium">เอกสาร</th>
               </tr></thead>
               <tbody>{view.map(x => (
                 <tr key={x.hawb} className="border-t border-gray-50">
@@ -579,6 +596,10 @@ function ExpenseFileBox() {
                   <td className="px-3 py-1 text-right tabular-nums">{n(x.file)}</td>
                   <td className="px-3 py-1 text-right tabular-nums">{x.status === "NOT_IN_SYSTEM" ? "-" : n(x.sys)}</td>
                   <td className={`px-3 py-1 text-right tabular-nums font-semibold ${x.status === "DIFF" ? (x.diff > 0 ? "text-red-700" : "text-blue-700") : "text-gray-400"}`}>{x.status === "NOT_IN_SYSTEM" ? "-" : (x.diff > 0 ? "+" : "") + n(x.diff)}</td>
+                  <td className="px-3 py-1 text-[10px]">
+                    {x.invMissing?.length > 0 && <div className="text-orange-700" title="INV ในไฟล์ที่ยังไม่อยู่ใน HAWB นี้ — กดอัปเดตจะเพิ่มให้">+ ขาด {x.invMissing.join(", ")}</div>}
+                    {x.invExtra?.length > 0 && <div className="text-gray-400" title="INV ที่อยู่ใน HAWB ในระบบ แต่ไม่อยู่ในไฟล์ (ไม่ถูกลบ — ตรวจเอง)">ในระบบเกิน {x.invExtra.join(", ")}</div>}
+                  </td>
                   <td className="px-3 py-1 text-gray-500">{x.docs.slice(0, 3).join(", ")}{x.docs.length > 3 ? ` +${x.docs.length - 3}` : ""}</td>
                 </tr>
               ))}</tbody>
@@ -586,7 +607,7 @@ function ExpenseFileBox() {
                 <td></td><td className="px-3 py-1">รวม {view.length} HAWB</td><td></td>
                 <td className="px-3 py-1 text-right tabular-nums">{n(sum("file"))}</td>
                 <td className="px-3 py-1 text-right tabular-nums">{n(sum("sys"))}</td>
-                <td></td><td></td>
+                <td></td><td></td><td></td>
               </tr></tfoot>
             </table>
           </div>
