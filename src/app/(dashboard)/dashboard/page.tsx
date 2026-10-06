@@ -9,6 +9,7 @@ import {
 import { MultiSelect } from "@/components/ui/multi-select"
 import { ClaimTreeSelect, SEP, type ClaimTree } from "@/components/ui/claim-tree-select"
 import { getSplits, splitAirCost, deptLabel, claimSplitState } from "@/lib/claim"
+import { pendingWhoFor } from "@/components/ApprovalChain"
 import { viewableBus, requestInBu, BU_META } from "@/lib/bu"
 import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
 import { buildShipRows, type ShipSource } from "@/lib/ship-map"
@@ -815,7 +816,7 @@ export default function DashboardPage() {
       for (const r of own) origByStyle.set(styleU(r), Math.max(origByStyle.get(styleU(r)) || 0, Number(r.qtyOriginalShipment) || 0))
       const acts = rows.map(r => r.actualAirFreight).filter((v: any) => v != null)
       return {
-        ...b, id, _lines: rows.length,
+        ...b, id, _lines: rows.length, _itemIds: rows.map((x:any)=>x.id),
         _dupDocs: [...new Set(rows.map(r => String(r.request?.documentNo || "")).filter(d => d && d !== headDoc))],
         style: join(own.map(r => r.style)), description: join(own.map(r => r.description)),
         hawbNo: join(rows.map(r => r.hawbNo)),
@@ -1073,6 +1074,9 @@ export default function DashboardPage() {
   // Click a dept card → popup: documents of that dept by state (default Pending), with who it waits on
   // and a link to open the document (marked "ถึงตาคุณ" when this user is in the doc's pending list).
   const [deptPop, setDeptPop] = useState<{dept:string; tab:"p"|"a"|"r"}|null>(null)
+  // approver directory (entry person per dept) — loaded the first time a popup opens
+  const [claimDir, setClaimDir] = useState<any[]|null>(null)
+  useEffect(()=>{ if(deptPop && claimDir===null) fetch("/api/users/claim-directory").then(r=>r.json()).then(d=>setClaimDir(Array.isArray(d)?d:[])).catch(()=>setClaimDir([])) },[deptPop, claimDir])
   const myNames = useMemo(()=>{
     const u:any = session?.user || {}
     return [u.name, u.email, String(u.email||"").split("@")[0]].filter(Boolean).map((x:string)=>x.toLowerCase())
@@ -1089,16 +1093,25 @@ export default function DashboardPage() {
         if(ss!==deptPop.tab) continue
         const id = r.request?.id; if(!id) continue
         const pct = (Number(sp.pct)||0)/100
-        const d = m.get(id) || { id, docNo:r.request?.documentNo, bu:r.request?.bu, status:r.request?.status, pendingWith:Array.isArray(r.request?.pendingWith)?r.request.pendingWith:[],
-          updatedAt:r.request?.updatedAt, so:new Set<string>(), act:0, est:0, stages:new Set<string>() }
+        const d = m.get(id) || { id, docNo:r.request?.documentNo, bu:r.request?.bu, status:r.request?.status,
+          updatedAt:r.request?.updatedAt, so:new Set<string>(), act:0, est:0, stages:new Set<string>(), who:new Set<string>() }
         d.so.add(`${r.so}|${r.sub||""}`); d.act += (Number(r.actualAirFreight)||0)*pct; d.est += (Number(r.airFreight)||0)*pct
-        if(ss==="p") d.stages.add(cs.label)
+        if(ss==="p"){
+          d.stages.add(cs.label)
+          // who THIS dept waits on for this SO: latest forward of the dept (scoped to the SO), else its entry person
+          const itemId = (r._itemIds && r._itemIds[0]) || r.id
+          const w = pendingWhoFor([{dept:sp.dept, done:false}], r.request?.claimForwards, itemId,
+            { dir: claimDir || [], bu: r.request?.bu, factory: r.factory, assignedDvmMer: r.request?.assignedDvmMer })[0] || ""
+          const name = w.includes(": ") ? w.slice(w.indexOf(": ")+2) : ""
+          if(name) d.who.add(name)
+        }
         m.set(id, d)
       }
     }
-    return [...m.values()].map(d=>({ ...d, soN:d.so.size, mine: d.pendingWith.some((w:string)=>myNames.includes(String(w).toLowerCase())) }))
+    return [...m.values()].map(d=>{ const who=[...d.who] as string[]
+      return { ...d, who, soN:d.so.size, mine: who.some(w=>myNames.includes(String(w).toLowerCase())) } })
       .sort((a,b)=> (Number(b.mine)-Number(a.mine)) || (b.act-a.act) || (b.est-a.est))
-  },[deptPop, chartRows, myNames])
+  },[deptPop, chartRows, myNames, claimDir])
 
   const monthlyDelay = useMemo(()=>{
     const m:Record<string,{total:number;count:number;ym:string}>={}
@@ -1472,7 +1485,7 @@ export default function DashboardPage() {
                       <th className="py-1.5 pr-3 font-medium text-right">Actual (ส่วนแผนก)</th>
                       <th className="py-1.5 pr-3 font-medium text-right">Est (ส่วนแผนก)</th>
                       {deptPop.tab==="p" && <th className="py-1.5 pr-3 font-medium">ขั้นที่รอ</th>}
-                      {deptPop.tab==="p" && <th className="py-1.5 pr-3 font-medium">อยู่ที่ใคร</th>}
+                      {deptPop.tab==="p" && <th className="py-1.5 pr-3 font-medium">รอใคร ({deptPop.dept})</th>}
                       <th className="py-1.5 font-medium"></th>
                     </tr></thead>
                     <tbody>{deptDocs.map(d=>(
@@ -1482,7 +1495,7 @@ export default function DashboardPage() {
                         <td className="py-1.5 pr-3 text-right tabular-nums font-semibold">{fmtNum(Math.round(d.act))}</td>
                         <td className="py-1.5 pr-3 text-right tabular-nums text-gray-500">{fmtNum(Math.round(d.est))}</td>
                         {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-amber-700">{[...d.stages].join(", ")}</td>}
-                        {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-gray-600 max-w-[220px] truncate" title={d.pendingWith.join(", ")}>{d.pendingWith.join(", ") || "-"}{days(d.updatedAt)!=null && <span className="text-gray-400"> · {days(d.updatedAt)} วัน</span>}</td>}
+                        {deptPop.tab==="p" && <td className="py-1.5 pr-3 text-gray-700 max-w-[240px] truncate" title={d.who.join(", ")}>{d.who.join(", ") || (claimDir===null ? "…" : "-")}{days(d.updatedAt)!=null && <span className="text-gray-400"> · {days(d.updatedAt)} วัน</span>}</td>}
                         <td className="py-1.5 text-right whitespace-nowrap">
                           <a href={`/requests/${d.id}`} className={`inline-block px-2.5 py-1 rounded-lg font-semibold ${d.mine && deptPop.tab==="p" ? "bg-green-600 text-white hover:bg-green-700" : "border border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
                             {d.mine && deptPop.tab==="p" ? "เปิดเพื่อ Approve →" : "เปิดดู →"}

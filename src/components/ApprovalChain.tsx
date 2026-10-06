@@ -161,7 +161,7 @@ function entryPersonOf(dept: string, dir: any[] | undefined, bu?: string, factor
 
 // Per-dept "who are we waiting on now?" — the latest forward's person (name/email local-part),
 // scoped to this SO; else the resolved ENTRY approver's email; else the position label.
-function pendingWhoFor(depts: { dept: string; done: boolean }[], claimForwards: any[] | undefined, soId?: string,
+export function pendingWhoFor(depts: { dept: string; done: boolean }[], claimForwards: any[] | undefined, soId?: string,
   opts?: { dir?: any[]; bu?: string; factory?: string | null; assignedDvmMer?: string | null }) {
   return depts.filter(d => !d.done).map(d => {
     const rows = (claimForwards || []).filter((f: any) => f.dept === d.dept &&
