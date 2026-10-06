@@ -32,6 +32,22 @@ async function recalcDocStatus(id: string): Promise<string> {
   return "COMPLETED"
 }
 
+// MER re-assigned these SOs to a (new) claim dept → wipe the OLD claim trail so the SO starts fresh at the
+// chosen dept: approvals already given (e.g. SCM NYK approver before it rejected) and the per-dept
+// forwards that still list the SO. Otherwise the old dept's chain keeps holding / showing the SO.
+async function resetClaimTrail(requestId: string, itemIds: string[]) {
+  if (!itemIds.length) return
+  await (prisma as any).claimApproval.deleteMany({ where: { itemId: { in: itemIds } } }).catch(() => {})
+  const cfs = await (prisma as any).claimForward.findMany({ where: { requestId } }).catch(() => [])
+  for (const cf of cfs as any[]) {
+    if (!Array.isArray(cf.itemIds)) continue
+    const keep = cf.itemIds.filter((x: string) => !itemIds.includes(x))
+    if (keep.length === cf.itemIds.length) continue
+    if (keep.length === 0) await (prisma as any).claimForward.delete({ where: { id: cf.id } }).catch(() => {})
+    else await (prisma as any).claimForward.update({ where: { id: cf.id }, data: { itemIds: keep } }).catch(() => {})
+  }
+}
+
 async function recalcDocStatusGW(id: string): Promise<string> {
   const items = await prisma.airRequestItem.findMany({ where: { requestId: id }, select: { itemStatus: true } })
   const nonRej = items.filter(i => i.itemStatus !== "REJECTED")
@@ -1491,6 +1507,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const totalPctVal = splits.reduce((sum: number, s: any) => sum + (Number(s.pct) || 0), 0)
     if (Math.round(totalPctVal) !== 100) return NextResponse.json({ error: "Total %CLAIM must equal 100" }, { status: 400 })
     const newSplits = splits.map((s: any) => ({ dept: String(s.dept), pct: Number(s.pct) || 0, reason: s.reason || null, status: null, crNo: null }))
+    await resetClaimTrail(id, [itemId])
     await prisma.airRequestItem.update({
       where: { id: itemId },
       data: { claimDepts: newSplits as any, claimDepartment: newSplits[0].dept, itemStatus: "LOG_PASSED" } as any
@@ -1504,7 +1521,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     // MER re-submitted the re-assigned SO → it's back in Claim. Alert claim approvers every time
     // (even if the doc status is unchanged because other SOs are still being re-worked).
-    if (nextDocStatus === "PENDING_CLAIM_GW") await notifyStatusChange(id, "PENDING_CLAIM_GW").catch(() => {})
+    if (nextDocStatus === "PENDING_CLAIM_GW") await notifyStatusChange(id, "PENDING_CLAIM_GW", [itemId]).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 
@@ -1519,6 +1536,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const rejected = request.items.filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
     if (rejected.length === 0) return NextResponse.json({ error: "No rejected SO to resubmit" }, { status: 400 })
     let count = 0
+    const done: string[] = []
     for (const it of rejected) {
       const raw = (perItem[it.id] && perItem[it.id].length) ? perItem[it.id] : commonSplits
       if (!raw || raw.length === 0) continue
@@ -1526,14 +1544,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (Math.round(totalPctVal) !== 100) return NextResponse.json({ error: `SO ${it.so}: total %CLAIM must equal 100` }, { status: 400 })
       if (raw.some((x: any) => !x.dept)) return NextResponse.json({ error: `SO ${it.so}: select a claim department` }, { status: 400 })
       const newSplits = raw.map((x: any) => ({ dept: String(x.dept), pct: Number(x.pct) || 0, reason: x.reason || null, status: null, crNo: null }))
+      await resetClaimTrail(id, [it.id])
       await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: newSplits as any, claimDepartment: newSplits[0].dept, itemStatus: "LOG_PASSED" } as any })
-      count++
+      count++; done.push(it.id)
     }
     if (count === 0) return NextResponse.json({ error: "Nothing to resubmit — set a claim department" }, { status: 400 })
     await prisma.approvalLog.create({ data: { requestId: id, userId, action: "APPROVE", fromStatus: request.status, toStatus: "PENDING_CLAIM_GW", comment: `Re-submitted ${count} SO to Claim (batch)` } })
     const nextDocStatus = await recalcDocStatusGW(id)
     if (nextDocStatus !== request.status) await prisma.airRequest.update({ where: { id }, data: { status: nextDocStatus } })
-    if (nextDocStatus === "PENDING_CLAIM_GW") await notifyStatusChange(id, "PENDING_CLAIM_GW").catch(() => {})
+    if (nextDocStatus === "PENDING_CLAIM_GW") await notifyStatusChange(id, "PENDING_CLAIM_GW", done).catch(() => {})
     return NextResponse.json(await getUpdated())
   }
 

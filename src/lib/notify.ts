@@ -448,11 +448,13 @@ async function notifyClaimNextPriorityImpl(
 }
 
 // Public entry — reroute to the doc's admin if it's a TEST doc, then run the real notifier.
-export async function notifyStatusChange(requestId: string, newStatus: string) {
-  return runWithTestMail(await docTestRecipient(requestId), () => notifyStatusChangeImpl(requestId, newStatus))
+// onlyItemIds (PENDING_CLAIM_GW): alert only the claim depts of THESE SOs (e.g. the ones MER just
+// re-submitted to a new dept) — not every dept already on the document.
+export async function notifyStatusChange(requestId: string, newStatus: string, onlyItemIds?: string[]) {
+  return runWithTestMail(await docTestRecipient(requestId), () => notifyStatusChangeImpl(requestId, newStatus, onlyItemIds))
 }
 
-async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
+async function notifyStatusChangeImpl(requestId: string, newStatus: string, onlyItemIds?: string[]) {
   try {
     const rolesToNotify = STATUS_ROLES[newStatus]
 
@@ -767,7 +769,8 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string) {
     // a split on this doc (CLAIM_GW for GW/SUPPLIER, SCM_NYK for NYK, SCM_NYG for NYG).
     if (newStatus === "PENDING_CLAIM_GW") {
       const depts = new Set<string>()
-      for (const it of req.items) getSplits(it).forEach(s => depts.add(s.dept))
+      const scope = onlyItemIds?.length ? req.items.filter((it: any) => onlyItemIds.includes(it.id)) : req.items
+      for (const it of scope) getSplits(it).forEach(s => depts.add(s.dept))
       const groups = gwClaimGroups(depts, req)
       if (groups.length === 0) return
       const link = `${APP_URL}/requests/${requestId}`

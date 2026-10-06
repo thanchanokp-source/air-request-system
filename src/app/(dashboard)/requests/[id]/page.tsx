@@ -648,7 +648,7 @@ export default function RequestDetailPage() {
   const [savingCr, setSavingCr] = useState(false)
   const [reassign, setReassign] = useState<Record<string, { dept: string; pct: string; reason: string }[]>>({})
   // Claim-reject resubmit: batch controls (apply one dept to ALL rejected SOs at once).
-  const [batchSplits, setBatchSplits] = useState<{ dept: string; pct: string; reason: string }[]>([{ dept: "SCM NYK", pct: "100", reason: "" }])
+  const [batchSplits, setBatchSplits] = useState<{ dept: string; pct: string; reason: string }[]>([{ dept: "", pct: "100", reason: "" }])  // no default dept — MER must pick (a default "SCM NYK" sent SOs back to NYK unnoticed)
   // claim splits per SO read from an uploaded Excel (itemId → splits); SOs not in the file use batchSplits
   const [fileSplits, setFileSplits] = useState<{ name: string; map: Record<string, { dept: string; pct: number; reason: string | null }[]>; errors: string[] } | null>(null)
   const [showPerSoReassign, setShowPerSoReassign] = useState(false)
