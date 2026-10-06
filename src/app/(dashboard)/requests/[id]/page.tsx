@@ -648,7 +648,9 @@ export default function RequestDetailPage() {
   const [savingCr, setSavingCr] = useState(false)
   const [reassign, setReassign] = useState<Record<string, { dept: string; pct: string; reason: string }[]>>({})
   // Claim-reject resubmit: batch controls (apply one dept to ALL rejected SOs at once).
-  const [batchReassignDept, setBatchReassignDept] = useState("SCM NYK")
+  const [batchSplits, setBatchSplits] = useState<{ dept: string; pct: string; reason: string }[]>([{ dept: "SCM NYK", pct: "100", reason: "" }])
+  // claim splits per SO read from an uploaded Excel (itemId → splits); SOs not in the file use batchSplits
+  const [fileSplits, setFileSplits] = useState<{ name: string; map: Record<string, { dept: string; pct: number; reason: string | null }[]>; errors: string[] } | null>(null)
   const [showPerSoReassign, setShowPerSoReassign] = useState(false)
   // Resubmit edit (at PENDING_MER / PENDING_MER_GW) — per-item field overrides the MER can change
   // before re-submitting. Empty = unchanged (reads from the item). GW also edits claim splits.
@@ -4395,35 +4397,126 @@ export default function RequestDetailPage() {
           {/* ── BATCH: apply one claim dept to ALL rejected SOs and resubmit in one click ── */}
           {(() => {
             const rejectedItems = (req.items || []).filter((i: any) => i.itemStatus === "CLAIM_REJECT_GW")
+            const DEPTS = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
+            const bTotal = batchSplits.reduce((a, r) => a + (Number(r.pct) || 0), 0)
+            const bValid = Math.round(bTotal) === 100 && batchSplits.every(r => r.dept)
+            const setB = (i: number, patch: any) => setBatchSplits(rs => rs.map((r, j) => j === i ? { ...r, ...patch } : r))
+            const fromFile = fileSplits ? rejectedItems.filter((it: any) => fileSplits.map[it.id]).length : 0
+            const restCount = rejectedItems.length - fromFile
+            const canSubmit = (fileSplits ? !fileSplits.errors.length : true) && (restCount === 0 || bValid)
+            const splitText = (rs: any[]) => rs.map(r => `${r.dept} ${Number(r.pct) || 0}%`).join(" + ")
             const doBatch = async () => {
-              if (!batchReassignDept) { alert("เลือกแผนก claim ก่อน"); return }
-              if (!confirm(`Resubmit ทั้งหมด ${rejectedItems.length} SO เป็น ${batchReassignDept} 100% ?`)) return
+              if (!canSubmit) return
+              const lines = [
+                fromFile ? `จากไฟล์: ${fromFile} SO (สัดส่วนตามไฟล์)` : "",
+                restCount ? `${restCount} SO: ${splitText(batchSplits)}` : "",
+              ].filter(Boolean).join("\n")
+              if (!confirm(`Resubmit ทั้งหมด ${rejectedItems.length} SO → Claim\n${lines}`)) return
               setSubmitting("_batchReassign")
               const res = await fetch(`/api/requests/${id}/approve`, {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "resubmit_claim_gw_batch", claimDepts: [{ dept: batchReassignDept, pct: 100, reason: null }] })
+                body: JSON.stringify({ action: "resubmit_claim_gw_batch",
+                  claimDepts: batchSplits.map(r => ({ dept: r.dept, pct: Number(r.pct) || 0, reason: r.reason || null })),
+                  perItem: fileSplits?.map || {} })
               })
-              if (res.ok) { setReq(await res.json()); setReassign({}) }
+              if (res.ok) { setReq(await res.json()); setReassign({}); setFileSplits(null) }
               else { const e = await res.json().catch(() => ({})); alert(e.error || "Error") }
               setSubmitting(null)
             }
+            // Excel template: one line per SO (add more lines with the same SO+SUB to split it)
+            const downloadTemplate = () => {
+              const rows = rejectedItems.map((it: any) => {
+                const sp = getSplits(it)
+                return { SO: it.so, SUB: it.sub || "", STYLE: it.style || "", "CLAIM DEPT": sp[0]?.dept || "", "%": sp[0]?.pct ?? 100, REASON: "" }
+              })
+              const ws = XLSX.utils.json_to_sheet(rows)
+              const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Claim split")
+              XLSX.writeFile(wb, `claim-split-${req.documentNo}.xlsx`)
+            }
+            const onFile = async (f: File | undefined) => {
+              if (!f) return
+              const wb = XLSX.read(await f.arrayBuffer(), { type: "array" })
+              const raw: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" })
+              const get = (r: any, re: RegExp) => { const k = Object.keys(r).find(k => re.test(k.trim())); return k ? r[k] : "" }
+              const soN = (v: any) => String(v ?? "").replace(/\D/g, "").replace(/^0+/, "")
+              const up = (v: any) => String(v ?? "").trim().toUpperCase()
+              const deptOf = (v: any) => { const t = up(v).replace(/\s+/g, " "); return DEPTS.find(d => d === t || d.replace(" ", "") === t.replace(" ", "")) || "" }
+              const map: Record<string, any[]> = {}, errors: string[] = []
+              raw.forEach((r, i) => {
+                const so = soN(get(r, /^SO/i)); if (!so) return
+                const sub = up(get(r, /^SUB/i)), style = up(get(r, /^STYLE/i))
+                const cands = rejectedItems.filter((it: any) => soN(it.so) === so && (!sub || up(it.sub) === sub) && (!style || up(it.style) === style))
+                const line = `แถว ${i + 2} (SO ${so}${sub ? "/" + sub : ""})`
+                if (!cands.length) { errors.push(`${line}: ไม่ใช่ SO ที่ถูก reject ในเอกสารนี้`); return }
+                if (cands.length > 1) { errors.push(`${line}: ตรงหลายแถว — ใส่ SUB / STYLE ให้ชัด`); return }
+                const dept = deptOf(get(r, /DEPT|แผนก/i))
+                if (!dept) { errors.push(`${line}: แผนกไม่ถูกต้อง (ใช้ ${DEPTS.join(" / ")})`); return }
+                const pct = Number(String(get(r, /^%|PCT|PERCENT|สัดส่วน/i)).replace(/[%,\s]/g, ""))
+                if (!(pct > 0)) { errors.push(`${line}: % ต้องมากกว่า 0`); return }
+                const id0 = cands[0].id
+                map[id0] = [...(map[id0] || []), { dept, pct, reason: String(get(r, /REASON|เหตุผล/i) || "").trim() || null }]
+              })
+              for (const [iid, rs] of Object.entries(map)) {
+                const t = rs.reduce((a, x) => a + x.pct, 0)
+                if (Math.round(t) !== 100) { const it = rejectedItems.find((x: any) => x.id === iid); errors.push(`SO ${it?.so}${it?.sub ? "/" + it.sub : ""}: รวม ${t}% (ต้อง = 100)`) }
+              }
+              setFileSplits({ name: f.name, map, errors })
+            }
             const isSub = submitting === "_batchReassign"
             return (
-              <div className="border border-green-300 bg-green-50/60 rounded-lg p-3 flex flex-wrap items-center gap-3">
-                <span className="text-sm font-semibold text-gray-700">ตั้งทั้งหมด ({rejectedItems.length} SO):</span>
-                <select value={batchReassignDept} onChange={e => setBatchReassignDept(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white">
-                  {["SCM NYK", "SCM NYG", "GW", "SUPPLIER"].map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-                <span className="text-sm text-gray-500">100%</span>
-                <button onClick={doBatch} disabled={isSub}
-                  className="ml-auto px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50">
-                  {isSub ? "กำลัง Resubmit..." : `Resubmit ทั้งหมด → Claim (${rejectedItems.length} SO)`}
-                </button>
-                <button type="button" onClick={() => setShowPerSoReassign(v => !v)}
-                  className="text-xs text-gray-500 hover:text-gray-800 underline w-full sm:w-auto">
-                  {showPerSoReassign ? "ซ่อนการแก้รายตัว" : "หรือแก้แผนกรายตัว (บาง SO ต่างกัน) »"}
-                </button>
+              <div className="border border-green-300 bg-green-50/60 rounded-lg p-3 space-y-2">
+                <div className="flex flex-wrap items-start gap-3">
+                  <span className="text-sm font-semibold text-gray-700 pt-1.5">ตั้งทั้งหมด ({restCount} SO{fromFile ? ` · อีก ${fromFile} SO จากไฟล์` : ""}):</span>
+                  <div className="space-y-1.5">
+                    {batchSplits.map((r, i) => (
+                      <div key={i} className="flex items-center gap-2 flex-wrap">
+                        <select value={r.dept} onChange={e => setB(i, { dept: e.target.value })} className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white">
+                          <option value="">เลือกแผนก…</option>
+                          {DEPTS.map(d => <option key={d} value={d} disabled={d !== r.dept && batchSplits.some(x => x.dept === d)}>{d}</option>)}
+                        </select>
+                        <input type="number" min={0} max={100} value={r.pct} onChange={e => setB(i, { pct: e.target.value })} className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white text-right" />
+                        <span className="text-sm text-gray-500">%</span>
+                        <input value={r.reason} onChange={e => setB(i, { reason: e.target.value })} placeholder="Reason (optional)" className="w-48 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
+                        {batchSplits.length > 1 && <button onClick={() => setBatchSplits(rs => rs.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-sm">✕</button>}
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-3 text-xs">
+                      {batchSplits.length < DEPTS.length && <button onClick={() => setBatchSplits(rs => [...rs, { dept: "", pct: String(Math.max(0, 100 - bTotal)), reason: "" }])} className="text-blue-600 hover:underline">+ เพิ่มแผนก</button>}
+                      <span className={`font-semibold ${Math.round(bTotal) === 100 ? "text-green-700" : "text-red-600"}`}>รวม {bTotal}%{Math.round(bTotal) !== 100 ? " (ต้อง = 100)" : ""}</span>
+                    </div>
+                  </div>
+                  <button onClick={doBatch} disabled={isSub || !canSubmit}
+                    className="ml-auto px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50">
+                    {isSub ? "กำลัง Resubmit..." : `Resubmit ทั้งหมด → Claim (${rejectedItems.length} SO)`}
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 border-t border-green-200 pt-2 text-xs">
+                  <span className="font-semibold text-gray-700">หรืออัปโหลดไฟล์ (สัดส่วนราย SO):</span>
+                  <button type="button" onClick={downloadTemplate} className="text-blue-600 hover:underline">⬇ ดาวน์โหลดแบบฟอร์ม ({rejectedItems.length} SO)</button>
+                  <label className="px-3 py-1 rounded-lg border border-gray-300 bg-white text-gray-700 cursor-pointer hover:bg-gray-50">
+                    📎 เลือกไฟล์ Excel
+                    <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { onFile(e.target.files?.[0]); e.target.value = "" }} />
+                  </label>
+                  {fileSplits && <>
+                    <span className={fileSplits.errors.length ? "text-red-600" : "text-green-700"}>{fileSplits.name} · ใช้กับ {fromFile} SO{fileSplits.errors.length ? ` · ผิด ${fileSplits.errors.length} จุด` : " ✓"}</span>
+                    <button type="button" onClick={() => setFileSplits(null)} className="text-gray-500 hover:text-red-600">✕ ล้างไฟล์</button>
+                  </>}
+                  <button type="button" onClick={() => setShowPerSoReassign(v => !v)}
+                    className="ml-auto text-gray-500 hover:text-gray-800 underline">
+                    {showPerSoReassign ? "ซ่อนการแก้รายตัว" : "หรือแก้แผนกรายตัว (บาง SO ต่างกัน) »"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500">แบบฟอร์ม: 1 บรรทัด = 1 แผนกของ SO นั้น · SO ที่แบ่งหลายแผนกให้ใส่หลายบรรทัด (SO + SUB เดียวกัน) · % ของแต่ละ SO รวม = 100 · SO ที่ไม่อยู่ในไฟล์ใช้สัดส่วนด้านบน</p>
+                {fileSplits && fileSplits.errors.length > 0 && (
+                  <ul className="text-[11px] text-red-600 list-disc pl-5 max-h-32 overflow-auto">{fileSplits.errors.slice(0, 30).map((e, i) => <li key={i}>{e}</li>)}</ul>
+                )}
+                {fileSplits && !fileSplits.errors.length && fromFile > 0 && (
+                  <div className="max-h-40 overflow-auto text-[11px] bg-white border border-green-200 rounded">
+                    {rejectedItems.filter((it: any) => fileSplits.map[it.id]).map((it: any) => (
+                      <div key={it.id} className="px-2 py-0.5 border-b border-gray-50 flex gap-3"><span className="font-mono w-28">{it.so}{it.sub ? " / " + it.sub : ""}</span><span className="text-gray-700">{splitText(fileSplits.map[it.id])}</span></div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })()}
