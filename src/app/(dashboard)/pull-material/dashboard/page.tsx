@@ -354,11 +354,10 @@ export default function Page() {
     )
   }
 
-  const SectionHead = ({ n, title, sub, color }: { n: number; title: string; sub: string; color: string }) => (
+  const SectionHead = ({ n, title, color }: { n: number; title: string; color: string }) => (
     <div className="flex items-center gap-2.5 mt-6 mb-3">
       <span className="w-6 h-6 rounded-lg grid place-items-center text-[12px] font-bold text-white shrink-0" style={{ background: color }}>{n}</span>
       <h2 className="text-[15px] font-bold tracking-[-.015em] whitespace-nowrap" style={{ color: D.text }}>{title}</h2>
-      <em className="not-italic text-[11.5px] truncate" style={{ color: D.faint }}>{sub}</em>
       <span className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${D.line}, transparent)` }} />
     </div>
   )
@@ -374,7 +373,6 @@ export default function Page() {
     return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: bg, color: fg }}>{children}</span>
   }
 
-  const airPct = totalDocs ? Math.round((airDocs.length / totalDocs) * 100) : 0
   const kpis = [
     { ic: "∑", k: "Estimated freight", v: K(est), u: "USD", d: totalDocs ? `Avg ${fmt(Math.round(est / totalDocs))} USD per document` : "—", c: C.s1 },
     { ic: "✓", k: "Actual freight", v: K(act), u: "USD", d: "", pill: `From ${doneDocs.length} closed document${doneDocs.length === 1 ? "" : "s"}`, c: C.s2 },
@@ -397,13 +395,6 @@ export default function Page() {
             <h1 className="text-[22px] font-bold tracking-[-.025em] mt-0.5 leading-[1.4]" style={{ color: D.text }}>✈ Air Request — Team Analysis Dashboard</h1>
             <div className="flex items-center gap-2.5 flex-wrap mt-1.5 text-[11.5px]" style={{ color: D.mut }}>
               <Pill tone="neutral">{monthly.length ? `${monLabel(monthly[0][0], true)} → ${monLabel(monthly[monthly.length - 1][0], true)}` : "—"}</Pill>
-              <span><b className="tabular-nums" style={{ color: D.text }}>{totalDocs}</b> documents</span>
-              <span className="w-[3px] h-[3px] rounded-full inline-block" style={{ background: D.faint }} />
-              <span><b className="tabular-nums" style={{ color: D.text }}>{wipDocs.length}</b> open</span>
-              <span className="w-[3px] h-[3px] rounded-full inline-block" style={{ background: D.faint }} />
-              <span><b className="tabular-nums" style={{ color: D.text }}>{doneDocs.length}</b> closed</span>
-              <span className="w-[3px] h-[3px] rounded-full inline-block" style={{ background: D.faint }} />
-              <span><b className="tabular-nums" style={{ color: D.text }}>{airDocs.length}</b> by Air <span style={{ color: D.faint }}>({airPct}%)</span></span>
             </div>
           </div>
           <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2, border: `1px solid ${D.line}` }}>
@@ -464,7 +455,7 @@ export default function Page() {
         ) : (
           <>
             {/* ── 1 · Cost & Ship Mode ───────────────────────────────────── */}
-            <SectionHead n={1} title="Cost & Ship Mode" sub="What we spent, and how the goods travelled" color={C.s1} />
+            <SectionHead n={1} title="Cost & Ship Mode" color={C.s1} />
             <div className="grid gap-3" style={{ gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr)" }}>
               <Card title="Estimate vs Actual (USD)"
                 right={<Legend items={[{ k: "Estimate", c: C.s1 }, { k: "Actual", c: C.s2 }]} />}>
@@ -481,7 +472,7 @@ export default function Page() {
             </div>
 
             {/* ── 2 · Air Cost ───────────────────────────────────────────── */}
-            <SectionHead n={2} title="Air Cost" sub="Air-confirmed documents only — who carries it, from where, at what cost" color={C.s2} />
+            <SectionHead n={2} title="Air Cost" color={C.s2} />
             <div className="grid gap-3" style={{ gridTemplateColumns: "minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr)" }}>
               <Card title={`Forwarder on Air Documents (${airDocs.length})`}
                 right={airNoFwd ? <Pill tone="bad">{airNoFwd} pending</Pill> : null}>
@@ -517,7 +508,7 @@ export default function Page() {
             </div>
 
             {/* ── 3 · Status Document ────────────────────────────────────── */}
-            <SectionHead n={3} title="Status Document" sub="Who raised how many, and where they sit today" color={C.s5} />
+            <SectionHead n={3} title="Status Document" color={C.s5} />
             <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
               <Card title="Documents Raised by Purchasing"
                 right={<Pill tone="neutral">{purchaserRows.length} people</Pill>}>
