@@ -169,9 +169,9 @@ export default function Page() {
   const incTotal = incRows.reduce((s, [, n]) => s + n, 0)
 
   const fwdStatusRows = [
-    { k: "Not sent yet", n: amount(fReqs.filter((r: any) => !r.fwdSentAt)), c: C.s4 },
-    { k: "Sent · awaiting reply", n: amount(fReqs.filter((r: any) => r.fwdSentAt && !r.fwdImportedAt)), c: C.s1 },
-    { k: "Replied", n: amount(fReqs.filter((r: any) => r.fwdImportedAt)), c: C.s3 },
+    { k: "Not sent yet", n: amount(airDocs.filter((r: any) => !r.fwdSentAt)), c: C.s4 },
+    { k: "Sent · awaiting reply", n: amount(airDocs.filter((r: any) => r.fwdSentAt && !r.fwdImportedAt)), c: C.s1 },
+    { k: "Replied", n: amount(airDocs.filter((r: any) => r.fwdImportedAt)), c: C.s3 },
   ]
 
   // ── Row 3 · who raised what, and where it sits ─────────────────────────────────────────
@@ -493,6 +493,17 @@ export default function Page() {
                 }))} />
               </Card>
             </div>
+            <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
+              <Card title="Cost / kg by Country (USD)">
+                <HBars labelW={94} rows={countryCost.map(x => ({ k: x.k, v: x.v, color: C.s4, label: x.v.toFixed(2) }))} />
+              </Card>
+              <Card title="Cost / kg by Supplier (USD)">
+                <HBars labelW={112} rows={supplierCost.map((x, i) => ({ k: x.k, v: x.v, color: i === 0 ? C.crit : C.s5, label: x.v.toFixed(2) }))} />
+              </Card>
+              <Card title="Incoterms">
+                <Donut />
+              </Card>
+            </div>
 
             {/* ── 2 · Air Cost ───────────────────────────────────────────── */}
             <SectionHead n={2} title="Air Cost" color={C.s2} />
@@ -516,17 +527,6 @@ export default function Page() {
                   k: r.k, v: r.n, color: C.s1, label: amountLabel(r.n),
                   sub: r.act > 0 ? `Act ${fmt(Math.round(r.act))}$` : `${r.perKg.toFixed(2)} $/kg`,
                 }))} />
-              </Card>
-              <Card title="Cost / kg by Country (USD)">
-                <HBars labelW={94} rows={countryCost.map(x => ({ k: x.k, v: x.v, color: C.s4, label: x.v.toFixed(2) }))} />
-              </Card>
-            </div>
-            <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
-              <Card title="Cost / kg by Supplier (USD)">
-                <HBars labelW={112} rows={supplierCost.map((x, i) => ({ k: x.k, v: x.v, color: i === 0 ? C.crit : C.s5, label: x.v.toFixed(2) }))} />
-              </Card>
-              <Card title="Incoterms">
-                <Donut />
               </Card>
               <Card title="Forwarder Status">
                 <HBars labelW={118} rows={fwdStatusRows.map(s => ({ k: s.k, v: s.n, color: s.c, label: amountLabel(s.n) }))} />
