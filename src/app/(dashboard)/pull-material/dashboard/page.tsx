@@ -7,30 +7,31 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { buildRequesters } from "@/lib/pull-requesters"
 import { pullReqType } from "@/lib/pull-reqtype"
 
-// ── Control-tower theme (dark) ─────────────────────────────────────────────────────────────
-// This page is the wall display: dark surface, three columns, one chart per question. Colours are
-// fixed slots assigned in order and never cycled; every bar/slice also carries its own number so
-// colour is never the only cue.
-// Three surfaces to choose from — the app's own chrome (white top bar, maroon sidebar) stays put,
-// so each one is picked to sit next to that without fighting it. The choice is remembered per browser.
+// ── Control-tower theme ────────────────────────────────────────────────────────────────────
+// The wall display is two surfaces, not one: the PAGE (the backdrop + its headings) can be dark,
+// cream or light, while the CHART PANELS are always a light card. Charts stay readable whatever
+// backdrop is chosen, and one set of series colours works everywhere. The choice is remembered
+// per browser. Colours are fixed slots assigned in order and never cycled; every bar and slice
+// also carries its own number, so colour is never the only cue.
 type ThemeKey = "cream" | "charcoal" | "navy" | "light"
-const THEMES: Record<ThemeKey, { label: string; bg: string; card: string; card2: string; line: string; text: string; mut: string; dark: boolean }> = {
-  cream: { label: "ครีม", bg: "#f4ede1", card: "#fffdf8", card2: "#f7f1e6", line: "#e4d9c7", text: "#2b2620", mut: "#7c7467", dark: false },
-  charcoal: { label: "เทาเข้ม", bg: "#17191e", card: "#212429", card2: "#191c21", line: "#32363f", text: "#eceef2", mut: "#9ba1ac", dark: true },
-  navy: { label: "น้ำเงินเข้ม", bg: "#0f1520", card: "#1a2130", card2: "#141b26", line: "#2b3545", text: "#e8edf5", mut: "#93a0b4", dark: true },
-  light: { label: "สว่าง", bg: "#eef0f4", card: "#ffffff", card2: "#f4f5f8", line: "#e2e5ea", text: "#111827", mut: "#6b7280", dark: false },
+type Theme = {
+  label: string; swatch: string
+  pageBg: string; pageText: string; pageMut: string   // the backdrop and the headings on it
+  card: string; card2: string; line: string; text: string; mut: string  // inside every panel
 }
-// Series slots per surface: the dark steps on dark, the light steps on light — same hues either way.
-const SERIES: Record<"dark" | "light", { s1: string; s2: string; s3: string; s4: string; s5: string; good: string; crit: string; funnel: string[] }> = {
-  dark: {
-    s1: "#3987e5", s2: "#d95926", s3: "#199e70", s4: "#c98500", s5: "#9085e9", good: "#43a047", crit: "#e66767",
-    funnel: ["#1f3a5f", "#2a6ab0", "#3987e5", "#c98500", "#d95926", "#9085e9"],
-  },
-  light: {
-    s1: "#2a78d6", s2: "#eb6834", s3: "#1baf7a", s4: "#eda100", s5: "#4a3aa7", good: "#008300", crit: "#e34948",
-    // every funnel bar prints its count in white, so each step stays dark enough to read on
-    funnel: ["#104281", "#1c5cab", "#2a78d6", "#b45309", "#c2491d", "#4a3aa7"],
-  },
+const PANEL_LIGHT = { card: "#ffffff", card2: "#f4f5f8", line: "#e4e7ec", text: "#111827", mut: "#6b7280" }
+const PANEL_CREAM = { card: "#fffdf8", card2: "#f7f1e6", line: "#e4d9c7", text: "#2b2620", mut: "#7c7467" }
+const THEMES: Record<ThemeKey, Theme> = {
+  cream: { label: "ครีม", swatch: "#f4ede1", pageBg: "#f4ede1", pageText: "#2b2620", pageMut: "#7c7467", ...PANEL_CREAM },
+  charcoal: { label: "เทาเข้ม", swatch: "#17191e", pageBg: "#17191e", pageText: "#eceef2", pageMut: "#9ba1ac", ...PANEL_LIGHT },
+  navy: { label: "น้ำเงินเข้ม", swatch: "#0f1520", pageBg: "#0f1520", pageText: "#e8edf5", pageMut: "#93a0b4", ...PANEL_LIGHT },
+  light: { label: "สว่าง", swatch: "#eef0f4", pageBg: "#eef0f4", pageText: "#111827", pageMut: "#6b7280", ...PANEL_LIGHT },
+}
+// One series set — the panels are light under every theme, so these never need a dark variant.
+const C = {
+  s1: "#2a78d6", s2: "#eb6834", s3: "#1baf7a", s4: "#eda100", s5: "#4a3aa7", good: "#008300", crit: "#e34948",
+  // every funnel bar prints its count in white, so each step stays dark enough to read on
+  funnel: ["#104281", "#1c5cab", "#2a78d6", "#b45309", "#c2491d", "#4a3aa7"],
 }
 const THB = 32.5
 const DAY = 86400000
@@ -70,7 +71,6 @@ export default function Page() {
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
 
   const D = THEMES[theme]
-  const C = SERIES[D.dark ? "dark" : "light"]
 
   const fReqs = reqs.filter((r: any) => {
     if (typeF !== "ALL" && reqTypeOf(r) !== typeF) return false
@@ -406,7 +406,7 @@ export default function Page() {
   }
 
   const SectionTitle = ({ children }: any) => (
-    <h2 className="text-[12.5px] font-bold uppercase tracking-wider mb-2" style={{ color: D.mut }}>{children}</h2>
+    <h2 className="text-[12.5px] font-bold uppercase tracking-wider mb-2" style={{ color: D.pageMut }}>{children}</h2>
   )
   const kpis = [
     { v: fmt(totalDocs), k: `${doneDocs.length} ปิดงาน · ${wipDocs.length} ค้าง`, c: D.text },
@@ -424,14 +424,14 @@ export default function Page() {
   return (
     // A panel inside the app shell rather than a full-bleed wash — the white top bar and the maroon
     // sidebar stay as they are, and the dark surface reads as deliberate instead of clashing.
-    <div className="rounded-2xl p-4 md:p-5 min-h-[calc(100vh-110px)]" style={{ background: D.bg, color: D.text, border: `1px solid ${D.line}` }}>
+    <div className="rounded-2xl p-4 md:p-5 min-h-[calc(100vh-110px)]" style={{ background: D.pageBg, color: D.pageText, border: `1px solid ${D.line}` }}>
       <div className="max-w-[1500px] mx-auto space-y-3">
         {/* header */}
         <div className="flex items-end justify-between gap-3 flex-wrap">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: D.mut }}>Nan Yang Textile · RM REQ AIR</div>
+            <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: D.pageMut }}>Nan Yang Textile · RM REQ AIR</div>
             <h1 className="text-[22px] font-bold">✈ {bu} Air Request — Team Analysis Dashboard</h1>
-            <p className="text-[11.5px]" style={{ color: D.mut }}>ช่วงข้อมูล {period} · ใครคอขวด · ส่วนต่าง Est เทียบ Actual · ใบที่ค้างเกินกำหนด</p>
+            <p className="text-[11.5px]" style={{ color: D.pageMut }}>ช่วงข้อมูล {period} · ใครคอขวด · ส่วนต่าง Est เทียบ Actual · ใบที่ค้างเกินกำหนด</p>
           </div>
           <div className="flex gap-3 items-center flex-wrap">
             <div className="flex gap-1.5">{BUS.map(b => (
@@ -444,7 +444,7 @@ export default function Page() {
                 <button key={t} onClick={() => pickTheme(t)} title={`พื้นหลัง: ${THEMES[t].label}`}
                   className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold"
                   style={theme === t ? { background: D.card2, color: D.text } : { color: D.mut }}>
-                  <i className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: THEMES[t].bg, border: `1px solid ${D.line}` }} />
+                  <i className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: THEMES[t].swatch, border: `1px solid ${D.line}` }} />
                   {THEMES[t].label}
                 </button>
               ))}
@@ -482,7 +482,7 @@ export default function Page() {
           <span className="text-[11px] ml-auto" style={{ color: D.mut }}>{fReqs.length} เอกสาร</span>
         </div>
 
-        {loading ? <p className="text-sm" style={{ color: D.mut }}>Loading…</p> : totalDocs === 0 ? (
+        {loading ? <p className="text-sm" style={{ color: D.pageMut }}>Loading…</p> : totalDocs === 0 ? (
           <div className="rounded-xl p-12 text-center text-sm" style={{ background: D.card, border: `1px solid ${D.line}`, color: D.mut }}>ยังไม่มีเอกสารใน BU นี้</div>
         ) : (
           <div className="grid lg:grid-cols-3 gap-3 items-start">
