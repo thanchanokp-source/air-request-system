@@ -13,8 +13,9 @@ import { pullReqType } from "@/lib/pull-reqtype"
 // colour is never the only cue.
 // Three surfaces to choose from — the app's own chrome (white top bar, maroon sidebar) stays put,
 // so each one is picked to sit next to that without fighting it. The choice is remembered per browser.
-type ThemeKey = "charcoal" | "navy" | "light"
+type ThemeKey = "cream" | "charcoal" | "navy" | "light"
 const THEMES: Record<ThemeKey, { label: string; bg: string; card: string; card2: string; line: string; text: string; mut: string; dark: boolean }> = {
+  cream: { label: "ครีม", bg: "#f4ede1", card: "#fffdf8", card2: "#f7f1e6", line: "#e4d9c7", text: "#2b2620", mut: "#7c7467", dark: false },
   charcoal: { label: "เทาเข้ม", bg: "#17191e", card: "#212429", card2: "#191c21", line: "#32363f", text: "#eceef2", mut: "#9ba1ac", dark: true },
   navy: { label: "น้ำเงินเข้ม", bg: "#0f1520", card: "#1a2130", card2: "#141b26", line: "#2b3545", text: "#e8edf5", mut: "#93a0b4", dark: true },
   light: { label: "สว่าง", bg: "#eef0f4", card: "#ffffff", card2: "#f4f5f8", line: "#e2e5ea", text: "#111827", mut: "#6b7280", dark: false },
@@ -27,7 +28,8 @@ const SERIES: Record<"dark" | "light", { s1: string; s2: string; s3: string; s4:
   },
   light: {
     s1: "#2a78d6", s2: "#eb6834", s3: "#1baf7a", s4: "#eda100", s5: "#4a3aa7", good: "#008300", crit: "#e34948",
-    funnel: ["#104281", "#1c5cab", "#2a78d6", "#eda100", "#eb6834", "#4a3aa7"],
+    // every funnel bar prints its count in white, so each step stays dark enough to read on
+    funnel: ["#104281", "#1c5cab", "#2a78d6", "#b45309", "#c2491d", "#4a3aa7"],
   },
 }
 const THB = 32.5
@@ -51,7 +53,7 @@ export default function Page() {
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
-  const [theme, setTheme] = useState<ThemeKey>("charcoal")
+  const [theme, setTheme] = useState<ThemeKey>("cream")
   const reqTypeOf = pullReqType
   useEffect(() => { try { const t = localStorage.getItem("pullDashTheme") as ThemeKey; if (t && THEMES[t]) setTheme(t) } catch { /* private mode */ } }, [])
   const pickTheme = (t: ThemeKey) => { setTheme(t); try { localStorage.setItem("pullDashTheme", t) } catch { /* private mode */ } }
