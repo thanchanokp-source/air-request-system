@@ -38,6 +38,11 @@ if [ "${PUSH_DB:-0}" = "1" ]; then
   npx prisma db push || { echo "!! prisma db push failed — aborting (nothing restarted)"; exit 1; }
 fi
 
+# Regenerate the Prisma client BEFORE the typescript check — a schema change (new model/field) pulled
+# above is otherwise unknown to tsc until the build step runs "prisma generate" (→ false TS errors).
+echo "==> [1b2] prisma generate"
+npx prisma generate >/dev/null || { echo "!! prisma generate failed — aborting (nothing restarted)"; exit 1; }
+
 echo "==> [1c] Pre-deploy checks (hooks rules / lib-imports-app / typescript)"
 node scripts/check.mjs || { echo "!! checks failed - nothing built, site untouched"; exit 1; }
 
