@@ -183,17 +183,18 @@ export default function Page() {
   }).filter(x => x.age > AGE_LIMIT || x.rev >= 3 || (x.waitFwd != null && x.waitFwd > 3))
     .sort((a, b) => (b.rev * 10 + b.age) - (a.rev * 10 + a.age)).slice(0, 8)
 
-  // ── How long the open documents have been waiting, and where they stand with the forwarder ──
-  const AGE_BUCKETS = [
-    { k: "0–3 days", hit: (d: number) => d <= 3 },
-    { k: "4–7 days", hit: (d: number) => d > 3 && d <= 7 },
-    { k: "8–14 days", hit: (d: number) => d > 7 && d <= 14 },
-    { k: "15+ days", hit: (d: number) => d > 14 },
+  // ── How many documents went out by each shipping mode (what LG confirmed, not what was asked) ──
+  const modeRows = [
+    { k: "✈ Air", n: fReqs.filter((r: any) => r.shipMode === "AIR").length, c: C.s1 },
+    { k: "🚢 Sea", n: fReqs.filter((r: any) => r.shipMode === "SEA").length, c: C.s3 },
+    { k: "📦 Courier", n: fReqs.filter((r: any) => r.shipMode === "COURIER").length, c: C.s5 },
+    { k: "Not confirmed yet", n: fReqs.filter((r: any) => !r.shipMode).length, c: C.s4 },
   ]
-  const ageRows = AGE_BUCKETS.map(b => ({
-    k: b.k,
-    n: wipDocs.filter((r: any) => b.hit(Math.floor((Date.now() - new Date(r.createdAt).getTime()) / DAY))).length,
-  }))
+  const modeTotal = modeRows.reduce((s, m) => s + m.n, 0) || 1
+  // Docs where LG ended up overriding what Purchasing asked for — the interesting minority.
+  const modeOverride = fReqs.filter((r: any) => r.preferredMode && r.shipMode && r.preferredMode !== r.shipMode).length
+
+  // ── How long the open documents have been waiting, and where they stand with the forwarder ──
   const fwdStatusRows = [
     { k: "Not sent yet", n: fReqs.filter((r: any) => !r.fwdSentAt).length, c: C.s4 },
     { k: "Sent · awaiting reply", n: fReqs.filter((r: any) => r.fwdSentAt && !r.fwdImportedAt).length, c: C.s1 },
@@ -540,6 +541,13 @@ export default function Page() {
                 }>
                 <Columns />
               </Card>
+              <Card title="Shipping Mode Mix" cap="How many documents went by each mode (as confirmed by LG)"
+                right={modeOverride ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(234,104,52,.15)", color: C.s2 }}>LG changed {modeOverride}</span> : null}>
+                <HBars labelW={116} rows={modeRows.map(m => ({
+                  k: m.k, v: m.n, color: m.c, label: `${m.n} docs`,
+                  tag: <span className="text-[10.5px] tabular-nums" style={{ color: D.mut, minWidth: 32, textAlign: "right" }}>{Math.round((m.n / modeTotal) * 100)}%</span>,
+                }))} />
+              </Card>
               <Card title="Exception Handling" cap={`Open > ${AGE_LIMIT} days · returned 3+ times · FWD silent > 3 days`}>
                 {exceptions.length === 0 ? <p className="text-[12px] py-3 text-center" style={{ color: C.good }}>Nothing over the limit 🎉</p> : (
                   <div className="space-y-1.5">
@@ -568,10 +576,6 @@ export default function Page() {
               </Card>
               <Card title="Incoterms Distribution" cap="Tells whether origin cost (EXW/FCA) has to be added">
                 <Donut />
-              </Card>
-              <Card title="Open Documents by Age" cap="How long the unfinished documents have been waiting">
-                <HBars labelW={84} color={C.s2}
-                  rows={ageRows.map((b, i) => ({ k: b.k, v: b.n, label: `${b.n} docs`, color: [C.s3, C.s1, C.s4, C.crit][i] }))} />
               </Card>
               <Card title="Forwarder Status" cap="Where every document stands with the forwarder">
                 <HBars labelW={128} rows={fwdStatusRows.map(s => ({ k: s.k, v: s.n, label: `${s.n} docs`, color: s.c }))} />
