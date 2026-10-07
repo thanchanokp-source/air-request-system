@@ -44,6 +44,7 @@ export default function Page() {
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
   const [statusF, setStatusF] = useState<string[]>([])
+  const [supF, setSupF] = useState<string[]>([])
   const reqTypeOf = pullReqType
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
@@ -54,6 +55,7 @@ export default function Page() {
   const poNos = useMemo(() => [...new Set(reqs.flatMap((r: any) => (r.items || []).map((i: any) => i.poNoDoc)).filter(Boolean))].sort(), [reqs])
   // Status filter options are the statuses actually present, shown by their label.
   const statusOpts = useMemo(() => [...new Set(reqs.map((r: any) => STATUS_LABEL[r.status] || r.status).filter(Boolean))].sort(), [reqs])
+  const supOpts = useMemo(() => [...new Set(reqs.flatMap((r: any) => (r.items || []).map((i: any) => i.vendorName)).filter(Boolean))].sort(), [reqs])
 
   // Every hook must run on every render — this early return has to stay BELOW them, otherwise the
   // first render (session still "loading") runs fewer hooks than the next one: React error #310.
@@ -66,6 +68,7 @@ export default function Page() {
     if (poF.length && !(r.items || []).some((i: any) => poF.includes(i.poNoDoc))) return false
     if (reqF.length && !reqF.includes(displayOf(r))) return false
     if (statusF.length && !statusF.includes(STATUS_LABEL[r.status] || r.status)) return false
+    if (supF.length && !(r.items || []).some((i: any) => supF.includes(i.vendorName))) return false
     return true
   })
   const items = fReqs.flatMap((r: any) => r.items || [])
@@ -158,6 +161,16 @@ export default function Page() {
     g.est += Number(i.airFreightCost) || 0; g.kg += Number(i.weight) || 0; g.n++
   })
   const countryCost = Object.entries(byCountry).map(([k, v]) => ({ k, v: v.kg ? v.est / v.kg : 0, n: v.n }))
+    .filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 6)
+
+  // Same metric per supplier — which vendors ship the expensive kilos.
+  const byVendor: Record<string, { est: number; kg: number; n: number }> = {}
+  items.forEach((i: any) => {
+    const k = i.vendorName; if (!k) return
+    const g = (byVendor[k] ||= { est: 0, kg: 0, n: 0 })
+    g.est += Number(i.airFreightCost) || 0; g.kg += Number(i.weight) || 0; g.n++
+  })
+  const supplierCost = Object.entries(byVendor).map(([k, v]) => ({ k, v: v.kg ? v.est / v.kg : 0, n: v.n }))
     .filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 6)
 
   // ── Exceptions ───────────────────────────────────────────────────────────────────────────
@@ -456,8 +469,9 @@ export default function Page() {
           <div className="w-36"><MultiSelect label="PO…" options={poNos} value={poF} onChange={setPoF} /></div>
           <div className="w-36"><MultiSelect label="Buyer…" options={reqOptions} value={reqF} onChange={setReqF} /></div>
           <div className="w-40"><MultiSelect label="Status…" options={statusOpts} value={statusF} onChange={setStatusF} /></div>
-          {(docF.length > 0 || poF.length > 0 || reqF.length > 0 || statusF.length > 0) && (
-            <button onClick={() => { setDocF([]); setPoF([]); setReqF([]); setStatusF([]) }} className="text-[11px] underline" style={{ color: D.mut }}>Clear filters</button>
+          <div className="w-40"><MultiSelect label="Supplier…" options={supOpts} value={supF} onChange={setSupF} /></div>
+          {(docF.length > 0 || poF.length > 0 || reqF.length > 0 || statusF.length > 0 || supF.length > 0) && (
+            <button onClick={() => { setDocF([]); setPoF([]); setReqF([]); setStatusF([]); setSupF([]) }} className="text-[11px] underline" style={{ color: D.mut }}>Clear filters</button>
           )}
           <span className="text-[11px] ml-auto" style={{ color: D.mut }}>{fReqs.length} documents</span>
         </div>
@@ -489,6 +503,10 @@ export default function Page() {
                 <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${D.line}` }}>
                   <p className="text-[10.5px] mb-2" style={{ color: D.mut }}>Est cost per kilo by origin country (USD/kg)</p>
                   <HBars color={C.s4} labelW={78} rows={countryCost.map(x => ({ k: `${x.k} (${x.n})`, v: x.v, label: x.v.toFixed(2) }))} />
+                </div>
+                <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${D.line}` }}>
+                  <p className="text-[10.5px] mb-2" style={{ color: D.mut }}>Est cost per kilo by supplier (USD/kg)</p>
+                  <HBars color={C.s5} labelW={100} rows={supplierCost.map(x => ({ k: `${x.k} (${x.n})`, v: x.v, label: x.v.toFixed(2) }))} />
                 </div>
               </Card>
             </div>
