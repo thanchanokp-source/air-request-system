@@ -183,6 +183,23 @@ export default function Page() {
   }).filter(x => x.age > AGE_LIMIT || x.rev >= 3 || (x.waitFwd != null && x.waitFwd > 3))
     .sort((a, b) => (b.rev * 10 + b.age) - (a.rev * 10 + a.age)).slice(0, 8)
 
+  // ── How long the open documents have been waiting, and where they stand with the forwarder ──
+  const AGE_BUCKETS = [
+    { k: "0–3 days", hit: (d: number) => d <= 3 },
+    { k: "4–7 days", hit: (d: number) => d > 3 && d <= 7 },
+    { k: "8–14 days", hit: (d: number) => d > 7 && d <= 14 },
+    { k: "15+ days", hit: (d: number) => d > 14 },
+  ]
+  const ageRows = AGE_BUCKETS.map(b => ({
+    k: b.k,
+    n: wipDocs.filter((r: any) => b.hit(Math.floor((Date.now() - new Date(r.createdAt).getTime()) / DAY))).length,
+  }))
+  const fwdStatusRows = [
+    { k: "Not sent yet", n: fReqs.filter((r: any) => !r.fwdSentAt).length, c: C.s4 },
+    { k: "Sent · awaiting reply", n: fReqs.filter((r: any) => r.fwdSentAt && !r.fwdImportedAt).length, c: C.s1 },
+    { k: "Replied & imported", n: fReqs.filter((r: any) => r.fwdImportedAt).length, c: C.s3 },
+  ]
+
   // ── Reasons for revision ─────────────────────────────────────────────────────────────────
   const reasonCount: Record<string, number> = {}
   fReqs.forEach((r: any) => { const t = String(r.lastReturnReason || "").trim(); if (t && (Number(r.reviseCount) || 0) > 0) reasonCount[t] = (reasonCount[t] || 0) + 1 })
@@ -551,6 +568,13 @@ export default function Page() {
               </Card>
               <Card title="Incoterms Distribution" cap="Tells whether origin cost (EXW/FCA) has to be added">
                 <Donut />
+              </Card>
+              <Card title="Open Documents by Age" cap="How long the unfinished documents have been waiting">
+                <HBars labelW={84} color={C.s2}
+                  rows={ageRows.map((b, i) => ({ k: b.k, v: b.n, label: `${b.n} docs`, color: [C.s3, C.s1, C.s4, C.crit][i] }))} />
+              </Card>
+              <Card title="Forwarder Status" cap="Where every document stands with the forwarder">
+                <HBars labelW={128} rows={fwdStatusRows.map(s => ({ k: s.k, v: s.n, label: `${s.n} docs`, color: s.c }))} />
               </Card>
               <Card title="Top Reasons for Revision" cap={`${totalRevises} returns in total · latest reason per document`}>
                 <VBars />
