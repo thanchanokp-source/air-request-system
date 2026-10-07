@@ -53,7 +53,23 @@ export default function Page() {
   const estOf = (r: any) => (r.items || []).reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
   const kgOf = (r: any) => (r.items || []).reduce((s: number, i: any) => s + (Number(i.weight) || 0), 0)
   const isDone = (r: any) => r.status === "COMPLETED" || r.actualAir != null
-  const ownerOf = (r: any) => r.purchaserName || displayOf(r) || r.requesterName || "-"
+  // One person, one bar. The same human reaches us as "doungjai.p", "doungjai.p@nanyangtextile.com"
+  // or "doungjai" depending on which field was filled, so every spelling is folded onto the name the
+  // "จัดซื้อ" filter already uses (buildRequesters), matching on the part before the @ and, failing
+  // that, on the part before the first dot.
+  const localOf = (s: any) => String(s || "").split("@")[0].trim()
+  const canon = new Map<string, string>()
+  reqs.forEach((r: any) => {
+    const d = displayOf(r); if (!d) return
+    canon.set(d.toLowerCase(), d)
+    const l = localOf(r.requesterName).toLowerCase(); if (l) canon.set(l, d)
+  })
+  const ownerOf = (r: any) => {
+    const raw = localOf(r.purchaserName) || displayOf(r) || localOf(r.requesterName)
+    if (!raw) return "-"
+    const k = raw.toLowerCase()
+    return canon.get(k) || canon.get(k.split(".")[0]) || raw
+  }
 
   const totalPullGarment = items.reduce((s, i) => s + (Number(i.pullGarment) || 0), 0)
   const totalKg = items.reduce((s, i) => s + (Number(i.weight) || 0), 0)
