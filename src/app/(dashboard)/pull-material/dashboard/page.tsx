@@ -13,19 +13,9 @@ import { pullReqType } from "@/lib/pull-reqtype"
 // backdrop is chosen, and one set of series colours works everywhere. The choice is remembered
 // per browser. Colours are fixed slots assigned in order and never cycled; every bar and slice
 // also carries its own number, so colour is never the only cue.
-type ThemeKey = "cream" | "charcoal" | "navy" | "light"
-type Theme = {
-  label: string; swatch: string
-  pageBg: string; pageText: string; pageMut: string   // the backdrop and the headings on it
-  card: string; card2: string; line: string; text: string; mut: string  // inside every panel
-}
-const PANEL_LIGHT = { card: "#ffffff", card2: "#f4f5f8", line: "#e4e7ec", text: "#111827", mut: "#6b7280" }
-const PANEL_CREAM = { card: "#fffdf8", card2: "#f7f1e6", line: "#e4d9c7", text: "#2b2620", mut: "#7c7467" }
-const THEMES: Record<ThemeKey, Theme> = {
-  cream: { label: "ครีม", swatch: "#f4ede1", pageBg: "#f4ede1", pageText: "#2b2620", pageMut: "#7c7467", ...PANEL_CREAM },
-  charcoal: { label: "เทาเข้ม", swatch: "#17191e", pageBg: "#17191e", pageText: "#eceef2", pageMut: "#9ba1ac", ...PANEL_LIGHT },
-  navy: { label: "น้ำเงินเข้ม", swatch: "#0f1520", pageBg: "#0f1520", pageText: "#e8edf5", pageMut: "#93a0b4", ...PANEL_LIGHT },
-  light: { label: "สว่าง", swatch: "#eef0f4", pageBg: "#eef0f4", pageText: "#111827", pageMut: "#6b7280", ...PANEL_LIGHT },
+const D = {
+  pageBg: "#eef0f4", pageText: "#111827", pageMut: "#6b7280",            // the backdrop behind the panels
+  card: "#ffffff", card2: "#f4f5f8", line: "#e4e7ec", text: "#111827", mut: "#6b7280", // inside every panel
 }
 // One series set — the panels are light under every theme, so these never need a dark variant.
 const C = {
@@ -54,10 +44,7 @@ export default function Page() {
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
-  const [theme, setTheme] = useState<ThemeKey>("cream")
   const reqTypeOf = pullReqType
-  useEffect(() => { try { const t = localStorage.getItem("pullDashTheme") as ThemeKey; if (t && THEMES[t]) setTheme(t) } catch { /* private mode */ } }, [])
-  const pickTheme = (t: ThemeKey) => { setTheme(t); try { localStorage.setItem("pullDashTheme", t) } catch { /* private mode */ } }
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { load() }, [bu]) // eslint-disable-line
@@ -70,7 +57,6 @@ export default function Page() {
   // first render (session still "loading") runs fewer hooks than the next one: React error #310.
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
 
-  const D = THEMES[theme]
 
   const fReqs = reqs.filter((r: any) => {
     if (typeF !== "ALL" && reqTypeOf(r) !== typeF) return false
@@ -426,30 +412,18 @@ export default function Page() {
     // sidebar stay as they are, and the dark surface reads as deliberate instead of clashing.
     <div className="rounded-2xl p-4 md:p-5 min-h-[calc(100vh-110px)]" style={{ background: D.pageBg, color: D.pageText, border: `1px solid ${D.line}` }}>
       <div className="max-w-[1500px] mx-auto space-y-3">
-        {/* header */}
-        <div className="flex items-end justify-between gap-3 flex-wrap">
+        {/* header — framed like every other panel, with a tinted strip so the title reads as a banner */}
+        <div className="rounded-xl px-4 py-3.5 flex items-end justify-between gap-3 flex-wrap"
+          style={{ background: `linear-gradient(90deg, ${D.card} 0%, ${D.card2} 100%)`, border: `1px solid ${D.line}`, borderLeft: `4px solid ${C.s1}` }}>
           <div>
-            <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: D.pageMut }}>Nan Yang Textile · RM REQ AIR</div>
-            <h1 className="text-[22px] font-bold">✈ {bu} Air Request — Team Analysis Dashboard</h1>
-            <p className="text-[11.5px]" style={{ color: D.pageMut }}>ช่วงข้อมูล {period} · ใครคอขวด · ส่วนต่าง Est เทียบ Actual · ใบที่ค้างเกินกำหนด</p>
+            <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: D.mut }}>Nan Yang Textile · RM REQ AIR</div>
+            <h1 className="text-[22px] font-bold" style={{ color: D.text }}>✈ {bu} Air Request — Team Analysis Dashboard</h1>
+            <p className="text-[11.5px]" style={{ color: D.mut }}>ช่วงข้อมูล {period} · ใครคอขวด · ส่วนต่าง Est เทียบ Actual · ใบที่ค้างเกินกำหนด</p>
           </div>
-          <div className="flex gap-3 items-center flex-wrap">
-            <div className="flex gap-1.5">{BUS.map(b => (
-              <button key={b} onClick={() => setBu(b)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                style={bu === b ? { background: C.s1, color: "#fff" } : { background: D.card, color: D.mut, border: `1px solid ${D.line}` }}>{b}</button>
-            ))}</div>
-            {/* surface picker — remembered per browser */}
-            <div className="flex gap-1 rounded-lg p-0.5" style={{ background: D.card, border: `1px solid ${D.line}` }}>
-              {(Object.keys(THEMES) as ThemeKey[]).map(t => (
-                <button key={t} onClick={() => pickTheme(t)} title={`พื้นหลัง: ${THEMES[t].label}`}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold"
-                  style={theme === t ? { background: D.card2, color: D.text } : { color: D.mut }}>
-                  <i className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: THEMES[t].swatch, border: `1px solid ${D.line}` }} />
-                  {THEMES[t].label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <div className="flex gap-1.5">{BUS.map(b => (
+            <button key={b} onClick={() => setBu(b)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+              style={bu === b ? { background: C.s1, color: "#fff" } : { background: D.card, color: D.mut, border: `1px solid ${D.line}` }}>{b}</button>
+          ))}</div>
         </div>
 
         {/* KPI strip */}
