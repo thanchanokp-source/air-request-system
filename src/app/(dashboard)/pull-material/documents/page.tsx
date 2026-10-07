@@ -57,7 +57,8 @@ export default function Page() {
   // #4 batch fill: filter by port + ETC range, multi-select docs, fill actual across many at once.
   const [portF, setPortF] = useState("ALL")
   // Where a doc stands with the forwarder: never mailed · mailed and still waiting · FWD answered.
-  const [fwdF, setFwdF] = useState<"ALL" | "NONE" | "SENT" | "BACK">("ALL")
+  // Opens on the docs LG has not mailed out yet — that is the pile they work from.
+  const [fwdF, setFwdF] = useState<"ALL" | "NONE" | "SENT" | "BACK">("NONE")
   const [etcFrom, setEtcFrom] = useState("")
   const [etcTo, setEtcTo] = useState("")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())

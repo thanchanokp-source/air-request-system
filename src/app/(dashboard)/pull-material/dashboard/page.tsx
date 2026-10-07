@@ -156,7 +156,16 @@ export default function Page() {
   })
   const incRows = Object.entries(incAgg).sort((a, b) => b[1].n - a[1].n).slice(0, 5)
   const incTotal = incRows.reduce((s, [, v]) => s + v.n, 0)
-  const incCost = incRows.map(([k, v]) => ({ k, v: v.kg ? v.est / v.kg : 0 })).sort((a, b) => b.v - a.v)
+
+  // ── Route cost: what a kilo costs out of each origin country (per material line, not per doc) ──
+  const byCountry: Record<string, { est: number; kg: number; n: number }> = {}
+  items.forEach((i: any) => {
+    const k = i.country; if (!k) return
+    const g = (byCountry[k] ||= { est: 0, kg: 0, n: 0 })
+    g.est += Number(i.airFreightCost) || 0; g.kg += Number(i.weight) || 0; g.n++
+  })
+  const countryCost = Object.entries(byCountry).map(([k, v]) => ({ k, v: v.kg ? v.est / v.kg : 0, n: v.n }))
+    .filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 6)
 
   // ── Exceptions ───────────────────────────────────────────────────────────────────────────
   const AGE_LIMIT = 7
@@ -415,10 +424,12 @@ export default function Page() {
         {/* header — framed like every other panel, with a tinted strip so the title reads as a banner */}
         <div className="rounded-xl px-4 py-3.5 flex items-end justify-between gap-3 flex-wrap"
           style={{ background: `linear-gradient(90deg, ${D.card} 0%, ${D.card2} 100%)`, border: `1px solid ${D.line}`, borderLeft: `4px solid ${C.s1}` }}>
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.18em]" style={{ color: D.mut }}>Nan Yang Textile · RM REQ AIR</div>
-            <h1 className="text-[22px] font-bold" style={{ color: D.text }}>✈ {bu} Air Request — Team Analysis Dashboard</h1>
-            <p className="text-[11.5px]" style={{ color: D.mut }}>ช่วงข้อมูล {period} · ใครคอขวด · ส่วนต่าง Est เทียบ Actual · ใบที่ค้างเกินกำหนด</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap text-[10px] uppercase tracking-[0.18em]" style={{ color: D.mut }}>
+              Nan Yang Textile · RM REQ AIR
+              <span className="px-2 py-0.5 rounded-full tracking-normal normal-case text-[10.5px]" style={{ background: D.card2, border: `1px solid ${D.line}` }}>{period}</span>
+            </div>
+            <h1 className="text-[22px] font-bold leading-[1.45] py-0.5" style={{ color: D.text }}>✈ {bu} Air Request — Team Analysis Dashboard</h1>
           </div>
           <div className="flex gap-1.5">{BUS.map(b => (
             <button key={b} onClick={() => setBu(b)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
@@ -481,8 +492,8 @@ export default function Page() {
                   tag: <span className="text-[10.5px] font-bold tabular-nums" style={{ color: f.diff > 0 ? C.crit : C.good }}>({f.diff > 0 ? "+" : ""}{f.diff.toFixed(1)})</span>,
                 }))} />
                 <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${D.line}` }}>
-                  <p className="text-[10.5px] mb-2" style={{ color: D.mut }}>ต้นทุน Est ต่อกิโล แยกตาม Incoterm (USD/kg)</p>
-                  <HBars color={C.s4} labelW={64} rows={incCost.map(x => ({ k: x.k, v: x.v, label: x.v.toFixed(2) }))} />
+                  <p className="text-[10.5px] mb-2" style={{ color: D.mut }}>ต้นทุน Est ต่อกิโล แยกตามประเทศต้นทาง (USD/kg)</p>
+                  <HBars color={C.s4} labelW={78} rows={countryCost.map(x => ({ k: `${x.k} (${x.n})`, v: x.v, label: x.v.toFixed(2) }))} />
                 </div>
               </Card>
             </div>
