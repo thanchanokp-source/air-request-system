@@ -11,11 +11,24 @@ import { pullReqType } from "@/lib/pull-reqtype"
 // This page is the wall display: dark surface, three columns, one chart per question. Colours are
 // fixed slots assigned in order and never cycled; every bar/slice also carries its own number so
 // colour is never the only cue.
-const D = { bg: "#0f1520", card: "#1a2130", card2: "#141b26", line: "#2b3545", text: "#e8edf5", mut: "#93a0b4" }
-const C = {
-  s1: "#3987e5", s2: "#d95926", s3: "#199e70", s4: "#c98500", s5: "#9085e9",
-  good: "#43a047", crit: "#e66767",
-  funnel: ["#1f3a5f", "#2a6ab0", "#c98500", "#d95926", "#199e70", "#9085e9"],
+// Three surfaces to choose from — the app's own chrome (white top bar, maroon sidebar) stays put,
+// so each one is picked to sit next to that without fighting it. The choice is remembered per browser.
+type ThemeKey = "charcoal" | "navy" | "light"
+const THEMES: Record<ThemeKey, { label: string; bg: string; card: string; card2: string; line: string; text: string; mut: string; dark: boolean }> = {
+  charcoal: { label: "เทาเข้ม", bg: "#17191e", card: "#212429", card2: "#191c21", line: "#32363f", text: "#eceef2", mut: "#9ba1ac", dark: true },
+  navy: { label: "น้ำเงินเข้ม", bg: "#0f1520", card: "#1a2130", card2: "#141b26", line: "#2b3545", text: "#e8edf5", mut: "#93a0b4", dark: true },
+  light: { label: "สว่าง", bg: "#eef0f4", card: "#ffffff", card2: "#f4f5f8", line: "#e2e5ea", text: "#111827", mut: "#6b7280", dark: false },
+}
+// Series slots per surface: the dark steps on dark, the light steps on light — same hues either way.
+const SERIES: Record<"dark" | "light", { s1: string; s2: string; s3: string; s4: string; s5: string; good: string; crit: string; funnel: string[] }> = {
+  dark: {
+    s1: "#3987e5", s2: "#d95926", s3: "#199e70", s4: "#c98500", s5: "#9085e9", good: "#43a047", crit: "#e66767",
+    funnel: ["#1f3a5f", "#2a6ab0", "#3987e5", "#c98500", "#d95926", "#9085e9"],
+  },
+  light: {
+    s1: "#2a78d6", s2: "#eb6834", s3: "#1baf7a", s4: "#eda100", s5: "#4a3aa7", good: "#008300", crit: "#e34948",
+    funnel: ["#104281", "#1c5cab", "#2a78d6", "#eda100", "#eb6834", "#4a3aa7"],
+  },
 }
 const THB = 32.5
 const DAY = 86400000
@@ -38,7 +51,10 @@ export default function Page() {
   const [docF, setDocF] = useState<string[]>([])
   const [poF, setPoF] = useState<string[]>([])
   const [reqF, setReqF] = useState<string[]>([])
+  const [theme, setTheme] = useState<ThemeKey>("charcoal")
   const reqTypeOf = pullReqType
+  useEffect(() => { try { const t = localStorage.getItem("pullDashTheme") as ThemeKey; if (t && THEMES[t]) setTheme(t) } catch { /* private mode */ } }, [])
+  const pickTheme = (t: ThemeKey) => { setTheme(t); try { localStorage.setItem("pullDashTheme", t) } catch { /* private mode */ } }
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
   useEffect(() => { load() }, [bu]) // eslint-disable-line
@@ -50,6 +66,9 @@ export default function Page() {
   // Every hook must run on every render — this early return has to stay BELOW them, otherwise the
   // first render (session still "loading") runs fewer hooks than the next one: React error #310.
   if (auth === "loading") return <div className="p-10 text-center text-gray-400 text-sm">Loading…</div>
+
+  const D = THEMES[theme]
+  const C = SERIES[D.dark ? "dark" : "light"]
 
   const fReqs = reqs.filter((r: any) => {
     if (typeF !== "ALL" && reqTypeOf(r) !== typeF) return false
@@ -401,7 +420,9 @@ export default function Page() {
   const period = monthly.length ? `${monthly[0][0]} → ${monthly[monthly.length - 1][0]}` : "—"
 
   return (
-    <div className="-m-5 md:-m-8 p-4 md:p-6 min-h-screen" style={{ background: D.bg, color: D.text }}>
+    // A panel inside the app shell rather than a full-bleed wash — the white top bar and the maroon
+    // sidebar stay as they are, and the dark surface reads as deliberate instead of clashing.
+    <div className="rounded-2xl p-4 md:p-5 min-h-[calc(100vh-110px)]" style={{ background: D.bg, color: D.text, border: `1px solid ${D.line}` }}>
       <div className="max-w-[1500px] mx-auto space-y-3">
         {/* header */}
         <div className="flex items-end justify-between gap-3 flex-wrap">
@@ -410,10 +431,23 @@ export default function Page() {
             <h1 className="text-[22px] font-bold">✈ {bu} Air Request — Team Analysis Dashboard</h1>
             <p className="text-[11.5px]" style={{ color: D.mut }}>ช่วงข้อมูล {period} · ใครคอขวด · ส่วนต่าง Est เทียบ Actual · ใบที่ค้างเกินกำหนด</p>
           </div>
-          <div className="flex gap-1.5">{BUS.map(b => (
-            <button key={b} onClick={() => setBu(b)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-              style={bu === b ? { background: C.s1, color: "#fff" } : { background: D.card, color: D.mut, border: `1px solid ${D.line}` }}>{b}</button>
-          ))}</div>
+          <div className="flex gap-3 items-center flex-wrap">
+            <div className="flex gap-1.5">{BUS.map(b => (
+              <button key={b} onClick={() => setBu(b)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                style={bu === b ? { background: C.s1, color: "#fff" } : { background: D.card, color: D.mut, border: `1px solid ${D.line}` }}>{b}</button>
+            ))}</div>
+            {/* surface picker — remembered per browser */}
+            <div className="flex gap-1 rounded-lg p-0.5" style={{ background: D.card, border: `1px solid ${D.line}` }}>
+              {(Object.keys(THEMES) as ThemeKey[]).map(t => (
+                <button key={t} onClick={() => pickTheme(t)} title={`พื้นหลัง: ${THEMES[t].label}`}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-semibold"
+                  style={theme === t ? { background: D.card2, color: D.text } : { color: D.mut }}>
+                  <i className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: THEMES[t].bg, border: `1px solid ${D.line}` }} />
+                  {THEMES[t].label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* KPI strip */}
