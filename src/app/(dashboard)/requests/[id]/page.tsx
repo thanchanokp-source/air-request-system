@@ -9,6 +9,7 @@ import { PdfDownloadButton } from "@/components/pdf-download-button"
 import HawbSection from "@/components/HawbSection"
 import { ClaimSplitBadges, ClaimSplitTable } from "@/components/ClaimSplits"
 import SignatureModal from "@/components/signature-modal"
+import SupplierClaimBox from "@/components/SupplierClaimBox"
 import { getSplits, deptSplitStatus, isLastPosition, nextPositionLabel, nextPositionRole, positionHasBranch, PROCUREMENT_BRANCHES, actingClaimForSO, deptLabel, nextPositionSpec, positionSpec, prodGroupCovers, vpProdGroup, itemHasReassignSplit, chainFor, claimSplitState, claimReasonText, claimDetailText, type PosSpec } from "@/lib/claim"
 import { validateUploadRows } from "@/lib/upload-validate"
 import { soCurrency, splitByCurrency, fmtSplit } from "@/lib/currency"
@@ -2476,6 +2477,10 @@ export default function RequestDetailPage() {
 
       {/* Claim Status by Department — additive at-a-glance board (all roles) */}
       <ClaimStatusBoard req={req} />
+
+      {/* Procurement → supplier claim (doc no. + amount + files) */}
+      <SupplierClaimBox req={req} myRoles={myAllRoles}
+        onChanged={async () => { const rr = await fetch(`/api/requests/${id}`); if (rr.ok) setReq(await rr.json()) }} />
 
       {/* Rejection Reason */}
       {req.rejectionReason && (

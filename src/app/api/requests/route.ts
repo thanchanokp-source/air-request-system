@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
       items: { include: { claimApprovals: { select: { userId: true, role: true, createdAt: true } } } },
       // Forced-position forward rows → show who each claim dept is currently waiting on.
       claimForwards: { select: { dept: true, nextName: true, nextEmail: true, position: true, itemIds: true } },
+      supplierClaims: { select: { id: true, refNo: true, amount: true } },
       attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
       approvalLogs: {
         // REJECT logs (for rejection info) + the "ready to book" approval

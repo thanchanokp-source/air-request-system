@@ -644,6 +644,28 @@ function DocSection({ pages, hawbNo, masterSigs, hidePresident }: { pages: { req
           </View>
         )}
 
+        {/* Supplier claim — Procurement charged back to the supplier (doc no. + amount) */}
+        {(() => {
+          const seen = new Set<string>(), sc: any[] = []
+          for (const p of pages) for (const c of (p.req?.supplierClaims || [])) if (!seen.has(c.id)) { seen.add(c.id); sc.push({ ...c, doc: p.req?.documentNo }) }
+          if (!sc.length) return null
+          const multiDoc = new Set(sc.map(c => c.doc)).size > 1
+          return (
+            <View style={{ marginTop: 8, borderWidth: 1, borderColor: "#bbf7d0", borderRadius: 3, borderStyle: "solid", maxWidth: 320 }} wrap={false}>
+              <View style={{ flexDirection: "row", backgroundColor: "#166534", paddingVertical: 3, paddingHorizontal: 8 }}>
+                <Text style={{ color: "#fff", fontSize: 8, flex: 1 }}>SUPPLIER CLAIM (PROCUREMENT)</Text>
+                <Text style={{ color: "#fff", fontSize: 8, textAlign: "right", width: 90 }}>AMOUNT (THB)</Text>
+              </View>
+              {sc.map((c, i) => (
+                <View key={c.id} style={{ flexDirection: "row", paddingVertical: 2.5, paddingHorizontal: 8, borderTopWidth: i === 0 ? 0 : 0.5, borderTopColor: "#e2e8f0", borderStyle: "solid" }}>
+                  <Text style={{ fontSize: 8, flex: 1 }}>{c.refNo}{multiDoc ? `  (${c.doc})` : ""}</Text>
+                  <Text style={{ fontSize: 8, textAlign: "right", width: 90 }}>{Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+                </View>
+              ))}
+            </View>
+          )
+        })()}
+
         {/* Signature — ONCE, at the end */}
         <SignatureRow signers={signers} flow />
     </>

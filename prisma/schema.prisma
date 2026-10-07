@@ -35,6 +35,7 @@ model User {
   approvals          ApprovalLog[]
   claimApprovals     ClaimApproval[]
   attachments        RequestAttachment[]
+  supplierClaims     SupplierClaim[]
 }
 
 model MasterBrand {
@@ -146,6 +147,7 @@ model AirRequest {
   hawbGroups          HawbGroup[]
   claimForwards       ClaimForward[]
   approvalSignatures  ApprovalSignature[]
+  supplierClaims      SupplierClaim[]
 }
 
 // A signature snapshot captured at the moment a person APPROVES (not data entry).
@@ -222,6 +224,22 @@ model ClaimApproval {
   user      User           @relation(fields: [userId], references: [id])
 
   @@unique([itemId, userId])
+}
+
+// Procurement charged (part of) this document's claim back to a supplier: claim doc no. + amount.
+// Files = RequestAttachment with category "SUPPLIER_CLAIM:<id>".
+model SupplierClaim {
+  id          String     @id @default(cuid())
+  requestId   String
+  refNo       String
+  amount      Float
+  note        String?
+  createdById String
+  createdAt   DateTime   @default(now())
+  request     AirRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  createdBy   User       @relation(fields: [createdById], references: [id])
+
+  @@index([requestId])
 }
 
 model HawbGroup {

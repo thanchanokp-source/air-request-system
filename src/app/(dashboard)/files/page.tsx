@@ -803,6 +803,12 @@ export default function FilesPage() {
                               <span className="text-xs text-gray-400">{[...new Set(items.map((i: any) => i.brand).filter(Boolean))].join(", ") || req.brandName}</span>
                               <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${req.bu === "GW" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{req.bu}</span>
                               {req.crNo && <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium whitespace-nowrap">CR: {req.crNo}</span>}
+                              {Array.isArray(req.supplierClaims) && req.supplierClaims.length > 0 && (
+                                <span title={req.supplierClaims.map((c: any) => `${c.refNo} · ${Number(c.amount).toLocaleString()} THB`).join("\n")}
+                                  className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium whitespace-nowrap">
+                                  🧾 เคลม supplier แล้ว {req.supplierClaims.reduce((s: number, c: any) => s + (Number(c.amount) || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} THB
+                                </span>
+                              )}
                               {(() => {
                                 const stage = docStage(req)
                                 const ap = bookApproval(req)

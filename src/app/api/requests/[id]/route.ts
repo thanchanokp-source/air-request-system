@@ -24,6 +24,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
       attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
       claimForwards: true,
       approvalSignatures: { orderBy: { signedAt: "asc" } },
+      supplierClaims: { include: { createdBy: { select: { name: true, email: true } } }, orderBy: { createdAt: "asc" } },
     } as any
   })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
