@@ -401,29 +401,13 @@ export default function Page() {
       <div className="max-w-[1360px] mx-auto">
 
         {/* header banner */}
-        <div className="rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3.5 flex-wrap"
-          style={{ background: `linear-gradient(100deg, ${D.card}, ${D.card2})`, border: `1px solid ${D.line}`, borderInlineStart: `4px solid ${C.s1}`, boxShadow: SH }}>
-          <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-[.17em] font-semibold" style={{ color: D.faint }}>Nan Yang Textile · RM REQ AIR · {bu}</div>
-            <h1 className="text-[22px] font-bold tracking-[-.025em] mt-0.5 leading-[1.4]" style={{ color: D.text }}>✈ Air Request — Team Analysis Dashboard</h1>
-            <div className="flex items-center gap-2.5 flex-wrap mt-1.5 text-[11.5px]" style={{ color: D.mut }}>
-              <Pill tone="neutral">{monthly.length ? `${monLabel(monthly[0][0], true)} → ${monLabel(monthly[monthly.length - 1][0], true)}` : "—"}</Pill>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* count documents, or the garment pieces behind them */}
-            <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2, border: `1px solid ${D.line}` }}>
-              {([["docs", "Docs"], ["pcs", "Pcs"]] as const).map(([v, label]) => (
-                <button key={v} onClick={() => setUnit(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                  style={unit === v ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>{label}</button>
-              ))}
-            </div>
-            <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2, border: `1px solid ${D.line}` }}>
-              {BUS.map(b => (
-                <button key={b} onClick={() => setBu(b)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                  style={bu === b ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>{b}</button>
-              ))}
-            </div>
+        {/* Borderless band: the title sits on the page itself, so the KPI cards below are the first
+            surface the eye lands on. Everything that changes the data lives in the filter bar. */}
+        <div className="pb-3 mb-1" style={{ borderBottom: `1px solid ${D.line}` }}>
+          <div className="text-[10px] uppercase tracking-[.17em] font-semibold" style={{ color: D.faint }}>Nan Yang Textile · RM REQ AIR · {bu}</div>
+          <h1 className="text-[25px] font-bold tracking-[-.03em] mt-1 leading-[1.3]" style={{ color: D.text }}>✈ Air Request — Team Analysis</h1>
+          <div className="mt-2">
+            <Pill tone="neutral">{monthly.length ? `${monLabel(monthly[0][0], true)} → ${monLabel(monthly[monthly.length - 1][0], true)}` : "—"}</Pill>
           </div>
         </div>
 
@@ -469,7 +453,20 @@ export default function Page() {
           {(docF.length > 0 || poF.length > 0 || reqF.length > 0 || statusF.length > 0 || supF.length > 0) && (
             <button onClick={() => { setDocF([]); setPoF([]); setReqF([]); setStatusF([]); setSupF([]) }} className="text-[11px] underline" style={{ color: D.mut }}>Clear filters</button>
           )}
-          <span className="text-[11.5px] ms-auto" style={{ color: D.faint }}>{totalDocs} documents</span>
+          <span className="w-px h-5 ms-auto" style={{ background: D.line }} />
+          {/* count documents, or the garment pieces behind them */}
+          <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2 }}>
+            {([["docs", "Docs"], ["pcs", "Pcs"]] as const).map(([v, label]) => (
+              <button key={v} onClick={() => setUnit(v)} className="px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold"
+                style={unit === v ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>{label}</button>
+            ))}
+          </div>
+          <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2 }}>
+            {BUS.map(b => (
+              <button key={b} onClick={() => setBu(b)} className="px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold"
+                style={bu === b ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>{b}</button>
+            ))}
+          </div>
         </div>
 
         {loading ? <p className="text-sm mt-4" style={{ color: D.pageMut }}>Loading…</p> : totalDocs === 0 ? (
