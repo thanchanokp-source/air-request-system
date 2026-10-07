@@ -1045,7 +1045,7 @@ export default function DashboardPage() {
         const lbl=deptLabel(s.dept)||"-"; const pct=Number(s.pct)||0
         if(!m[lbl]) m[lbl]={amt:{THB:0,USD:0},est:{THB:0,USD:0},qty:0,st:{a:{THB:0,USD:0,n:0},p:{THB:0,USD:0,n:0},r:{THB:0,USD:0,n:0}}}
         m[lbl].amt[cur]+=act*pct/100              // actual ล้วน (ไม่ fallback est)
-        const ss = r.itemStatus==="REJECTED" ? "rejected" : PAST_CLAIM.includes(r.itemStatus) ? "approved" : claimSplitState(s.dept, s.status).s
+        const ss = r.itemStatus==="REJECTED" ? "rejected" : PAST_CLAIM.includes(r.itemStatus) ? "approved" : claimSplitState(s.dept, s.status, s).s
         const b = m[lbl].st[ss==="approved"?"a":ss==="rejected"?"r":"p"]
         b[cur as "THB"|"USD"]+=act*pct/100; b.n++
         m[lbl].est[cur]+=est*pct/100
@@ -1088,7 +1088,7 @@ export default function DashboardPage() {
     for(const r of chartRows){
       for(const sp of getSplits(r)){
         if((deptLabel(sp.dept)||"-")!==deptPop.dept) continue
-        const cs = claimSplitState(sp.dept, sp.status)
+        const cs = claimSplitState(sp.dept, sp.status, sp)
         const ss = r.itemStatus==="REJECTED" ? "r" : PAST.includes(r.itemStatus) ? "a" : cs.s==="approved" ? "a" : cs.s==="rejected" ? "r" : "p"
         if(ss!==deptPop.tab) continue
         const id = r.request?.id; if(!id) continue

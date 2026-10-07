@@ -794,7 +794,7 @@ async function notifyStatusChangeImpl(requestId: string, newStatus: string, only
       const scope = onlyItemIds?.length ? req.items.filter((it: any) => onlyItemIds.includes(it.id)) : req.items
       for (const it of scope) getSplits(it).forEach(s => depts.add(s.dept))
       const groups = gwClaimGroups(depts, req)
-      if (depts.has("GW")) await notifyGwClaimStepImpl(req, "DPM").catch(() => {})
+      if (scope.some((it: any) => getSplits(it).some((s: any) => s.dept === "GW" && s.reapprove && s.status == null))) await notifyGwClaimStepImpl(req, "DPM").catch(() => {})
       if (groups.length === 0) return
       const link = `${APP_URL}/requests/${requestId}`
       // Each group = a claim dept's people (GW≠SUPPLIER via claimDepartment).
@@ -1674,7 +1674,7 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
       const NO_APPROVAL = ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]   // GW approves again
       const doneSt = ["DEPT_APPROVED", "COMPLETED", "REJECTED"]
       const pendingDepts = new Set<string>()
-      for (const it of (doc.items || [])) for (const s of getSplits(it)) if (s.dept && !doneSt.includes(String(s.status || "")) && !NO_APPROVAL.includes(s.dept)) pendingDepts.add(s.dept)
+      for (const it of (doc.items || [])) for (const s of getSplits(it)) if (s.dept && !doneSt.includes(String(s.status || "")) && !NO_APPROVAL.includes(s.dept) && !(s.dept === "GW" && !(s as any).reapprove)) pendingDepts.add(s.dept)
       const set = new Set<string>()
       const addE = (e: any) => { if (e) set.add(String(e).toLowerCase()) }
       // A forwarded approver (per dept) is the CURRENT holder for their SOs → alert only them,
@@ -1703,7 +1703,7 @@ export async function sendWeeklyStuckAlerts(): Promise<{ docs: number; emailsSen
         if (forwardedDepts.has(d)) continue // already forwarded → only the current holder above
         if (d === "COMMERCIAL") { addE(doc.assignedDvmMer || doc.assignedVpMer); continue }
         if (d === "GW" && doc.bu === "GW") {   // GW claim: DPM of the doc → GM
-          const st = (doc.items || []).flatMap((it: any) => getSplits(it)).filter((s: any) => s.dept === "GW").map((s: any) => s.status)
+          const st = (doc.items || []).flatMap((it: any) => getSplits(it)).filter((s: any) => s.dept === "GW" && s.reapprove).map((s: any) => s.status)
           if (st.some((x: any) => x == null || x === "CLAIM_PENDING")) { if (doc.assignedVpMer) addE(doc.assignedVpMer); else { roleSet.add("DPM_GW"); roleSet.add("VP_MER_GW") } }
           if (st.includes("GW_DPM_PASSED")) roleSet.add("GM_GW")
           continue
@@ -1839,7 +1839,8 @@ async function claimEntryUsersForDept(req: any, dept: string, items: any[]): Pro
   if (req.bu === "GW") {
     if (dept === "SCM NYG" || dept === "NYG") deptRoles = ["SCM_NYG"]
     else if (dept === "GW") {
-      // GW claim entry = the doc's DPM (assignedVpMer), else every DPM_GW / VP_MER_GW
+      // GW set at upload = already approved with the doc → nobody; re-assigned on resubmit → the doc's DPM
+      if (!items.some((it: any) => getSplits(it).some((s: any) => s.dept === "GW" && s.reapprove))) return []
       const emails = await gwClaimStepEmails(req, "DPM")
       const us = await prisma.user.findMany({ where: { isActive: true, email: { in: emails } } as any, select: { id: true, email: true } })
       push(us)

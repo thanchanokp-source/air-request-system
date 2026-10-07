@@ -43,7 +43,7 @@ function docDeptMap(doc: any): Record<string, DeptAgg> {
     const reachedClaim = CLAIM_REACHED.has(it.itemStatus)
     for (const sp of getSplits(it)) {
       const dept = canonDept(sp.dept)
-      const base = claimSplitState(sp.dept, sp.status).s
+      const base = claimSplitState(sp.dept, sp.status, sp).s
       // Assigned but the doc hasn't reached the claim stage yet → "notstarted" (grey), unless the
       // split is already settled (auto-approved GW/SUPPLIER, or rejected).
       const st: CellState = itemRejected ? "rejected"

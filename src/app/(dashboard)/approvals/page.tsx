@@ -92,7 +92,7 @@ export default function ApprovalsPage() {
     const isDpm = (myRoles.includes("DPM_GW") || myRoles.includes("VP_MER_GW")) && (!r.assignedVpMer || String(r.assignedVpMer).toLowerCase() === userEmail.toLowerCase())
     const isGm = myRoles.includes("GM_GW")
     if (!isDpm && !isGm) return []
-    return (r.items || []).filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => s.dept === "GW"
+    return (r.items || []).filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => s.dept === "GW" && s.reapprove
       && ((isDpm && (s.status == null || s.status === "CLAIM_PENDING")) || (isGm && s.status === "GW_DPM_PASSED"))))
   }
   // Which BU(s) this person's queue can span (their roles' BUs; bu==="ALL" → every BU).

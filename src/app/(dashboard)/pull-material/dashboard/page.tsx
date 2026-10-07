@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
-import { BUS, STATUS_LABEL, fmt } from "../_StageWork"
+import { BUS, MAROON, STATUS_LABEL, fmt } from "../_StageWork"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { buildRequesters } from "@/lib/pull-requesters"
 import { pullReqType, isSampleLike } from "@/lib/pull-reqtype"
@@ -401,27 +401,29 @@ export default function Page() {
       <div className="max-w-[1360px] mx-auto">
 
         {/* header banner */}
-        <div className="rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3.5 flex-wrap"
-          style={{ background: `linear-gradient(100deg, ${D.card}, ${D.card2})`, border: `1px solid ${D.line}`, borderInlineStart: `4px solid ${C.s1}`, boxShadow: SH }}>
+        <div className="rounded-2xl px-5 py-4 flex items-center justify-between gap-3.5 flex-wrap"
+          style={{ background: `linear-gradient(100deg, ${MAROON}, #8f2b2b 55%, #a8453a)`, border: "1px solid rgba(0,0,0,.08)", boxShadow: "0 10px 24px -18px rgba(107,26,26,.9)" }}>
           <div className="min-w-0">
-            <div className="text-[10px] uppercase tracking-[.17em] font-semibold" style={{ color: D.faint }}>Nan Yang Textile · RM REQ AIR · {bu}</div>
-            <h1 className="text-[22px] font-bold tracking-[-.025em] mt-0.5 leading-[1.4]" style={{ color: D.text }}>✈ Air Request — Team Analysis Dashboard</h1>
-            <div className="flex items-center gap-2.5 flex-wrap mt-1.5 text-[11.5px]" style={{ color: D.mut }}>
-              <Pill tone="neutral">{monthly.length ? `${monLabel(monthly[0][0], true)} → ${monLabel(monthly[monthly.length - 1][0], true)}` : "—"}</Pill>
+            <div className="text-[10px] uppercase tracking-[.17em] font-semibold" style={{ color: "rgba(255,255,255,.62)" }}>Nan Yang Textile · RM REQ AIR · {bu}</div>
+            <h1 className="text-[22px] font-bold tracking-[-.025em] mt-0.5 leading-[1.4] text-white">✈ Air Request — Team Analysis Dashboard</h1>
+            <div className="flex items-center gap-2.5 flex-wrap mt-1.5 text-[11.5px]">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,.16)", color: "#fff" }}>
+                {monthly.length ? `${monLabel(monthly[0][0], true)} → ${monLabel(monthly[monthly.length - 1][0], true)}` : "—"}
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {/* count documents, or the garment pieces behind them */}
-            <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2, border: `1px solid ${D.line}` }}>
+            <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: "rgba(255,255,255,.14)" }}>
               {([["docs", "Docs"], ["pcs", "Pcs"]] as const).map(([v, label]) => (
                 <button key={v} onClick={() => setUnit(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                  style={unit === v ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>{label}</button>
+                  style={unit === v ? { background: "#fff", color: MAROON } : { color: "rgba(255,255,255,.82)" }}>{label}</button>
               ))}
             </div>
-            <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2, border: `1px solid ${D.line}` }}>
+            <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: "rgba(255,255,255,.14)" }}>
               {BUS.map(b => (
                 <button key={b} onClick={() => setBu(b)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                  style={bu === b ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>{b}</button>
+                  style={bu === b ? { background: "#fff", color: MAROON } : { color: "rgba(255,255,255,.82)" }}>{b}</button>
               ))}
             </div>
           </div>

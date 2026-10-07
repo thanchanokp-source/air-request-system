@@ -1508,7 +1508,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!splits || splits.length === 0) return NextResponse.json({ error: "Please select at least one claim department" }, { status: 400 })
     const totalPctVal = splits.reduce((sum: number, s: any) => sum + (Number(s.pct) || 0), 0)
     if (Math.round(totalPctVal) !== 100) return NextResponse.json({ error: "Total %CLAIM must equal 100" }, { status: 400 })
-    const newSplits = splits.map((s: any) => ({ dept: String(s.dept), pct: Number(s.pct) || 0, reason: s.reason || null, status: null, crNo: null }))
+    // a GW split chosen on a resubmit was never seen by DPM / GM → reapprove (DPM → GM)
+    const newSplits = splits.map((s: any) => ({ dept: String(s.dept), pct: Number(s.pct) || 0, reason: s.reason || null, status: null, crNo: null, ...(String(s.dept) === "GW" ? { reapprove: true } : {}) }))
     await resetClaimTrail(id, [itemId])
     await prisma.airRequestItem.update({
       where: { id: itemId },
@@ -1545,7 +1546,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const totalPctVal = raw.reduce((s: number, x: any) => s + (Number(x.pct) || 0), 0)
       if (Math.round(totalPctVal) !== 100) return NextResponse.json({ error: `SO ${it.so}: total %CLAIM must equal 100` }, { status: 400 })
       if (raw.some((x: any) => !x.dept)) return NextResponse.json({ error: `SO ${it.so}: select a claim department` }, { status: 400 })
-      const newSplits = raw.map((x: any) => ({ dept: String(x.dept), pct: Number(x.pct) || 0, reason: x.reason || null, status: null, crNo: null }))
+      const newSplits = raw.map((x: any) => ({ dept: String(x.dept), pct: Number(x.pct) || 0, reason: x.reason || null, status: null, crNo: null, ...(String(x.dept) === "GW" ? { reapprove: true } : {}) }))
       await resetClaimTrail(id, [it.id])
       await prisma.airRequestItem.update({ where: { id: it.id }, data: { claimDepts: newSplits as any, claimDepartment: newSplits[0].dept, itemStatus: "LOG_PASSED" } as any })
       count++; done.push(it.id)
@@ -1578,7 +1579,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     for (const it of items) {
       if (!["PRES_PASSED", "LOG_PASSED"].includes(it.itemStatus)) continue
       const sp = getSplits(it).find((s: any) => s.dept === "GW")
-      if (!sp || sp.status === "REJECTED" || sp.status === GW_DEPT_APPROVED) continue
+      if (!sp || !(sp as any).reapprove || sp.status === "REJECTED" || sp.status === GW_DEPT_APPROVED) continue   // auto GW split → nothing to approve
       const atDpm = sp.status == null || sp.status === SPLIT_STATUS.CLAIM_PENDING
       let next: string | null = null, stepRole = ""
       if (atDpm && canDpm) { next = GW_DPM_PASSED; stepRole = gwStepHeld.find(r => r !== "GM_GW")!; dpmDone++ }

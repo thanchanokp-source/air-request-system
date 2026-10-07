@@ -42,7 +42,7 @@ export function pendingApproverNames(doc: any, users: ApproverDir[]): string[] {
     const NO_APPROVAL = ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]   // GW approves again
     const done = ["DEPT_APPROVED", "COMPLETED", "REJECTED"]
     const pendingDepts = new Set<string>()
-    for (const it of (doc.items || [])) for (const s of getSplits(it)) if (s.dept && !done.includes(String(s.status || "")) && !NO_APPROVAL.includes(s.dept)) pendingDepts.add(s.dept)
+    for (const it of (doc.items || [])) for (const s of getSplits(it)) if (s.dept && !done.includes(String(s.status || "")) && !NO_APPROVAL.includes(s.dept) && !(s.dept === "GW" && !(s as any).reapprove)) pendingDepts.add(s.dept)
     const set = new Set<string>()
     const forwardedDepts = new Set<string>()
     // Current holder per SO = FRONTIER forward (max position covering that SO), not every forward —
@@ -63,7 +63,7 @@ export function pendingApproverNames(doc: any, users: ApproverDir[]): string[] {
       if (forwardedDepts.has(d)) continue
       if (d === "COMMERCIAL") { const n = nameOfEmail(doc.assignedDvmMer || doc.assignedVpMer); if (n) set.add(n); continue }
       if (d === "GW" && bu === "GW") {   // GW claim: DPM of the doc → GM
-        const st = (doc.items || []).flatMap((it: any) => getSplits(it)).filter((s: any) => s.dept === "GW").map((s: any) => s.status)
+        const st = (doc.items || []).flatMap((it: any) => getSplits(it)).filter((s: any) => s.dept === "GW" && s.reapprove).map((s: any) => s.status)
         if (st.some((x: any) => x == null || x === "CLAIM_PENDING")) { const n = doc.assignedVpMer ? nameOfEmail(doc.assignedVpMer) : null; if (n) set.add(n); else { roleSet.add("DPM_GW"); roleSet.add("VP_MER_GW") } }
         if (st.includes("GW_DPM_PASSED")) roleSet.add("GM_GW")
         continue

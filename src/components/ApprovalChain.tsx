@@ -1,6 +1,6 @@
 "use client"
 
-import { getSplits, chainFor, deptLabel, claimEntryDisplayRoles, vpProdGroup, prodGroupCovers, NO_APPROVAL_GW_DEPTS } from "@/lib/claim"
+import { getSplits, chainFor, deptLabel, claimEntryDisplayRoles, vpProdGroup, prodGroupCovers, isAutoGwSplit } from "@/lib/claim"
 
 // Visual approval progress chain.
 //  - Doc-level (pass `items`): overall document stage + aggregated claim depts.
@@ -340,7 +340,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   // here too → the chip shows green "✓" (not amber "Waiting") the moment the claim exists.
   const gwSplitDone = (s: any) =>
     s.status === "DEPT_APPROVED" || s.status === "COMPLETED"
-    || (NO_APPROVAL_GW_DEPTS.includes(s.dept) && s.status !== "REJECTED")
+    || (isAutoGwSplit(s) && s.status !== "REJECTED")   // SUPPLIER, or GW set at upload (approved with the doc)
   const map: Record<string, { total: number; done: number }> = {}
   for (const it of claimSource) for (const s of getSplits(it)) {
     if (!map[s.dept]) map[s.dept] = { total: 0, done: 0 }
@@ -364,7 +364,7 @@ export function ApprovalChain({ status, bu, items, soItem, sm, claimForwards, ap
   const dTxt = (n: number | null) => n == null ? "" : ` · ${n} วัน`
   let gwGwWho = ""
   if (parallelReached && !completed && !rejected) {
-    const gwSt = claimSource.flatMap(it => getSplits(it)).filter((s: any) => s.dept === "GW").map((s: any) => s.status)
+    const gwSt = claimSource.flatMap(it => getSplits(it)).filter((s: any) => s.dept === "GW" && s.reapprove).map((s: any) => s.status)
     if (gwSt.some((x: any) => x == null || x === "CLAIM_PENDING")) {
       const dpm = nameOf(req?.assignedVpMer) || resolveRoleEmail(approvers, ["DPM_GW", "VP_MER_GW"], "GW")
       gwGwWho = `GW: DPM ${dpm}`.trim() + dTxt(daysSince(claimStart))

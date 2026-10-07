@@ -247,7 +247,7 @@ function ClaimStatusBoard({ req }: { req: any }) {
     for (const sp of getSplits(i)) {
       const st = itemRejected ? { s: "rejected" as const, label: "Rejected" }
         : itemDone ? { s: "approved" as const, label: "Accepted" }
-        : claimSplitState(sp.dept, sp.status)
+        : claimSplitState(sp.dept, sp.status, sp)
       ;(byDept[sp.dept] ||= []).push({
         so: i.so, state: st.s, label: st.label,
         amount: act * (Number(sp.pct) || 0) / 100, cur, crNo: sp.crNo,
@@ -999,7 +999,7 @@ export default function RequestDetailPage() {
       const held: string[] = [role, ...(((session?.user as any)?.roles) || [])]
       const myEmail = String((session?.user as any)?.email || "").toLowerCase()
       const gwAt = (pred: (st: any) => boolean) => (req?.items || []).some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus)
-        && getSplits(i).some((s: any) => s.dept === "GW" && pred(s.status)))
+        && getSplits(i).some((s: any) => s.dept === "GW" && s.reapprove && pred(s.status)))
       const dpmRole = held.find(r => r === "DPM_GW" || r === "VP_MER_GW")
       if (dpmRole && (!req?.assignedVpMer || String(req.assignedVpMer).toLowerCase() === myEmail) && gwAt(st => st == null || st === "CLAIM_PENDING")) return dpmRole
       if (held.includes("GM_GW") && gwAt(st => st === "GW_DPM_PASSED")) return "GM_GW"
@@ -1305,7 +1305,7 @@ export default function RequestDetailPage() {
       // GW: show SOs at the parallel claim stage where my dept has a split (+ rejected history).
       if (i.itemStatus === "REJECTED") return true
       // GW step roles see only the SOs waiting for THEIR step (DPM: not yet approved · GM: DPM-approved)
-      if (isGwStepRole) return ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => s.dept === "GW"
+      if (isGwStepRole) return ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => s.dept === "GW" && s.reapprove
         && (claimRole === "GM_GW" ? s.status === "GW_DPM_PASSED" : (s.status == null || s.status === "CLAIM_PENDING")))
       return ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && getSplits(i).some((s: any) => gwClaimDepts.includes(s.dept))
     }

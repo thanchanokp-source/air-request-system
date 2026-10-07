@@ -117,10 +117,14 @@ export const GW_CLAIM_DEPTS = ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"]
 export const SUPPLIER_DEPTS = ["SUPPLIER", "SUPPLIER_IN", "SUPPLIER_OUT"]
 // GW-side claim depts that need NO approval: all SUPPLIER variants are treated as already
 // approved everywhere — never alerted, never block, no approve button.
-// "GW" APPROVES again — 2 steps, the same people who approved the document: the doc's DPM
-// (assignedVpMer; DPM_GW / VP_MER_GW) → GM (GM_GW). Split status: null → GW_DPM_PASSED → DEPT_APPROVED.
-// A split like NYK 70% + GW 30% waits for both. SCM NYK / SCM NYG approve as before.
+// "GW": the claim dept set at UPLOAD was already approved with the document (DPM → GM) → AUTO approved.
+// Only a GW split MER (re)assigned on a claim RESUBMIT (flag `reapprove`) must go DPM → GM again
+// (split status null → GW_DPM_PASSED → DEPT_APPROVED). e.g. NYK rejected → MER re-split NYK 70 + GW 30.
 export const NO_APPROVAL_GW_DEPTS = [...SUPPLIER_DEPTS]
+/** split needs no approval: SUPPLIER*, or a GW split that was not re-assigned on a resubmit */
+export const isAutoGwSplit = (s: any) => !!s && (SUPPLIER_DEPTS.includes(s.dept) || (s.dept === "GW" && !s.reapprove))
+/** GW split waiting for the DPM → GM re-approval */
+export const isGwReapproveSplit = (s: any) => !!s && s.dept === "GW" && !!s.reapprove
 export const GW_DPM_PASSED = "GW_DPM_PASSED"
 export const GW_CLAIM_STEP_ROLES = ["DPM_GW", "VP_MER_GW", "GM_GW"]
 const isNoApprovalGwDept = (d: string) => NO_APPROVAL_GW_DEPTS.includes(d)
@@ -196,11 +200,14 @@ export function deptLabel(dept: string): string {
 // Coarse read-only state of one department's split, with a human stage label.
 // Used by the per-doc Claim Status board and the cross-doc CLAIM STATUS page.
 // Handles both NYG (DVM→VP per dept) and GW (parallel per dept, incl. NYK 3-role).
-export function claimSplitState(dept: string, status: string | null | undefined): { s: "approved" | "rejected" | "pending"; label: string } {
+export function claimSplitState(dept: string, status: string | null | undefined, split?: any): { s: "approved" | "rejected" | "pending"; label: string } {
   if (status === "REJECTED") return { s: "rejected", label: "Rejected" }
   if (status === "COMPLETED" || status === GW_DEPT_APPROVED || status === "ACCT_PENDING") return { s: "approved", label: "Accepted" }
   if (isNoApprovalGwDept(dept)) return { s: "approved", label: "No approval needed" }
   if (status === GW_DPM_PASSED) return { s: "pending", label: "Waiting GM" }
+  // GW: auto unless re-assigned on a resubmit (without the split object, only GW_DPM_PASSED marks it)
+  if (dept === "GW" && (split ? !split.reapprove : true)) return { s: "approved", label: "Approved at DPM / GM" }
+  if (dept === "GW") return { s: "pending", label: "Waiting DPM" }
   if (status === NYG_SPLIT.CLAIM_PASSED) return { s: "pending", label: "Waiting VP" }
   if (status === GW_NYK_APPROVER_PASSED) return { s: "pending", label: "Waiting EVP / CR" }
   if (status === GW_DEPT_ACCEPTED) return { s: "pending", label: "Waiting CR NO" }
@@ -438,13 +445,13 @@ export function nykSplitStatus(o: { approver: boolean; evp: boolean; cr: boolean
 // Does this item have a split for one of `depts` NOT yet fully finalized?
 // (includes DEPT_ACCEPTED so SCM NYK still sees the SO to come back for CR)
 export function hasPendingGwSplit(item: any, depts: string[]): boolean {
-  return getSplits(item).some(s => depts.includes(s.dept) && !isNoApprovalGwDept(s.dept) && s.status !== GW_DEPT_APPROVED && s.status !== SPLIT_STATUS.REJECTED)
+  return getSplits(item).some(s => depts.includes(s.dept) && !isAutoGwSplit(s) && s.status !== GW_DEPT_APPROVED && s.status !== SPLIT_STATUS.REJECTED)
 }
 
 // Does this item have a split for one of `depts` still awaiting the FIRST
 // approval (not yet accepted)? Used to gate the per-SO Approve action.
 export function hasApprovableGwSplit(item: any, depts: string[]): boolean {
-  return getSplits(item).some(s => depts.includes(s.dept) && !isNoApprovalGwDept(s.dept) && (s.status == null || s.status === SPLIT_STATUS.CLAIM_PENDING))
+  return getSplits(item).some(s => depts.includes(s.dept) && !isAutoGwSplit(s) && (s.status == null || s.status === SPLIT_STATUS.CLAIM_PENDING))
 }
 
 // Mark this role's departments' splits with `targetStatus` (default APPROVED).
@@ -487,7 +494,7 @@ export function deriveGwItemStatus(splits: ClaimSplit[], lgDone: boolean = true,
   // GW + SUPPLIER claims need NO approval — treat them as already approved so they
   // never block the doc (it flows straight to Accounting via the President step).
   const st = splits.map(s =>
-    (isNoApprovalGwDept(s.dept) && s.status !== SPLIT_STATUS.REJECTED)
+    (isAutoGwSplit(s) && s.status !== SPLIT_STATUS.REJECTED)
       ? GW_DEPT_APPROVED : s.status)
   if (st.some(s => s === SPLIT_STATUS.REJECTED)) return "REJECTED" // reject one portion → SO rejected
   // claim not fully approved yet (incl. NYK approver-done but EVP/CR incomplete)
