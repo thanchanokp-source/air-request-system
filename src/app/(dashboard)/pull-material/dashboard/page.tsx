@@ -42,6 +42,8 @@ export default function Page() {
   const [reqF, setReqF] = useState<string[]>([])
   const [statusF, setStatusF] = useState<string[]>([])
   const [supF, setSupF] = useState<string[]>([])
+  // Every count on this page can be read either as "how many documents" or "how many garments".
+  const [unit, setUnit] = useState<"docs" | "pcs">("docs")
   const reqTypeOf = pullReqType
 
   const load = async () => { setLoading(true); try { const d = await fetch(`/api/pull-material?bu=${bu}`).then(r => r.json()); setReqs(d.requests || []) } finally { setLoading(false) } }
@@ -71,6 +73,10 @@ export default function Page() {
   const estOf = (r: any) => (r.items || []).reduce((s: number, i: any) => s + (Number(i.airFreightCost) || 0), 0)
   const kgOf = (r: any) => (r.items || []).reduce((s: number, i: any) => s + (Number(i.weight) || 0), 0)
   const isDone = (r: any) => r.status === "COMPLETED" || r.actualAir != null
+  // Counting unit: documents, or the garment pieces those documents pull.
+  const pcsOf = (r: any) => (r.items || []).reduce((s: number, i: any) => s + (Number(i.pullGarment) || 0), 0)
+  const amount = (docs: any[]) => (unit === "docs" ? docs.length : docs.reduce((s, r) => s + pcsOf(r), 0))
+  const amountLabel = (n: number) => (unit === "docs" ? `${n} docs` : `${fmt(Math.round(n))} pcs`)
 
   // One person, one bar. The same human reaches us as "doungjai.p", "doungjai.p@nanyangtextile.com"
   // or "doungjai", so every spelling folds onto the name the Buyer filter already uses.
@@ -109,34 +115,35 @@ export default function Page() {
   const multiYear = new Set(monthly.map(([m]) => m.slice(0, 4))).size > 1
 
   const modeRows = [
-    { k: "✈ Air", n: fReqs.filter((r: any) => r.shipMode === "AIR").length, c: C.s1 },
-    { k: "🚢 Sea", n: fReqs.filter((r: any) => r.shipMode === "SEA").length, c: C.s3 },
-    { k: "📦 Courier", n: fReqs.filter((r: any) => r.shipMode === "COURIER").length, c: C.s5 },
-    { k: "Not confirmed", n: fReqs.filter((r: any) => !r.shipMode).length, c: C.s4 },
+    { k: "✈ Air", n: amount(fReqs.filter((r: any) => r.shipMode === "AIR")), c: C.s1 },
+    { k: "🚢 Sea", n: amount(fReqs.filter((r: any) => r.shipMode === "SEA")), c: C.s3 },
+    { k: "📦 Courier", n: amount(fReqs.filter((r: any) => r.shipMode === "COURIER")), c: C.s5 },
+    { k: "Not confirmed", n: amount(fReqs.filter((r: any) => !r.shipMode)), c: C.s4 },
   ]
   const modeTotal = modeRows.reduce((s, m) => s + m.n, 0) || 1
   const modeOverride = fReqs.filter((r: any) => r.preferredMode && r.shipMode && r.preferredMode !== r.shipMode).length
 
   // ── Row 2 · everything below looks at the AIR documents only ───────────────────────────
   const airDocs = fReqs.filter((r: any) => r.shipMode === "AIR")
-  const fwdCount: Record<string, number> = {}
-  let airNoFwd = 0
+  const fwdGroups: Record<string, any[]> = {}
+  const noFwdDocs: any[] = []
   airDocs.forEach((r: any) => {
     const name = r.fwdName || r.preCostFwd
-    if (name) fwdCount[name] = (fwdCount[name] || 0) + 1; else airNoFwd++
+    if (name) (fwdGroups[name] ||= []).push(r); else noFwdDocs.push(r)
   })
-  const airFwdRows = Object.entries(fwdCount).map(([k, n]) => ({ k, n })).sort((a, b) => b.n - a.n).slice(0, 6)
-  const fwdAssigned = airDocs.length - airNoFwd
+  const airFwdRows = Object.entries(fwdGroups).map(([k, docs]) => ({ k, n: amount(docs) })).sort((a, b) => b.n - a.n).slice(0, 6)
+  const airNoFwd = amount(noFwdDocs)
+  const fwdAssigned = amount(airDocs.filter((r: any) => r.fwdName || r.preCostFwd))
 
   // Origin countries of the air documents: how many documents, and what a kilo costs there.
-  const airByCountry: Record<string, { docs: Set<string>; est: number; kg: number }> = {}
+  const airByCountry: Record<string, { docs: Map<string, any>; est: number; kg: number }> = {}
   airDocs.forEach((r: any) => (r.items || []).forEach((i: any) => {
     const k = i.country; if (!k) return
-    const g = (airByCountry[k] ||= { docs: new Set(), est: 0, kg: 0 })
-    g.docs.add(r.id); g.est += Number(i.airFreightCost) || 0; g.kg += Number(i.weight) || 0
+    const g = (airByCountry[k] ||= { docs: new Map(), est: 0, kg: 0 })
+    g.docs.set(r.id, r); g.est += Number(i.airFreightCost) || 0; g.kg += Number(i.weight) || 0
   }))
   const airCountryRows = Object.entries(airByCountry)
-    .map(([k, v]) => ({ k, n: v.docs.size, perKg: v.kg ? v.est / v.kg : 0 }))
+    .map(([k, v]) => ({ k, n: amount([...v.docs.values()]), perKg: v.kg ? v.est / v.kg : 0 }))
     .sort((a, b) => b.n - a.n).slice(0, 6)
 
   const perKgBy = (key: "country" | "vendorName") => {
@@ -157,15 +164,15 @@ export default function Page() {
   const incTotal = incRows.reduce((s, [, n]) => s + n, 0)
 
   const fwdStatusRows = [
-    { k: "Not sent yet", n: fReqs.filter((r: any) => !r.fwdSentAt).length, c: C.s4 },
-    { k: "Sent · awaiting reply", n: fReqs.filter((r: any) => r.fwdSentAt && !r.fwdImportedAt).length, c: C.s1 },
-    { k: "Replied", n: fReqs.filter((r: any) => r.fwdImportedAt).length, c: C.s3 },
+    { k: "Not sent yet", n: amount(fReqs.filter((r: any) => !r.fwdSentAt)), c: C.s4 },
+    { k: "Sent · awaiting reply", n: amount(fReqs.filter((r: any) => r.fwdSentAt && !r.fwdImportedAt)), c: C.s1 },
+    { k: "Replied", n: amount(fReqs.filter((r: any) => r.fwdImportedAt)), c: C.s3 },
   ]
 
   // ── Row 3 · who raised what, and where it sits ─────────────────────────────────────────
-  const byOwner: Record<string, number> = {}
-  fReqs.forEach((r: any) => { const o = ownerOf(r); byOwner[o] = (byOwner[o] || 0) + 1 })
-  const purchaserRows = Object.entries(byOwner).map(([k, n]) => ({ k, n })).sort((a, b) => b.n - a.n).slice(0, 9)
+  const byOwner: Record<string, any[]> = {}
+  fReqs.forEach((r: any) => { (byOwner[ownerOf(r)] ||= []).push(r) })
+  const purchaserRows = Object.entries(byOwner).map(([k, docs]) => ({ k, n: amount(docs) })).sort((a, b) => b.n - a.n).slice(0, 9)
 
   // Status told the way the team actually talks about it: which lane the document is in, and which
   // desk it is sitting on right now. The three lanes have different chains, so they are separated
@@ -199,24 +206,24 @@ export default function Page() {
   ]
   const laneRows = LANES.map(l => {
     const docs = fReqs.filter((r: any) => laneOf(r) === l.key)
-    const m: Record<string, number> = {}
-    docs.forEach((r: any) => { const k = stageOf(r); m[k] = (m[k] || 0) + 1 })
+    const m: Record<string, any[]> = {}
+    docs.forEach((r: any) => { (m[stageOf(r)] ||= []).push(r) })
     const rows = Object.entries(m).sort((a, b) => {
       const ra = STAGE_RANK.indexOf(a[0]), rb = STAGE_RANK.indexOf(b[0])
       return (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb)
-    }).map(([k, n]) => ({ k, n, c: stageColor[k] || D.mut }))
-    return { ...l, total: docs.length, rows }
-  }).filter(l => l.total > 0)
+    }).map(([k, ds]) => ({ k, n: amount(ds), c: stageColor[k] || D.mut }))
+    return { ...l, total: amount(docs), count: docs.length, rows }
+  }).filter(l => l.count > 0)
 
   // What Logistics still owes — one row per thing LG has to do next.
   const atLg = fReqs.filter((r: any) => ["APPROVED", "PENDING_LOGISTICS", "PENDING_LG_RATE", "COMPLETED"].includes(r.status))
   const lgRows = [
-    { k: "No ship mode selected", n: atLg.filter((r: any) => !r.shipMode && r.status !== "COMPLETED").length, c: C.s4 },
-    { k: "Air rate missing", n: fReqs.filter((r: any) => r.status === "PENDING_LG_RATE").length, c: "#c2491d" },
-    { k: "Air · not sent to FWD", n: atLg.filter((r: any) => r.shipMode === "AIR" && !r.fwdSentAt && r.status !== "COMPLETED").length, c: C.s2 },
-    { k: "Sent to FWD · awaiting reply", n: fReqs.filter((r: any) => r.fwdSentAt && !r.fwdImportedAt).length, c: C.s1 },
-    { k: "FWD replied · ready to close", n: fReqs.filter((r: any) => r.fwdImportedAt && r.actualAir == null).length, c: C.s5 },
-    { k: "Closed", n: doneDocs.length, c: C.s3 },
+    { k: "No ship mode selected", n: amount(atLg.filter((r: any) => !r.shipMode && r.status !== "COMPLETED")), c: C.s4 },
+    { k: "Air rate missing", n: amount(fReqs.filter((r: any) => r.status === "PENDING_LG_RATE")), c: "#c2491d" },
+    { k: "Air · not sent to FWD", n: amount(atLg.filter((r: any) => r.shipMode === "AIR" && !r.fwdSentAt && r.status !== "COMPLETED")), c: C.s2 },
+    { k: "Sent to FWD · awaiting reply", n: amount(fReqs.filter((r: any) => r.fwdSentAt && !r.fwdImportedAt)), c: C.s1 },
+    { k: "FWD replied · ready to close", n: amount(fReqs.filter((r: any) => r.fwdImportedAt && r.actualAir == null)), c: C.s5 },
+    { k: "Closed", n: amount(doneDocs), c: C.s3 },
   ].filter(r => r.n > 0)
 
   // ── Export (unchanged data contract) ───────────────────────────────────────────────────
@@ -397,11 +404,20 @@ export default function Page() {
               <Pill tone="neutral">{monthly.length ? `${monLabel(monthly[0][0], true)} → ${monLabel(monthly[monthly.length - 1][0], true)}` : "—"}</Pill>
             </div>
           </div>
-          <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2, border: `1px solid ${D.line}` }}>
-            {BUS.map(b => (
-              <button key={b} onClick={() => setBu(b)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                style={bu === b ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>{b}</button>
-            ))}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* count documents, or the garment pieces behind them */}
+            <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2, border: `1px solid ${D.line}` }}>
+              {([["docs", "Docs"], ["pcs", "Pcs"]] as const).map(([v, label]) => (
+                <button key={v} onClick={() => setUnit(v)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={unit === v ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>{label}</button>
+              ))}
+            </div>
+            <div className="flex gap-0.5 rounded-xl p-[3px]" style={{ background: D.card2, border: `1px solid ${D.line}` }}>
+              {BUS.map(b => (
+                <button key={b} onClick={() => setBu(b)} className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={bu === b ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>{b}</button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -466,7 +482,7 @@ export default function Page() {
                 <ShareBar rows={modeRows} />
                 <div className="h-3" />
                 <HBars labelW={92} rows={modeRows.map(m => ({
-                  k: m.k, v: m.n, color: m.c, label: `${m.n} docs`, sub: `${Math.round((m.n / modeTotal) * 100)}%`,
+                  k: m.k, v: m.n, color: m.c, label: amountLabel(m.n), sub: `${Math.round((m.n / modeTotal) * 100)}%`,
                 }))} />
               </Card>
             </div>
@@ -482,14 +498,14 @@ export default function Page() {
                     <div className="mt-2"><Legend items={[{ k: `Forwarder assigned ${fwdAssigned}`, c: C.s3 }, { k: `Not assigned ${airNoFwd}`, c: C.s4 }]} /></div>
                     <div className="my-3" style={{ borderTop: `1px solid ${D.line2}` }} />
                     <HBars labelW={112} rows={[
-                      ...airFwdRows.map(f => ({ k: f.k, v: f.n, color: C.s3, label: `${f.n} docs` })),
-                      ...(airNoFwd ? [{ k: "Not assigned", v: airNoFwd, color: C.s4, label: `${airNoFwd} docs` }] : []),
+                      ...airFwdRows.map(f => ({ k: f.k, v: f.n, color: C.s3, label: amountLabel(f.n) })),
+                      ...(airNoFwd ? [{ k: "Not assigned", v: airNoFwd, color: C.s4, label: amountLabel(airNoFwd) }] : []),
                     ]} />
                   </>
                 )}
               </Card>
               <Card title="Air Origin Countries">
-                <HBars labelW={94} rows={airCountryRows.map(r => ({ k: r.k, v: r.n, color: C.s1, label: `${r.n} docs`, sub: `${r.perKg.toFixed(2)} $/kg` }))} />
+                <HBars labelW={94} rows={airCountryRows.map(r => ({ k: r.k, v: r.n, color: C.s1, label: amountLabel(r.n), sub: `${r.perKg.toFixed(2)} $/kg` }))} />
               </Card>
               <Card title="Cost / kg by Country (USD)">
                 <HBars labelW={94} rows={countryCost.map(x => ({ k: x.k, v: x.v, color: C.s4, label: x.v.toFixed(2) }))} />
@@ -503,7 +519,7 @@ export default function Page() {
                 <Donut />
               </Card>
               <Card title="Forwarder Status">
-                <HBars labelW={118} rows={fwdStatusRows.map(s => ({ k: s.k, v: s.n, color: s.c, label: `${s.n} docs` }))} />
+                <HBars labelW={118} rows={fwdStatusRows.map(s => ({ k: s.k, v: s.n, color: s.c, label: amountLabel(s.n) }))} />
               </Card>
             </div>
 
@@ -512,7 +528,7 @@ export default function Page() {
             <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
               <Card title="Documents Raised by Purchasing"
                 right={<Pill tone="neutral">{purchaserRows.length} people</Pill>}>
-                <HBars labelW={100} rows={purchaserRows.map(p => ({ k: p.k, v: p.n, color: C.s5, label: `${p.n} docs` }))} />
+                <HBars labelW={100} rows={purchaserRows.map(p => ({ k: p.k, v: p.n, color: C.s5, label: amountLabel(p.n) }))} />
               </Card>
               <Card title="Waiting On — by Request Lane"
                 right={<Pill tone="neutral">{wipDocs.length} open</Pill>}>
@@ -522,11 +538,11 @@ export default function Page() {
                       <div key={l.key}>
                         <div className="flex items-baseline justify-between mb-1.5">
                           <span className="text-[11.5px] font-bold" style={{ color: D.text }}>{l.label}</span>
-                          <span className="text-[10.5px] tabular-nums" style={{ color: D.faint }}>{l.total} docs</span>
+                          <span className="text-[10.5px] tabular-nums" style={{ color: D.faint }}>{amountLabel(l.total)}</span>
                         </div>
                         <ShareBar rows={l.rows.map(r => ({ k: r.k, n: r.n, c: r.c }))} />
                         <div className="mt-2">
-                          <HBars labelW={146} rows={l.rows.map(r => ({ k: r.k, v: r.n, color: r.c, label: `${r.n}` }))} />
+                          <HBars labelW={146} rows={l.rows.map(r => ({ k: r.k, v: r.n, color: r.c, label: unit === "docs" ? `${r.n}` : fmt(Math.round(r.n)) }))} />
                         </div>
                       </div>
                     ))}
@@ -535,7 +551,7 @@ export default function Page() {
               </Card>
               <Card title="Logistics — What's Next"
                 right={<Pill tone="neutral">{atLg.length} at LG</Pill>}>
-                <HBars labelW={160} rows={lgRows.map(r => ({ k: r.k, v: r.n, color: r.c, label: `${r.n} docs` }))} />
+                <HBars labelW={160} rows={lgRows.map(r => ({ k: r.k, v: r.n, color: r.c, label: amountLabel(r.n) }))} />
               </Card>
             </div>
 
