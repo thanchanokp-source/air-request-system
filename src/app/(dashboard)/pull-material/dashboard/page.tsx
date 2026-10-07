@@ -25,7 +25,6 @@ const C = {
 }
 const THB = 32.5
 const DAY = 86400000
-const TARGET_DAYS = 2 // เป้าหมายรอบเวลาต่อใบ (วัน) — เกินกว่านี้ถือว่าช้า
 const K = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${Math.round(n)}`)
 
 // Workflow order used by the funnel; anything unknown falls in at the end.
@@ -97,19 +96,10 @@ export default function Page() {
   const variance = act - estDone
   const variancePct = estDone > 0 && act > 0 ? (variance / estDone) * 100 : null
 
-  // ── Workload & turnaround by buyer ───────────────────────────────────────────────────────
-  const byOwner: Record<string, { d: number[]; docs: number }> = {}
-  fReqs.forEach((r: any) => {
-    const o = ownerOf(r); const g = (byOwner[o] ||= { d: [], docs: 0 })
-    g.docs++
-    if (isDone(r)) { const n = (new Date(r.updatedAt).getTime() - new Date(r.createdAt).getTime()) / DAY; if (n >= 0) g.d.push(n) }
-  })
-  const ownerRows = Object.entries(byOwner).map(([k, v]) => ({
-    k, docs: v.docs, avg: v.d.length ? v.d.reduce((a, b) => a + b, 0) / v.d.length : null,
-  }))
-  const workRows = [...ownerRows].sort((a, b) => b.docs - a.docs).slice(0, 7)
-  const turnRows = ownerRows.filter(o => o.avg != null).sort((a, b) => (b.avg || 0) - (a.avg || 0)).slice(0, 7)
-  const overTargetN = turnRows.filter(o => (o.avg || 0) > TARGET_DAYS).length
+  // ── Workload by buyer ────────────────────────────────────────────────────────────────────
+  const byOwner: Record<string, number> = {}
+  fReqs.forEach((r: any) => { const o = ownerOf(r); byOwner[o] = (byOwner[o] || 0) + 1 })
+  const workRows = Object.entries(byOwner).map(([k, docs]) => ({ k, docs })).sort((a, b) => b.docs - a.docs).slice(0, 7)
 
   // ── Monthly: totals (USD) + unit rate (USD/kg) ───────────────────────────────────────────
   const byMonth: Record<string, { docs: number; est: number; act: number; kg: number; kgDone: number }> = {}
@@ -133,7 +123,6 @@ export default function Page() {
     ...FUNNEL_ORDER.filter(s => stageCount[s]).map(s => ({ k: FUNNEL_LABEL[s] || STATUS_LABEL[s] || s, n: stageCount[s] })),
     ...Object.keys(stageCount).filter(s => !FUNNEL_ORDER.includes(s)).map(s => ({ k: STATUS_LABEL[s] || s, n: stageCount[s] })),
   ]
-  const funnelMax = Math.max(1, ...funnelRows.map(f => f.n))
 
   // ── Forwarder performance (THB/kg) ───────────────────────────────────────────────────────
   const byFwd: Record<string, { act: number; est: number; kg: number; docs: number }> = {}
@@ -309,30 +298,31 @@ export default function Page() {
     )
   }
 
-  // Funnel — centred bars, widest stage first, each labelled with its own count.
-  const Funnel = () => {
-    if (!funnelRows.length) return <Empty />
-    const W = 300, rowH = 30, gap = 5, H = funnelRows.length * (rowH + gap)
+  // Backlog by stage. A funnel implies each step is a subset of the one above it, which these
+  // stages are not — they are a snapshot of where open docs sit right now. One share bar for the
+  // composition, then a plain ranked bar per stage, each with its own count and percentage.
+  const Backlog = () => {
+    const total = funnelRows.reduce((s, f) => s + f.n, 0)
+    if (!total) return <Empty />
+    const ranked = [...funnelRows].sort((a, b) => b.n - a.n)
+    const max = ranked[0].n
     return (
-      <div className="flex gap-3 items-center flex-wrap">
-        <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label="เอกสารค้างแยกตามขั้น">
-          {funnelRows.map((f, i) => {
-            const w = Math.max(70, (f.n / funnelMax) * W)
-            const yy = i * (rowH + gap)
-            return (
-              <g key={f.k}>
-                <rect x={(W - w) / 2} y={yy} width={w} height={rowH} rx={4} fill={C.funnel[i % C.funnel.length]}><title>{`${f.k} · ${f.n} ใบ`}</title></rect>
-                <text x={W / 2} y={yy + rowH / 2 + 4} textAnchor="middle" style={{ fontSize: 12, fontWeight: 700, fill: "#fff" }}>{f.n}</text>
-              </g>
-            )
-          })}
-        </svg>
-        <div className="flex flex-col gap-1.5">
-          {funnelRows.map((f, i) => (
-            <span key={f.k} className="flex items-center gap-2 text-[11.5px]" style={{ color: D.mut }}>
-              <i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: C.funnel[i % C.funnel.length] }} />
-              {f.k} <b style={{ color: D.text }}>{f.n}</b>
-            </span>
+      <div className="space-y-3">
+        <div className="flex h-5 rounded overflow-hidden" style={{ border: `1px solid ${D.line}` }}>
+          {ranked.map((f, i) => (
+            <span key={f.k} style={{ width: `${(f.n / total) * 100}%`, background: C.funnel[i % C.funnel.length] }} title={`${f.k} · ${f.n} ใบ (${Math.round((f.n / total) * 100)}%)`} />
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          {ranked.map((f, i) => (
+            <div key={f.k} className="flex items-center gap-2">
+              <span className="text-[11.5px] truncate shrink-0" style={{ width: 104, color: D.mut }} title={f.k}>{f.k}</span>
+              <span className="flex-1 h-[14px] rounded" style={{ background: D.card2 }}>
+                <span className="block h-[14px] rounded" style={{ width: `${Math.max(3, (f.n / max) * 100)}%`, background: C.funnel[i % C.funnel.length] }} />
+              </span>
+              <span className="text-[11.5px] font-bold tabular-nums text-right shrink-0" style={{ minWidth: 38, color: D.text }}>{f.n} ใบ</span>
+              <span className="text-[10.5px] tabular-nums text-right shrink-0" style={{ minWidth: 34, color: D.mut }}>{Math.round((f.n / total) * 100)}%</span>
+            </div>
           ))}
         </div>
       </div>
@@ -501,15 +491,6 @@ export default function Page() {
             {/* ── Column 2 · คุมต้นทุน & ส่วนต่าง ───────────────────────────── */}
             <div className="space-y-3">
               <SectionTitle>Cost Control &amp; Variance Analysis</SectionTitle>
-              <Card title="รอบเวลาเฉลี่ยต่อคน (วัน)" cap={`เปิดเอกสาร → LG ปิดงาน · เป้าหมาย ${TARGET_DAYS} วัน`}
-                right={overTargetN ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(230,103,103,.15)", color: C.crit }}>เกินเป้า {overTargetN} คน</span> : null}>
-                <HBars rows={turnRows.map(o => ({
-                  k: o.k, v: o.avg || 0, color: (o.avg || 0) > TARGET_DAYS ? C.crit : C.s1,
-                  label: `${(o.avg || 0).toFixed(1)} วัน`,
-                  tag: <span className="text-[10px] font-bold whitespace-nowrap" style={{ color: (o.avg || 0) > TARGET_DAYS ? C.crit : C.good }}>{(o.avg || 0) > TARGET_DAYS ? "เกินเป้า" : "ในเป้า"}</span>,
-                }))} />
-                <p className="text-[10px] mt-2.5" style={{ color: D.mut }}>* ระบบยังไม่เก็บเวลาแยกรายขั้น — ตัวเลขนี้คือเวลาทั้งใบ</p>
-              </Card>
               <Card title="Est เทียบ Actual รายเดือน (USD)" cap="ยอดรวมต่อเดือน · สเกลเดียวกันทั้งสองแท่ง"
                 right={
                   <div className="flex gap-2.5 text-[10.5px]" style={{ color: D.mut }}>
@@ -543,7 +524,7 @@ export default function Page() {
             <div className="space-y-3">
               <SectionTitle>Pending Queue &amp; Root Cause</SectionTitle>
               <Card title="Pending Requests Breakdown" cap={`เอกสารที่ยังไม่ปิดงาน ${wipDocs.length} ใบ แยกตามขั้น`}>
-                <Funnel />
+                <Backlog />
               </Card>
               <Card title="Incoterms Distribution" cap="กระทบว่าต้องบวก origin cost (EXW/FCA) หรือไม่">
                 <Donut />
