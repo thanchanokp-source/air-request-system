@@ -23,6 +23,12 @@ const SH = "0 1px 2px rgba(15,23,42,.05)"
 const THB = 32.5
 const DAY = 86400000
 const K = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${Math.round(n)}`)
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+// "2026-09" → "Sep" (or "Sep 26" once the range crosses a year boundary)
+const monLabel = (key: string, withYear: boolean) => {
+  const [y, m] = key.split("-")
+  return `${MON[Number(m) - 1] || m}${withYear ? ` ${y.slice(2)}` : ""}`
+}
 
 // Workflow order for the backlog chart; anything unknown falls in at the end.
 const STAGE_ORDER = ["PENDING_PURCHASING", "PC_REVISE", "PENDING_SCM_DECISION", "PENDING_APPROVAL", "PENDING_LOGISTICS", "PENDING_LG_RATE", "APPROVED"]
@@ -30,6 +36,14 @@ const STAGE_LABEL: Record<string, string> = {
   PENDING_PURCHASING: "Awaiting Purchasing", PC_REVISE: "Returned for fix", PENDING_SCM_DECISION: "Awaiting SCM",
   PENDING_APPROVAL: "Awaiting Approval", PENDING_LOGISTICS: "Awaiting LG close", PENDING_LG_RATE: "Awaiting air rate", APPROVED: "Approved",
 }
+// A stage keeps the same colour everywhere it appears (bar, share strip, status table), so the eye
+// can follow one stage across the row. Unknown statuses fall back to the spare slots.
+const STAGE_COLOR: Record<string, string> = {
+  PENDING_PURCHASING: "#eb6834", PC_REVISE: "#e34948", PENDING_SCM_DECISION: "#4a3aa7",
+  PENDING_APPROVAL: "#eda100", PENDING_LG_RATE: "#c2491d", PENDING_LOGISTICS: "#2a78d6",
+  APPROVED: "#1baf7a", COMPLETED: "#0e7c5a", NO_AIR: "#6b7280", RECALLED: "#8b5cf6",
+}
+const SPARE = ["#1c5cab", "#b45309", "#7c3aed", "#0f766e", "#be123c"]
 
 export default function Page() {
   const { data: session, status: auth } = useSession()
@@ -106,6 +120,7 @@ export default function Page() {
   })
   const monthly = Object.entries(byMonth).sort().slice(-10)
   const maxMonth = Math.max(1, ...monthly.flatMap(([, v]) => [v.est, v.act]))
+  const multiYear = new Set(monthly.map(([m]) => m.slice(0, 4))).size > 1
 
   const modeRows = [
     { k: "✈ Air", n: fReqs.filter((r: any) => r.shipMode === "AIR").length, c: C.s1 },
@@ -168,13 +183,16 @@ export default function Page() {
 
   const stageCount: Record<string, number> = {}
   wipDocs.forEach((r: any) => { stageCount[r.status] = (stageCount[r.status] || 0) + 1 })
+  const colorOf = (code: string, i: number) => STAGE_COLOR[code] || SPARE[i % SPARE.length]
   const stuckRows = [
-    ...STAGE_ORDER.filter(s => stageCount[s]).map(s => ({ k: STAGE_LABEL[s] || STATUS_LABEL[s] || s, n: stageCount[s] })),
-    ...Object.keys(stageCount).filter(s => !STAGE_ORDER.includes(s)).map(s => ({ k: STATUS_LABEL[s] || s, n: stageCount[s] })),
-  ]
+    ...STAGE_ORDER.filter(s => stageCount[s]),
+    ...Object.keys(stageCount).filter(s => !STAGE_ORDER.includes(s)),
+  ].map((s, i) => ({ code: s, k: STAGE_LABEL[s] || STATUS_LABEL[s] || s, n: stageCount[s], c: colorOf(s, i) }))
+
   const allStatus: Record<string, number> = {}
-  fReqs.forEach((r: any) => { const k = STATUS_LABEL[r.status] || r.status; allStatus[k] = (allStatus[k] || 0) + 1 })
+  fReqs.forEach((r: any) => { allStatus[r.status] = (allStatus[r.status] || 0) + 1 })
   const statusRows = Object.entries(allStatus).sort((a, b) => b[1] - a[1])
+    .map(([code, n], i) => ({ code, k: STATUS_LABEL[code] || code, n, c: colorOf(code, i) }))
 
   // ── Export (unchanged data contract) ───────────────────────────────────────────────────
   const dstr = (v: any) => (v ? new Date(v).toLocaleDateString("en-GB") : "-")
@@ -270,7 +288,7 @@ export default function Page() {
             <g key={m}>
               <rect x={x0} y={y(v.est)} width={w} height={Math.max(1.5, P.t + ih - y(v.est))} rx={3} fill={C.s1}><title>{`${m} · Est ${fmt(Math.round(v.est))} USD`}</title></rect>
               <rect x={x0 + w + 3} y={y(v.act)} width={w} height={Math.max(v.act > 0 ? 1.5 : 0, P.t + ih - y(v.act))} rx={3} fill={C.s2}><title>{`${m} · Actual ${fmt(Math.round(v.act))} USD`}</title></rect>
-              <text x={P.l + i * bw + bw / 2} y={H - 8} textAnchor="middle" style={{ fontSize: 9, fill: D.faint }}>{m.slice(5)}</text>
+              <text x={P.l + i * bw + bw / 2} y={H - 8} textAnchor="middle" style={{ fontSize: 9.5, fill: D.faint }}>{monLabel(m, multiYear)}</text>
             </g>
           )
         })}
@@ -353,7 +371,7 @@ export default function Page() {
             <div className="text-[10px] uppercase tracking-[.17em] font-semibold" style={{ color: D.faint }}>Nan Yang Textile · RM REQ AIR · {bu}</div>
             <h1 className="text-[22px] font-bold tracking-[-.025em] mt-0.5 leading-[1.4]" style={{ color: D.text }}>✈ Air Request — Team Analysis Dashboard</h1>
             <div className="flex items-center gap-2.5 flex-wrap mt-1.5 text-[11.5px]" style={{ color: D.mut }}>
-              <Pill tone="neutral">{monthly.length ? `${monthly[0][0]} → ${monthly[monthly.length - 1][0]}` : "—"}</Pill>
+              <Pill tone="neutral">{monthly.length ? `${monLabel(monthly[0][0], true)} → ${monLabel(monthly[monthly.length - 1][0], true)}` : "—"}</Pill>
               <span><b className="tabular-nums" style={{ color: D.text }}>{totalDocs}</b> documents</span>
               <span className="w-[3px] h-[3px] rounded-full inline-block" style={{ background: D.faint }} />
               <span><b className="tabular-nums" style={{ color: D.text }}>{wipDocs.length}</b> open</span>
@@ -397,18 +415,19 @@ export default function Page() {
             {([["ALL", "All"], ["SCM", "SCM"], ["PURCHASING", "Purchasing"], ["SAMPLE", "Sample"], ["PPC", "PPC"]] as const).map(([v, label]) => {
               const n = v === "ALL" ? reqs.length : reqs.filter((r: any) => reqTypeOf(r) === v).length
               return (
-                <button key={v} onClick={() => setTypeF(v)} className="px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold"
+                <button key={v} onClick={() => setTypeF(v)} className="px-2 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap"
                   style={typeF === v ? { background: D.card, color: D.text, boxShadow: SH } : { color: D.mut }}>
                   {label} <span className="opacity-60">{n}</span>
                 </button>
               )
             })}
           </div>
-          <div className="w-40"><MultiSelect label="Doc No…" options={docNos} value={docF} onChange={setDocF} /></div>
-          <div className="w-36"><MultiSelect label="PO…" options={poNos} value={poF} onChange={setPoF} /></div>
-          <div className="w-36"><MultiSelect label="Buyer…" options={reqOptions} value={reqF} onChange={setReqF} /></div>
-          <div className="w-40"><MultiSelect label="Status…" options={statusOpts} value={statusF} onChange={setStatusF} /></div>
-          <div className="w-40"><MultiSelect label="Supplier…" options={supOpts} value={supF} onChange={setSupF} /></div>
+          {/* the five pickers share the leftover width so the bar stays a single row */}
+          <div className="flex-1 min-w-[160px]"><MultiSelect label="Doc No…" options={docNos} value={docF} onChange={setDocF} /></div>
+          <div className="flex-1 min-w-[110px]"><MultiSelect label="PO…" options={poNos} value={poF} onChange={setPoF} /></div>
+          <div className="flex-1 min-w-[110px]"><MultiSelect label="Buyer…" options={reqOptions} value={reqF} onChange={setReqF} /></div>
+          <div className="flex-1 min-w-[120px]"><MultiSelect label="Status…" options={statusOpts} value={statusF} onChange={setStatusF} /></div>
+          <div className="flex-1 min-w-[120px]"><MultiSelect label="Supplier…" options={supOpts} value={supF} onChange={setSupF} /></div>
           {(docF.length > 0 || poF.length > 0 || reqF.length > 0 || statusF.length > 0 || supF.length > 0) && (
             <button onClick={() => { setDocF([]); setPoF([]); setReqF([]); setStatusF([]); setSupF([]) }} className="text-[11px] underline" style={{ color: D.mut }}>Clear filters</button>
           )}
@@ -477,14 +496,14 @@ export default function Page() {
             <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
               <Card title="Documents Raised by Purchasing" cap="By purchasing name · documents submitted"
                 right={<Pill tone="neutral">{purchaserRows.length} people</Pill>}>
-                <HBars labelW={100} rows={purchaserRows.map(p => ({ k: p.k, v: p.n, color: C.s1, label: `${p.n} docs` }))} />
+                <HBars labelW={100} rows={purchaserRows.map(p => ({ k: p.k, v: p.n, color: C.s5, label: `${p.n} docs` }))} />
               </Card>
               <Card title="Where Documents Are Stuck" cap={`${wipDocs.length} documents not closed yet`}>
                 {stuckRows.length === 0 ? <Empty /> : (
                   <>
-                    <ShareBar rows={stuckRows.map((s, i) => ({ k: s.k, n: s.n, c: C.seq[Math.min(i, C.seq.length - 1)] }))} />
+                    <ShareBar rows={stuckRows.map(s => ({ k: s.k, n: s.n, c: s.c }))} />
                     <div className="h-3" />
-                    <HBars labelW={126} rows={stuckRows.map((s, i) => ({ k: s.k, v: s.n, color: C.seq[Math.min(i, C.seq.length - 1)], label: `${s.n} docs` }))} />
+                    <HBars labelW={126} rows={stuckRows.map(s => ({ k: s.k, v: s.n, color: s.c, label: `${s.n} docs` }))} />
                   </>
                 )}
               </Card>
@@ -498,11 +517,13 @@ export default function Page() {
                     </tr>
                   </thead>
                   <tbody>
-                    {statusRows.map(([k, n]) => (
-                      <tr key={k} style={{ borderTop: `1px solid ${D.line2}` }}>
-                        <td className="px-1.5 py-1.5" style={{ color: D.mut }}>{k}</td>
-                        <td className="px-1.5 py-1.5 text-right font-bold tabular-nums" style={{ color: D.text }}>{n}</td>
-                        <td className="px-1.5 py-1.5 text-right tabular-nums" style={{ color: D.faint }}>{Math.round((n / totalDocs) * 100)}%</td>
+                    {statusRows.map(s => (
+                      <tr key={s.code} style={{ borderTop: `1px solid ${D.line2}` }}>
+                        <td className="px-1.5 py-1.5" style={{ color: D.mut }}>
+                          <span className="inline-block w-2 h-2 rounded-sm me-2 align-middle" style={{ background: s.c }} />{s.k}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-right font-bold tabular-nums" style={{ color: D.text }}>{s.n}</td>
+                        <td className="px-1.5 py-1.5 text-right tabular-nums" style={{ color: D.faint }}>{Math.round((s.n / totalDocs) * 100)}%</td>
                       </tr>
                     ))}
                   </tbody>
