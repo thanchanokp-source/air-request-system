@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react"
 import { BUS, STATUS_LABEL, fmt } from "../_StageWork"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { buildRequesters } from "@/lib/pull-requesters"
-import { pullReqType } from "@/lib/pull-reqtype"
+import { pullReqType, isSampleLike } from "@/lib/pull-reqtype"
 
 // ── Theme ──────────────────────────────────────────────────────────────────────────────────
 // Light backdrop, white panels. Series colours are fixed slots assigned in order and never
@@ -30,20 +30,6 @@ const monLabel = (key: string, withYear: boolean) => {
   return `${MON[Number(m) - 1] || m}${withYear ? ` ${y.slice(2)}` : ""}`
 }
 
-// Workflow order for the backlog chart; anything unknown falls in at the end.
-const STAGE_ORDER = ["PENDING_PURCHASING", "PC_REVISE", "PENDING_SCM_DECISION", "PENDING_APPROVAL", "PENDING_LOGISTICS", "PENDING_LG_RATE", "APPROVED"]
-const STAGE_LABEL: Record<string, string> = {
-  PENDING_PURCHASING: "Awaiting Purchasing", PC_REVISE: "Returned for fix", PENDING_SCM_DECISION: "Awaiting SCM",
-  PENDING_APPROVAL: "Awaiting Approval", PENDING_LOGISTICS: "Awaiting LG close", PENDING_LG_RATE: "Awaiting air rate", APPROVED: "Approved",
-}
-// A stage keeps the same colour everywhere it appears (bar, share strip, status table), so the eye
-// can follow one stage across the row. Unknown statuses fall back to the spare slots.
-const STAGE_COLOR: Record<string, string> = {
-  PENDING_PURCHASING: "#eb6834", PC_REVISE: "#e34948", PENDING_SCM_DECISION: "#4a3aa7",
-  PENDING_APPROVAL: "#eda100", PENDING_LG_RATE: "#c2491d", PENDING_LOGISTICS: "#2a78d6",
-  APPROVED: "#1baf7a", COMPLETED: "#0e7c5a", NO_AIR: "#6b7280", RECALLED: "#8b5cf6",
-}
-const SPARE = ["#1c5cab", "#b45309", "#7c3aed", "#0f766e", "#be123c"]
 
 export default function Page() {
   const { data: session, status: auth } = useSession()
@@ -181,18 +167,57 @@ export default function Page() {
   fReqs.forEach((r: any) => { const o = ownerOf(r); byOwner[o] = (byOwner[o] || 0) + 1 })
   const purchaserRows = Object.entries(byOwner).map(([k, n]) => ({ k, n })).sort((a, b) => b.n - a.n).slice(0, 9)
 
-  const stageCount: Record<string, number> = {}
-  wipDocs.forEach((r: any) => { stageCount[r.status] = (stageCount[r.status] || 0) + 1 })
-  const colorOf = (code: string, i: number) => STAGE_COLOR[code] || SPARE[i % SPARE.length]
-  const stuckRows = [
-    ...STAGE_ORDER.filter(s => stageCount[s]),
-    ...Object.keys(stageCount).filter(s => !STAGE_ORDER.includes(s)),
-  ].map((s, i) => ({ code: s, k: STAGE_LABEL[s] || STATUS_LABEL[s] || s, n: stageCount[s], c: colorOf(s, i) }))
+  // Status told the way the team actually talks about it: which lane the document is in, and which
+  // desk it is sitting on right now. The three lanes have different chains, so they are separated
+  // instead of being piled into one status list.
+  const laneOf = (r: any): "SCM" | "FREE" | "PUR" =>
+    isSampleLike(reqTypeOf(r)) ? "FREE" : (r.requestType || "SCM") === "PURCHASING" ? "PUR" : "SCM"
+  const stageOf = (r: any): string => {
+    const s = r.status
+    if (s === "COMPLETED") return "Completed"
+    if (s === "RECALLED") return "Recalled"
+    if (s === "REJECTED") return "Rejected"
+    if (s === "NO_AIR") return "No air"
+    if (s === "PENDING_LG_RATE") return "Waiting LG · air rate"
+    if (s === "APPROVED" || s === "PENDING_LOGISTICS") return laneOf(r) === "FREE" ? "Auto approved · waiting LG" : "Waiting LG"
+    if (s === "PC_REVISE") return "Returned to Purchase"
+    if (s === "PENDING_PURCHASING") return "Waiting Purchase"
+    if (s === "PENDING_SCM_DECISION") return "Waiting SCM air decision"
+    if (["PENDING_DVM_SCM", "PENDING_VP_SCM", "PENDING_FINAL"].includes(s)) return "Waiting SCM approve"
+    if (["PENDING_VP_PUR", "PENDING_DVM_PUR", "PENDING_PC_DECISION"].includes(s)) return "Waiting DVM Purchase approve"
+    return STATUS_LABEL[s] || s
+  }
+  const STAGE_RANK = ["Waiting Purchase", "Returned to Purchase", "Waiting SCM air decision", "Waiting SCM approve",
+    "Waiting DVM Purchase approve", "Auto approved · waiting LG", "Waiting LG", "Waiting LG · air rate", "Completed"]
+  const stageColor: Record<string, string> = {
+    "Waiting Purchase": C.s2, "Returned to Purchase": C.crit, "Waiting SCM air decision": C.s5,
+    "Waiting SCM approve": C.s4, "Waiting DVM Purchase approve": C.s4, "Auto approved · waiting LG": C.s1,
+    "Waiting LG": C.s1, "Waiting LG · air rate": "#c2491d", Completed: C.s3, Recalled: "#8b5cf6", Rejected: D.mut, "No air": D.mut,
+  }
+  const LANES: { key: "SCM" | "FREE" | "PUR"; label: string }[] = [
+    { key: "SCM", label: "SCM request" }, { key: "PUR", label: "Purchasing request" }, { key: "FREE", label: "MER / PPC request" },
+  ]
+  const laneRows = LANES.map(l => {
+    const docs = fReqs.filter((r: any) => laneOf(r) === l.key)
+    const m: Record<string, number> = {}
+    docs.forEach((r: any) => { const k = stageOf(r); m[k] = (m[k] || 0) + 1 })
+    const rows = Object.entries(m).sort((a, b) => {
+      const ra = STAGE_RANK.indexOf(a[0]), rb = STAGE_RANK.indexOf(b[0])
+      return (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb)
+    }).map(([k, n]) => ({ k, n, c: stageColor[k] || D.mut }))
+    return { ...l, total: docs.length, rows }
+  }).filter(l => l.total > 0)
 
-  const allStatus: Record<string, number> = {}
-  fReqs.forEach((r: any) => { allStatus[r.status] = (allStatus[r.status] || 0) + 1 })
-  const statusRows = Object.entries(allStatus).sort((a, b) => b[1] - a[1])
-    .map(([code, n], i) => ({ code, k: STATUS_LABEL[code] || code, n, c: colorOf(code, i) }))
+  // What Logistics still owes — one row per thing LG has to do next.
+  const atLg = fReqs.filter((r: any) => ["APPROVED", "PENDING_LOGISTICS", "PENDING_LG_RATE", "COMPLETED"].includes(r.status))
+  const lgRows = [
+    { k: "No ship mode selected", n: atLg.filter((r: any) => !r.shipMode && r.status !== "COMPLETED").length, c: C.s4 },
+    { k: "Air rate missing", n: fReqs.filter((r: any) => r.status === "PENDING_LG_RATE").length, c: "#c2491d" },
+    { k: "Air · not sent to FWD", n: atLg.filter((r: any) => r.shipMode === "AIR" && !r.fwdSentAt && r.status !== "COMPLETED").length, c: C.s2 },
+    { k: "Sent to FWD · awaiting reply", n: fReqs.filter((r: any) => r.fwdSentAt && !r.fwdImportedAt).length, c: C.s1 },
+    { k: "FWD replied · ready to close", n: fReqs.filter((r: any) => r.fwdImportedAt && r.actualAir == null).length, c: C.s5 },
+    { k: "Closed", n: doneDocs.length, c: C.s3 },
+  ].filter(r => r.n > 0)
 
   // ── Export (unchanged data contract) ───────────────────────────────────────────────────
   const dstr = (v: any) => (v ? new Date(v).toLocaleDateString("en-GB") : "-")
@@ -441,11 +466,11 @@ export default function Page() {
             {/* ── 1 · Cost & Ship Mode ───────────────────────────────────── */}
             <SectionHead n={1} title="Cost & Ship Mode" sub="What we spent, and how the goods travelled" color={C.s1} />
             <div className="grid gap-3" style={{ gridTemplateColumns: "minmax(0,1.6fr) minmax(0,1fr)" }}>
-              <Card title="Estimate vs Actual (USD)" cap="Monthly bars — both share one scale"
+              <Card title="Estimate vs Actual (USD)"
                 right={<Legend items={[{ k: "Estimate", c: C.s1 }, { k: "Actual", c: C.s2 }]} />}>
                 <Columns />
               </Card>
-              <Card title="Ship Mode per Document" cap="Mode confirmed by LG · counted in documents"
+              <Card title="Ship Mode per Document"
                 right={modeOverride ? <Pill tone="warn">LG changed {modeOverride}</Pill> : null}>
                 <ShareBar rows={modeRows} />
                 <div className="h-3" />
@@ -458,7 +483,7 @@ export default function Page() {
             {/* ── 2 · Air Cost ───────────────────────────────────────────── */}
             <SectionHead n={2} title="Air Cost" sub="Air-confirmed documents only — who carries it, from where, at what cost" color={C.s2} />
             <div className="grid gap-3" style={{ gridTemplateColumns: "minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr)" }}>
-              <Card title="Forwarder on Air Documents" cap={`Assigned vs not assigned — of the ${airDocs.length} air documents`}
+              <Card title={`Forwarder on Air Documents (${airDocs.length})`}
                 right={airNoFwd ? <Pill tone="bad">{airNoFwd} pending</Pill> : null}>
                 {airDocs.length === 0 ? <Empty /> : (
                   <>
@@ -472,21 +497,21 @@ export default function Page() {
                   </>
                 )}
               </Card>
-              <Card title="Air Origin Countries" cap="Documents per country · right column = USD per kg">
+              <Card title="Air Origin Countries">
                 <HBars labelW={94} rows={airCountryRows.map(r => ({ k: r.k, v: r.n, color: C.s1, label: `${r.n} docs`, sub: `${r.perKg.toFixed(2)} $/kg` }))} />
               </Card>
-              <Card title="Cost / kg by Country" cap="Est cost per kilo by origin country (USD)">
+              <Card title="Cost / kg by Country (USD)">
                 <HBars labelW={94} rows={countryCost.map(x => ({ k: x.k, v: x.v, color: C.s4, label: x.v.toFixed(2) }))} />
               </Card>
             </div>
             <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
-              <Card title="Cost / kg by Supplier" cap="Est cost per kilo by supplier (USD) · check the weight on outliers">
+              <Card title="Cost / kg by Supplier (USD)">
                 <HBars labelW={112} rows={supplierCost.map((x, i) => ({ k: x.k, v: x.v, color: i === 0 ? C.crit : C.s5, label: x.v.toFixed(2) }))} />
               </Card>
-              <Card title="Incoterms" cap="Tells whether origin cost (EXW/FCA) must be added">
+              <Card title="Incoterms">
                 <Donut />
               </Card>
-              <Card title="Forwarder Status" cap="Where each document stands with the forwarder">
+              <Card title="Forwarder Status">
                 <HBars labelW={118} rows={fwdStatusRows.map(s => ({ k: s.k, v: s.n, color: s.c, label: `${s.n} docs` }))} />
               </Card>
             </div>
@@ -494,40 +519,32 @@ export default function Page() {
             {/* ── 3 · Status Document ────────────────────────────────────── */}
             <SectionHead n={3} title="Status Document" sub="Who raised how many, and where they sit today" color={C.s5} />
             <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(3, minmax(0,1fr))" }}>
-              <Card title="Documents Raised by Purchasing" cap="By purchasing name · documents submitted"
+              <Card title="Documents Raised by Purchasing"
                 right={<Pill tone="neutral">{purchaserRows.length} people</Pill>}>
                 <HBars labelW={100} rows={purchaserRows.map(p => ({ k: p.k, v: p.n, color: C.s5, label: `${p.n} docs` }))} />
               </Card>
-              <Card title="Where Documents Are Stuck" cap={`${wipDocs.length} documents not closed yet`}>
-                {stuckRows.length === 0 ? <Empty /> : (
-                  <>
-                    <ShareBar rows={stuckRows.map(s => ({ k: s.k, n: s.n, c: s.c }))} />
-                    <div className="h-3" />
-                    <HBars labelW={126} rows={stuckRows.map(s => ({ k: s.k, v: s.n, color: s.c, label: `${s.n} docs` }))} />
-                  </>
+              <Card title="Waiting On — by Request Lane"
+                right={<Pill tone="neutral">{wipDocs.length} open</Pill>}>
+                {laneRows.length === 0 ? <Empty /> : (
+                  <div className="space-y-3.5">
+                    {laneRows.map(l => (
+                      <div key={l.key}>
+                        <div className="flex items-baseline justify-between mb-1.5">
+                          <span className="text-[11.5px] font-bold" style={{ color: D.text }}>{l.label}</span>
+                          <span className="text-[10.5px] tabular-nums" style={{ color: D.faint }}>{l.total} docs</span>
+                        </div>
+                        <ShareBar rows={l.rows.map(r => ({ k: r.k, n: r.n, c: r.c }))} />
+                        <div className="mt-2">
+                          <HBars labelW={146} rows={l.rows.map(r => ({ k: r.k, v: r.n, color: r.c, label: `${r.n}` }))} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </Card>
-              <Card title="All Statuses" cap="Statuses present in this data set">
-                <table className="w-full text-[12px]">
-                  <thead>
-                    <tr style={{ color: D.faint }}>
-                      <th className="text-left font-semibold text-[10px] uppercase tracking-wider px-1.5 py-1">Status</th>
-                      <th className="text-right font-semibold text-[10px] uppercase tracking-wider px-1.5 py-1">Docs</th>
-                      <th className="text-right font-semibold text-[10px] uppercase tracking-wider px-1.5 py-1">Share</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {statusRows.map(s => (
-                      <tr key={s.code} style={{ borderTop: `1px solid ${D.line2}` }}>
-                        <td className="px-1.5 py-1.5" style={{ color: D.mut }}>
-                          <span className="inline-block w-2 h-2 rounded-sm me-2 align-middle" style={{ background: s.c }} />{s.k}
-                        </td>
-                        <td className="px-1.5 py-1.5 text-right font-bold tabular-nums" style={{ color: D.text }}>{s.n}</td>
-                        <td className="px-1.5 py-1.5 text-right tabular-nums" style={{ color: D.faint }}>{Math.round((s.n / totalDocs) * 100)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <Card title="Logistics — What's Next"
+                right={<Pill tone="neutral">{atLg.length} at LG</Pill>}>
+                <HBars labelW={160} rows={lgRows.map(r => ({ k: r.k, v: r.n, color: r.c, label: `${r.n} docs` }))} />
               </Card>
             </div>
 
