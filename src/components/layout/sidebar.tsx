@@ -12,6 +12,7 @@ const claimNav = [
   { href: "/claim-status", label: "CLAIM STATUS" },
   { href: "/drop-queue", label: "DROP QUEUE", roles: ["ADMIN", "MER_USER", "MER_EA", "MER_TRM"] },
   { href: "/files", label: "DOCUMENT FOR LOGISTICS & ACCOUNTING" },
+  { href: "/supplier-claim", label: "SUPPLIER CLAIM", roles: ["ADMIN", "CLAIM_PROCUREMENT", "VP_PROCUREMENT"] },
   { href: "/requests/nyk-import", label: "NYK IMPORT", adminOnly: true },
   { href: "/logistics", label: "LG BOOKING", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_GW", "LOGISTICS_TRM", "LOGISTICS_SUB"] },
   { href: "/lg-air-booking", label: "LG AIR BOOKING (NYG)", roles: ["ADMIN", "LOGISTICS", "LOGISTICS_SUB"] },
