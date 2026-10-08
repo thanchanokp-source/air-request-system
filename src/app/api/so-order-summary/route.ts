@@ -36,6 +36,8 @@ export async function GET(req: NextRequest) {
     , f AS (
       SELECT * FROM s
       WHERE (sd IS NULL OR sd >= DATE '2026-01-01')   -- air-request system starts 2026 → older SO not counted
+        -- only garment sale orders: 8-digit SO starting 01 / 09 (other prefixes are not air-request orders)
+        AND lpad(regexp_replace(so_no_doc::text, '\\D', '', 'g'), 8, '0') ~ '^(01|09)'
         AND ($1 = '' OR sd IS NULL OR to_char(sd, 'YYYY') = $1)
         AND (cardinality($2::text[]) = 0 OR sd IS NULL OR to_char(sd, 'MM') = ANY($2::text[]))
         AND (cardinality($3::text[]) = 0 OR brand = ANY($3::text[]))
