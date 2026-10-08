@@ -24,11 +24,12 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
       attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
       claimForwards: true,
       approvalSignatures: { orderBy: { signedAt: "asc" } },
-      supplierClaims: { include: { createdBy: { select: { name: true, email: true } } }, orderBy: { createdAt: "asc" } },
     } as any
   })
   if (!request) return NextResponse.json({ error: "Not found" }, { status: 404 })
   await attachGarmentPo([request as any])
+  // separate query (see /api/requests): a missing SupplierClaim table must not break the document page
+  ;(request as any).supplierClaims = await (prisma as any).supplierClaim.findMany({ where: { requestId: id }, include: { createdBy: { select: { name: true, email: true } } }, orderBy: { createdAt: "asc" } }).catch(() => [])
   return NextResponse.json(request)
 }
 

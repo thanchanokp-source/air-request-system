@@ -78,7 +78,6 @@ export async function GET(req: NextRequest) {
       items: { include: { claimApprovals: { select: { userId: true, role: true, createdAt: true } } } },
       // Forced-position forward rows → show who each claim dept is currently waiting on.
       claimForwards: { select: { dept: true, nextName: true, nextEmail: true, position: true, itemIds: true } },
-      supplierClaims: { select: { id: true, refNo: true, amount: true } },
       attachments: { include: { uploadedBy: { select: { name: true, role: true } } }, orderBy: { createdAt: "asc" } },
       approvalLogs: {
         // REJECT logs (for rejection info) + the "ready to book" approval
@@ -100,6 +99,13 @@ export async function GET(req: NextRequest) {
   // "อยู่ที่ใคร" — current approver name(s) per doc (dashboard column). Directory loaded once.
   const dir = await (prisma.user as any).findMany({ where: { isActive: true }, select: { email: true, name: true, role: true, roles: true, bu: true } })
   for (const r of requests as any[]) { try { r.pendingWith = pendingApproverNames(r, dir) } catch { r.pendingWith = [] } }
+  // supplier claims loaded SEPARATELY (never in the include) — if that table is missing / fails, the list
+  // still loads (a failed include made the whole API error → empty dashboard)
+  try {
+    const sc = await (prisma as any).supplierClaim.findMany({ where: { requestId: { in: (requests as any[]).map(r => r.id) } }, select: { id: true, requestId: true, refNo: true, amount: true } })
+    const by = new Map<string, any[]>(); for (const c of sc as any[]) by.set(c.requestId, [...(by.get(c.requestId) || []), c])
+    for (const r of requests as any[]) r.supplierClaims = by.get(r.id) || []
+  } catch { /* SupplierClaim table not created yet */ }
   return NextResponse.json(requests)
 }
 
