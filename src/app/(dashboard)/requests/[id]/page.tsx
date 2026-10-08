@@ -646,6 +646,7 @@ export default function RequestDetailPage() {
   const [lgRejectReason, setLgRejectReason] = useState("")
   const [crNoInput, setCrNoInput] = useState("")
   const [crByItem, setCrByItem] = useState<Record<string, string>>({}) // per-SO CR NO (grouped by INV in the UI)
+  const [crOpenInv, setCrOpenInv] = useState<Set<string>>(new Set()) // INV whose per-SO CR list is expanded
   const [savingCr, setSavingCr] = useState(false)
   const [reassign, setReassign] = useState<Record<string, { dept: string; pct: string; reason: string }[]>>({})
   // Claim-reject resubmit: batch controls (apply one dept to ALL rejected SOs at once).
@@ -5182,10 +5183,19 @@ export default function RequestDetailPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-semibold text-blue-800">INV {inv}</span>
                       <span className="text-[10px] text-gray-400">{its.length} SO</span>
+                      {/* SO CRs differ → the INV box shows blank; say so instead of looking empty */}
+                      {!commonCr(its) && its.some((it: any) => String(crOf(it)).trim()) && <span className="text-[10px] text-amber-700">หลาย CR ใน INV นี้</span>}
                       <input value={commonCr(its)} onChange={e => setInvCr(its, e.target.value)} placeholder="CR NO for this INV"
                         className="ml-auto w-44 border border-blue-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300" />
+                      {its.length > 1 && (
+                        <button type="button" onClick={() => setCrOpenInv(p => { const n = new Set(p); n.has(inv) ? n.delete(inv) : n.add(inv); return n })}
+                          className="text-[11px] text-blue-600 hover:underline whitespace-nowrap">
+                          {crOpenInv.has(inv) ? "▾ ซ่อนราย SO" : `▸ แก้ราย SO (${its.length})`}
+                        </button>
+                      )}
                     </div>
-                    {its.length > 1 && (
+                    {/* per-SO CR only when expanded (an INV holding several CRs) — default = one CR per INV */}
+                    {its.length > 1 && crOpenInv.has(inv) && (
                       <div className="pl-3 space-y-1 border-l-2 border-blue-50">
                         {its.map((it: any) => (
                           <div key={it.id} className="flex items-center gap-2">
