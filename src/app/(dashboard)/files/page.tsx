@@ -556,7 +556,6 @@ export default function FilesPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">DOCUMENT FOR LOGISTICS &amp; ACCOUNTING</h1>
-        <p className="text-xs text-gray-400 mt-0.5">All approved documents in one place — filter by BU and status</p>
       </div>
 
       <div className="flex gap-4 items-start">
@@ -598,71 +597,77 @@ export default function FilesPage() {
 
         {/* Right: content */}
         <div className="flex-1 min-w-0 bg-white rounded-xl border border-gray-200">
-          {/* Header */}
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 flex-wrap">
-            <div>
+          {/* Header — row 1: title + count + view switch · row 2: show-toggles (left) · exports (right) */}
+          <div className="px-5 py-4 border-b border-gray-100 space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h2 className="font-semibold text-gray-800">Documents</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Approved for booking (VP SCM / GM) — Booking → Logistics → Completed</p>
-            </div>
-            <div className="ml-auto flex items-center gap-3">
-              <span className="text-xs text-gray-400">{soView ? `${soRows.length} SO` : `${filtered.length} document(s)`}</span>
-              {/* View toggle: LG picks SO (grouped by port/date); or browse by document */}
-              <div className="flex rounded-lg border border-gray-300 overflow-hidden text-xs font-medium">
-                <button onClick={() => setSoView(false)}
-                  className={`px-3 py-1.5 ${!soView ? "bg-gray-700 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>By Document</button>
-                <button onClick={() => setSoView(true)}
-                  className={`px-3 py-1.5 border-l border-gray-300 ${soView ? "bg-gray-700 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>By SO</button>
-              </div>
-              {soView && (
-                <div className="flex items-center gap-1 text-xs">
-                  <span className="text-gray-400">Group:</span>
-                  {([["shipdate","Ship Date"],["none","None"]] as [any,string][]).map(([k,lbl]) => (
-                    <button key={k} onClick={() => setGroupBy(k)}
-                      className={`px-2 py-1 rounded font-medium ${groupBy === k ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{lbl}</button>
-                  ))}
+              <span className="text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2 py-0.5 tabular-nums">{soView ? `${soRows.length} SO` : `${filtered.length} docs`}</span>
+              <span className="text-xs text-gray-400 hidden md:inline">Approved for booking (VP SCM / GM) → Booking → Logistics → Completed</span>
+              <div className="ml-auto flex items-center gap-2">
+                {soView && (
+                  <div className="flex items-center gap-1 text-xs">
+                    <span className="text-gray-400">Group</span>
+                    {([["shipdate","Ship Date"],["none","None"]] as [any,string][]).map(([k,lbl]) => (
+                      <button key={k} onClick={() => setGroupBy(k)}
+                        className={`h-8 px-2.5 rounded-lg font-medium whitespace-nowrap ${groupBy === k ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{lbl}</button>
+                    ))}
+                  </div>
+                )}
+                {/* View toggle: LG picks SO (grouped by port/date); or browse by document */}
+                <div className="flex h-8 rounded-lg border border-gray-300 overflow-hidden text-xs font-medium">
+                  <button onClick={() => setSoView(false)}
+                    className={`px-3 whitespace-nowrap ${!soView ? "bg-gray-700 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>By Document</button>
+                  <button onClick={() => setSoView(true)}
+                    className={`px-3 whitespace-nowrap border-l border-gray-300 ${soView ? "bg-gray-700 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}>By SO</button>
                 </div>
-              )}
-              {true && (
-                <button onClick={() => setUnbookedOnly(v => !v)}
-                  className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${unbookedOnly ? "bg-amber-500 text-white border-amber-500" : "bg-white text-amber-700 border-amber-300 hover:bg-amber-50"}`}>
-                  {unbookedOnly ? "● Showing unbooked" : "○ Unbooked only"}
-                </button>
-              )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* show / mode toggles */}
+              <button onClick={() => setUnbookedOnly(v => !v)}
+                className={`h-8 text-xs px-3 rounded-lg font-medium border whitespace-nowrap transition-colors ${unbookedOnly ? "bg-amber-500 text-white border-amber-500" : "bg-white text-amber-700 border-amber-300 hover:bg-amber-50"}`}>
+                {unbookedOnly ? "● Unbooked only" : "○ Unbooked only"}
+              </button>
               {isAdmin && (
                 <button onClick={() => setShowTest(v => !v)}
                   title="Admin only — include TEST documents (hidden from other users)"
-                  className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${showTest ? "bg-purple-600 text-white border-purple-600" : "bg-white text-purple-600 border-purple-300 hover:bg-purple-50"}`}>
-                  {showTest ? "● Showing test" : "○ Test docs"}
+                  className={`h-8 text-xs px-3 rounded-lg font-medium border whitespace-nowrap transition-colors ${showTest ? "bg-purple-600 text-white border-purple-600" : "bg-white text-purple-600 border-purple-300 hover:bg-purple-50"}`}>
+                  {showTest ? "● Test docs" : "○ Test docs"}
                 </button>
               )}
               <button onClick={() => { setCombineMode(m => !m); setSelectedForCombine(new Set()) }}
-                className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${combineMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"}`}>
+                className={`h-8 text-xs px-3 rounded-lg font-medium border whitespace-nowrap transition-colors ${combineMode ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-600 border-blue-300 hover:bg-blue-50"}`}>
                 {combineMode ? "✕ Cancel Combine" : "⊞ Combine Mode"}
               </button>
-              {/* One PDF of ALL filtered SOs across every visible document (no manual selection). */}
-              <button onClick={downloadAllFilteredPdf} disabled={combineLoading || filteredSoTotal === 0}
-                title="รวม SO ที่ filter จากทุกเอกสารเป็น PDF เดียว"
-                className="text-xs px-3 py-1.5 rounded-lg font-medium border border-green-600 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
-                {combineLoading ? "…" : `↓ PDF รวม (${filteredSoTotal} SO)`}
-              </button>
-              {/* HAWB summary (Excel, pivot-like: HAWB → INV) of the documents / filters on screen */}
-              <button onClick={exportHawbSummary}
-                title="สรุปยอดตาม HAWB (กด + ใน Excel เพื่อดูราย INV) · ตาม filter ปัจจุบัน"
-                className="text-xs px-3 py-1.5 rounded-lg font-medium border border-emerald-600 text-emerald-700 bg-white hover:bg-emerald-50 whitespace-nowrap">
-                ⬇ HAWB Summary (Excel)
-              </button>
-              {/* Print by HAWB — type (or pick) a HAWB# → consolidated PDF of all its SO */}
-              <div className="flex items-center gap-1">
-                <input list="hawb-list" value={hawbQuery} disabled={hawbLoading}
-                  onChange={e => setHawbQuery(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") printHawb(hawbQuery) }}
-                  placeholder="HAWB#…"
-                  className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 bg-white text-gray-700 w-[130px] disabled:opacity-50" />
-                <datalist id="hawb-list">{allHawbs.map(h => <option key={h} value={h} />)}</datalist>
-                <button onClick={() => printHawb(hawbQuery)} disabled={hawbLoading || !hawbQuery.trim()}
-                  className="text-xs px-3 py-1.5 rounded-lg font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                  {hawbLoading ? "…" : "🖨 HAWB"}
+
+              {/* exports */}
+              <div className="ml-auto flex items-center gap-2 flex-wrap">
+                {/* One PDF of ALL filtered SOs across every visible document (no manual selection). */}
+                <button onClick={downloadAllFilteredPdf} disabled={combineLoading || filteredSoTotal === 0}
+                  title="รวม SO ที่ filter จากทุกเอกสารเป็น PDF เดียว"
+                  className="h-8 text-xs px-3 rounded-lg font-medium border border-green-600 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
+                  {combineLoading ? "…" : `↓ PDF รวม (${filteredSoTotal} SO)`}
                 </button>
+                {/* HAWB summary (Excel, pivot-like: HAWB → INV) of the documents / filters on screen */}
+                <button onClick={exportHawbSummary}
+                  title="สรุปยอดตาม HAWB (กด + ใน Excel เพื่อดูราย INV) · ตาม filter ปัจจุบัน"
+                  className="h-8 text-xs px-3 rounded-lg font-medium border border-emerald-600 text-emerald-700 bg-white hover:bg-emerald-50 whitespace-nowrap">
+                  ⬇ HAWB Summary (Excel)
+                </button>
+                {/* Print by HAWB — type (or pick) a HAWB# → consolidated PDF of all its SO */}
+                <div className="flex h-8 rounded-lg border border-gray-300 overflow-hidden bg-white">
+                  <input list="hawb-list" value={hawbQuery} disabled={hawbLoading}
+                    onChange={e => setHawbQuery(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") printHawb(hawbQuery) }}
+                    placeholder="HAWB#…" aria-label="HAWB number"
+                    className="text-xs px-2 text-gray-700 w-[130px] outline-none disabled:opacity-50" />
+                  <datalist id="hawb-list">{allHawbs.map(h => <option key={h} value={h} />)}</datalist>
+                  <button onClick={() => printHawb(hawbQuery)} disabled={hawbLoading || !hawbQuery.trim()}
+                    className="text-xs px-3 font-medium border-l border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40 whitespace-nowrap">
+                    {hawbLoading ? "…" : "🖨 HAWB"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
