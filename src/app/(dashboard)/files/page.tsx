@@ -218,6 +218,50 @@ export default function FilesPage() {
     return true
   }), [folderFiltered, docF, brandF, styleF, soF, cpF, invoiceF, claimF, portF, shipF, hawbNorm, unbookedOnly])
 
+  // ── HAWB summary → Excel (pivot-like): one row per HAWB (totals) with its INV rows grouped underneath
+  // (Excel outline: collapsed, click + to expand). Uses the documents + filters currently on screen.
+  // Sheet 2 = flat SO detail (HAWB / INV / SO …) for the user's own pivot.
+  const exportHawbSummary = async () => {
+    const XLSX = await import("xlsx")
+    const lines: any[] = []
+    for (const r of filtered) for (const it of (r.items || [])) {
+      if (it.itemStatus === "REJECTED" || !itemMatchesFilters(it)) continue
+      const h = String(it.hawbNo || "").trim(); if (!h || /^[-.\s]*$/.test(h)) continue
+      lines.push({ hawb: h, inv: String(it.invoiceNo || "").trim() || "(no INV)", doc: r.documentNo, bu: r.bu, brand: it.brand || r.brandName || "",
+        so: it.so, sub: it.sub || "", style: it.style || "", qty: Number(it.qtyActualShip ?? it.qtyRequestAir) || 0,
+        act: Number(it.actualAirFreight) || 0, est: Number(it.airFreight) || 0 })
+    }
+    if (!lines.length) { alert("ไม่มี SO ที่มี HAWB ตาม filter ปัจจุบัน"); return }
+    const r2 = (v: number) => Math.round(v * 100) / 100
+    const uniqJoin = (xs: string[]) => [...new Set(xs.filter(Boolean))].join(", ")
+    const agg = (ls: any[]) => ({ so: new Set(ls.map(l => `${l.so}|${l.sub}`)).size, qty: ls.reduce((a, l) => a + l.qty, 0), act: r2(ls.reduce((a, l) => a + l.act, 0)), est: r2(ls.reduce((a, l) => a + l.est, 0)) })
+    const byHawb = new Map<string, any[]>()
+    for (const l of lines) byHawb.set(l.hawb, [...(byHawb.get(l.hawb) || []), l])
+    const head = ["HAWB", "INV", "เอกสาร", "BU", "Brand", "SO", "QTY", "Actual", "EST"]
+    const aoa: any[][] = [head], rows: any[] = [{}]
+    for (const [h, ls] of [...byHawb.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const t = agg(ls)
+      const invs = [...new Set(ls.map(l => l.inv))].sort()
+      aoa.push([h, `${invs.length} INV`, uniqJoin(ls.map(l => l.doc)), uniqJoin(ls.map(l => l.bu)), uniqJoin(ls.map(l => l.brand)), t.so, t.qty, t.act, t.est]); rows.push({})
+      for (const inv of invs) {
+        const il = ls.filter(l => l.inv === inv), ti = agg(il)
+        aoa.push([h, inv, uniqJoin(il.map(l => l.doc)), uniqJoin(il.map(l => l.bu)), uniqJoin(il.map(l => l.brand)), ti.so, ti.qty, ti.act, ti.est])
+        rows.push({ level: 1, hidden: true })   // grouped under the HAWB row — expand with + in Excel
+      }
+    }
+    const g = agg(lines)
+    aoa.push(["GRAND TOTAL", `${new Set(lines.map(l => l.inv)).size} INV`, `${new Set(lines.map(l => l.doc)).size} เอกสาร`, "", "", g.so, g.qty, g.act, g.est]); rows.push({})
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    ws["!rows"] = rows
+    ws["!cols"] = [{ wch: 18 }, { wch: 18 }, { wch: 40 }, { wch: 6 }, { wch: 28 }, { wch: 6 }, { wch: 10 }, { wch: 14 }, { wch: 14 }]
+    const detail = XLSX.utils.json_to_sheet(lines.sort((a, b) => a.hawb.localeCompare(b.hawb) || a.inv.localeCompare(b.inv) || String(a.so).localeCompare(String(b.so)))
+      .map(l => ({ HAWB: l.hawb, INV: l.inv, "เอกสาร": l.doc, BU: l.bu, Brand: l.brand, SO: l.so, SUB: l.sub, STYLE: l.style, QTY: l.qty, Actual: r2(l.act), EST: r2(l.est) })))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "HAWB Summary")
+    XLSX.utils.book_append_sheet(wb, detail, "Detail (SO)")
+    XLSX.writeFile(wb, `hawb-summary-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
   // Flat SO rows for the LG "By SO" view — item-level filtering, then group by Port/Ship Date.
   const soRows = useMemo(() => {
     const rows: { req: any; item: any }[] = []
@@ -600,6 +644,12 @@ export default function FilesPage() {
                 title="รวม SO ที่ filter จากทุกเอกสารเป็น PDF เดียว"
                 className="text-xs px-3 py-1.5 rounded-lg font-medium border border-green-600 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
                 {combineLoading ? "…" : `↓ PDF รวม (${filteredSoTotal} SO)`}
+              </button>
+              {/* HAWB summary (Excel, pivot-like: HAWB → INV) of the documents / filters on screen */}
+              <button onClick={exportHawbSummary}
+                title="สรุปยอดตาม HAWB (กด + ใน Excel เพื่อดูราย INV) · ตาม filter ปัจจุบัน"
+                className="text-xs px-3 py-1.5 rounded-lg font-medium border border-emerald-600 text-emerald-700 bg-white hover:bg-emerald-50 whitespace-nowrap">
+                ⬇ HAWB Summary (Excel)
               </button>
               {/* Print by HAWB — type (or pick) a HAWB# → consolidated PDF of all its SO */}
               <div className="flex items-center gap-1">
