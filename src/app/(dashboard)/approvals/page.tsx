@@ -8,6 +8,7 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { getSplits, gwDeptsForRole, hasPendingGwSplit, hasApprovableGwSplit, splitAirCost, actingClaimForSO, deptSplitStatus, itemHasReassignSplit, vpProdGroup, prodGroupCovers } from "@/lib/claim"
 import { roleBu, requestInBu, BU_META, BUS } from "@/lib/bu"
 import { ClaimSplitBadges } from "@/components/ClaimSplits"
+import AttachmentsPopup, { AttachChip } from "@/components/AttachmentsPopup"
 
 const fmtDate = (v: any) => { if (!v) return "-"; const d = new Date(v); if (isNaN(d.getTime())) return "-"; const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${String(d.getDate()).padStart(2,"0")}/${M[d.getMonth()]}/${d.getFullYear()}` }
 const fmtNum = (v: any, dec = 0) => v != null ? Number(v).toLocaleString("en-US", { maximumFractionDigits: dec }) : "-"
@@ -20,6 +21,7 @@ export default function ApprovalsPage() {
   const isGwRole = ["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW", "LOGISTICS_GW", "CLAIM_GW", "SCM_NYK_APPROVER", "SCM_NYK_EVP", "SCM_NYK", "SCM_NYG", "ACCOUNTING"].includes(role)
   const claimDeptOptions = isGwRole ? ["SCM NYK", "SCM NYG", "GW", "SUPPLIER"] : ["COMMERCIAL", "PROCUREMENT", "NYK", "PRODUCTION", "SCM NYG"]
   const [requests, setRequests] = useState<any[]>([])
+  const [attDoc, setAttDoc] = useState<any>(null) // document whose 📎 attachments popup is open
   const [loading, setLoading] = useState(true)
   const [brandF, setBrandF] = useState<string[]>([])
   const [styleF, setStyleF] = useState<string[]>([])
@@ -444,6 +446,7 @@ export default function ApprovalsPage() {
 
   return (
     <div className="space-y-4">
+      {attDoc && <AttachmentsPopup doc={attDoc} onClose={() => setAttDoc(null)} />}
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div>
@@ -581,6 +584,7 @@ export default function ApprovalsPage() {
                   {isClaimRole && (
                     <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">My Claim {fmtNum(myDocTotal)} {cur}</span>
                   )}
+                  <AttachChip doc={req} onOpen={() => setAttDoc(req)} />
                 </div>
                 <Link href={`/requests/${req.id}`} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 font-medium shrink-0 ml-auto">
                   Open →
