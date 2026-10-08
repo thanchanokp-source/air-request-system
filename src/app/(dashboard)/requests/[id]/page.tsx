@@ -2330,9 +2330,17 @@ export default function RequestDetailPage() {
         <h1 className="text-xl font-bold text-gray-900">{req.documentNo}</h1>
         {/* Back-to-SCM / returned reason — surfaced doc-level so SCM sees WHY it came back, on any section. */}
         {(() => {
-          const reasons = [...new Set((req.items || []).filter((i: any) => i.itemComment && i.itemStatus === "PENDING").map((i: any) => String(i.itemComment).trim()).filter(Boolean))]
+          // which SO were sent back (not the whole doc): count + SO list, so a doc that is otherwise moving
+          // on (e.g. NYK claim of the other SO) isn't read as "the document was returned"
+          const back = (req.items || []).filter((i: any) => i.itemComment && i.itemStatus === "PENDING")
+          const reasons = [...new Set(back.map((i: any) => String(i.itemComment).trim()).filter(Boolean))]
           if (!reasons.length) return null
-          return <div className="w-full rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-800"><b>↩ ส่งกลับ — เหตุผล:</b> {reasons.join(" · ")}</div>
+          const total = (req.items || []).filter((i: any) => i.itemStatus !== "REJECTED").length
+          const sos = [...new Set(back.map((i: any) => `${i.so}${i.sub ? "/" + i.sub : ""}`))]
+          return <div className="w-full rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-800">
+            <b>↩ ส่งกลับ {back.length} จาก {total} SO</b> ({sos.slice(0, 6).join(", ")}{sos.length > 6 ? ` +${sos.length - 6}` : ""}) — <b>เหตุผล:</b> {reasons.join(" · ")}
+            {back.length < total && <span className="text-orange-700/80"> · รอ SCM เลือกแผนกเคลมใหม่ · SO อื่นยังเดินต่อตามปกติ</span>}
+          </div>
         })()}
         {req.isTest && (
           <span className="text-xs bg-amber-100 border border-amber-300 text-amber-800 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">🧪 TEST — email goes to admin</span>

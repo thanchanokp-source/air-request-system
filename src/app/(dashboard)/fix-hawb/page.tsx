@@ -163,6 +163,24 @@ export default function FixHawbPage() {
                   </tr>
                 ))}
               </tbody>
+              {/* totals — whole HAWB, plus the ticked SO when some are selected */}
+              <tfoot className="bg-gray-50 font-semibold text-gray-800 sticky bottom-0">
+                {sel.size > 0 && (() => {
+                  const ts = data.rows.filter((r: any) => sel.has(r.id))
+                  return (
+                    <tr className="border-t border-gray-200 text-red-700">
+                      <td className="px-3 py-2" colSpan={7}>ที่ติ๊ก {ts.length} SO</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{n(ts.reduce((a: number, r: any) => a + (Number(r.qty) || 0), 0))}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{n(Math.round(ts.reduce((a: number, r: any) => a + (Number(r.actualAirFreight) || 0), 0) * 100) / 100)}</td>
+                    </tr>
+                  )
+                })()}
+                <tr className="border-t-2 border-gray-300">
+                  <td className="px-3 py-2" colSpan={7}>รวม HAWB {data.hawb} · {data.rows.length} SO · {new Set(data.rows.map((r: any) => r.invoiceNo).filter(Boolean)).size} INV · {new Set(data.rows.map((r: any) => r.documentNo)).size} เอกสาร</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{n(data.totalQty)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums" style={{ color: MAROON }}>{n(Math.round((Number(data.totalActual) || 0) * 100) / 100)}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
 
