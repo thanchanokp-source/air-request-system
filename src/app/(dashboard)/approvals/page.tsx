@@ -149,6 +149,11 @@ export default function ApprovalsPage() {
 
   // SCM NYK has 2 approvers → whoever approves first "owns" the doc; hide it from
   // the OTHER approver's queue. Owner = who has ≥1 SCM_NYK_APPROVER approval on it.
+  // NYK sees a document only when LG has finished EVERY NYK SO (INV + Actual air) — same rule as the
+  // NYK e-mail hold (notify nykLgReady). Partial LG data (e.g. 2 of 6 SO booked) stays out of the queue.
+  const isNykSo = (i: any) => i.itemStatus !== "REJECTED" && getSplits(i).some((s: any) => s.dept === "SCM NYK" || s.dept === "NYK")
+  const nykLgReady = (r: any) => { const ny = (r.items || []).filter(isNykSo); return ny.length > 0 && ny.every((i: any) => i.invoiceNo && i.actualAirFreight != null) }
+  const nykApproverDone = (i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER")
   const nykOwnedByOther = (r: any) => (r.items || []).some((i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER" && a.userId && a.userId !== userId))
   const nykOwnedByMe = (r: any) => (r.items || []).some((i: any) => (i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_APPROVER" && a.userId === userId))
 
@@ -198,17 +203,18 @@ export default function ApprovalsPage() {
     if (myRoles.includes("SCM_NYK_APPROVER")) {
       const myDepts = gwDeptsForRole("SCM_NYK_APPROVER", userClaimDept)
       // SCM NYK sees the doc ONLY after LG has entered its data (INV + Actual air) on the NYK SO.
-      if (items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts) && i.invoiceNo && i.actualAirFreight != null)) return true
+      if (nykLgReady(r) && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts) && i.invoiceNo && i.actualAirFreight != null)) return true
     }
     // CR user: once they've entered the CR NO for the doc, their job is done → drop it.
     if (myRoles.includes("SCM_NYK") && !r.crNo) {
       const myDepts = gwDeptsForRole("SCM_NYK", userClaimDept)
-      if (items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))) return true
+      // CR user acts after the Approver → only SO the Approver already approved
+      if (nykLgReady(r) && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts) && nykApproverDone(i))) return true
     }
     // EVP: drops once they've approved the NYK split (even if CR still pending).
     if (myRoles.includes("SCM_NYK_EVP")) {
       const myDepts = gwDeptsForRole("SCM_NYK_EVP", userClaimDept)
-      if (items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts)
+      if (nykLgReady(r) && items.some((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts) && nykApproverDone(i)
         && !(i.claimApprovals || []).some((a: any) => a.role === "SCM_NYK_EVP"))) return true
     }
     // CLAIM_GW / SCM_NYG are GW-only claim roles. Match via held roles so a person who is
@@ -292,12 +298,14 @@ export default function ApprovalsPage() {
     if (myRoles.includes("LOGISTICS_GW") && r.bu === "GW") return items.filter((i: any) => i.itemStatus === "PRES_PASSED")
     if (myRoles.includes("SCM_NYK_APPROVER")) {
       const myDepts = gwDeptsForRole("SCM_NYK_APPROVER", userClaimDept)
-      return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts) && i.invoiceNo && i.actualAirFreight != null)
+      return nykLgReady(r) ? items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasApprovableGwSplit(i, myDepts) && i.invoiceNo && i.actualAirFreight != null) : []
     }
     const gwClaimRoleP = myRoles.find((rr: string) => ["CLAIM_GW", "SCM_NYK", "SCM_NYK_EVP", "SCM_NYG"].includes(rr))
     if (gwClaimRoleP) {
       const myDepts = gwDeptsForRole(gwClaimRoleP, userClaimDept)
-      return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts))
+      const isNykStep = gwClaimRoleP === "SCM_NYK" || gwClaimRoleP === "SCM_NYK_EVP"   // after the Approver, full LG data only
+      if (isNykStep && !nykLgReady(r)) return []
+      return items.filter((i: any) => ["PRES_PASSED", "LOG_PASSED"].includes(i.itemStatus) && hasPendingGwSplit(i, myDepts) && (!isNykStep || nykApproverDone(i)))
     }
     return items.filter((i: any) => i.itemStatus !== "REJECTED")
   }
@@ -429,8 +437,10 @@ export default function ApprovalsPage() {
   const isClaimRole = role === "CLAIM_GW" || role === "SCM_NYK" || role === "SCM_NYK_APPROVER" || role === "SCM_NYK_EVP" || role === "SCM_NYG"
   const myDepts = isClaimRole ? gwDeptsForRole(role, userClaimDept) : []
   // Sum of this SO's air-freight portion for the current claim role's departments.
+  // Claim money = ACTUAL air × claim% only — no EST fallback (an SO LG hasn't billed yet has no claim amount)
+  const actualClaim = (item: any, s: any) => item?.actualAirFreight == null ? 0 : splitAirCost(item, s)
   const myClaimForItem = (item: any) =>
-    getSplits(item).filter((s: any) => myDepts.includes(s.dept)).reduce((sum: number, s: any) => sum + splitAirCost(item, s), 0)
+    getSplits(item).filter((s: any) => myDepts.includes(s.dept)).reduce((sum: number, s: any) => sum + actualClaim(item, s), 0)
 
   return (
     <div className="space-y-4">
@@ -535,7 +545,7 @@ export default function ApprovalsPage() {
           // Claim amount per department across this whole document (THB).
           const deptSums: Record<string, number> = {}
           reqItems.forEach((i: any) => getSplits(i).forEach((s: any) => {
-            deptSums[s.dept] = (deptSums[s.dept] || 0) + splitAirCost(i, s)
+            deptSums[s.dept] = (deptSums[s.dept] || 0) + (i.actualAirFreight == null ? 0 : splitAirCost(i, s))
           }))
           const myDocTotal = reqItems.reduce((s: number, i: any) => s + myClaimForItem(i), 0)
           // Show a CR NO column when this doc has an NYK claim (CR is a NYK-only field).
@@ -599,7 +609,9 @@ export default function ApprovalsPage() {
                         <td className="px-3 py-1.5 text-blue-700">{fmtNum(item.grossWeight, 2)}</td>
                         <td className="px-3 py-1.5 text-blue-700">{fmtNum(item.airFreight)}</td>
                         <td className="px-3 py-1.5 font-semibold text-green-700">{fmtNum(item.actualAirFreight)}</td>
-                        {isClaimRole && <td className="px-3 py-1.5 font-bold text-red-700 whitespace-nowrap">{fmtNum(myClaimForItem(item))} {cur}</td>}
+                        {isClaimRole && (item.actualAirFreight == null
+                          ? <td className="px-3 py-1.5 text-gray-400 whitespace-nowrap" title="LG ยังไม่ใส่ Actual air ของ SO นี้">รอ LG</td>
+                          : <td className="px-3 py-1.5 font-bold text-red-700 whitespace-nowrap">{fmtNum(myClaimForItem(item))} {cur}</td>)}
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.factory}</td>
                         <td className="px-3 py-1.5 whitespace-nowrap">{item.country}</td>
                         <td className="px-3 py-1.5"><ClaimSplitBadges item={item} showReason /></td>
