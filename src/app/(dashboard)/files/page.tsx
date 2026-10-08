@@ -602,7 +602,6 @@ export default function FilesPage() {
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="font-semibold text-gray-800">Documents</h2>
               <span className="text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2 py-0.5 tabular-nums">{soView ? `${soRows.length} SO` : `${filtered.length} docs`}</span>
-              <span className="text-xs text-gray-400 hidden md:inline">Approved for booking (VP SCM / GM) → Booking → Logistics → Completed</span>
               <div className="ml-auto flex items-center gap-2">
                 {soView && (
                   <div className="flex items-center gap-1 text-xs">
