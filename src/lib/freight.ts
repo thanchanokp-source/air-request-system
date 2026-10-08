@@ -62,6 +62,43 @@ export async function releaseHeldDocs() {
   }
 }
 
+// Fill EST for lines that still have NO estimate (gross or est 0) — e.g. the DESCRIPTION / country had no
+// master when the doc was uploaded and the doc was not held. Runs after a Master Description / rate is
+// added or edited, on ANY status (an empty estimate is not an "approved" one, so the EST freeze does not
+// apply). Description match = upload rule: exact key, else closest name ≥ FUZZY_MIN. Returns lines filled.
+export async function fillMissingEst(): Promise<number> {
+  const { lev, FUZZY_MIN } = await import("@/lib/build-items")
+  const items = await (prisma.airRequestItem as any).findMany({
+    where: { itemStatus: { not: "REJECTED" }, request: { isTest: false }, OR: [{ grossWeight: null }, { grossWeight: 0 }, { airFreight: null }, { airFreight: 0 }] },
+    select: { id: true, description: true, country: true, brand: true, qtyRequestAir: true, qtyOriginalShipment: true, grossWeight: true, request: { select: { bu: true } } },
+  })
+  if (!items.length) return 0
+  const rateList = await (prisma as any).masterFreightRate.findMany({ where: { isActive: true } })
+  const rates: Record<string, number> = {}, ratesUsd: Record<string, number> = {}
+  for (const r of rateList) { rates[rateKey(r.country)] = r.ratePerKg; ratesUsd[rateKey(r.country)] = r.rateUsd || 0 }
+  const descList = await (prisma as any).masterDescription.findMany({ where: { isActive: true }, select: { name: true, weightPerUnit: true } })
+  const wts: Record<string, number> = {}
+  for (const d of descList) wts[descKey(d.name)] = d.weightPerUnit || 0
+  const keys = Object.keys(wts)
+  const wtOf = (desc: string) => {
+    const k = descKey(desc); if (!k) return 0
+    if (wts[k] != null) return wts[k]
+    let best = "", ratio = 0
+    for (const mk of keys) { const r = 1 - lev(k, mk) / Math.max(k.length, mk.length, 1); if (r > ratio) { ratio = r; best = mk } }
+    return ratio >= FUZZY_MIN ? wts[best] : 0
+  }
+  let n = 0
+  for (const it of items as any[]) {
+    const qty = it.qtyRequestAir || it.qtyOriginalShipment || 0
+    const gross = (Number(it.grossWeight) || 0) > 0 ? Number(it.grossWeight) : qty * wtOf(it.description)
+    const rate = (soCurrency(it.request?.bu, it.brand) === "USD" ? ratesUsd : rates)[rateKey(it.country)] || 0
+    if (!(gross > 0)) continue
+    await prisma.airRequestItem.update({ where: { id: it.id }, data: { grossWeight: gross, ...(rate > 0 ? { airFreight: gross * rate, marketRatePerKg: rate } : {}) } as any }).catch(() => {})
+    n++
+  }
+  return n
+}
+
 // Back-compat alias (older call sites). Both rate and weight releases run the same pass.
 export const releasePendingRateDocs = releaseHeldDocs
 

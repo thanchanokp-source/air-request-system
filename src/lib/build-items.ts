@@ -64,7 +64,7 @@ const numOf = (v: any) => { const n = parseFloat(String(v ?? "").replace(/,/g, "
 const descKey = (s: string) => String(s || "").trim().toUpperCase().replace(/\s*,\s*/g, ",").replace(/\s+/g, " ")
 const rateKey = (country: string) => canonCountry(country)
 
-const lev = (a: string, b: string) => {
+export const lev = (a: string, b: string) => {
   const m = a.length, n = b.length
   if (!m) return n; if (!n) return m
   const dp = Array.from({ length: n + 1 }, (_, j) => j)
@@ -78,7 +78,7 @@ const lev = (a: string, b: string) => {
   }
   return dp[n]
 }
-const FUZZY_MIN = 0.85
+export const FUZZY_MIN = 0.85
 
 export interface BuildItemsResult {
   items: any[]

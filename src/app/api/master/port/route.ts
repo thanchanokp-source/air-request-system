@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { releasePendingRateDocs } from "@/lib/freight"
+import { releasePendingRateDocs, fillMissingEst } from "@/lib/freight"
 import { canEditMaster } from "@/lib/master-access"
 import { soCurrency } from "@/lib/currency"
 
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       } catch { /* skip bad row */ }
     }
     await releasePendingRateDocs()
+    await fillMissingEst().catch(() => 0)   // lines with no EST yet (new rate)
     return NextResponse.json({ ok: true, saved, total: body.rows.length })
   }
 
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
     })
     const recalculated = await recalcOpenItems(item.country, rateThb, rateUsd, bu)
     await releasePendingRateDocs()
+    await fillMissingEst().catch(() => 0)   // lines with no EST yet (new rate)
     return NextResponse.json({ ...item, recalculated })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
