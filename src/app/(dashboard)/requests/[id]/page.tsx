@@ -5123,7 +5123,7 @@ export default function RequestDetailPage() {
 
           {/* Legend — what each claim action means (NYG/EA/TRM). Placed above the
               CR/EVP picker box so it reads as a note in that area. */}
-          {!claimBackGw && (
+          {!claimBackGw && role !== "SCM_NYK" && (
             <div className="text-sm text-gray-700 bg-blue-50/60 border border-blue-100 rounded-lg px-4 py-3 flex flex-wrap gap-x-6 gap-y-2 leading-relaxed">
               <span><b className="text-green-700">✓ Approve</b> = อนุมัติ claim ของแผนกเรา</span>
               <span><b className="text-orange-600">↩ Back to SCM</b> = ไม่ใช่ claim ของเรา (claim เลือกผิดแผนก)</span>
@@ -5176,7 +5176,7 @@ export default function RequestDetailPage() {
                 <p className="text-[11px] text-blue-700 leading-relaxed">
                   {crLocked
                     ? <>⏳ Waiting for the <b>SCM NYK Approver</b> to approve all SOs first{awaitingCount > 0 ? ` (${awaitingCount} SO remaining)` : ""} — then enter CR NO per INV</>
-                    : <>💡 Enter a <b>CR NO per INV</b> (one INV may hold several CRs — edit a specific SO if needed). Fill in every INV, then Finalize → Accounting.</>}
+                    : <>💡 Enter a <b>CR NO per INV</b> — one CR NO per INV, applied to every SO of that INV. Fill in every INV, then press Confirm → Accounting.</>}
                 </p>
                 {!crLocked && invGroups.map(([inv, its]) => (
                   <div key={inv} className="border border-blue-100 rounded-lg bg-white p-2 space-y-1.5">
@@ -5187,15 +5187,9 @@ export default function RequestDetailPage() {
                       {!commonCr(its) && its.some((it: any) => String(crOf(it)).trim()) && <span className="text-[10px] text-amber-700">หลาย CR ใน INV นี้</span>}
                       <input value={commonCr(its)} onChange={e => setInvCr(its, e.target.value)} placeholder="CR NO for this INV"
                         className="ml-auto w-44 border border-blue-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300" />
-                      {its.length > 1 && (
-                        <button type="button" onClick={() => setCrOpenInv(p => { const n = new Set(p); n.has(inv) ? n.delete(inv) : n.add(inv); return n })}
-                          className="text-[11px] text-blue-600 hover:underline whitespace-nowrap">
-                          {crOpenInv.has(inv) ? "▾ ซ่อนราย SO" : `▸ แก้ราย SO (${its.length})`}
-                        </button>
-                      )}
                     </div>
                     {/* per-SO CR only when expanded (an INV holding several CRs) — default = one CR per INV */}
-                    {its.length > 1 && crOpenInv.has(inv) && (
+                    {false && its.length > 1 && crOpenInv.has(inv) && (
                       <div className="pl-3 space-y-1 border-l-2 border-blue-50">
                         {its.map((it: any) => (
                           <div key={it.id} className="flex items-center gap-2">
@@ -5210,8 +5204,9 @@ export default function RequestDetailPage() {
                 ))}
                 {!crLocked && (
                   <button onClick={finalize} disabled={!allFilled || savingCr}
-                    className="text-xs bg-blue-600 text-white px-4 py-1.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
-                    {savingCr ? "..." : "Finalize CR → Accounting"}
+                    title={allFilled ? "ยืนยัน CR NO ทุก INV แล้วส่งต่อ Accounting" : "กรอก CR NO ให้ครบทุก INV ก่อน"}
+                    className="text-sm bg-green-600 text-white px-5 py-2 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed">
+                    {savingCr ? "กำลังบันทึก…" : "✓ Confirm"}
                   </button>
                 )}
               </div>
