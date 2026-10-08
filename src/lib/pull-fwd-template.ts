@@ -44,9 +44,9 @@ export const FILL_COLS: {
 }[] = [
   { header: "MAWB NO", width: 16, field: "mawbNo", type: "text", phase: 1 },
   { header: "HAWB NO", width: 16, field: "hawbNo", type: "text", phase: 1 },
-  { header: "FLIGHT ETD", width: 13, field: "flightEtd", type: "date", phase: 1, hint: "YYYY-MM-DD" },
-  { header: "FLIGHT ETA", width: 13, field: "flightEta", type: "date", phase: 1, hint: "YYYY-MM-DD" },
-  { header: "CFM IN-HOUSE DATE", width: 18, field: "cfmInHouseDate", type: "date", phase: 1, hint: "YYYY-MM-DD" },
+  { header: "FLIGHT ETD", width: 13, field: "flightEtd", type: "date", phase: 1, hint: "pick from list · dd-mmm-yyyy" },
+  { header: "FLIGHT ETA", width: 13, field: "flightEta", type: "date", phase: 1, hint: "pick from list · dd-mmm-yyyy" },
+  { header: "CFM IN-HOUSE DATE", width: 18, field: "cfmInHouseDate", type: "date", phase: 1, hint: "pick from list · dd-mmm-yyyy" },
   { header: "AIR FREIGHT (THB) /KG", width: 19, field: "fwdRateThbPerKg", type: "number", phase: 1, hint: "THB/kg" },
   { header: "SUPPLIER INV", width: 18, field: "invoiceNo", type: "text", phase: 1 },
   { header: "ACTUAL AIR FREIGHT (THB)", width: 23, field: "actualAir", type: "number", phase: 2, thb: true, hint: "THB" },

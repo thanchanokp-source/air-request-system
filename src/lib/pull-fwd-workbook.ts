@@ -50,5 +50,39 @@ export async function buildFwdWorkbook(docs: any[], phase: FwdPhase): Promise<Bu
     })
   }
   ws.getColumn(headers.length).hidden = true // _DOCID — matches the row back to its document
+
+  // ── Date columns: a real drop-down instead of free typing ───────────────────────────────────
+  // A plain .xlsx has no calendar control, so the next best thing is a list of real dates kept on a
+  // hidden sheet. The forwarder picks "23-Sep-2026" from the arrow and the cell holds a true date
+  // value — which is what kills the "wed sep 23" / "05/09/26" guessing on import.
+  const dateCols = FILL_COLS.map((c, i) => ({ c, i })).filter(x => x.c.type === "date" && x.c.phase === phase)
+  if (dateCols.length) {
+    const DATE_SHEET = "DATES"
+    const dws = wb.addWorksheet(DATE_SHEET)
+    const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 30)
+    const N = 300                                    // ~10 months ahead, covers any booking window
+    for (let k = 0; k < N; k++) {
+      const d = new Date(start); d.setDate(start.getDate() + k)
+      const cell = dws.getCell(k + 1, 1)
+      cell.value = d
+      cell.numFmt = "dd-mmm-yyyy"
+    }
+    dws.getColumn(1).width = 16
+    dws.state = "veryHidden"                         // can't be unhidden from the Excel UI by accident
+    const source = `=${DATE_SHEET}!$A$1:$A$${N}`
+    const firstDataRow = 3                           // header row + hint row
+    for (const { i } of dateCols) {
+      const colIdx = refCount + i + 1
+      ws.getColumn(colIdx).numFmt = "dd-mmm-yyyy"
+      for (let r = firstDataRow; r < firstDataRow + docs.length; r++) {
+        ws.getCell(r, colIdx).dataValidation = {
+          type: "list", allowBlank: true, formulae: [source], showErrorMessage: true,
+          errorStyle: "warning", errorTitle: "Pick a date",
+          error: "Please choose a date from the drop-down (dd-mmm-yyyy, e.g. 23-Sep-2026).",
+          showInputMessage: true, promptTitle: "Date", prompt: "Click the arrow and pick a date (dd-mmm-yyyy).",
+        }
+      }
+    }
+  }
   return Buffer.from(await wb.xlsx.writeBuffer())
 }

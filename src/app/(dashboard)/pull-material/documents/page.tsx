@@ -812,6 +812,9 @@ export default function Page() {
             const air = scope.filter(r => r.shipMode === "AIR")
             const readySend = air.filter(r => !r.fwdSentAt)
             const waiting = scope.filter(r => r.fwdSentAt && r.actualAir == null)
+            // Phase 2 = "now tell us what it actually cost": the FWD already answered the booking
+            // questions (or at least gave a HAWB) and the Actual is still empty.
+            const readyP2 = air.filter(r => (r.fwdImportedAt || r.hawbNo) && r.actualAir == null)
             const step = needMode.length ? 1 : readySend.length ? 2 : 3
             const card = (n: number, on: boolean) =>
               `flex-1 min-w-[210px] flex gap-3 items-start rounded-xl border p-3 ${on ? "border-amber-300 bg-amber-50" : "border-gray-200 bg-white"}`
@@ -848,9 +851,15 @@ export default function Page() {
                         {air.length - readySend.length ? <> · <button onClick={() => setFwdF("SENT")} className="underline text-amber-700 hover:text-amber-900">ส่งแล้ว {air.length - readySend.length} ใบ</button></> : ""}
                       </p>
                       <div className="flex gap-1.5 flex-wrap">
-                        <button onClick={() => setBulkFwd(true)} disabled={fwdBusy || !air.length}
+                        <button onClick={() => { setFwdPhase(1); setBulkFwd(true) }} disabled={fwdBusy || !air.length}
                           className={`px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 ${step === 2 ? "text-white" : "border border-gray-300 text-gray-600 bg-white hover:bg-gray-50"}`}
-                          style={step === 2 ? { background: MAROON } : undefined}>ส่งให้ FWD</button>
+                          style={step === 2 ? { background: MAROON } : undefined}>📧 ขอ booking (P1)</button>
+                        {/* second round: the booking info is in, now ask for the money */}
+                        <button onClick={() => { setSelectedIds(new Set(readyP2.map(r => r.id))); setFwdPhase(2); setBulkFwd(true) }}
+                          disabled={fwdBusy || !readyP2.length}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-amber-300 text-amber-800 bg-white hover:bg-amber-50 disabled:opacity-40">
+                          💰 ขอ Actual (P2){readyP2.length ? ` · ${readyP2.length}` : ""}
+                        </button>
                         <button onClick={previewFwdFile} disabled={fwdBusy || !air.length}
                           className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">⬇️ ดูไฟล์</button>
                       </div>

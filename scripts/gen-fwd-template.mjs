@@ -82,6 +82,36 @@ for (const vals of dataRows) {
 }
 ws.getColumn(headers.length).hidden = true // _DOCID — filled by the system, must not be edited
 
+// Date cells get a drop-down of real dates (hidden sheet) so the forwarder can never type
+// "wed sep 23" or "05/09/26" — the cell always holds a true date value.
+const dateCols = FILL_COLS.map((c, i) => ({ c, i })).filter(x => x.c.type === "date" && x.c.phase === PHASE)
+if (dateCols.length) {
+  const dws = wb.addWorksheet("DATES")
+  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 30)
+  const N = 300
+  for (let k = 0; k < N; k++) {
+    const d = new Date(start); d.setDate(start.getDate() + k)
+    const cell = dws.getCell(k + 1, 1)
+    cell.value = d
+    cell.numFmt = "dd-mmm-yyyy"
+  }
+  dws.getColumn(1).width = 16
+  dws.state = "veryHidden"
+  const source = `=DATES!$A$1:$A$${N}`
+  for (const { i } of dateCols) {
+    const colIdx = refCount + i + 1
+    ws.getColumn(colIdx).numFmt = "dd-mmm-yyyy"
+    for (let r = 3; r < 3 + dataRows.length; r++) {
+      ws.getCell(r, colIdx).dataValidation = {
+        type: "list", allowBlank: true, formulae: [source], showErrorMessage: true,
+        errorStyle: "warning", errorTitle: "Pick a date",
+        error: "Please choose a date from the drop-down (dd-mmm-yyyy, e.g. 23-Sep-2026).",
+        showInputMessage: true, promptTitle: "Date", prompt: "Click the arrow and pick a date (dd-mmm-yyyy).",
+      }
+    }
+  }
+}
+
 // README sheet
 const rs = wb.addWorksheet("README")
 rs.getColumn(1).width = 30
@@ -95,7 +125,7 @@ line("Green columns", "Please fill these in and return the file by reply mail")
 line("_DOCID (hidden)", "System key — must stay as it is, the file cannot be imported without it")
 line("", "")
 line("Columns to fill", "", true)
-FILL_COLS.forEach(c => line((c.phase === PHASE ? "" : "(phase " + c.phase + ") ") + c.header, [c.type === "number" ? "number (no currency symbol)" : c.type === "date" ? "date — YYYY-MM-DD" : "text", c.hint ? `e.g. ${c.hint}` : ""].filter(Boolean).join(" · ")))
+FILL_COLS.forEach(c => line((c.phase === PHASE ? "" : "(phase " + c.phase + ") ") + c.header, [c.type === "number" ? "number (no currency symbol)" : c.type === "date" ? "date — pick from the drop-down (dd-mmm-yyyy)" : "text", c.hint ? `e.g. ${c.hint}` : ""].filter(Boolean).join(" · ")))
 
 mkdirSync(dirname(out), { recursive: true })
 await wb.xlsx.writeFile(out)
