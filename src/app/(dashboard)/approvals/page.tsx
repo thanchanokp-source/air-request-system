@@ -590,9 +590,10 @@ export default function ApprovalsPage() {
                   Open →
                 </Link>
               </div>
-              <div className="overflow-x-auto">
+              {/* long documents scroll inside their own box (max ~8 rows) — header row stays visible */}
+              <div className="overflow-auto max-h-[460px]">
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-50 border-b">
+                  <thead className="bg-gray-50 border-b sticky top-0 z-10">
                     <tr>{["SO","STYLE","BRAND","SUB","CUSTOMER PO","DESCRIPTION","ORIG. DATE","PLAN DATE","QTY ORIG","QTY AIR","GROSS WEIGHT (KG)",`EST. AIR FREIGHT (${cur})`,`ACTUAL AIR FREIGHT (${cur})`,...(isClaimRole ? [`MY CLAIM (${cur})`] : []),"FACTORY","COUNTRY","CLAIM DEPT",...(hasNyk ? ["CR NO"] : []),"INVOICE NO","HAWB#","PO GARMENT"].map(h =>
                       <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium whitespace-nowrap">{h}</th>)}
                     </tr>

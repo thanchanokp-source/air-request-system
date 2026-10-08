@@ -241,14 +241,16 @@ function computeSigners(req: any, brandItems?: any[], masterSigs?: Record<string
       .sort((a, b) => new Date(a.signedAt).getTime() - new Date(b.signedAt).getTime())
   }
 
-  // GW: stamp GM + President (DPM dropped) + the FINAL signer of each claim department chain
+  // GW: stamp DPM (the doc's merch approver = GW's "VP MER") + GM + President + the FINAL signer of each claim department chain
   // (e.g. SCM NYG → EVP PROD; NYK → SCM NYK EVP). Intermediate claim signers (entry, VP SCM NYG,
   // VP PROD …) are collapsed away. In GW a CLAIM_NEXT_APPROVER is always the SCM NYG chain, so
   // group them under "SCM NYG"; SCM NYK's 3 roles group under "SCM NYK".
   if (isGW && sigList.length) {
-    const LINEAR = new Set(["GM_GW", "PRESIDENT_GW"])
-    const linear = sigList.filter((sg: any) => LINEAR.has(sg.role))
-    const claim = sigList.filter((sg: any) => !LINEAR.has(sg.role) && sg.role !== "VP_MER_GW" && sg.role !== "DPM_GW")
+    const LINEAR = new Set(["VP_MER_GW", "DPM_GW", "GM_GW", "PRESIDENT_GW"])
+    // DPM may sign twice (doc approval + a re-approved GW claim split) → keep its LAST linear stamp only
+    const linearAll = sigList.filter((sg: any) => LINEAR.has(sg.role))
+    const linear = [...new Map(linearAll.map((sg: any) => [sg.role === "DPM_GW" ? "VP_MER_GW" : sg.role, sg])).values()]
+    const claim = sigList.filter((sg: any) => !LINEAR.has(sg.role))
     const deptKey = (sg: any): string =>
       (sg.role === "CLAIM_NEXT_APPROVER" || sg.positionLabel === "Claim Approver") ? "SCM NYG"
       : /SCM_NYK/.test(sg.role) ? "SCM NYK"
@@ -270,6 +272,25 @@ function computeSigners(req: any, brandItems?: any[], masterSigs?: Record<string
     for (const sg of sigList) {
       signers.push({ title: sg.positionLabel || sg.role || "Approver", name: sg.approverName || "", date: sg.signedAt, verb: "Approved", sig: sg.signatureData || null, crNo: sg.crNo || null })
     }
+    // A linear approver who approved WITHOUT an e-sign snapshot (approved before e-signatures, or via a
+    // path that didn't capture one) was silently missing as soon as ANY other signature existed —
+    // e.g. a GW doc showed only the SCM NYK stamp, no DPM / GM. Add them from the approval log with the
+    // approver's MASTER signature (matched by name).
+    const LINEAR_POS: { label: string; from: string[]; roles: string[] }[] = isGW
+      ? [{ label: "DPM", from: ["PENDING_VP_MER_GW", "PENDING_DPM_GW"], roles: ["VP_MER_GW", "DPM_GW"] },
+         { label: "GM", from: ["PENDING_GM_GW"], roles: ["GM_GW"] },
+         { label: "President", from: ["PENDING_PRESIDENT_GW"], roles: ["PRESIDENT_GW"] }]
+      : [{ label: "VP Merchandise", from: ["PENDING_VP_MER", "PENDING_VP_MER_EA", "PENDING_VP_MER_TRM"], roles: ["VP_MER", "VP_MER_EA", "VP_MER_TRM"] },
+         { label: "VP SCM", from: ["PENDING_VP_SCM"], roles: ["VP_SCM"] },
+         { label: "President", from: ["PENDING_PRESIDENT"], roles: ["PRESIDENT"] }]
+    for (const pos of LINEAR_POS) {
+      if (sigList.some((sg: any) => pos.roles.includes(sg.role))) continue
+      const log = [...approveLogs].reverse().find((l: any) => pos.from.includes(l.fromStatus))
+      if (!log) continue
+      const name = log.user?.name || ""
+      signers.push({ title: pos.label, name, date: log.createdAt, verb: "Approved", sig: findMasterSig(masterSigs, name) })
+    }
+    signers.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
   } else {
     const chain: [string, string][] = isGW
       ? [["PENDING_GM_GW", "GM"], ["PENDING_PRESIDENT_GW", "President"]]
