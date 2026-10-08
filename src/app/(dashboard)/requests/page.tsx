@@ -192,7 +192,7 @@ export default function RequestsPage() {
   }
 
   useEffect(() => {
-    fetch("/api/requests").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
+    fetch("/api/requests").then(r => r.json()).then(d => { if (!Array.isArray(d)) console.error("[requests] /api/requests failed:", d); setRequests(Array.isArray(d) ? d : []) }).catch(e => { console.error("[requests] /api/requests failed:", e); setRequests([]) }).finally(() => setLoading(false))
     fetch("/api/users/claim-directory").then(r => r.json()).then(d => setClaimDir(Array.isArray(d) ? d : [])).catch(() => {})
     // real shipped qty source (mp_line / export) for the "QTY ส่งออกจริง" column
     fetch("/api/air-export-map", { cache: "no-store" }).then(r => r.ok ? r.json() : null)

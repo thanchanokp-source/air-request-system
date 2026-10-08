@@ -730,7 +730,7 @@ export default function DashboardPage() {
   const [poMap, setPoMap] = useState<Record<string,string>>({})
 
   useEffect(() => {
-    fetch("/api/requests").then(r=>r.json()).then(d=>{ setRequests(d); setLoading(false) })
+    fetch("/api/requests").then(r=>r.json()).then(d=>{ if(!Array.isArray(d)) console.error("[dashboard] /api/requests failed:", d); setRequests(Array.isArray(d)?d:[]) }).catch(e=>{ console.error("[dashboard] /api/requests failed:", e); setRequests([]) }).finally(()=>setLoading(false))
   }, [])
 
   // SO → PO (po_no_doc) from the Bill of Material, for the dashboard PO column.

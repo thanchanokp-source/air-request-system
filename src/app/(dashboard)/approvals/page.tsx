@@ -55,7 +55,7 @@ export default function ApprovalsPage() {
 
   const [approverDir, setApproverDir] = useState<any[]>([]) // role→people, for the admin person-search
   useEffect(() => {
-    fetch("/api/requests?mine=true").then(r => r.json()).then(d => { setRequests(d); setLoading(false) })
+    fetch("/api/requests?mine=true").then(r => r.json()).then(d => { if (!Array.isArray(d)) console.error("[approvals] /api/requests failed:", d); setRequests(Array.isArray(d) ? d : []) }).catch(e => { console.error("[approvals] /api/requests failed:", e); setRequests([]) }).finally(() => setLoading(false))
     fetch("/api/users/claim-directory").then(r => r.json()).then(d => setApproverDir(Array.isArray(d) ? d : [])).catch(() => {})
   }, [])
   // Roles that are the CURRENT approver(s) at a doc's stage (for the person-search to match
