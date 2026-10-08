@@ -136,6 +136,12 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
         if (i < 0) i = left.findIndex(r => sameQ(r, iv.qty))
         if (i >= 0) { owner.set(iv.inv, [left.splice(i, 1)[0]]); openInv.splice(openInv.indexOf(iv), 1) }
       }
+      // LG already booked a row on this INV (its INV + HAWB) → that row owns the INV even if qty differs —
+      // otherwise closest-qty pairing can swap the two INVs and each data-table row shows BOTH HAWBs
+      for (const iv of [...openInv]) {
+        const i = left.findIndex(r => up(r.invoiceNo) === iv.inv)
+        if (i >= 0) { owner.set(iv.inv, [left.splice(i, 1)[0]]); openInv.splice(openInv.indexOf(iv), 1) }
+      }
       // several rows whose qty SUM = one INV → they share it (fewest rows first; small sets only)
       const sharedInv = new Set<string>(), sharedIds = new Set<string>()
       // only when MER rows OUTNUMBER the INVs — same count = one row per INV (01261158: 9↔900, 216↔225)
@@ -164,9 +170,9 @@ export function buildShipRows(items: any[], src: ShipSource): { groups: ShipGrou
         const b = best!; const iv = openInv.splice(b.vi, 1)[0]
         owner.set(iv.inv, [left.splice(b.li, 1)[0]])
       }
-      for (const r of left) {                            // more MER rows than INVs → duplicates: merge into closest INV (head stays first)
-        let bi = invs[0], bd = Infinity
-        for (const iv of invs) { const d = Math.abs((Number(r.qtyRequestAir) || 0) - iv.qty); if (d < bd) { bd = d; bi = iv } }
+      for (const r of left) {                            // more MER rows than INVs → duplicates: merge into their own INV (LG), else closest INV (head stays first)
+        let bi = invs.find(iv => iv.inv === up(r.invoiceNo)) || invs[0], bd = invs.some(iv => iv.inv === up(r.invoiceNo)) ? -1 : Infinity
+        for (const iv of invs) { if (bd < 0) break; const d = Math.abs((Number(r.qtyRequestAir) || 0) - iv.qty); if (d < bd) { bd = d; bi = iv } }
         owner.set(bi.inv, [...(owner.get(bi.inv) || []), r])
       }
       const base0 = mer[0]
