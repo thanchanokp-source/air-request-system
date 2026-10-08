@@ -15,6 +15,7 @@ export type ClaimSplit = {
   detail?: string | null
   status?: string | null
   crNo?: string | null
+  reapprove?: boolean   // GW split re-assigned on a resubmit → must go DPM → GM again (see isAutoGwSplit)
 }
 
 // GW claim departments that route through SCM (NYK/NYG) before Accounting.
@@ -46,6 +47,9 @@ export function getSplits(item: any): ClaimSplit[] {
       detail: s.detail ?? s.reasonDetail ?? null,   // some rows store the field as `reasonDetail`
       status: s.status ?? null,
       crNo: s.crNo ?? null,
+      // keep the flag — every writer rebuilds claimDepts from getSplits, so dropping it here would
+      // silently turn a re-approve GW split back into an auto-approved one
+      ...(s.reapprove ? { reapprove: true } : {}),
     })).filter(s => s.dept)
   }
   if (item?.claimDepartment) {
